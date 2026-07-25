@@ -204,4 +204,30 @@ body {
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Map hardcoded slate utility classes to semantic Shadcn variables */
+  --color-slate-950: var(--background);
+  --color-slate-900: var(--card);
+  --color-slate-800: var(--border);
+  --color-slate-700: var(--border);
+  --color-slate-600: var(--muted-foreground);
+  --color-slate-500: var(--muted-foreground);
+  --color-slate-400: var(--muted-foreground);
+  --color-slate-300: var(--foreground);
+  --color-slate-200: var(--foreground);
+  --color-slate-100: var(--foreground);
+  --color-slate-50: var(--foreground);
+
+  /* Map hardcoded indigo primary accents to the Shadcn primary color */
+  --color-indigo-950: var(--background);
+  --color-indigo-900: var(--primary);
+  --color-indigo-850: var(--primary);
+  --color-indigo-800: var(--primary);
+  --color-indigo-700: var(--primary);
+  --color-indigo-600: var(--primary);
+  --color-indigo-500: var(--primary);
+  --color-indigo-400: var(--accent);
+  --color-indigo-300: var(--accent);
+  --color-indigo-200: var(--foreground);
+  --color-indigo-100: var(--foreground);
 }
