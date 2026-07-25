@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { trackedPages, scanHistory } from "@/db/schema";
+import { trackedPages, scanHistory, queue } from "@/db/schema";
 import { addSingleUrl } from "@/actions/add-url";
 import { singleUrlSchema } from "@/lib/validators";
 import { eq, ilike, or, and, sql, desc, asc, inArray } from "drizzle-orm";
@@ -109,15 +109,46 @@ export async function GET(request: Request) {
       );
     }
 
+    // Fetch latest queue entry per page for failureReason + attempts
+    let queueMap: Record<string, { failureReason?: string | null; attempts?: number }> = {};
+    if (pageIds.length > 0) {
+      const latestQueue = await db
+        .select({
+          trackedPageId: queue.trackedPageId,
+          failureReason: queue.failureReason,
+          attempts: queue.attempts,
+        })
+        .from(queue)
+        .where(
+          and(
+            inArray(queue.trackedPageId, pageIds),
+            sql`${queue.id} in (
+              select id from (
+                select id, row_number() over (partition by tracked_page_id order by created_at desc) as rn
+                from queue
+              ) t where rn = 1
+            )`
+          )
+        );
+      queueMap = Object.fromEntries(
+        latestQueue.map((q) => [q.trackedPageId, { failureReason: q.failureReason, attempts: q.attempts ?? 0 }])
+      );
+    }
+
     const pagesWithPrev = pages.map((p) => {
       const prev = prevResultsMap[p.id] ?? null;
       const difference =
         p.currentResults !== null && prev !== null ? p.currentResults - prev : null;
+      const queueEntry = queueMap[p.id];
 
       return {
         ...p,
         previousResults: prev,
         difference,
+        failureReason: queueEntry?.failureReason ?? null,
+        attempts: queueEntry?.attempts ?? 0,
+        notes: p.notes ?? null,
+        isWatchlisted: p.isWatchlisted ?? false,
       };
     });
 

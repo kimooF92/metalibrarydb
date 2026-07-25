@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { TrackedPage } from "@/types";
 import { HistoryModal } from "./history-modal";
 import { DeleteConfirmModal } from "./delete-confirm-modal";
@@ -23,6 +23,9 @@ import {
   ChevronDown,
   ChevronsUpDown,
   Flame,
+  Star,
+  AlertTriangle,
+  StickyNote,
 } from "lucide-react";
 
 function formatRelativeTime(dateInput: string | Date | null | undefined): string {
@@ -65,6 +68,7 @@ interface PagesTableProps {
   sortBy: string;
   sortOrder: "asc" | "desc";
   onSortChange: (col: string) => void;
+  onBulkDelete?: (ids: string[]) => void;
 }
 
 export function PagesTable({
@@ -73,6 +77,7 @@ export function PagesTable({
   onRefresh,
   onRetry,
   onDelete,
+  onBulkDelete,
   search,
   onSearchChange,
   statusFilter,
@@ -86,6 +91,23 @@ export function PagesTable({
   sortOrder,
   onSortChange,
 }: PagesTableProps) {
+  const [watchlisted, setWatchlisted] = useState<Record<string, boolean>>(
+    Object.fromEntries(pages.map((p) => [p.id, p.isWatchlisted ?? false]))
+  );
+
+  const toggleWatchlist = useCallback(async (id: string) => {
+    const next = !watchlisted[id];
+    setWatchlisted((prev) => ({ ...prev, [id]: next }));
+    try {
+      await fetch(`/api/page/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isWatchlisted: next }),
+      });
+    } catch {
+      setWatchlisted((prev) => ({ ...prev, [id]: !next }));
+    }
+  }, [watchlisted]);
   const SortHeader = ({
     col,
     label,
@@ -199,6 +221,30 @@ export function PagesTable({
     );
   };
 
+  const [editingNotes, setEditingNotes] = useState<string | null>(null);
+  const [editingNotesValue, setEditingNotesValue] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
+
+  const saveNotes = async (id: string) => {
+    setSavingNotes(true);
+    try {
+      const res = await fetch(`/api/page/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: editingNotesValue }),
+      });
+      if (res.ok) {
+        const target = pages.find((p) => p.id === id);
+        if (target) (target as any).notes = editingNotesValue;
+        setEditingNotes(null);
+      }
+    } catch (err) {
+      console.error("Failed to save notes", err);
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
   return (
     <div className="glass-card rounded-xl p-5 shadow-xl">
       {/* Search & Filters Toolbar */}
@@ -283,14 +329,29 @@ export function PagesTable({
               className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>Refresh Selected ({selectedIds.length})</span>
+              <span>Refresh ({selectedIds.length})</span>
             </button>
+
+            {onBulkDelete && (
+              <button
+                onClick={() => {
+                  if (confirm(`Delete ${selectedIds.length} selected page(s)? This cannot be undone.`)) {
+                    onBulkDelete(selectedIds);
+                    setSelectedIds([]);
+                  }
+                }}
+                className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold shadow-md shadow-rose-600/30 transition-all cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete ({selectedIds.length})</span>
+              </button>
+            )}
 
             <button
               onClick={() => setSelectedIds([])}
               className="px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-900 transition-colors cursor-pointer"
             >
-              Clear selection
+              Clear
             </button>
           </div>
         </div>
@@ -302,6 +363,9 @@ export function PagesTable({
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-900/90 text-slate-400 uppercase font-semibold border-b border-slate-800">
               <tr>
+                <th className="px-2.5 py-2.5 text-center w-8">
+                  {/* Watchlist */}
+                </th>
                 <th className="px-2.5 py-2.5 text-center w-8">
                   <label className="relative inline-flex items-center justify-center cursor-pointer" title="Select all visible pages">
                     <input
@@ -382,6 +446,8 @@ export function PagesTable({
                       className={`transition-all group ${
                         isSelected
                           ? "bg-indigo-950/40 hover:bg-indigo-950/60"
+                          : watchlisted[p.id]
+                          ? "bg-amber-500/[0.03] border-l-2 border-l-yellow-400/70 hover:bg-amber-500/[0.07]"
                           : isHighVolume
                           ? "bg-amber-500/[0.04] hover:bg-amber-500/[0.08] border-l-2 border-l-amber-400"
                           : isDimmed
@@ -389,6 +455,20 @@ export function PagesTable({
                           : "hover:bg-slate-900/60"
                       }`}
                     >
+                      {/* Watchlist Star */}
+                      <td className="px-2 py-2.5 text-center">
+                        <button
+                          onClick={() => toggleWatchlist(p.id)}
+                          title={watchlisted[p.id] ? "Remove from watchlist" : "Add to watchlist"}
+                          className={`p-0.5 rounded transition-all ${
+                            watchlisted[p.id]
+                              ? "text-yellow-400"
+                              : "text-slate-700 hover:text-yellow-400/60 opacity-0 group-hover:opacity-100"
+                          }`}
+                        >
+                          <Star className={`w-3 h-3 ${watchlisted[p.id] ? "fill-yellow-400" : ""}`} />
+                        </button>
+                      </td>
                       {/* Checkbox */}
                       <td className="px-2.5 py-2.5 text-center">
                         <label className="relative inline-flex items-center justify-center cursor-pointer">
@@ -515,35 +595,47 @@ export function PagesTable({
 
                       {/* Status */}
                       <td className="px-3 py-2.5">
-                        {p.status === "success" && p.currentResults === 0 ? (
-                          <span
-                            className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-900/80 text-slate-500 border border-slate-800/80"
-                            title="Confirmed 0 active ads found on Meta Ad Library"
-                          >
-                            0 Active Ads
-                          </span>
-                        ) : p.status === "unclear" ? (
-                          <span
-                            className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-purple-950/30 text-purple-400/70 border border-purple-500/15 cursor-help"
-                            title="Unclear: Page layout pattern not recognized automatically. Verify URL or click Refresh."
-                          >
-                            Unclear
-                          </span>
-                        ) : (
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
-                              p.status === "success"
-                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                : p.status === "scanning"
-                                ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 animate-pulse"
-                                : p.status === "pending"
-                                ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                                : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                            }`}
-                          >
-                            {p.status}
-                          </span>
-                        )}
+                        <div className="flex flex-col gap-0.5">
+                          {p.status === "success" && p.currentResults === 0 ? (
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-900/80 text-slate-500 border border-slate-800/80"
+                              title="Confirmed 0 active ads found on Meta Ad Library"
+                            >
+                              0 Active Ads
+                            </span>
+                          ) : p.status === "unclear" ? (
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-purple-950/30 text-purple-400/70 border border-purple-500/15 cursor-help"
+                              title="Unclear: Page layout pattern not recognized automatically. Verify URL or click Refresh."
+                            >
+                              Unclear
+                            </span>
+                          ) : (
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                                p.status === "success"
+                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                  : p.status === "scanning"
+                                  ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 animate-pulse"
+                                  : p.status === "pending"
+                                  ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                  : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                              }`}
+                            >
+                              {p.status}
+                            </span>
+                          )}
+                          {/* Failure reason micro-badge */}
+                          {p.status === "failed" && p.failureReason && (
+                            <span
+                              className="inline-flex items-center gap-0.5 text-[9px] text-rose-400/70 font-mono"
+                              title={`Failure reason: ${p.failureReason}`}
+                            >
+                              <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                              {p.failureReason}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Last Checked */}
@@ -554,6 +646,23 @@ export function PagesTable({
                       {/* Actions */}
                       <td className="px-3 py-2.5 text-right">
                         <div className="flex items-center justify-end space-x-1">
+                          {/* Notes button */}
+                          <button
+                            onClick={() => {
+                              setEditingNotes(p.id);
+                              setEditingNotesValue((p as any).notes || "");
+                            }}
+                            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                              (p as any).notes
+                                ? "text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10"
+                                : "text-slate-400 hover:text-yellow-300 hover:bg-yellow-500/10 opacity-0 group-hover:opacity-100"
+                            }`}
+                            title={(p as any).notes || "Add note"}
+                            aria-label={`Notes for ${p.displayName || "tracked page"}`}
+                          >
+                            <StickyNote className="w-3.5 h-3.5" />
+                          </button>
+
                           <button
                             onClick={() => onRefresh([p.id])}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer"
@@ -572,14 +681,26 @@ export function PagesTable({
                             <History className="w-3.5 h-3.5" />
                           </button>
 
-                          <button
-                            onClick={() => onRetry([p.id])}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-amber-300 hover:bg-amber-500/10 transition-all cursor-pointer"
-                            title="Retry scan"
-                            aria-label={`Retry scan for ${p.displayName || "tracked page"}`}
-                          >
-                            <RotateCcw className="w-3.5 h-3.5" />
-                          </button>
+                          {/* Retry — escalate after 3+ attempts */}
+                          {p.status === "failed" && (p.attempts ?? 0) >= 3 ? (
+                            <button
+                              onClick={() => openHistory(p)}
+                              className="p-1.5 rounded-lg text-amber-400/80 hover:text-amber-300 hover:bg-amber-500/10 transition-all cursor-pointer"
+                              title={`Failed ${p.attempts} times — click to review history`}
+                              aria-label={`Review failure history for ${p.displayName || "tracked page"}`}
+                            >
+                              <ShieldAlert className="w-3.5 h-3.5" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => onRetry([p.id])}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-amber-300 hover:bg-amber-500/10 transition-all cursor-pointer"
+                              title="Retry scan"
+                              aria-label={`Retry scan for ${p.displayName || "tracked page"}`}
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                          )}
 
                           <button
                             onClick={() => setPageToDelete(p)}
@@ -590,6 +711,39 @@ export function PagesTable({
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
+
+                        {/* Inline Notes Editor */}
+                        {editingNotes === p.id && (
+                          <div className="mt-1.5 flex items-start space-x-1.5 justify-end">
+                            <textarea
+                              value={editingNotesValue}
+                              onChange={(e) => setEditingNotesValue(e.target.value)}
+                              rows={2}
+                              placeholder="Add a note..."
+                              className="bg-slate-950 text-xs text-white px-2 py-1 rounded border border-yellow-500/40 focus:outline-none resize-none w-48"
+                              autoFocus
+                              disabled={savingNotes}
+                            />
+                            <div className="flex flex-col gap-1">
+                              <button
+                                onClick={() => saveNotes(p.id)}
+                                disabled={savingNotes}
+                                className="p-1 text-emerald-400 hover:text-emerald-300 transition-colors"
+                                title="Save note"
+                              >
+                                {savingNotes ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                              </button>
+                              <button
+                                onClick={() => setEditingNotes(null)}
+                                disabled={savingNotes}
+                                className="p-1 text-slate-400 hover:text-slate-200 transition-colors"
+                                title="Cancel"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );

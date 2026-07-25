@@ -142,6 +142,17 @@ export default function DashboardPage() {
     }
   };
 
+  const handleBulkDelete = async (ids: string[]) => {
+    try {
+      await Promise.all(ids.map((id) => fetch(`/api/page/${id}`, { method: "DELETE" })));
+      showToast("success", `Deleted ${ids.length} page(s) successfully.`);
+      loadData();
+    } catch (err) {
+      console.error("Bulk delete failed", err);
+      showToast("error", "Failed to delete some pages.");
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Toast Alert Banner */}
@@ -215,6 +226,7 @@ export default function DashboardPage() {
         onRefresh={handleRefresh}
         onRetry={handleRetry}
         onDelete={handleDelete}
+        onBulkDelete={handleBulkDelete}
         search={search}
         onSearchChange={(val) => {
           setSearch(val);

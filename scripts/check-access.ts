@@ -3,89 +3,55 @@ dotenv.config({ path: ".env.local" });
 
 import { getBrowserSession, closeBrowserSession } from "../worker/browser";
 
-export type AccessCheckResult =
-  | "WORKING_NORMALLY"
-  | "CAPTCHA_CHALLENGE_PRESENT"
-  | "NETWORK_BLOCK_OR_TIMEOUT"
-  | "REGIONAL_GATING";
+const TEST_URL =
+  process.argv[2] && process.argv[2].startsWith("http")
+    ? process.argv[2]
+    : "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&q=nike&search_type=keyword_exact_phrase";
 
-export async function checkMetaAdLibraryAccess(
-  testUrl = "https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL"
-): Promise<{ status: AccessCheckResult; message: string }> {
-  console.log("==========================================");
-  console.log(" Meta Ad Library — Network Access Check  ");
-  console.log("==========================================");
+async function checkAccess() {
+  console.log("🔍 Meta Ad Library — Access Check");
+  console.log("   URL:", TEST_URL);
+  console.log("   Testing connection...\n");
 
-  let page;
+  const { page } = await getBrowserSession();
+
   try {
-    const session = await getBrowserSession();
-    page = session.page;
-
-    console.log(`[Check] Navigating to: ${testUrl}`);
-    await page.goto(testUrl, { waitUntil: "networkidle", timeout: 25000 });
-
-    const content = await page.content();
+    await page.goto(TEST_URL, { waitUntil: "networkidle", timeout: 30000 });
     const bodyText = await page.evaluate(() => document.body.innerText);
 
-    // 1. Check CAPTCHA / Challenge
-    if (
-      content.includes("captcha") ||
-      content.includes("security_check") ||
-      bodyText.includes("Confirm it's you") ||
-      bodyText.includes("Enter the code")
-    ) {
-      console.warn("❌ [CAPTCHA Detected] Security challenge active. Do not start scan session.");
-      return {
-        status: "CAPTCHA_CHALLENGE_PRESENT",
-        message: "CAPTCHA or security challenge detected on Meta Ad Library.",
-      };
-    }
+    const hasCaptcha =
+      (await page.$('iframe[src*="captcha"], iframe[src*="recaptcha"], #captcha_dialog')) !== null ||
+      /confirm it'?s you|security check|unusual activity/i.test(bodyText);
 
-    // 2. Check Regional Gating
-    if (
-      bodyText.includes("not available in your region") ||
-      bodyText.includes("restricted in your country")
-    ) {
-      console.warn("⚠️ [Regional Gating] Ad Library is legally gated in current IP location.");
-      return {
-        status: "REGIONAL_GATING",
-        message: "Meta Ad Library reports regional/location gating.",
-      };
-    }
+    const isRateLimited =
+      /rate limit exceeded|too many requests|temporarily blocked/i.test(bodyText);
 
-    // 3. Check Result pattern or Ad Library UI header
-    if (
-      /results?/i.test(bodyText) ||
-      /Ad Library/i.test(bodyText) ||
-      /Search ads/i.test(bodyText)
-    ) {
-      console.log("✅ [Access Normal] Meta Ad Library is reachable and loaded successfully.");
-      return {
-        status: "WORKING_NORMALLY",
-        message: "Meta Ad Library is reachable and operating normally.",
-      };
-    }
+    const resultPattern = /[\d,~]+\s+(results?|ads?)/i;
+    const hasResults = resultPattern.test(bodyText);
 
-    console.warn("⚠️ [Pattern Missing] Page loaded but unexpected content layout.");
-    return {
-      status: "CAPTCHA_CHALLENGE_PRESENT",
-      message: "Page loaded but Ad Library elements were not recognized.",
-    };
+    if (hasResults) {
+      console.log("✅ ACCESS OK — Meta Ad Library is responding normally.");
+      console.log("   Result pattern found. Safe to start a scan session.");
+    } else if (hasCaptcha) {
+      console.log("⚠️  CAPTCHA DETECTED — Meta has flagged this session.");
+      console.log("   Do not start a scan session. Wait and try again later.");
+    } else if (isRateLimited) {
+      console.log("🚫 RATE LIMITED — Too many requests from this IP/session.");
+      console.log("   Wait at least 30 minutes before trying again.");
+    } else {
+      console.log("❓ UNCLEAR — Page loaded but no result pattern found.");
+      console.log("   May be a layout change or geo-restriction. Check browser manually.");
+    }
   } catch (err: any) {
-    console.error("❌ [Network Error/Timeout]", err.message);
-    return {
-      status: "NETWORK_BLOCK_OR_TIMEOUT",
-      message: `Network error or timeout: ${err.message}`,
-    };
+    if (err.name === "TimeoutError") {
+      console.log("❌ TIMEOUT — Meta Ad Library did not respond in 30 seconds.");
+      console.log("   Possible network block or ISP restriction.");
+    } else {
+      console.log("❌ ERROR —", err.message);
+    }
   } finally {
     await closeBrowserSession();
   }
 }
 
-// Execute directly if run via CLI
-if (require.main === module) {
-  checkMetaAdLibraryAccess().then((res) => {
-    console.log("Access Check Result:", res);
-    process.exit(res.status === "WORKING_NORMALLY" ? 0 : 1);
-  });
-}
+checkAccess().catch(console.error);

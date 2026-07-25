@@ -8,6 +8,13 @@
       "when": 1784923841087,
       "tag": "0000_orange_riptide",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784950464299,
+      "tag": "0001_add_watchlist_and_notes",
+      "breakpoints": true
     }
   ]
 }

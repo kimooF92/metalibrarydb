@@ -35,6 +35,7 @@ export const trackedPages = pgTable(
     aiSummary: text("ai_summary"),
     lastCreativeScan: timestamp("last_creative_scan", { withTimezone: true }),
     creativeHash: text("creative_hash"),
+    isWatchlisted: boolean("is_watchlisted").default(false),
   },
   (table) => [
     index("idx_tracked_pages_status").on(table.status),

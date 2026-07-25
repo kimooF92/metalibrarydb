@@ -12,6 +12,11 @@ export interface TrackedPage {
   status: "pending" | "scanning" | "success" | "failed" | "unclear";
   createdAt: string;
   updatedAt: string;
+  // Extended fields
+  failureReason?: string | null;
+  attempts?: number | null;
+  notes?: string | null;
+  isWatchlisted?: boolean;
 }
 
 export interface ScanHistoryEntry {
@@ -59,4 +64,12 @@ export interface PaginationMeta {
   limit: number;
   total: number;
   totalPages: number;
+}
+
+export interface TopMover {
+  id: string;
+  displayName: string | null;
+  url: string;
+  currentResults: number | null;
+  difference: number;
 }

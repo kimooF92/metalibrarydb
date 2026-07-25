@@ -44,18 +44,27 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { displayName } = body;
+    const { displayName, notes, isWatchlisted } = body;
 
     if (!id) {
       return NextResponse.json({ error: "Page ID is required" }, { status: 400 });
     }
 
+    const updatePayload: Record<string, unknown> = { updatedAt: new Date() };
+
+    if (displayName !== undefined) {
+      updatePayload.displayName = displayName?.trim() || null;
+    }
+    if (notes !== undefined) {
+      updatePayload.notes = notes?.trim() || null;
+    }
+    if (isWatchlisted !== undefined) {
+      updatePayload.isWatchlisted = Boolean(isWatchlisted);
+    }
+
     const [updated] = await db
       .update(trackedPages)
-      .set({
-        displayName: displayName?.trim() || null,
-        updatedAt: new Date(),
-      })
+      .set(updatePayload)
       .where(eq(trackedPages.id, id))
       .returning();
 
@@ -65,13 +74,13 @@ export async function PATCH(
 
     return NextResponse.json({
       success: true,
-      message: "Display name updated successfully",
+      message: "Page updated successfully",
       page: updated,
     });
   } catch (error) {
     console.error("Error in PATCH /api/page/[id]:", error);
     return NextResponse.json(
-      { error: "Failed to update display name" },
+      { error: "Failed to update page" },
       { status: 500 }
     );
   }

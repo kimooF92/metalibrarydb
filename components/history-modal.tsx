@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { TrackedPage, ScanHistoryEntry } from "@/types";
-import { X, Calendar, Loader2, ExternalLink, ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
+import { X, Calendar, Loader2, ExternalLink, ArrowUpRight, ArrowDownRight, Minus, ChevronUp, ChevronDown } from "lucide-react";
 
 interface HistoryModalProps {
   page: TrackedPage | null;
@@ -10,9 +10,61 @@ interface HistoryModalProps {
   onClose: () => void;
 }
 
+// Pure SVG sparkline — no external dependencies
+function Sparkline({ data }: { data: (number | null)[] }) {
+  const values = data.filter((v): v is number => v !== null);
+  if (values.length < 2) return null;
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+
+  const width = 200;
+  const height = 40;
+  const padding = 4;
+
+  const points = values.map((v, i) => {
+    const x = padding + (i / (values.length - 1)) * (width - padding * 2);
+    const y = padding + (1 - (v - min) / range) * (height - padding * 2);
+    return `${x},${y}`;
+  });
+
+  const polyline = points.join(" ");
+  const areaPoints = [
+    `${padding},${height - padding}`,
+    ...points,
+    `${width - padding},${height - padding}`,
+  ].join(" ");
+
+  return (
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      className="w-full h-10"
+      preserveAspectRatio="none"
+    >
+      <defs>
+        <linearGradient id="sparkGrad" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="#6366f1" stopOpacity="0.3" />
+          <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon points={areaPoints} fill="url(#sparkGrad)" />
+      <polyline points={polyline} fill="none" stroke="#6366f1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Last point dot */}
+      {points.length > 0 && (() => {
+        const last = points[points.length - 1].split(",");
+        return (
+          <circle cx={last[0]} cy={last[1]} r="2.5" fill="#6366f1" />
+        );
+      })()}
+    </svg>
+  );
+}
+
 export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
   const [history, setHistory] = useState<ScanHistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [sortAsc, setSortAsc] = useState(false); // newest first by default
 
   useEffect(() => {
     if (isOpen && page) {
@@ -36,6 +88,17 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
   };
 
   if (!isOpen || !page) return null;
+
+  const sorted = [...history].sort((a, b) => {
+    const ta = new Date(a.checkedAt).getTime();
+    const tb = new Date(b.checkedAt).getTime();
+    return sortAsc ? ta - tb : tb - ta;
+  });
+
+  // Sparkline data: chronological order (oldest → newest)
+  const sparkData = [...history]
+    .sort((a, b) => new Date(a.checkedAt).getTime() - new Date(b.checkedAt).getTime())
+    .map((h) => h.results);
 
   return (
     <div
@@ -93,76 +156,107 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
               No historical scan records available yet.
             </div>
           ) : (
-            <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-950/50">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-900/80 text-slate-400 uppercase font-semibold border-b border-slate-800">
-                  <tr>
-                    <th className="px-4 py-3">Scan Date</th>
-                    <th className="px-4 py-3">Result Count</th>
-                    <th className="px-4 py-3">Difference</th>
-                    <th className="px-4 py-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {history.map((item) => {
-                    const diff = item.difference;
-                    let diffBadge = (
-                      <span className="inline-flex items-center text-slate-400">
-                        <Minus className="w-3 h-3 mr-1" /> 0
-                      </span>
-                    );
+            <>
+              {/* Sparkline Chart */}
+              {sparkData.length >= 2 && (
+                <div className="mb-4 bg-slate-900/60 rounded-xl border border-slate-800 px-4 pt-3 pb-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                      Result Trend ({history.length} scans)
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-500">
+                      min {Math.min(...sparkData.filter((v): v is number => v !== null)).toLocaleString()} →
+                      max {Math.max(...sparkData.filter((v): v is number => v !== null)).toLocaleString()}
+                    </span>
+                  </div>
+                  <Sparkline data={sparkData} />
+                </div>
+              )}
 
-                    if (diff !== null && diff !== undefined && diff !== 0) {
-                      if (diff > 0) {
-                        diffBadge = (
-                          <span className="inline-flex items-center font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                            <ArrowUpRight className="w-3 h-3 mr-0.5" /> +{diff}
-                          </span>
-                        );
-                      } else {
-                        diffBadge = (
-                          <span className="inline-flex items-center font-semibold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
-                            <ArrowDownRight className="w-3 h-3 mr-0.5" /> {diff}
-                          </span>
-                        );
+              {/* Sort Control */}
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs text-slate-400">{history.length} scan records</span>
+                <button
+                  onClick={() => setSortAsc((s) => !s)}
+                  className="flex items-center space-x-1 text-xs text-slate-400 hover:text-slate-200 bg-slate-900/60 hover:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-800 transition-all cursor-pointer"
+                >
+                  <Calendar className="w-3 h-3" />
+                  <span>{sortAsc ? "Oldest First" : "Newest First"}</span>
+                  {sortAsc ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+              </div>
+
+              <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-950/50">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-900/80 text-slate-400 uppercase font-semibold border-b border-slate-800">
+                    <tr>
+                      <th className="px-4 py-3">Scan Date</th>
+                      <th className="px-4 py-3">Result Count</th>
+                      <th className="px-4 py-3">Difference</th>
+                      <th className="px-4 py-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {sorted.map((item) => {
+                      const diff = item.difference;
+                      let diffBadge = (
+                        <span className="inline-flex items-center text-slate-400">
+                          <Minus className="w-3 h-3 mr-1" /> 0
+                        </span>
+                      );
+
+                      if (diff !== null && diff !== undefined && diff !== 0) {
+                        if (diff > 0) {
+                          diffBadge = (
+                            <span className="inline-flex items-center font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                              <ArrowUpRight className="w-3 h-3 mr-0.5" /> +{diff}
+                            </span>
+                          );
+                        } else {
+                          diffBadge = (
+                            <span className="inline-flex items-center font-semibold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
+                              <ArrowDownRight className="w-3 h-3 mr-0.5" /> {diff}
+                            </span>
+                          );
+                        }
                       }
-                    }
 
-                    return (
-                      <tr key={item.id} className="hover:bg-slate-900/40 transition-all">
-                        <td className="px-4 py-3 text-slate-300 font-mono">
-                          {new Date(item.checkedAt).toLocaleString()}
-                        </td>
-                        <td className="px-4 py-3 font-semibold text-slate-100">
-                          {item.results !== null ? item.results.toLocaleString() : "—"}
-                        </td>
-                        <td className="px-4 py-3">{diffBadge}</td>
-                        <td className="px-4 py-3">
-                          {item.status === "success" && item.results === 0 ? (
-                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800/80 text-slate-300 border border-slate-700/60">
-                              0 Active Ads
-                            </span>
-                          ) : (
-                            <span
-                              className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium uppercase ${
-                                item.status === "success"
-                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                  : item.status === "unclear"
-                                  ? "bg-purple-500/10 text-purple-300 border border-purple-500/20"
-                                  : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                              }`}
-                            >
-                              {item.status}
-                              {item.failureReason ? ` (${item.failureReason})` : ""}
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-900/40 transition-all">
+                          <td className="px-4 py-3 text-slate-300 font-mono">
+                            {new Date(item.checkedAt).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-slate-100">
+                            {item.results !== null ? item.results.toLocaleString() : "—"}
+                          </td>
+                          <td className="px-4 py-3">{diffBadge}</td>
+                          <td className="px-4 py-3">
+                            {item.status === "success" && item.results === 0 ? (
+                              <span className="inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800/80 text-slate-300 border border-slate-700/60">
+                                0 Active Ads
+                              </span>
+                            ) : (
+                              <span
+                                className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium uppercase ${
+                                  item.status === "success"
+                                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                    : item.status === "unclear"
+                                    ? "bg-purple-500/10 text-purple-300 border border-purple-500/20"
+                                    : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                                }`}
+                              >
+                                {item.status}
+                                {item.failureReason ? ` (${item.failureReason})` : ""}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       </div>

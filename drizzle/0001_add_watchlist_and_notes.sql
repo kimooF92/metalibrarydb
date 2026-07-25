@@ -1,0 +1,1 @@
+ALTER TABLE "tracked_pages" ADD COLUMN "is_watchlisted" boolean DEFAULT false;

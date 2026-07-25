@@ -10,6 +10,7 @@ import {
   BarChart3,
   TrendingUp,
   FolderInput,
+  ShieldAlert,
 } from "lucide-react";
 
 interface StatsCardsProps {
@@ -20,8 +21,8 @@ interface StatsCardsProps {
 export function StatsCards({ stats, loading }: StatsCardsProps) {
   if (loading || !stats) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 sm:gap-4 mb-4">
-        {[...Array(8)].map((_, i) => (
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-4">
+        {[...Array(6)].map((_, i) => (
           <div
             key={i}
             className="h-20 glass-card rounded-xl animate-pulse bg-slate-900/40"
@@ -74,37 +75,17 @@ export function StatsCards({ stats, loading }: StatsCardsProps) {
       border: "border-rose-500/20",
     },
     {
-      title: "Average Results",
-      value: stats.averageResults.toLocaleString(),
-      icon: BarChart3,
-      color: "text-indigo-400",
-      bg: "bg-indigo-500/10",
-      border: "border-indigo-500/20",
-    },
-    {
-      title: "Highest Results",
-      value: stats.highestResults.toLocaleString(),
-      icon: TrendingUp,
+      title: "Unclear",
+      value: stats.unclear.toLocaleString(),
+      icon: ShieldAlert,
       color: "text-purple-400",
       bg: "bg-purple-500/10",
       border: "border-purple-500/20",
     },
-    {
-      title: "Last Import",
-      value: stats.lastImport ? stats.lastImport.filename : "None",
-      subtitle: stats.lastImport
-        ? `${stats.lastImport.totalRows} URLs`
-        : "No imports yet",
-      icon: FolderInput,
-      color: "text-slate-300",
-      bg: "bg-slate-500/10",
-      border: "border-slate-500/20",
-      isText: true,
-    },
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 sm:gap-4 mb-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-4">
       {items.map((item, index) => {
         const Icon = item.icon;
         return (
@@ -127,18 +108,11 @@ export function StatsCards({ stats, loading }: StatsCardsProps) {
 
             <div className="mt-1">
               <div
-                className={`font-bold tracking-tight text-slate-100 truncate ${
-                  item.isText ? "text-xs" : "text-lg sm:text-xl"
-                }`}
+                className="font-bold tracking-tight text-slate-100 truncate text-lg sm:text-xl"
                 title={item.value}
               >
                 {item.value}
               </div>
-              {item.subtitle && (
-                <div className="text-[10px] text-slate-400 mt-0.5 truncate">
-                  {item.subtitle}
-                </div>
-              )}
             </div>
           </div>
         );

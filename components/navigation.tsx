@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, LayoutDashboard, UploadCloud } from "lucide-react";
+import { Activity, LayoutDashboard, UploadCloud, BarChart3 } from "lucide-react";
 import { WorkerStatus } from "./worker-status";
 
 export function Navigation() {
@@ -71,6 +71,18 @@ export function Navigation() {
           >
             <UploadCloud className="w-4 h-4" />
             <span>Import</span>
+          </Link>
+
+          <Link
+            href="/analytics"
+            className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+              pathname === "/analytics"
+                ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/30"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span>Analytics</span>
           </Link>
         </nav>
 
