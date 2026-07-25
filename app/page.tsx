@@ -1,65 +1,182 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useState, useCallback } from "react";
+import { TrackedPage, DashboardStats } from "@/types";
+import { StatsCards } from "@/components/stats-cards";
+import { AddUrlForm } from "@/components/add-url-form";
+import { PagesTable } from "@/components/pages-table";
+import { RefreshCw } from "lucide-react";
+
+export default function DashboardPage() {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  const [pages, setPages] = useState<TrackedPage[]>([]);
+  const [pagesLoading, setPagesLoading] = useState(true);
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [searchTypeFilter, setSearchTypeFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await fetch("/api/stats");
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch stats", err);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, []);
+
+  const fetchPages = useCallback(async () => {
+    setPagesLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("page", String(page));
+      params.set("limit", "25");
+      if (search) params.set("search", search);
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      if (searchTypeFilter !== "all") params.set("searchType", searchTypeFilter);
+      params.set("sortBy", sortBy);
+      params.set("sortOrder", sortOrder);
+
+      const res = await fetch(`/api/pages?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setPages(data.data || []);
+        setTotalPages(data.pagination?.totalPages || 1);
+      }
+    } catch (err) {
+      console.error("Failed to fetch pages", err);
+    } finally {
+      setPagesLoading(false);
+    }
+  }, [page, search, statusFilter, searchTypeFilter, sortBy, sortOrder]);
+
+  const loadData = useCallback(() => {
+    fetchStats();
+    fetchPages();
+  }, [fetchStats, fetchPages]);
+
+  const handleSortChange = (col: string) => {
+    if (col === sortBy) {
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(col);
+      setSortOrder("desc");
+    }
+    setPage(1);
+  };
+
+  // Initial load on mount and when filters/pagination change
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleRefresh = async (ids: string[]) => {
+    try {
+      const res = await fetch("/api/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (res.ok) loadData();
+    } catch (err) {
+      console.error("Refresh action failed", err);
+    }
+  };
+
+  const handleRetry = async (ids?: string[]) => {
+    try {
+      const res = await fetch("/api/retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (res.ok) loadData();
+    } catch (err) {
+      console.error("Retry action failed", err);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this tracked page and all its scan history?")) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/page/${id}`, { method: "DELETE" });
+      if (res.ok) loadData();
+    } catch (err) {
+      console.error("Delete action failed", err);
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-800/80">
+        <div>
+          <h1 className="text-2xl font-extrabold text-white tracking-tight">
+            Ad Library Monitoring Dashboard
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="text-xs text-slate-400 mt-1">
+            Track visible active result counts across Meta Ad Library search URLs
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+
+        <button
+          onClick={loadData}
+          className="self-start sm:self-auto flex items-center space-x-2 text-xs font-medium px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-all cursor-pointer"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${pagesLoading ? "animate-spin" : ""}`} />
+          <span>Refresh Data</span>
+        </button>
+      </div>
+
+      {/* Summary Stats Cards */}
+      <StatsCards stats={stats} loading={statsLoading} />
+
+      {/* Manual Single URL Add Form */}
+      <AddUrlForm onSuccess={loadData} />
+
+      {/* Main Tracked Pages Table */}
+      <PagesTable
+        pages={pages}
+        loading={pagesLoading}
+        onRefresh={handleRefresh}
+        onRetry={handleRetry}
+        onDelete={handleDelete}
+        search={search}
+        onSearchChange={(val) => {
+          setSearch(val);
+          setPage(1);
+        }}
+        statusFilter={statusFilter}
+        onStatusFilterChange={(val) => {
+          setStatusFilter(val);
+          setPage(1);
+        }}
+        searchTypeFilter={searchTypeFilter}
+        onSearchTypeFilterChange={(val) => {
+          setSearchTypeFilter(val);
+          setPage(1);
+        }}
+        page={page}
+        totalPages={totalPages}
+        onPageChange={(p) => setPage(p)}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onSortChange={handleSortChange}
+      />
     </div>
   );
 }
