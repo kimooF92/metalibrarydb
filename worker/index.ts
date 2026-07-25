@@ -8,6 +8,7 @@ import {
   markJobRunning,
   markJobCompleted,
   markJobFailed,
+  resetStuckJobs,
 } from "./db";
 import {
   checkRateCaps,
@@ -25,6 +26,9 @@ async function runWorker() {
   console.log("==========================================");
   console.log(" Meta Ad Library Tracker — Worker Started ");
   console.log("==========================================");
+
+  // Clear any orphaned scanning/running jobs from previous unexpected shutdowns
+  await resetStuckJobs();
 
   // Check command line arguments for test mode
   const args = process.argv.slice(2);
@@ -123,12 +127,14 @@ async function runWorker() {
 // Graceful shutdown
 process.on("SIGINT", async () => {
   console.log("\nShutting down worker...");
+  await resetStuckJobs();
   await closeBrowserSession();
   process.exit(0);
 });
 
 process.on("SIGTERM", async () => {
   console.log("\nShutting down worker...");
+  await resetStuckJobs();
   await closeBrowserSession();
   process.exit(0);
 });

@@ -38,13 +38,23 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
   if (!isOpen || !page) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl glass-panel rounded-2xl border border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-20 px-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="history-modal-title"
+        className="relative w-full max-w-2xl glass-panel rounded-2xl border border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800/80 bg-slate-900/50">
           <div>
             <div className="flex items-center space-x-2">
-              <h2 className="text-base font-bold text-slate-100">
+              <h2 id="history-modal-title" className="text-base font-bold text-slate-100">
                 Scan History
               </h2>
               <a
@@ -64,6 +74,7 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
 
           <button
             onClick={onClose}
+            aria-label="Close modal"
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-all cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -127,18 +138,24 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
                         </td>
                         <td className="px-4 py-3">{diffBadge}</td>
                         <td className="px-4 py-3">
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium uppercase ${
-                              item.status === "success"
-                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                : item.status === "unclear"
-                                ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                                : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                            }`}
-                          >
-                            {item.status}
-                            {item.failureReason ? ` (${item.failureReason})` : ""}
-                          </span>
+                          {item.status === "success" && item.results === 0 ? (
+                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800/80 text-slate-300 border border-slate-700/60">
+                              0 Active Ads
+                            </span>
+                          ) : (
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium uppercase ${
+                                item.status === "success"
+                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                  : item.status === "unclear"
+                                  ? "bg-purple-500/10 text-purple-300 border border-purple-500/20"
+                                  : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                              }`}
+                            >
+                              {item.status}
+                              {item.failureReason ? ` (${item.failureReason})` : ""}
+                            </span>
+                          )}
                         </td>
                       </tr>
                     );

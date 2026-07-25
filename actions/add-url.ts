@@ -2,7 +2,7 @@ import { db } from "@/db";
 import { trackedPages, queue } from "@/db/schema";
 import { isValidMetaAdLibraryUrl } from "@/lib/validators";
 import { extractUrlMetadata } from "@/lib/url-parser";
-import { eq, or } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 
 export interface AddUrlResult {
   success: boolean;
@@ -11,7 +11,10 @@ export interface AddUrlResult {
   isDuplicate?: boolean;
 }
 
-export async function addSingleUrl(rawUrl: string): Promise<AddUrlResult> {
+export async function addSingleUrl(
+  rawUrl: string,
+  allowDuplicate = false
+): Promise<AddUrlResult> {
   const trimmed = rawUrl.trim();
 
   // 1. Validation
@@ -25,20 +28,29 @@ export async function addSingleUrl(rawUrl: string): Promise<AddUrlResult> {
   // Extract metadata
   const meta = extractUrlMetadata(trimmed);
 
-  // 2. Check duplicates by URL or pageId
-  const existing = await db.query.trackedPages.findFirst({
-    where: meta.pageId
-      ? or(eq(trackedPages.url, meta.url), eq(trackedPages.pageId, meta.pageId))
-      : eq(trackedPages.url, meta.url),
-  });
+  // 2. Check duplicates by URL, pageId, or case-insensitive displayName (unless allowDuplicate is true)
+  if (!allowDuplicate) {
+    const nameNorm = meta.displayName ? meta.displayName.trim().toLowerCase() : "";
 
-  if (existing) {
-    return {
-      success: false,
-      isDuplicate: true,
-      message: `URL is already tracked under display name: "${existing.displayName || existing.url}"`,
-      page: existing,
-    };
+    const existing = await db.query.trackedPages.findFirst({
+      where: meta.pageId
+        ? or(eq(trackedPages.url, meta.url), eq(trackedPages.pageId, meta.pageId))
+        : nameNorm
+        ? or(
+            eq(trackedPages.url, meta.url),
+            sql`lower(trim(${trackedPages.displayName})) = ${nameNorm}`
+          )
+        : eq(trackedPages.url, meta.url),
+    });
+
+    if (existing) {
+      return {
+        success: false,
+        isDuplicate: true,
+        message: `Duplicate page detected: "${existing.displayName || existing.url}" is already being tracked.`,
+        page: existing,
+      };
+    }
   }
 
   // 3. Insert into tracked_pages

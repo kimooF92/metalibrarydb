@@ -143,8 +143,9 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const validated = singleUrlSchema.parse(body);
+    const allowDuplicate = Boolean(body.allowDuplicate);
 
-    const result = await addSingleUrl(validated.url);
+    const result = await addSingleUrl(validated.url, allowDuplicate);
 
     if (!result.success) {
       return NextResponse.json(

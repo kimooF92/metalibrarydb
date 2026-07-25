@@ -1,29 +1,48 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, LayoutDashboard, UploadCloud, ShieldAlert } from "lucide-react";
+import { Activity, LayoutDashboard, UploadCloud } from "lucide-react";
 import { WorkerStatus } from "./worker-status";
 
 export function Navigation() {
   const pathname = usePathname();
+  const [isVisible, setIsVisible] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      if (currentScrollY > lastScrollY && currentScrollY > 64) {
+        setIsVisible(false);
+      } else {
+        setIsVisible(true);
+      }
+      setLastScrollY(currentScrollY);
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [lastScrollY]);
 
   return (
-    <header className="sticky top-0 z-40 w-full glass-panel border-b border-slate-800/80">
+    <header
+      className={`sticky top-0 z-40 w-full glass-panel border-b border-slate-800/80 transition-transform duration-300 ${
+        isVisible ? "translate-y-0" : "-translate-y-full"
+      }`}
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         {/* Brand Logo */}
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-blue-500 to-cyan-400 p-[1px] shadow-lg shadow-indigo-500/20">
-            <div className="w-full h-full bg-slate-950 rounded-[11px] flex items-center justify-center">
-              <Activity className="w-5 h-5 text-indigo-400" />
-            </div>
-          </div>
+          <img
+            src="/icon.png"
+            alt="Meta Ad Tracker Logo"
+            className="w-9 h-9 rounded-full border border-cyan-400/30 shadow-md shadow-cyan-500/20 object-cover"
+          />
           <div>
             <span className="font-bold text-lg text-white tracking-tight">
               Meta Ad Tracker
-            </span>
-            <span className="ml-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-              v1.2
             </span>
           </div>
         </div>
@@ -63,3 +82,4 @@ export function Navigation() {
     </header>
   );
 }
+

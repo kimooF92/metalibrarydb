@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { UploadCloud, FileSpreadsheet, Loader2, CheckCircle2, AlertTriangle, Info, Play } from "lucide-react";
+import { UploadCloud, FileSpreadsheet, Loader2, CheckCircle2, AlertTriangle, Info, Play, X, AlertCircle } from "lucide-react";
 import { ImportResultSummary } from "@/actions/import";
 
 export function ImportDropzone() {
@@ -11,6 +11,7 @@ export function ImportDropzone() {
   const [summary, setSummary] = useState<ImportResultSummary | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -40,9 +41,10 @@ export function ImportDropzone() {
   };
 
   const handleSelectedFile = (selectedFile: File) => {
+    setErrorMessage(null);
     const ext = selectedFile.name.split(".").pop()?.toLowerCase();
     if (ext !== "csv" && ext !== "xlsx") {
-      alert("Please upload a valid CSV or XLSX file.");
+      setErrorMessage("Please upload a valid CSV or XLSX file.");
       return;
     }
     setFile(selectedFile);
@@ -55,6 +57,7 @@ export function ImportDropzone() {
 
     setUploading(true);
     setSummary(null);
+    setErrorMessage(null);
 
     try {
       const formData = new FormData();
@@ -70,11 +73,11 @@ export function ImportDropzone() {
         setSummary(data);
       } else {
         const errData = await res.json().catch(() => null);
-        alert(errData?.error || "Failed to import file. Please check file formatting.");
+        setErrorMessage(errData?.error || "Failed to import file. Please check file formatting.");
       }
     } catch (err) {
       console.error("Upload failed", err);
-      alert("Network error during file upload.");
+      setErrorMessage("Network error during file upload.");
     } finally {
       setUploading(false);
     }
@@ -96,6 +99,23 @@ export function ImportDropzone() {
 
   return (
     <div className="max-w-3xl mx-auto">
+      {/* Error Message Banner */}
+      {errorMessage && (
+        <div className="mb-4 flex items-center justify-between bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs p-3.5 rounded-xl">
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            onClick={() => setErrorMessage(null)}
+            className="p-1 hover:text-white transition-colors"
+            aria-label="Dismiss error"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Drop Area */}
       <div
         onDragEnter={handleDrag}
@@ -138,6 +158,19 @@ export function ImportDropzone() {
               <span className="text-slate-500">
                 ({(file.size / 1024).toFixed(1)} KB)
               </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFile(null);
+                  setSummary(null);
+                  setErrorMessage(null);
+                }}
+                aria-label="Remove selected file"
+                className="p-1 text-slate-400 hover:text-slate-200 transition-colors ml-1 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
         </div>

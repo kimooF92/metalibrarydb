@@ -68,12 +68,11 @@ export async function scanMetaAdPage(
     );
 
     // 6. Extract result text using pattern matching (PRD §6)
-    // Check explicit "no results" first (English, French, Spanish, German)
-    if (
-      /no\s+results?\s+found|aucun\s+résultat|sin\s+resultados|keine\s+ergebnisse/i.test(
-        bodyText
-      )
-    ) {
+    // Check explicit "0 ads" / "no results" patterns first (English, French, Spanish, German)
+    const zeroAdRegex =
+      /^(?:~?\s?0\s*(?:results?|ads?|publicités?|anuncios?|anzeigen?)|no\s+results?\s+found|no\s+active\s+ads|aucun\s+résultat|sin\s+resultados|keine\s+ergebnisse|there\s+are\s+no\s+ads|0\s+matching\s+ads)/i;
+
+    if (zeroAdRegex.test(bodyText) || /~\s?0\s+results/i.test(bodyText) || /\b0\s+results\b/i.test(bodyText)) {
       return { status: "success", results: 0 };
     }
 

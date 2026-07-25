@@ -2,6 +2,18 @@ import { db } from "../db";
 import { trackedPages, queue, scanHistory, workerState } from "../db/schema";
 import { eq, asc, sql } from "drizzle-orm";
 
+export async function resetStuckJobs() {
+  await db
+    .update(queue)
+    .set({ status: "pending" })
+    .where(eq(queue.status, "running"));
+
+  await db
+    .update(trackedPages)
+    .set({ status: "pending" })
+    .where(eq(trackedPages.status, "scanning"));
+}
+
 export async function getWorkerState() {
   let state = await db.query.workerState.findFirst({
     where: eq(workerState.id, 1),

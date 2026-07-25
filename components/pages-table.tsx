@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { TrackedPage } from "@/types";
 import { HistoryModal } from "./history-modal";
+import { DeleteConfirmModal } from "./delete-confirm-modal";
 import {
   Search,
   Filter,
@@ -21,7 +22,30 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
+  Flame,
 } from "lucide-react";
+
+function formatRelativeTime(dateInput: string | Date | null | undefined): string {
+  if (!dateInput) return "Never";
+  const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return "Never";
+
+  const diffMs = Date.now() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHour = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHour / 24);
+
+  if (diffMin < 1) return "Just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffHour < 24) return `${diffHour}h ago`;
+  if (diffDay === 1) return "Yesterday";
+  if (diffDay < 7) return `${diffDay}d ago`;
+
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
 
 interface PagesTableProps {
   pages: TrackedPage[];
@@ -74,7 +98,7 @@ export function PagesTable({
     const active = sortBy === col;
     return (
       <th
-        className={`px-4 py-3.5 whitespace-nowrap ${className}`}
+        className={`px-3 py-2.5 whitespace-nowrap ${className}`}
       >
         <button
           onClick={() => onSortChange(col)}
@@ -100,6 +124,21 @@ export function PagesTable({
   };
   const [selectedHistoryPage, setSelectedHistoryPage] = useState<TrackedPage | null>(null);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
+
+  const [pageToDelete, setPageToDelete] = useState<TrackedPage | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const confirmDelete = async (id: string) => {
+    setDeleting(true);
+    try {
+      await onDelete(id);
+      setPageToDelete(null);
+    } catch (err) {
+      console.error("Failed to delete page", err);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState<string>("");
@@ -141,10 +180,29 @@ export function PagesTable({
     setHistoryModalOpen(true);
   };
 
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const allVisibleSelected =
+    pages.length > 0 && pages.every((p) => selectedIds.includes(p.id));
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(pages.map((p) => p.id));
+    }
+  };
+
+  const toggleSelectRow = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
   return (
     <div className="glass-card rounded-xl p-5 shadow-xl">
       {/* Search & Filters Toolbar */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 mb-4">
         {/* Global Search Bar */}
         <div className="relative flex-1">
           <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
@@ -204,33 +262,87 @@ export function PagesTable({
         </div>
       </div>
 
+      {/* Bulk Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="flex items-center justify-between bg-indigo-950/90 border border-indigo-500/40 px-4 py-2.5 rounded-xl text-xs text-indigo-200 mb-4 animate-in fade-in duration-150">
+          <div className="flex items-center space-x-2 font-medium">
+            <span className="font-bold text-white px-2 py-0.5 rounded bg-indigo-500/20 border border-indigo-500/30">
+              {selectedIds.length}
+            </span>
+            <span>
+              {selectedIds.length === 1 ? "page selected" : "pages selected"}
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => {
+                onRefresh(selectedIds);
+                setSelectedIds([]);
+              }}
+              className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Refresh Selected ({selectedIds.length})</span>
+            </button>
+
+            <button
+              onClick={() => setSelectedIds([])}
+              className="px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-900 transition-colors cursor-pointer"
+            >
+              Clear selection
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Table */}
       <div className="rounded-xl border border-slate-800/80 overflow-hidden bg-slate-950/40">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-900/90 text-slate-400 uppercase font-semibold border-b border-slate-800">
               <tr>
+                <th className="px-2.5 py-2.5 text-center w-8">
+                  <label className="relative inline-flex items-center justify-center cursor-pointer" title="Select all visible pages">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={toggleSelectAll}
+                      aria-label="Select all pages on current view"
+                      className="sr-only"
+                    />
+                    <div className={`w-4 h-4 rounded border transition-all flex items-center justify-center shadow-sm ${
+                      allVisibleSelected
+                        ? "bg-indigo-600 border-indigo-500"
+                        : "bg-slate-900/90 border-slate-700 hover:border-slate-500"
+                    }`}>
+                      {allVisibleSelected && (
+                        <Check className="w-3 h-3 text-white stroke-[3]" />
+                      )}
+                    </div>
+                  </label>
+                </th>
                 <SortHeader col="displayName" label="Display Name" />
-                <th className="px-4 py-3.5 whitespace-nowrap">Type</th>
+                <th className="px-3 py-2.5 whitespace-nowrap">Type</th>
                 <SortHeader col="currentResults" label="Current Results" />
-                <th className="px-4 py-3.5 whitespace-nowrap">Previous Results</th>
-                <th className="px-4 py-3.5 whitespace-nowrap">Difference</th>
+                <th className="px-3 py-2.5 whitespace-nowrap">Previous Results</th>
+                <th className="px-3 py-2.5 whitespace-nowrap">Difference</th>
                 <SortHeader col="status" label="Status" />
                 <SortHeader col="lastChecked" label="Last Checked" />
-                <th className="px-4 py-3.5 text-right whitespace-nowrap">Actions</th>
+                <th className="px-3 py-2.5 text-right whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
+                  <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
                     <Loader2 className="w-6 h-6 animate-spin text-indigo-400 mx-auto mb-2" />
                     <span>Loading tracked pages...</span>
                   </td>
                 </tr>
               ) : pages.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
+                  <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
                     No tracked Meta Ad Library URLs match your filter criteria.
                   </td>
                 </tr>
@@ -259,13 +371,48 @@ export function PagesTable({
                     }
                   }
 
+                  const isHighVolume = p.currentResults !== null && p.currentResults >= 50;
+                  const isDimmed = p.currentResults === 0 || p.status === "unclear";
+
+                  const isSelected = selectedIds.includes(p.id);
+
                   return (
                     <tr
                       key={p.id}
-                      className="hover:bg-slate-900/60 transition-all group"
+                      className={`transition-all group ${
+                        isSelected
+                          ? "bg-indigo-950/40 hover:bg-indigo-950/60"
+                          : isHighVolume
+                          ? "bg-amber-500/[0.04] hover:bg-amber-500/[0.08] border-l-2 border-l-amber-400"
+                          : isDimmed
+                          ? "opacity-60 hover:opacity-100 hover:bg-slate-900/40"
+                          : "hover:bg-slate-900/60"
+                      }`}
                     >
+                      {/* Checkbox */}
+                      <td className="px-2.5 py-2.5 text-center">
+                        <label className="relative inline-flex items-center justify-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectRow(p.id)}
+                            aria-label={`Select ${p.displayName || "tracked page"}`}
+                            className="sr-only"
+                          />
+                          <div className={`w-4 h-4 rounded border transition-all flex items-center justify-center shadow-sm ${
+                            isSelected
+                              ? "bg-indigo-600 border-indigo-500 shadow-indigo-600/30"
+                              : "bg-slate-900/90 border-slate-700/80 hover:border-slate-500"
+                          }`}>
+                            {isSelected && (
+                              <Check className="w-3 h-3 text-white stroke-[3]" />
+                            )}
+                          </div>
+                        </label>
+                      </td>
+
                       {/* Display Name & Link */}
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5">
                         {editingId === p.id ? (
                           <div className="flex items-center space-x-1.5">
                             <input
@@ -308,7 +455,7 @@ export function PagesTable({
                               target="_blank"
                               rel="noreferrer"
                               title={p.url}
-                              className="font-semibold text-slate-100 hover:text-indigo-300 underline-offset-2 hover:underline transition-colors truncate max-w-[200px]"
+                              className="font-semibold text-slate-100 hover:text-indigo-300 underline-offset-2 hover:underline transition-colors truncate max-w-[180px]"
                             >
                               {p.displayName || "Meta Ad Search"}
                             </a>
@@ -329,65 +476,89 @@ export function PagesTable({
                       </td>
 
                       {/* Search Type */}
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5">
                         <span className="inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800/80 text-slate-300 border border-slate-700/60">
                           {p.searchType || "page"}
                         </span>
                       </td>
 
                       {/* Current Results */}
-                      <td className="px-4 py-3 font-bold text-slate-100 text-sm">
-                        {p.currentResults !== null
-                          ? p.currentResults.toLocaleString()
-                          : "—"}
+                      <td className="px-3 py-2.5 text-sm">
+                        {p.currentResults !== null ? (
+                          p.currentResults >= 50 ? (
+                            <span
+                              className="inline-flex items-center space-x-1.5 font-extrabold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2.5 py-1 rounded-lg shadow-sm shadow-amber-500/10 text-xs"
+                              title="High Volume Competitor (50+ active ads)"
+                            >
+                              <Flame className="w-3.5 h-3.5 text-amber-400 fill-amber-400/40 animate-pulse shrink-0" />
+                              <span>{p.currentResults.toLocaleString()}</span>
+                            </span>
+                          ) : p.currentResults === 0 ? (
+                            <span className="font-semibold text-slate-500">0</span>
+                          ) : (
+                            <span className="font-bold text-slate-100">{p.currentResults.toLocaleString()}</span>
+                          )
+                        ) : (
+                          <span className="text-slate-600">—</span>
+                        )}
                       </td>
 
                       {/* Previous Results */}
-                      <td className="px-4 py-3 text-slate-400 font-medium">
+                      <td className="px-3 py-2.5 text-slate-400 font-medium">
                         {p.previousResults !== null && p.previousResults !== undefined
                           ? p.previousResults.toLocaleString()
                           : "—"}
                       </td>
 
                       {/* Difference */}
-                      <td className="px-4 py-3">{diffBadge}</td>
+                      <td className="px-3 py-2.5">{diffBadge}</td>
 
                       {/* Status */}
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
-                            p.status === "success"
-                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                              : p.status === "scanning"
-                              ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 animate-pulse"
-                              : p.status === "pending"
-                              ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                              : p.status === "unclear"
-                              ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
-                              : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                          }`}
-                        >
-                          {p.status}
-                        </span>
+                      <td className="px-3 py-2.5">
+                        {p.status === "success" && p.currentResults === 0 ? (
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-900/80 text-slate-500 border border-slate-800/80"
+                            title="Confirmed 0 active ads found on Meta Ad Library"
+                          >
+                            0 Active Ads
+                          </span>
+                        ) : p.status === "unclear" ? (
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-purple-950/30 text-purple-400/70 border border-purple-500/15 cursor-help"
+                            title="Unclear: Page layout pattern not recognized automatically. Verify URL or click Refresh."
+                          >
+                            Unclear
+                          </span>
+                        ) : (
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                              p.status === "success"
+                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                : p.status === "scanning"
+                                ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 animate-pulse"
+                                : p.status === "pending"
+                                ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                            }`}
+                          >
+                            {p.status}
+                          </span>
+                        )}
                       </td>
 
                       {/* Last Checked */}
-                      <td className="px-4 py-3 text-slate-400 font-mono text-[11px]">
-                        {p.lastChecked
-                          ? new Date(p.lastChecked).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })
-                          : "Never"}
+                      <td className="px-3 py-2.5 text-slate-400 font-mono text-[11px]" title={p.lastChecked ? new Date(p.lastChecked).toLocaleString() : undefined}>
+                        {formatRelativeTime(p.lastChecked)}
                       </td>
 
                       {/* Actions */}
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-3 py-2.5 text-right">
                         <div className="flex items-center justify-end space-x-1">
                           <button
                             onClick={() => onRefresh([p.id])}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer"
                             title="Refresh scan"
+                            aria-label={`Refresh scan for ${p.displayName || "tracked page"}`}
                           >
                             <RefreshCw className="w-3.5 h-3.5" />
                           </button>
@@ -396,6 +567,7 @@ export function PagesTable({
                             onClick={() => openHistory(p)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-blue-300 hover:bg-blue-500/10 transition-all cursor-pointer"
                             title="View scan history"
+                            aria-label={`View scan history for ${p.displayName || "tracked page"}`}
                           >
                             <History className="w-3.5 h-3.5" />
                           </button>
@@ -404,14 +576,16 @@ export function PagesTable({
                             onClick={() => onRetry([p.id])}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-amber-300 hover:bg-amber-500/10 transition-all cursor-pointer"
                             title="Retry scan"
+                            aria-label={`Retry scan for ${p.displayName || "tracked page"}`}
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
                           </button>
 
                           <button
-                            onClick={() => onDelete(p.id)}
+                            onClick={() => setPageToDelete(p)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
                             title="Delete tracked page"
+                            aria-label={`Delete ${p.displayName || "tracked page"}`}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -427,49 +601,70 @@ export function PagesTable({
 
         {/* Pagination Footer */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 bg-slate-900/60 border-t border-slate-800 text-xs text-slate-400">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-900/60 border-t border-slate-800 text-xs text-slate-400">
             <span>
               Page <strong className="text-slate-200">{page}</strong> of{" "}
               <strong className="text-slate-200">{totalPages}</strong>
             </span>
 
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-1.5 text-xs text-slate-400">
-                <span>Go to page:</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={totalPages}
-                  defaultValue={page}
-                  key={page}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      const val = parseInt((e.currentTarget as HTMLInputElement).value, 10);
-                      if (val >= 1 && val <= totalPages) {
-                        onPageChange(val);
-                      }
-                    }
-                  }}
-                  className="w-12 bg-slate-950/80 text-center text-slate-200 rounded border border-slate-800 py-1 focus:outline-none focus:border-indigo-500 transition-all font-semibold"
-                />
-              </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                disabled={page <= 1}
+                onClick={() => onPageChange(page - 1)}
+                className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 disabled:opacity-40 text-slate-300 transition-all cursor-pointer disabled:cursor-not-allowed text-xs font-medium"
+                aria-label="Previous page"
+              >
+                Previous
+              </button>
 
-              <div className="flex items-center space-x-2">
-                <button
-                  disabled={page <= 1}
-                  onClick={() => onPageChange(page - 1)}
-                  className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 transition-all cursor-pointer disabled:cursor-not-allowed"
-                >
-                  Previous
-                </button>
-                <button
-                  disabled={page >= totalPages}
-                  onClick={() => onPageChange(page + 1)}
-                  className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 transition-all cursor-pointer disabled:cursor-not-allowed"
-                >
-                  Next
-                </button>
-              </div>
+              {(() => {
+                const getPageNumbers = () => {
+                  if (totalPages <= 7) {
+                    return Array.from({ length: totalPages }, (_, i) => i + 1);
+                  }
+                  if (page <= 4) {
+                    return [1, 2, 3, 4, 5, "...", totalPages];
+                  }
+                  if (page >= totalPages - 3) {
+                    return [1, "...", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+                  }
+                  return [1, "...", page - 1, page, page + 1, "...", totalPages];
+                };
+
+                return getPageNumbers().map((p, idx) => {
+                  if (p === "...") {
+                    return (
+                      <span key={`ellipsis-${idx}`} className="px-1.5 py-1 text-slate-500 text-xs select-none">
+                        ...
+                      </span>
+                    );
+                  }
+                  const pageNum = p as number;
+                  const isActive = pageNum === page;
+                  return (
+                    <button
+                      key={`page-${pageNum}`}
+                      onClick={() => onPageChange(pageNum)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        isActive
+                          ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30 border border-indigo-500"
+                          : "bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800"
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                });
+              })()}
+
+              <button
+                disabled={page >= totalPages}
+                onClick={() => onPageChange(page + 1)}
+                className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 disabled:opacity-40 text-slate-300 transition-all cursor-pointer disabled:cursor-not-allowed text-xs font-medium"
+                aria-label="Next page"
+              >
+                Next
+              </button>
             </div>
           </div>
         )}
@@ -483,6 +678,15 @@ export function PagesTable({
           setHistoryModalOpen(false);
           setSelectedHistoryPage(null);
         }}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        page={pageToDelete}
+        isOpen={!!pageToDelete}
+        onClose={() => setPageToDelete(null)}
+        onConfirm={confirmDelete}
+        loading={deleting}
       />
     </div>
   );

@@ -20,11 +20,11 @@ interface StatsCardsProps {
 export function StatsCards({ stats, loading }: StatsCardsProps) {
   if (loading || !stats) {
     return (
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 sm:gap-4 mb-4">
         {[...Array(8)].map((_, i) => (
           <div
             key={i}
-            className="h-24 glass-card rounded-xl animate-pulse bg-slate-900/40"
+            className="h-20 glass-card rounded-xl animate-pulse bg-slate-900/40"
           />
         ))}
       </div>
@@ -104,19 +104,19 @@ export function StatsCards({ stats, loading }: StatsCardsProps) {
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 sm:gap-4 mb-8">
+    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 sm:gap-4 mb-4">
       {items.map((item, index) => {
         const Icon = item.icon;
         return (
           <div
             key={index}
-            className="glass-card rounded-xl p-4 transition-all duration-200 hover:-translate-y-0.5"
+            className="glass-card rounded-xl p-3.5 transition-all duration-200 hover:-translate-y-0.5"
           >
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs font-medium text-slate-400 truncate">
                 {item.title}
               </span>
-              <div className={`p-1.5 rounded-lg ${item.bg} ${item.color}`}>
+              <div className={`p-1 rounded-lg ${item.bg} ${item.color}`}>
                 <Icon
                   className={`w-3.5 h-3.5 ${
                     item.animate ? "animate-spin" : ""
@@ -146,3 +146,4 @@ export function StatsCards({ stats, loading }: StatsCardsProps) {
     </div>
   );
 }
+

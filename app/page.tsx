@@ -5,11 +5,12 @@ import { TrackedPage, DashboardStats } from "@/types";
 import { StatsCards } from "@/components/stats-cards";
 import { AddUrlForm } from "@/components/add-url-form";
 import { PagesTable } from "@/components/pages-table";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, LayoutGrid, ChevronDown, ChevronUp } from "lucide-react";
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [isOverviewCollapsed, setIsOverviewCollapsed] = useState(false);
 
   const [pages, setPages] = useState<TrackedPage[]>([]);
   const [pagesLoading, setPagesLoading] = useState(true);
@@ -82,6 +83,16 @@ export default function DashboardPage() {
     loadData();
   }, [loadData]);
 
+  const [toast, setToast] = useState<{
+    type: "success" | "error" | "info";
+    message: string;
+  } | null>(null);
+
+  const showToast = (type: "success" | "error" | "info", message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 4000);
+  };
+
   const handleRefresh = async (ids: string[]) => {
     try {
       const res = await fetch("/api/refresh", {
@@ -89,9 +100,13 @@ export default function DashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids }),
       });
-      if (res.ok) loadData();
+      if (res.ok) {
+        showToast("info", "Scan refresh queued successfully.");
+        loadData();
+      }
     } catch (err) {
       console.error("Refresh action failed", err);
+      showToast("error", "Failed to queue refresh.");
     }
   };
 
@@ -102,26 +117,47 @@ export default function DashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids }),
       });
-      if (res.ok) loadData();
+      if (res.ok) {
+        showToast("info", "Failed scans queued for retry.");
+        loadData();
+      }
     } catch (err) {
       console.error("Retry action failed", err);
+      showToast("error", "Failed to queue retry.");
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this tracked page and all its scan history?")) {
-      return;
-    }
     try {
       const res = await fetch(`/api/page/${id}`, { method: "DELETE" });
-      if (res.ok) loadData();
+      if (res.ok) {
+        showToast("success", "Tracked page deleted successfully.");
+        loadData();
+      } else {
+        showToast("error", "Failed to delete tracked page.");
+      }
     } catch (err) {
       console.error("Delete action failed", err);
+      showToast("error", "Network error while deleting page.");
     }
   };
 
   return (
     <div className="space-y-6">
+      {/* Toast Alert Banner */}
+      {toast && (
+        <div
+          className={`fixed top-20 right-6 z-50 flex items-center space-x-3 px-4 py-3 rounded-xl shadow-2xl border text-xs font-semibold backdrop-blur-md animate-in slide-in-from-top-5 duration-200 ${
+            toast.type === "success"
+              ? "bg-emerald-950/95 text-emerald-300 border-emerald-500/40"
+              : toast.type === "error"
+              ? "bg-rose-950/95 text-rose-300 border-rose-500/40"
+              : "bg-indigo-950/95 text-indigo-300 border-indigo-500/40"
+          }`}
+        >
+          <span>{toast.message}</span>
+        </div>
+      )}
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-800/80">
         <div>
@@ -142,11 +178,35 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {/* Summary Stats Cards */}
-      <StatsCards stats={stats} loading={statsLoading} />
+      {/* Unified Overview & Controls Block (Collapsed Together) */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center space-x-2">
+            <LayoutGrid className="w-4 h-4 text-indigo-400" />
+            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+              Overview & Quick Add
+            </span>
+          </div>
+          <button
+            onClick={() => setIsOverviewCollapsed(!isOverviewCollapsed)}
+            className="flex items-center space-x-1.5 text-xs text-slate-400 hover:text-slate-200 bg-slate-900/60 hover:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-800 transition-all cursor-pointer"
+          >
+            <span>{isOverviewCollapsed ? "Expand Overview" : "Collapse"}</span>
+            {isOverviewCollapsed ? (
+              <ChevronDown className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronUp className="w-3.5 h-3.5" />
+            )}
+          </button>
+        </div>
 
-      {/* Manual Single URL Add Form */}
-      <AddUrlForm onSuccess={loadData} />
+        {!isOverviewCollapsed && (
+          <div className="space-y-4 transition-all">
+            <StatsCards stats={stats} loading={statsLoading} />
+            <AddUrlForm onSuccess={loadData} />
+          </div>
+        )}
+      </div>
 
       {/* Main Tracked Pages Table */}
       <PagesTable

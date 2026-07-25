@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
+
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
@@ -13,8 +16,9 @@ export const client =
   postgres(connectionString, {
     prepare: false,
     max: 1,
-    idle_timeout: 10,
-    connect_timeout: 10,
+    idle_timeout: 15,
+    connect_timeout: 15,
+    ssl: "require",
   });
 
 if (process.env.NODE_ENV !== "production") globalForDb.conn = client;

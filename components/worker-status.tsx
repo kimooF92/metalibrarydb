@@ -93,6 +93,9 @@ export function WorkerStatus() {
               ? "Backoff Cooldown"
               : "Worker Ready"}
           </span>
+          <span className="hidden lg:inline-block text-[10px] font-mono text-slate-400 border-l border-slate-800 pl-2">
+            {state.scansThisHour ?? 0}h / {state.scansToday ?? 0}d
+          </span>
         </div>
 
         <button
