@@ -23,6 +23,7 @@
 # misc
 .DS_Store
 *.pem
+scratch/
 
 # debug
 npm-debug.log*
@@ -42,4 +43,3 @@ next-env.d.ts
 
 # playwright
 .playwright_profile/
-
