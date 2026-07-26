@@ -27,7 +27,8 @@ export default function DashboardPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  const fetchStats = useCallback(async () => {
+  const fetchStats = useCallback(async (silent = false) => {
+    if (!silent) setStatsLoading(true);
     try {
       const res = await fetch("/api/stats");
       if (res.ok) {
@@ -37,12 +38,12 @@ export default function DashboardPage() {
     } catch (err) {
       console.error("Failed to fetch stats", err);
     } finally {
-      setStatsLoading(false);
+      if (!silent) setStatsLoading(false);
     }
   }, []);
 
-  const fetchPages = useCallback(async () => {
-    setPagesLoading(true);
+  const fetchPages = useCallback(async (silent = false) => {
+    if (!silent) setPagesLoading(true);
     try {
       const params = new URLSearchParams();
       params.set("page", String(page));
@@ -63,13 +64,13 @@ export default function DashboardPage() {
     } catch (err) {
       console.error("Failed to fetch pages", err);
     } finally {
-      setPagesLoading(false);
+      if (!silent) setPagesLoading(false);
     }
   }, [page, search, statusFilter, searchTypeFilter, activeTab, sortBy, sortOrder]);
 
-  const loadData = useCallback(() => {
-    fetchStats();
-    fetchPages();
+  const loadData = useCallback((silent = false) => {
+    fetchStats(silent);
+    fetchPages(silent);
   }, [fetchStats, fetchPages]);
 
   const handleSortChange = (col: string) => {
@@ -86,6 +87,22 @@ export default function DashboardPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Determine if there are active scans running or pending
+  const isScanningActive =
+    (stats && (stats.scanning > 0 || stats.pending > 0)) ||
+    pages.some((p) => p.status === "scanning" || p.status === "pending");
+
+  // Real-time polling when scraper jobs are active
+  useEffect(() => {
+    if (!isScanningActive) return;
+
+    const interval = setInterval(() => {
+      loadData(true); // Silent reload
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [isScanningActive, loadData]);
 
   const [toast, setToast] = useState<{
     type: "success" | "error" | "info";
@@ -213,7 +230,7 @@ export default function DashboardPage() {
           </button>
 
           <button
-            onClick={loadData}
+            onClick={() => loadData()}
             title="Refresh dashboard data"
             className="flex items-center space-x-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-all cursor-pointer"
           >
