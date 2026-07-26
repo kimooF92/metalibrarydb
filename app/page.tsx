@@ -18,6 +18,7 @@ export default function DashboardPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchTypeFilter, setSearchTypeFilter] = useState("all");
+  const [activeTab, setActiveTab] = useState("all");
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
@@ -47,6 +48,7 @@ export default function DashboardPage() {
       if (search) params.set("search", search);
       if (statusFilter !== "all") params.set("status", statusFilter);
       if (searchTypeFilter !== "all") params.set("searchType", searchTypeFilter);
+      if (activeTab !== "all") params.set("tab", activeTab);
       params.set("sortBy", sortBy);
       params.set("sortOrder", sortOrder);
 
@@ -61,7 +63,7 @@ export default function DashboardPage() {
     } finally {
       setPagesLoading(false);
     }
-  }, [page, search, statusFilter, searchTypeFilter, sortBy, sortOrder]);
+  }, [page, search, statusFilter, searchTypeFilter, activeTab, sortBy, sortOrder]);
 
   const loadData = useCallback(() => {
     fetchStats();
@@ -240,6 +242,11 @@ export default function DashboardPage() {
         searchTypeFilter={searchTypeFilter}
         onSearchTypeFilterChange={(val) => {
           setSearchTypeFilter(val);
+          setPage(1);
+        }}
+        activeTab={activeTab}
+        onTabChange={(tab) => {
+          setActiveTab(tab);
           setPage(1);
         }}
         page={page}

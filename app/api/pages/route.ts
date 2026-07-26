@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { trackedPages, scanHistory, queue } from "@/db/schema";
 import { addSingleUrl } from "@/actions/add-url";
 import { singleUrlSchema } from "@/lib/validators";
-import { eq, ilike, or, and, sql, desc, asc, inArray } from "drizzle-orm";
+import { eq, ilike, or, and, sql, desc, asc, inArray, gte } from "drizzle-orm";
 
 export async function GET(request: Request) {
   try {
@@ -12,6 +12,7 @@ export async function GET(request: Request) {
     const search = searchParams.get("search")?.trim();
     const statusFilter = searchParams.get("status")?.trim();
     const searchTypeFilter = searchParams.get("searchType")?.trim();
+    const tab = searchParams.get("tab")?.trim() || "all";
     const sortBy = searchParams.get("sortBy")?.trim() || "createdAt";
     const sortOrder = searchParams.get("sortOrder")?.toLowerCase() === "asc" ? "asc" : "desc";
 
@@ -38,6 +39,17 @@ export async function GET(request: Request) {
 
     if (searchTypeFilter && searchTypeFilter !== "all") {
       conditions.push(eq(trackedPages.searchType, searchTypeFilter));
+    }
+
+    // Smart Tabs Filters
+    if (tab === "watchlist") {
+      conditions.push(eq(trackedPages.isWatchlisted, true));
+    } else if (tab === "high_volume") {
+      conditions.push(gte(trackedPages.currentResults, 50));
+    } else if (tab === "zero_ads") {
+      conditions.push(eq(trackedPages.currentResults, 0));
+    } else if (tab === "needs_review") {
+      conditions.push(inArray(trackedPages.status, ["unclear", "failed"]));
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

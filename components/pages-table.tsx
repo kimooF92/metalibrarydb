@@ -62,6 +62,8 @@ interface PagesTableProps {
   onStatusFilterChange: (value: string) => void;
   searchTypeFilter: string;
   onSearchTypeFilterChange: (value: string) => void;
+  activeTab: string;
+  onTabChange: (tab: string) => void;
   page: number;
   totalPages: number;
   onPageChange: (newPage: number) => void;
@@ -84,6 +86,8 @@ export function PagesTable({
   onStatusFilterChange,
   searchTypeFilter,
   onSearchTypeFilterChange,
+  activeTab,
+  onTabChange,
   page,
   totalPages,
   onPageChange,
@@ -247,6 +251,34 @@ export function PagesTable({
 
   return (
     <div className="glass-card rounded-xl p-5 shadow-xl">
+      {/* Smart Tabs */}
+      <div className="flex flex-wrap items-center gap-1.5 pb-4 mb-4 border-b border-slate-800/60">
+        {[
+          { id: "all", label: "All Pages", icon: null },
+          { id: "watchlist", label: "Watchlist", icon: Star, iconColor: "text-yellow-400 fill-yellow-400/20" },
+          { id: "high_volume", label: "High Volume", icon: Flame, iconColor: "text-amber-400 fill-amber-400/20" },
+          { id: "zero_ads", label: "Zero Ads", icon: Minus, iconColor: "text-slate-400" },
+          { id: "needs_review", label: "Needs Review", icon: ShieldAlert, iconColor: "text-rose-400" },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const active = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => onTabChange(tab.id)}
+              className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                active
+                  ? "bg-indigo-600/20 border-indigo-500/40 text-indigo-300 shadow-md shadow-indigo-600/10"
+                  : "bg-slate-900/60 border-slate-800/80 hover:border-slate-700/80 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              {Icon && <Icon className={`w-3.5 h-3.5 ${tab.iconColor || ""}`} />}
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Search & Filters Toolbar */}
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 mb-4">
         {/* Global Search Bar */}
