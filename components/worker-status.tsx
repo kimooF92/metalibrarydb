@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { WorkerState } from "@/types";
 import { PauseCircle, PlayCircle, ShieldAlert, Cpu, Trash2, CheckCircle2 } from "lucide-react";
 
-export function WorkerStatus() {
+export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" | "vertical" | "collapsed" }) {
   const [state, setState] = useState<WorkerState | null>(null);
   const [isBackoffActive, setIsBackoffActive] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -78,14 +78,157 @@ export function WorkerStatus() {
 
   if (!state) {
     return (
-      <div className="flex items-center space-x-2 text-xs text-slate-400 bg-slate-900/60 px-3 py-1.5 rounded-full border border-slate-800">
-        <Cpu className="w-3.5 h-3.5 animate-pulse" />
-        <span>Worker: Checking...</span>
+      <div className="flex items-center justify-center py-1.5 px-3 rounded-lg bg-slate-900/60 border border-slate-800 text-xs text-slate-400">
+        <Cpu className="w-3.5 h-3.5 animate-pulse mr-1.5" />
+        {layout !== "collapsed" && <span>Checking...</span>}
       </div>
     );
   }
 
   const isPaused = state.isPaused;
+
+  if (layout === "collapsed") {
+    return (
+      <button
+        onClick={toggleWorker}
+        disabled={loading}
+        title={isPaused ? "Worker is Paused. Click to Resume." : isBackoffActive ? "Worker Cooldown. Click to Resume." : "Worker Active. Click to Pause."}
+        className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-slate-800/40 border border-transparent hover:border-slate-800/60 transition-all cursor-pointer relative"
+      >
+        <span className="relative flex h-3.5 w-3.5">
+          {!isPaused && !isBackoffActive && (
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          )}
+          <span
+            className={`relative inline-flex rounded-full h-3.5 w-3.5 ${
+              isPaused
+                ? "bg-slate-500"
+                : isBackoffActive
+                ? "bg-amber-400"
+                : "bg-emerald-500"
+            }`}
+          ></span>
+        </span>
+      </button>
+    );
+  }
+
+  if (layout === "vertical") {
+    return (
+      <div className="flex flex-col space-y-3 w-full">
+        {/* Status Indicator & Control */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <span className="relative flex h-2 w-2">
+              {!isPaused && !isBackoffActive && (
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              )}
+              <span
+                className={`relative inline-flex rounded-full h-2 w-2 ${
+                  isPaused
+                    ? "bg-slate-500"
+                    : isBackoffActive
+                    ? "bg-amber-400"
+                    : "bg-emerald-500"
+                }`}
+              ></span>
+            </span>
+            <span className="text-xs font-semibold text-slate-200">
+              {isPaused
+                ? "Paused"
+                : isBackoffActive
+                ? "Backoff Cooldown"
+                : "Worker Active"}
+            </span>
+          </div>
+          
+          <button
+            onClick={toggleWorker}
+            disabled={loading}
+            className={`text-[10px] px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+              isPaused
+                ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20"
+                : "bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/20"
+            }`}
+          >
+            {isPaused ? "Resume" : "Pause"}
+          </button>
+        </div>
+
+        {/* Backoff / Warning */}
+        {isBackoffActive && (
+          <div className="flex items-start space-x-1.5 text-[10px] text-amber-400 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
+            <ShieldAlert className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <span>Repeated scraper failures detected. Cooldown active.</span>
+          </div>
+        )}
+
+        {/* Progress Bars Stack */}
+        <div className="flex flex-col space-y-2 bg-slate-950/65 p-2.5 rounded-lg border border-slate-900">
+          {/* Hourly Scans */}
+          <div className="flex flex-col space-y-1">
+            <div className="flex justify-between text-[9px]">
+              <span className="text-slate-500 font-medium">Hourly Scans</span>
+              <span className="text-slate-400 font-mono font-bold">{state.scansThisHour ?? 0} / 20</span>
+            </div>
+            <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${Math.min(100, ((state.scansThisHour ?? 0) / 20) * 100)}%`,
+                  background: (state.scansThisHour ?? 0) >= 18
+                    ? "#f87171"
+                    : (state.scansThisHour ?? 0) >= 12
+                    ? "#fbbf24"
+                    : "#6366f1",
+                }}
+              />
+            </div>
+          </div>
+          {/* Daily Scans */}
+          <div className="flex flex-col space-y-1">
+            <div className="flex justify-between text-[9px]">
+              <span className="text-slate-500 font-medium">Daily Scans</span>
+              <span className="text-slate-400 font-mono font-bold">{state.scansToday ?? 0} / 150</span>
+            </div>
+            <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${Math.min(100, ((state.scansToday ?? 0) / 150) * 100)}%`,
+                  background: (state.scansToday ?? 0) >= 135
+                    ? "#f87171"
+                    : (state.scansToday ?? 0) >= 100
+                    ? "#fbbf24"
+                    : "#6366f1",
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Queue Pruning Action */}
+        {pruneCount !== null && pruneCount > 0 && (
+          <button
+            onClick={pruneQueue}
+            disabled={pruning}
+            className="flex items-center justify-center space-x-1.5 text-[10px] w-full text-slate-400 hover:text-rose-300 bg-slate-900/60 hover:bg-rose-500/10 py-1.5 rounded-lg border border-slate-800 hover:border-rose-500/30 transition-all cursor-pointer"
+          >
+            <Trash2 className="w-3 h-3" />
+            <span>Prune {pruneCount} old jobs</span>
+          </button>
+        )}
+        
+        {/* Pruning Toast inside Vertical */}
+        {pruneToast && (
+          <div className="flex items-center justify-center space-x-1.5 text-[10px] text-emerald-400 bg-emerald-500/10 py-1.5 rounded-lg border border-emerald-500/20">
+            <CheckCircle2 className="w-3 h-3" />
+            <span>{pruneToast}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center space-x-3">

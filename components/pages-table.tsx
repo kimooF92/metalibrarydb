@@ -124,13 +124,12 @@ export function PagesTable({
     const active = sortBy === col;
     return (
       <th
-        className={`px-3 py-2.5 whitespace-nowrap ${className}`}
+        className={`px-3 py-1.5 whitespace-nowrap ${className}`}
       >
         <button
           onClick={() => onSortChange(col)}
-          className={`flex items-center gap-1 group transition-colors ${
-            active ? "text-indigo-400" : "text-slate-400 hover:text-slate-200"
-          }`}
+          className={`flex items-center gap-1 group transition-colors ${active ? "text-indigo-400" : "text-slate-400 hover:text-slate-200"
+            }`}
         >
           <span>{label}</span>
           <span className="transition-transform">
@@ -250,55 +249,53 @@ export function PagesTable({
   };
 
   return (
-    <div className="glass-card rounded-xl p-5 shadow-xl">
-      {/* Smart Tabs */}
-      <div className="flex flex-wrap items-center gap-1.5 pb-4 mb-4 border-b border-slate-800/60">
-        {[
-          { id: "all", label: "All Pages", icon: null },
-          { id: "watchlist", label: "Watchlist", icon: Star, iconColor: "text-yellow-400 fill-yellow-400/20" },
-          { id: "high_volume", label: "High Volume", icon: Flame, iconColor: "text-amber-400 fill-amber-400/20" },
-          { id: "zero_ads", label: "Zero Ads", icon: Minus, iconColor: "text-slate-400" },
-          { id: "needs_review", label: "Needs Review", icon: ShieldAlert, iconColor: "text-rose-400" },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const active = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => onTabChange(tab.id)}
-              className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                active
-                  ? "bg-indigo-600/20 border-indigo-500/40 text-indigo-300 shadow-md shadow-indigo-600/10"
-                  : "bg-slate-900/60 border-slate-800/80 hover:border-slate-700/80 text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              {Icon && <Icon className={`w-3.5 h-3.5 ${tab.iconColor || ""}`} />}
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Search & Filters Toolbar */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 mb-4">
-        {/* Global Search Bar */}
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search by Display Name, Page ID, or URL..."
-            className="w-full bg-slate-950/80 text-sm text-slate-100 placeholder-slate-500 rounded-lg pl-9 pr-4 py-2 border border-slate-800 focus:outline-none focus:border-indigo-500 transition-all"
-          />
+    <div className="flex-1 flex flex-col min-h-0 space-y-4">
+      {/* Search, Tabs, & Filters Combined Toolbar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-800/40">
+        {/* Left Side: Smart Tabs */}
+        <div className="flex flex-wrap items-center gap-1">
+          {[
+            { id: "all", label: "All Pages", icon: null },
+            { id: "watchlist", label: "Watchlist", icon: Star, iconColor: "text-yellow-400 fill-yellow-400/20" },
+            { id: "high_volume", label: "High Volume", icon: Flame, iconColor: "text-amber-400 fill-amber-400/20" },
+            { id: "zero_ads", label: "Zero Ads", icon: Minus, iconColor: "text-slate-400" },
+            { id: "needs_review", label: "Needs Review", icon: ShieldAlert, iconColor: "text-rose-400" },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => onTabChange(tab.id)}
+                className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${active
+                    ? "bg-indigo-600/20 border-indigo-500/40 text-indigo-300 shadow-md shadow-indigo-600/10"
+                    : "bg-slate-900/60 border-slate-800/80 hover:border-slate-700/80 text-slate-400 hover:text-slate-200"
+                  }`}
+              >
+                {Icon && <Icon className={`w-3 h-3 ${tab.iconColor || ""}`} />}
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3">
+        {/* Right Side: Search & Filter Dropdowns */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          {/* Global Search Bar */}
+          <div className="relative w-full sm:w-56 md:w-64">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Search..."
+              className="w-full bg-slate-950/80 text-xs text-slate-100 placeholder-slate-500 rounded-lg pl-8 pr-3 py-2 border border-slate-800 focus:outline-none focus:border-indigo-500 transition-all"
+            />
+          </div>
+
           {/* Status Filter */}
-          <div className="flex items-center space-x-2 bg-slate-950/80 px-3 py-1.5 rounded-lg border border-slate-800 text-xs">
-            <Filter className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-slate-400">Status:</span>
+          <div className="flex items-center space-x-1.5 bg-slate-950/80 px-2 py-1.5 rounded-lg border border-slate-800 text-[11px]">
+            <Filter className="w-3 h-3 text-slate-400" />
             <select
               value={statusFilter}
               onChange={(e) => onStatusFilterChange(e.target.value)}
@@ -314,8 +311,7 @@ export function PagesTable({
           </div>
 
           {/* Search Type Filter */}
-          <div className="flex items-center space-x-2 bg-slate-950/80 px-3 py-1.5 rounded-lg border border-slate-800 text-xs">
-            <span className="text-slate-400">Type:</span>
+          <div className="flex items-center space-x-1.5 bg-slate-950/80 px-2 py-1.5 rounded-lg border border-slate-800 text-[11px]">
             <select
               value={searchTypeFilter}
               onChange={(e) => onSearchTypeFilterChange(e.target.value)}
@@ -328,13 +324,13 @@ export function PagesTable({
             </select>
           </div>
 
-          {/* Global Actions */}
+          {/* Retry Failed */}
           <button
             onClick={() => onRetry()}
-            className="flex items-center space-x-1 text-xs font-medium px-3 py-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700/60 transition-all cursor-pointer"
+            className="flex items-center space-x-1 text-[11px] font-semibold px-2.5 py-2 rounded-lg bg-slate-850 hover:bg-slate-800 text-slate-200 border border-slate-700/60 transition-all cursor-pointer whitespace-nowrap shrink-0"
             title="Retry all failed scan jobs"
           >
-            <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+            <RotateCcw className="w-3 h-3 text-amber-400" />
             <span>Retry Failed</span>
           </button>
         </div>
@@ -390,15 +386,15 @@ export function PagesTable({
       )}
 
       {/* Main Table */}
-      <div className="rounded-xl border border-slate-800/80 overflow-hidden bg-slate-950/40">
-        <div className="overflow-x-auto">
+      <div className="rounded-xl border border-slate-800/80 bg-slate-950/40 flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div className="overflow-auto flex-1 min-h-0 relative">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-900/90 text-slate-400 uppercase font-semibold border-b border-slate-800">
+            <thead className="text-slate-400 uppercase font-semibold border-b border-slate-800 [&_th]:sticky [&_th]:top-0 [&_th]:z-20 [&_th]:bg-slate-900/95 [&_th]:transition-all [&_th]:duration-200">
               <tr>
-                <th className="px-2.5 py-2.5 text-center w-8">
+                <th className="px-2.5 py-1.5 text-center w-8">
                   {/* Watchlist */}
                 </th>
-                <th className="px-2.5 py-2.5 text-center w-8">
+                <th className="px-2.5 py-1.5 text-center w-8">
                   <label className="relative inline-flex items-center justify-center cursor-pointer" title="Select all visible pages">
                     <input
                       type="checkbox"
@@ -407,11 +403,10 @@ export function PagesTable({
                       aria-label="Select all pages on current view"
                       className="sr-only"
                     />
-                    <div className={`w-4 h-4 rounded border transition-all flex items-center justify-center shadow-sm ${
-                      allVisibleSelected
+                    <div className={`w-4 h-4 rounded border transition-all flex items-center justify-center shadow-sm ${allVisibleSelected
                         ? "bg-indigo-600 border-indigo-500"
                         : "bg-slate-900/90 border-slate-700 hover:border-slate-500"
-                    }`}>
+                      }`}>
                       {allVisibleSelected && (
                         <Check className="w-3 h-3 text-white stroke-[3]" />
                       )}
@@ -419,13 +414,13 @@ export function PagesTable({
                   </label>
                 </th>
                 <SortHeader col="displayName" label="Display Name" />
-                <th className="px-3 py-2.5 whitespace-nowrap">Type</th>
+                <th className="px-3 py-1.5 whitespace-nowrap">Type</th>
                 <SortHeader col="currentResults" label="Current Results" />
-                <th className="px-3 py-2.5 whitespace-nowrap">Previous Results</th>
-                <th className="px-3 py-2.5 whitespace-nowrap">Difference</th>
+                <th className="px-3 py-1.5 whitespace-nowrap">Previous Results</th>
+                <th className="px-3 py-1.5 whitespace-nowrap">Difference</th>
                 <SortHeader col="status" label="Status" />
                 <SortHeader col="lastChecked" label="Last Checked" />
-                <th className="px-3 py-2.5 text-right whitespace-nowrap">Actions</th>
+                <th className="px-3 py-1.5 text-right whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
@@ -475,34 +470,32 @@ export function PagesTable({
                   return (
                     <tr
                       key={p.id}
-                      className={`transition-all group ${
-                        isSelected
+                      className={`transition-all group ${isSelected
                           ? "bg-indigo-950/40 hover:bg-indigo-950/60"
                           : watchlisted[p.id]
-                          ? "bg-amber-500/[0.03] border-l-2 border-l-yellow-400/70 hover:bg-amber-500/[0.07]"
-                          : isHighVolume
-                          ? "bg-amber-500/[0.04] hover:bg-amber-500/[0.08] border-l-2 border-l-amber-400"
-                          : isDimmed
-                          ? "opacity-60 hover:opacity-100 hover:bg-slate-900/40"
-                          : "hover:bg-slate-900/60"
-                      }`}
+                            ? "bg-amber-500/[0.03] border-l-2 border-l-yellow-400/70 hover:bg-amber-500/[0.07]"
+                            : isHighVolume
+                              ? "bg-amber-500/[0.04] hover:bg-amber-500/[0.08] border-l-2 border-l-amber-400"
+                              : isDimmed
+                                ? "opacity-60 hover:opacity-100 hover:bg-slate-900/40"
+                                : "hover:bg-slate-900/60"
+                        }`}
                     >
                       {/* Watchlist Star */}
-                      <td className="px-2 py-2.5 text-center">
+                      <td className="px-2 py-1.5 text-center">
                         <button
                           onClick={() => toggleWatchlist(p.id)}
                           title={watchlisted[p.id] ? "Remove from watchlist" : "Add to watchlist"}
-                          className={`p-0.5 rounded transition-all ${
-                            watchlisted[p.id]
+                          className={`p-0.5 rounded transition-all ${watchlisted[p.id]
                               ? "text-yellow-400"
                               : "text-slate-700 hover:text-yellow-400/60 opacity-0 group-hover:opacity-100"
-                          }`}
+                            }`}
                         >
                           <Star className={`w-3 h-3 ${watchlisted[p.id] ? "fill-yellow-400" : ""}`} />
                         </button>
                       </td>
                       {/* Checkbox */}
-                      <td className="px-2.5 py-2.5 text-center">
+                      <td className="px-2.5 py-1.5 text-center">
                         <label className="relative inline-flex items-center justify-center cursor-pointer">
                           <input
                             type="checkbox"
@@ -511,11 +504,10 @@ export function PagesTable({
                             aria-label={`Select ${p.displayName || "tracked page"}`}
                             className="sr-only"
                           />
-                          <div className={`w-4 h-4 rounded border transition-all flex items-center justify-center shadow-sm ${
-                            isSelected
+                          <div className={`w-4 h-4 rounded border transition-all flex items-center justify-center shadow-sm ${isSelected
                               ? "bg-indigo-600 border-indigo-500 shadow-indigo-600/30"
                               : "bg-slate-900/90 border-slate-700/80 hover:border-slate-500"
-                          }`}>
+                            }`}>
                             {isSelected && (
                               <Check className="w-3 h-3 text-white stroke-[3]" />
                             )}
@@ -524,7 +516,7 @@ export function PagesTable({
                       </td>
 
                       {/* Display Name & Link */}
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 py-1.5">
                         {editingId === p.id ? (
                           <div className="flex items-center space-x-1.5">
                             <input
@@ -588,14 +580,14 @@ export function PagesTable({
                       </td>
 
                       {/* Search Type */}
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 py-1.5">
                         <span className="inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800/80 text-slate-300 border border-slate-700/60">
                           {p.searchType || "page"}
                         </span>
                       </td>
 
                       {/* Current Results */}
-                      <td className="px-3 py-2.5 text-sm">
+                      <td className="px-3 py-1.5 text-sm">
                         {p.currentResults !== null ? (
                           p.currentResults >= 50 ? (
                             <span
@@ -616,17 +608,17 @@ export function PagesTable({
                       </td>
 
                       {/* Previous Results */}
-                      <td className="px-3 py-2.5 text-slate-400 font-medium">
+                      <td className="px-3 py-1.5 text-slate-400 font-medium">
                         {p.previousResults !== null && p.previousResults !== undefined
                           ? p.previousResults.toLocaleString()
                           : "—"}
                       </td>
 
                       {/* Difference */}
-                      <td className="px-3 py-2.5">{diffBadge}</td>
+                      <td className="px-3 py-1.5">{diffBadge}</td>
 
                       {/* Status */}
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 py-1.5">
                         <div className="flex flex-col gap-0.5">
                           {p.status === "success" && p.currentResults === 0 ? (
                             <span
@@ -644,15 +636,14 @@ export function PagesTable({
                             </span>
                           ) : (
                             <span
-                              className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
-                                p.status === "success"
+                              className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${p.status === "success"
                                   ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                                   : p.status === "scanning"
-                                  ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 animate-pulse"
-                                  : p.status === "pending"
-                                  ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                                  : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                              }`}
+                                    ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 animate-pulse"
+                                    : p.status === "pending"
+                                      ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                      : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                                }`}
                             >
                               {p.status}
                             </span>
@@ -671,12 +662,12 @@ export function PagesTable({
                       </td>
 
                       {/* Last Checked */}
-                      <td className="px-3 py-2.5 text-slate-400 font-mono text-[11px]" title={p.lastChecked ? new Date(p.lastChecked).toLocaleString() : undefined}>
+                      <td className="px-3 py-1.5 text-slate-400 font-mono text-[11px]" title={p.lastChecked ? new Date(p.lastChecked).toLocaleString() : undefined}>
                         {formatRelativeTime(p.lastChecked)}
                       </td>
 
                       {/* Actions */}
-                      <td className="px-3 py-2.5 text-right">
+                      <td className="px-3 py-1.5 text-right">
                         <div className="flex items-center justify-end space-x-1">
                           {/* Notes button */}
                           <button
@@ -684,11 +675,10 @@ export function PagesTable({
                               setEditingNotes(p.id);
                               setEditingNotesValue((p as any).notes || "");
                             }}
-                            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                              (p as any).notes
+                            className={`p-1.5 rounded-lg transition-all cursor-pointer ${(p as any).notes
                                 ? "text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10"
                                 : "text-slate-400 hover:text-yellow-300 hover:bg-yellow-500/10 opacity-0 group-hover:opacity-100"
-                            }`}
+                              }`}
                             title={(p as any).notes || "Add note"}
                             aria-label={`Notes for ${p.displayName || "tracked page"}`}
                           >
@@ -831,11 +821,10 @@ export function PagesTable({
                     <button
                       key={`page-${pageNum}`}
                       onClick={() => onPageChange(pageNum)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                        isActive
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${isActive
                           ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30 border border-indigo-500"
                           : "bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800"
-                      }`}
+                        }`}
                     >
                       {pageNum}
                     </button>

@@ -5,12 +5,14 @@ import { TrackedPage, DashboardStats } from "@/types";
 import { StatsCards } from "@/components/stats-cards";
 import { AddUrlForm } from "@/components/add-url-form";
 import { PagesTable } from "@/components/pages-table";
-import { RefreshCw, LayoutGrid, ChevronDown, ChevronUp } from "lucide-react";
+import { SidebarTrigger } from "@/components/sidebar-context";
+import { RefreshCw, X, Plus, BarChart3 } from "lucide-react";
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
-  const [isOverviewCollapsed, setIsOverviewCollapsed] = useState(false);
+  const [showStatsModal, setShowStatsModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const [pages, setPages] = useState<TrackedPage[]>([]);
   const [pagesLoading, setPagesLoading] = useState(true);
@@ -156,7 +158,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="h-full flex flex-col space-y-4 overflow-hidden">
       {/* Toast Alert Banner */}
       {toast && (
         <div
@@ -172,53 +174,53 @@ export default function DashboardPage() {
         </div>
       )}
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-800/80">
-        <div>
-          <h1 className="text-2xl font-extrabold text-white tracking-tight">
-            Ad Library Monitoring Dashboard
-          </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Track visible active result counts across Meta Ad Library search URLs
-          </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-800/40">
+        <div className="flex items-center flex-wrap gap-2">
+          <div className="flex items-center space-x-2">
+            <SidebarTrigger />
+            <h1 className="text-base font-extrabold text-white tracking-tight">
+              Dashboard
+            </h1>
+          </div>
+          {stats && (
+            <span className="text-[10px] bg-slate-900 border border-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-medium hidden md:inline-block">
+              {stats.totalPages} monitored • {stats.completed} completed • {stats.failed} failed
+            </span>
+          )}
+          {stats && stats.scanning > 0 && (
+            <span className="flex items-center space-x-1.5 text-[10px] bg-cyan-950/80 border border-cyan-500/30 text-cyan-300 px-2 py-0.5 rounded-full font-semibold animate-pulse shrink-0">
+              <RefreshCw className="w-2.5 h-2.5 animate-spin text-cyan-400" />
+              <span>Scanning {stats.scanning} {stats.scanning === 1 ? "page" : "pages"}...</span>
+            </span>
+          )}
         </div>
 
-        <button
-          onClick={loadData}
-          className="self-start sm:self-auto flex items-center space-x-2 text-xs font-medium px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-all cursor-pointer"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${pagesLoading ? "animate-spin" : ""}`} />
-          <span>Refresh Data</span>
-        </button>
-      </div>
-
-      {/* Unified Overview & Controls Block (Collapsed Together) */}
-      <div className="mb-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center space-x-2">
-            <LayoutGrid className="w-4 h-4 text-indigo-400" />
-            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-              Overview & Quick Add
-            </span>
-          </div>
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setIsOverviewCollapsed(!isOverviewCollapsed)}
-            className="flex items-center space-x-1.5 text-xs text-slate-400 hover:text-slate-200 bg-slate-900/60 hover:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-800 transition-all cursor-pointer"
+            onClick={() => setShowStatsModal(true)}
+            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-all cursor-pointer"
           >
-            <span>{isOverviewCollapsed ? "Expand Overview" : "Collapse"}</span>
-            {isOverviewCollapsed ? (
-              <ChevronDown className="w-3.5 h-3.5" />
-            ) : (
-              <ChevronUp className="w-3.5 h-3.5" />
-            )}
+            <BarChart3 className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Show Stats</span>
+          </button>
+
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Track URL</span>
+          </button>
+
+          <button
+            onClick={loadData}
+            title="Refresh dashboard data"
+            className="flex items-center space-x-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-all cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${pagesLoading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
           </button>
         </div>
-
-        {!isOverviewCollapsed && (
-          <div className="space-y-4 transition-all">
-            <StatsCards stats={stats} loading={statsLoading} />
-            <AddUrlForm onSuccess={loadData} />
-          </div>
-        )}
       </div>
 
       {/* Main Tracked Pages Table */}
@@ -256,6 +258,41 @@ export default function DashboardPage() {
         sortOrder={sortOrder}
         onSortChange={handleSortChange}
       />
+
+      {/* Stats Modal */}
+      {showStatsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-950 border border-slate-800/80 p-6 rounded-2xl max-w-4xl w-full shadow-2xl relative animate-in zoom-in-95 duration-150">
+            <button
+              onClick={() => setShowStatsModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-200 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-wider">System Overview Stats</h3>
+            <StatsCards stats={stats} loading={statsLoading} />
+          </div>
+        </div>
+      )}
+
+      {/* Track URL Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-950 border border-slate-800/80 p-6 rounded-2xl max-w-md w-full shadow-2xl relative animate-in zoom-in-95 duration-150">
+            <button
+              onClick={() => setShowAddModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-200 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-wider">Track New Ad Library URL</h3>
+            <AddUrlForm onSuccess={() => {
+              setShowAddModal(false);
+              loadData();
+            }} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
