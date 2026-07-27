@@ -31,10 +31,10 @@ export interface SpyScanOutcome {
 }
 
 // Configurable constants
-const MAX_SCROLL_ATTEMPTS = 15;
-const NO_PROGRESS_CAP = 3;
-const SCROLL_WAIT_MS = 2500;
-const RESPONSE_TIMEOUT_MS = 25000;
+const MAX_SCROLL_ATTEMPTS = 30;
+const NO_PROGRESS_CAP = 5;
+const SCROLL_WAIT_MS = 1800;
+const RESPONSE_TIMEOUT_MS = 30000;
 
 /**
  * Extract normalized ad attributes from Meta GraphQL payload node
@@ -227,8 +227,18 @@ export async function scanAdCreatives(
   page.on("response", handleResponse);
 
   try {
-    // 2. Navigate to target Meta Ad Library URL
-    await page.goto(targetUrl, {
+    // Normalize country=ALL to extract full worldwide ad feed
+    let finalTargetUrl = targetUrl;
+    try {
+      const parsedUrl = new URL(targetUrl);
+      parsedUrl.searchParams.set("country", "ALL");
+      parsedUrl.searchParams.set("is_targeted_country", "false");
+      finalTargetUrl = parsedUrl.toString();
+    } catch {
+      // keep original targetUrl fallback
+    }
+
+    await page.goto(finalTargetUrl, {
       waitUntil: "networkidle",
       timeout: RESPONSE_TIMEOUT_MS,
     });
@@ -263,8 +273,11 @@ export async function scanAdCreatives(
       if (hasCaptchaOrBlock) break;
       if (isRateLimited) break;
 
-      // Scroll down
-      await page.evaluate(() => window.scrollBy(0, 1200));
+      // Scroll down deep to trigger GraphQL pagination
+      await page.evaluate(() => {
+        window.scrollBy(0, 1600);
+        window.scrollTo(0, document.body.scrollHeight);
+      });
       await page.waitForTimeout(SCROLL_WAIT_MS);
 
       const currentSize = collectedAds.size;

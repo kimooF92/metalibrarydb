@@ -1062,6 +1062,7 @@ export function PagesTable({
         }}
         trackedPageId={selectedDrawerPage?.id || null}
         displayName={selectedDrawerPage?.displayName || selectedDrawerPage?.pageId || null}
+        currentResults={selectedDrawerPage?.currentResults}
       />
 
       {/* Animated Toast Notification Popup */}
