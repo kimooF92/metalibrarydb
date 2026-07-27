@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, UploadCloud, BarChart3, Menu, X, ChevronLeft, ChevronRight, Sun, Moon } from "lucide-react";
+import { LayoutDashboard, UploadCloud, BarChart3, Eye, Menu, X, ChevronLeft, ChevronRight, Sun, Moon } from "lucide-react";
 import { WorkerStatus } from "./worker-status";
 import { useSidebar } from "@/components/sidebar-context";
 
@@ -95,6 +95,7 @@ export function Navigation() {
           <nav className="flex flex-col space-y-1.5">
             {[
               { href: "/", label: "Dashboard", icon: LayoutDashboard },
+              { href: "/spy", label: "Ad Spy Feed", icon: Eye },
               { href: "/import", label: "Bulk Import", icon: UploadCloud },
               { href: "/analytics", label: "Analytics", icon: BarChart3 },
             ].map((item) => {

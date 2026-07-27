@@ -141,6 +141,22 @@ export async function GET(request: Request) {
       );
     }
 
+    // Fetch active creative queue entries
+    let activeCreativeJobMap: Record<string, boolean> = {};
+    if (pageIds.length > 0) {
+      const activeCreativeJobs = await db
+        .select({ trackedPageId: queue.trackedPageId })
+        .from(queue)
+        .where(
+          and(
+            inArray(queue.trackedPageId, pageIds),
+            eq(queue.jobType, "creative"),
+            inArray(queue.status, ["pending", "running"])
+          )
+        );
+      activeCreativeJobMap = Object.fromEntries(activeCreativeJobs.map((q) => [q.trackedPageId, true]));
+    }
+
     const pagesWithPrev = pages.map((p) => {
       const prev = prevResultsMap[p.id] ?? null;
       const difference =
@@ -155,6 +171,7 @@ export async function GET(request: Request) {
         attempts: queueEntry?.attempts ?? 0,
         notes: p.notes ?? null,
         isWatchlisted: p.isWatchlisted ?? false,
+        isCreativeQueued: Boolean(activeCreativeJobMap[p.id]),
       };
     });
 

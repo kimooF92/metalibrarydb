@@ -1,0 +1,227 @@
+"use client";
+
+import { useState } from "react";
+import { Ad } from "@/types";
+import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
+import {
+  Calendar,
+  Layers,
+  ExternalLink,
+  Download,
+  Play,
+  Image as ImageIcon,
+  CheckCircle2,
+  XCircle,
+  HelpCircle,
+  Flame,
+  Globe,
+} from "lucide-react";
+
+interface AdCardProps {
+  ad: Ad;
+}
+
+export function AdCard({ ad }: AdCardProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isPlayingVideo, setIsPlayingVideo] = useState(false);
+
+  // Format launch date
+  const formatLaunchDate = (dateStr: string | null) => {
+    if (!dateStr) return "Unknown launch date";
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return "Unknown launch date";
+    
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - date.getTime());
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return "Launched today";
+    if (diffDays === 1) return "Launched yesterday";
+    if (diffDays < 30) return `Launched ${diffDays}d ago`;
+    return `Launched ${date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+  };
+
+  const duplicationCount = ad.duplicationCount || 1;
+  const isScaled = duplicationCount >= 5;
+
+  const firstVideoUrl = ad.mediaUrls?.find(
+    (url) => url.includes(".mp4") || url.includes("video") || ad.mediaType === "video"
+  );
+  const displayImage = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.[0];
+  const destinationUrl = resolveDestinationUrl(ad.linkUrl);
+  const targetDomain = getCleanDomain(ad.linkUrl);
+
+  return (
+    <div className="group relative flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-4 shadow-sm transition-all hover:border-slate-300 dark:hover:border-slate-700/80 hover:shadow-md">
+      {/* Top Section */}
+      <div>
+        {/* Brand Name & Status Badges */}
+        <div className="flex items-start justify-between gap-2 mb-2.5">
+          <div className="flex flex-col min-w-0">
+            <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+              {ad.pageName || `Page ${ad.pageId}`}
+            </span>
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+              ID: {ad.adArchiveId}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            {ad.isActive === true && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                <CheckCircle2 className="w-3 h-3" /> Active
+              </span>
+            )}
+            {ad.isActive === false && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-2 py-0.5 rounded-full">
+                <XCircle className="w-3 h-3" /> Inactive
+              </span>
+            )}
+            {ad.isActive === undefined && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+                <HelpCircle className="w-3 h-3" /> Unknown
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Badges Bar: Launch Date & Scale */}
+        <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          <span className="inline-flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-900 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-800 font-medium">
+            <Calendar className="w-3 h-3 text-indigo-500 dark:text-indigo-400" />
+            {formatLaunchDate(ad.startedRunningOn)}
+          </span>
+
+          <span
+            className={`inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md border font-semibold ${
+              isScaled
+                ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30"
+                : "bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800"
+            }`}
+          >
+            {isScaled ? (
+              <Flame className="w-3 h-3 text-amber-500 dark:text-amber-400 fill-amber-500/20 animate-pulse" />
+            ) : (
+              <Layers className="w-3 h-3 text-slate-400" />
+            )}
+            {duplicationCount} {duplicationCount === 1 ? "Copy" : "Copies running"}
+            {isScaled && <span className="ml-0.5">🔥 Scaled</span>}
+          </span>
+        </div>
+
+        {/* Media Container */}
+        <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-100 dark:bg-slate-900 mb-3 flex items-center justify-center">
+          {isPlayingVideo && firstVideoUrl ? (
+            <video
+              src={firstVideoUrl}
+              controls
+              autoPlay
+              className="w-full h-full object-contain bg-black"
+            />
+          ) : displayImage ? (
+            <div className="relative w-full h-full group/media">
+              {/* eslint-disable-next-html-shortcut */}
+              <img
+                src={displayImage}
+                alt={ad.title || "Ad creative"}
+                className="w-full h-full object-cover transition-transform duration-300 group-hover/media:scale-105"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = "none";
+                }}
+              />
+              {firstVideoUrl && (
+                <button
+                  onClick={() => setIsPlayingVideo(true)}
+                  className="absolute inset-0 m-auto w-11 h-11 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-lg hover:bg-indigo-500 hover:scale-110 transition-all cursor-pointer"
+                  title="Play Video"
+                >
+                  <Play className="w-5 h-5 fill-current ml-0.5" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-1.5 text-slate-400 dark:text-slate-500">
+              <ImageIcon className="w-7 h-7 opacity-40" />
+              <span className="text-[11px]">No media preview available</span>
+            </div>
+          )}
+        </div>
+
+        {/* Title */}
+        {ad.title && (
+          <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 mb-1 line-clamp-1">
+            {ad.title}
+          </h4>
+        )}
+
+        {/* Copy / Caption */}
+        {ad.caption && (
+          <div className="mb-3">
+            <p
+              className={`text-[11px] text-slate-600 dark:text-slate-400 whitespace-pre-line leading-relaxed ${
+                isExpanded ? "" : "line-clamp-3"
+              }`}
+            >
+              {ad.caption}
+            </p>
+            {ad.caption.length > 120 && (
+              <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline mt-1 cursor-pointer"
+              >
+                {isExpanded ? "Show less" : "Read full copy..."}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Footer Actions: Direct Brand Store CTA Link */}
+      <div className="pt-2.5 border-t border-slate-200 dark:border-slate-800/60 flex items-center justify-between gap-2 mt-auto text-xs">
+        {destinationUrl ? (
+          <a
+            href={destinationUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-white bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg shadow-sm transition-all truncate max-w-[72%]"
+            title={`Direct Brand Website: ${destinationUrl}`}
+          >
+            <Globe className="w-3.5 h-3.5 text-indigo-200 shrink-0" />
+            <span className="truncate">
+              {ad.ctaText || "Visit Store"} {targetDomain ? `• ${targetDomain}` : ""}
+            </span>
+            <ExternalLink className="w-3 h-3 text-indigo-200 shrink-0 ml-0.5" />
+          </a>
+        ) : (
+          <span className="text-[11px] text-slate-400 italic">No store website link</span>
+        )}
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {(firstVideoUrl || displayImage) && (
+            <a
+              href={firstVideoUrl || displayImage}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+              className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors"
+              title="Download Media File"
+            >
+              <Download className="w-3.5 h-3.5" />
+            </a>
+          )}
+
+          <a
+            href={`https://www.facebook.com/ads/library/?id=${ad.adArchiveId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline inline-flex items-center gap-1 p-1 rounded-md"
+            title="Open in Meta Ad Library"
+          >
+            Meta
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}

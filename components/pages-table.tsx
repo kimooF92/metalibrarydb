@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 import { TrackedPage } from "@/types";
 import { HistoryModal } from "./history-modal";
 import { DeleteConfirmModal } from "./delete-confirm-modal";
+import { PageAdLibraryDrawer } from "./spy/page-ad-library-drawer";
 import {
   Search,
   Filter,
@@ -26,6 +27,10 @@ import {
   Star,
   AlertTriangle,
   StickyNote,
+  Eye,
+  Sparkles,
+  Clock,
+  CheckCircle2,
 } from "lucide-react";
 
 function formatRelativeTime(dateInput: string | Date | null | undefined): string {
@@ -107,6 +112,17 @@ export function PagesTable({
     Object.fromEntries(pages.map((p) => [p.id, p.isWatchlisted ?? false]))
   );
 
+  const [toast, setToast] = useState<{
+    type: "success" | "error" | "info" | "warning";
+    title: string;
+    message: string;
+  } | null>(null);
+
+  const triggerToast = (type: "success" | "error" | "info" | "warning", title: string, message: string) => {
+    setToast({ type, title, message });
+    setTimeout(() => setToast(null), 4500);
+  };
+
   useEffect(() => {
     setWatchlisted(Object.fromEntries(pages.map((p) => [p.id, p.isWatchlisted ?? false])));
   }, [pages]);
@@ -171,6 +187,9 @@ export function PagesTable({
   };
   const [selectedHistoryPage, setSelectedHistoryPage] = useState<TrackedPage | null>(null);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
+
+  const [selectedDrawerPage, setSelectedDrawerPage] = useState<TrackedPage | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [pageToDelete, setPageToDelete] = useState<TrackedPage | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -395,6 +414,35 @@ export function PagesTable({
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Refresh ({selectedIds.length})</span>
+            </button>
+
+            <button
+              onClick={async () => {
+                try {
+                  const res = await fetch("/api/spy/scans", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ trackedPageIds: selectedIds }),
+                  });
+                  const data = await res.json();
+                  if (res.ok) {
+                    triggerToast(
+                      "success",
+                      "Bulk Spy Scans Queued",
+                      `Queued ${data.enqueuedCount || 0} Ad Spy creative scan(s). ${data.skippedCount || 0} already in queue.`
+                    );
+                    setSelectedIds([]);
+                  } else {
+                    triggerToast("error", "Bulk Scan Failed", data.error || "Could not queue creative scans");
+                  }
+                } catch {
+                  triggerToast("error", "Network Error", "Failed to queue bulk creative scans");
+                }
+              }}
+              className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-semibold shadow-md shadow-purple-600/30 transition-all cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Extract Ad Spy ({selectedIds.length})</span>
             </button>
 
             {onBulkDelete && (
@@ -689,6 +737,29 @@ export function PagesTable({
                               {p.failureReason}
                             </span>
                           )}
+
+                          {/* Ad Spy Creative Badges */}
+                          {p.isCreativeQueued && (
+                            <span
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-pulse mt-0.5"
+                              title="Ad Spy creative extraction scan is queued in progress"
+                            >
+                              <Clock className="w-2.5 h-2.5 shrink-0" />
+                              <span>Spy Queued</span>
+                            </span>
+                          )}
+
+                          {p.lastCreativeScan &&
+                            new Date(p.lastCreativeScan).toDateString() === new Date().toDateString() &&
+                            !p.isCreativeQueued && (
+                              <span
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 mt-0.5"
+                                title={`Ad Spy creative scan completed today at ${new Date(p.lastCreativeScan).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                              >
+                                <Sparkles className="w-2.5 h-2.5 shrink-0" />
+                                <span>Scanned Today</span>
+                              </span>
+                            )}
                         </div>
                       </td>
 
@@ -714,6 +785,69 @@ export function PagesTable({
                             aria-label={`Notes for ${p.displayName || "tracked page"}`}
                           >
                             <StickyNote className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Ad Spy Actions */}
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await fetch("/api/spy/scans", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ trackedPageIds: [p.id] }),
+                                });
+                                const data = await res.json();
+                                if (res.ok) {
+                                  const statusItem = data.pageStatuses?.[0];
+                                  const brandName = p.displayName || p.pageId || p.id;
+                                  if (statusItem?.status === "already_queued") {
+                                    triggerToast(
+                                      "warning",
+                                      "Already Queued",
+                                      `Creative scan for "${brandName}" is already pending/running in queue.`
+                                    );
+                                  } else if (statusItem?.isScannedToday) {
+                                    const timeStr = statusItem.lastCreativeScan ? new Date(statusItem.lastCreativeScan).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
+                                    triggerToast(
+                                      "info",
+                                      "Queued (Scanned Earlier)",
+                                      `Creative scan added for "${brandName}". (Note: Brand was already scanned earlier today at ${timeStr}).`
+                                    );
+                                  } else {
+                                    triggerToast(
+                                      "success",
+                                      "Creative Scan Queued",
+                                      `Creative extraction scan queued for "${brandName}". Start worker to process.`
+                                    );
+                                  }
+                                } else {
+                                  triggerToast("error", "Scan Failed", data.error || "Could not queue creative scan");
+                                }
+                              } catch (err) {
+                                triggerToast("error", "Network Error", "Failed to queue creative scan");
+                              }
+                            }}
+                            className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-300 hover:bg-purple-500/10 transition-all cursor-pointer"
+                            title={
+                              (p as any).lastCreativeScan && new Date((p as any).lastCreativeScan).toDateString() === new Date().toDateString()
+                                ? `Scanned today at ${new Date((p as any).lastCreativeScan).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                                : "Queue Ad Spy extraction scan"
+                            }
+                            aria-label={`Queue creative scan for ${p.displayName || "tracked page"}`}
+                          >
+                            <Sparkles className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setSelectedDrawerPage(p);
+                              setDrawerOpen(true);
+                            }}
+                            className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer"
+                            title="View extracted ads"
+                            aria-label={`View extracted ads for ${p.displayName || "tracked page"}`}
+                          >
+                            <Eye className="w-3.5 h-3.5" />
                           </button>
 
                           <button
@@ -918,6 +1052,36 @@ export function PagesTable({
         onConfirm={confirmDelete}
         loading={deleting}
       />
+
+      {/* Per-Page Ad Library Drawer */}
+      <PageAdLibraryDrawer
+        isOpen={drawerOpen}
+        onClose={() => {
+          setDrawerOpen(false);
+          setSelectedDrawerPage(null);
+        }}
+        trackedPageId={selectedDrawerPage?.id || null}
+        displayName={selectedDrawerPage?.displayName || selectedDrawerPage?.pageId || null}
+      />
+
+      {/* Animated Toast Notification Popup */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-start gap-3 p-4 rounded-xl shadow-2xl border backdrop-blur-md max-w-sm animate-in slide-in-from-bottom-5 duration-200 bg-slate-900/95 text-slate-100 border-slate-800">
+          {toast.type === "warning" && <Clock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />}
+          {toast.type === "info" && <Sparkles className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />}
+          {toast.type === "success" && <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />}
+          {toast.type === "error" && <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />}
+
+          <div className="flex flex-col min-w-0 flex-1">
+            <span className="text-xs font-bold text-white">{toast.title}</span>
+            <span className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">{toast.message}</span>
+          </div>
+
+          <button onClick={() => setToast(null)} className="text-slate-400 hover:text-white cursor-pointer">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

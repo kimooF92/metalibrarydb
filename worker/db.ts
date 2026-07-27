@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { trackedPages, queue, scanHistory, workerState } from "../db/schema";
+import { trackedPages, queue, scanHistory, workerState, creativeScans } from "../db/schema";
 import { eq, asc, sql } from "drizzle-orm";
 
 export async function resetStuckJobs() {
@@ -49,9 +49,6 @@ export async function getNextPendingJob() {
   const job = await db.query.queue.findFirst({
     where: eq(queue.status, "pending"),
     orderBy: [asc(queue.createdAt)],
-    with: {
-      // Find associated tracked page
-    },
   });
 
   if (!job) return null;
@@ -62,26 +59,46 @@ export async function getNextPendingJob() {
 
   if (!page) return null;
 
+  let creativeScanRecord = null;
+  if (job.jobType === "creative" && job.creativeScanId) {
+    creativeScanRecord = await db.query.creativeScans.findFirst({
+      where: eq(creativeScans.id, job.creativeScanId),
+    });
+  }
+
   return {
     queueJob: job,
     trackedPage: page,
+    creativeScan: creativeScanRecord,
   };
 }
 
-export async function markJobRunning(queueId: string, pageId: string) {
+export async function markJobRunning(queueId: string, pageId: string, creativeScanId?: string | null) {
+  const now = new Date();
+
   await db
     .update(queue)
     .set({
       status: "running",
-      startedAt: new Date(),
+      startedAt: now,
       attempts: sql`${queue.attempts} + 1`,
     })
     .where(eq(queue.id, queueId));
 
-  await db
-    .update(trackedPages)
-    .set({ status: "scanning", updatedAt: new Date() })
-    .where(eq(trackedPages.id, pageId));
+  if (creativeScanId) {
+    await db
+      .update(creativeScans)
+      .set({
+        status: "running",
+        startedAt: now,
+      })
+      .where(eq(creativeScans.id, creativeScanId));
+  } else {
+    await db
+      .update(trackedPages)
+      .set({ status: "scanning", updatedAt: now })
+      .where(eq(trackedPages.id, pageId));
+  }
 }
 
 export async function markJobCompleted(
@@ -134,6 +151,32 @@ export async function markJobCompleted(
     .where(eq(queue.id, queueId));
 }
 
+export async function markCreativeJobCompleted(
+  queueId: string,
+  creativeScanId: string,
+  extractedCount: number,
+  status: "completed" | "partial"
+) {
+  const now = new Date();
+
+  await db
+    .update(creativeScans)
+    .set({
+      status,
+      extractedCount,
+      finishedAt: now,
+    })
+    .where(eq(creativeScans.id, creativeScanId));
+
+  await db
+    .update(queue)
+    .set({
+      status: "completed",
+      finishedAt: now,
+    })
+    .where(eq(queue.id, queueId));
+}
+
 export async function markJobFailed(
   queueId: string,
   pageId: string,
@@ -171,3 +214,32 @@ export async function markJobFailed(
     })
     .where(eq(queue.id, queueId));
 }
+
+export async function markCreativeJobFailed(
+  queueId: string,
+  creativeScanId: string,
+  reason: string,
+  details?: string
+) {
+  const now = new Date();
+
+  await db
+    .update(creativeScans)
+    .set({
+      status: "failed",
+      failureReason: reason,
+      outcomeDetails: details,
+      finishedAt: now,
+    })
+    .where(eq(creativeScans.id, creativeScanId));
+
+  await db
+    .update(queue)
+    .set({
+      status: "failed",
+      failureReason: reason,
+      finishedAt: now,
+    })
+    .where(eq(queue.id, queueId));
+}
+

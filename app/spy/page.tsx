@@ -1,0 +1,188 @@
+"use client";
+
+import { useState } from "react";
+import { useAdFeed, useAdStats } from "@/hooks/use-spy";
+import { AdCard } from "@/components/spy/ad-card";
+import { AdRow } from "@/components/spy/ad-row";
+import { SpyFilters } from "@/components/spy/spy-filters";
+import { Layers, Calendar, Video, Image as ImageIcon, RefreshCw, ChevronLeft, ChevronRight, Eye } from "lucide-react";
+
+export default function AdSpyPage() {
+  const { ads, pagination, isLoading, error, params, updateFilters, refetch } = useAdFeed();
+  const { stats } = useAdStats();
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+
+  const handleResetFilters = () => {
+    updateFilters({
+      search: "",
+      dateFrom: undefined,
+      dateTo: undefined,
+      minDuplications: 1,
+      mediaType: "all",
+      status: "all",
+      sortBy: "started_running_on",
+      sortOrder: "desc",
+      page: 1,
+    });
+  };
+
+  return (
+    <div className="h-full overflow-y-auto bg-background text-foreground space-y-4">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800/40">
+        <div className="flex items-center space-x-2">
+          <Eye className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
+          <h1 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight">
+            Ad Spy Feed
+          </h1>
+          <span className="text-[10px] bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full font-medium hidden md:inline-block">
+            {stats.totalAdsCaptured} ads captured • {stats.launchedLast7Days} new this week
+          </span>
+        </div>
+
+        <button
+          onClick={() => refetch()}
+          className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shrink-0"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-indigo-500" : ""}`} />
+          <span>Refresh Feed</span>
+        </button>
+      </div>
+
+      {/* Summary Metrics Banner */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3.5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Total Captured
+            </span>
+            <Layers className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
+          </div>
+          <p className="text-xl font-black text-slate-900 dark:text-slate-100 mt-1.5">
+            {stats.totalAdsCaptured}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3.5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Launched (7 Days)
+            </span>
+            <Calendar className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
+          </div>
+          <p className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1.5">
+            {stats.launchedLast7Days}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3.5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Scaled Ads (5+)
+            </span>
+            <Layers className="w-4 h-4 text-amber-500 dark:text-amber-400" />
+          </div>
+          <p className="text-xl font-black text-amber-600 dark:text-amber-400 mt-1.5">
+            {stats.scaledAdsCount}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3.5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Media Breakdown
+            </span>
+            <Video className="w-4 h-4 text-purple-500 dark:text-purple-400" />
+          </div>
+          <div className="flex items-center gap-3 mt-2 text-xs font-semibold">
+            <span className="inline-flex items-center gap-1 text-slate-700 dark:text-slate-300">
+              <ImageIcon className="w-3 h-3 text-indigo-500 dark:text-indigo-400" /> {stats.mediaDistribution.image}
+            </span>
+            <span className="inline-flex items-center gap-1 text-slate-700 dark:text-slate-300">
+              <Video className="w-3 h-3 text-purple-500 dark:text-purple-400" /> {stats.mediaDistribution.video}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Filter Toolbar & View Switcher */}
+      <SpyFilters
+        filters={params}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        onFilterChange={updateFilters}
+        onReset={handleResetFilters}
+      />
+
+      {/* Main Feed Content */}
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center h-64 text-slate-500 dark:text-slate-400 gap-2.5">
+          <RefreshCw className="w-7 h-7 animate-spin text-indigo-500" />
+          <span className="text-xs font-semibold">Loading ad creatives feed...</span>
+        </div>
+      ) : error ? (
+        <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs">
+          Error loading ad feed: {error}
+        </div>
+      ) : ads.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-64 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center">
+          <Layers className="w-10 h-10 text-slate-400 dark:text-slate-600 mb-2.5" />
+          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">No ad creatives match your filters</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mt-1 mb-3">
+            Try resetting your filters or run an Ad Spy extraction scan on your tracked brand pages from the main dashboard.
+          </p>
+          <button
+            onClick={handleResetFilters}
+            className="px-3.5 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors cursor-pointer"
+          >
+            Reset Filters
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* Conditional Layout: Grid Cards vs List / Line by Line */}
+          {viewMode === "grid" ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5">
+              {ads.map((ad) => (
+                <AdCard key={ad.id} ad={ad} />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2.5">
+              {ads.map((ad) => (
+                <AdRow key={ad.id} ad={ad} />
+              ))}
+            </div>
+          )}
+
+          {/* Pagination Controls */}
+          {pagination.totalPages > 1 && (
+            <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800/60 pb-4">
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                Showing page <strong className="text-slate-900 dark:text-slate-100">{pagination.page}</strong> of{" "}
+                <strong className="text-slate-900 dark:text-slate-100">{pagination.totalPages}</strong> ({pagination.total} total ads)
+              </span>
+
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={pagination.page <= 1}
+                  onClick={() => updateFilters({ page: pagination.page - 1 })}
+                  className="flex items-center space-x-1 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 disabled:opacity-40 text-slate-700 dark:text-slate-300 transition-all cursor-pointer disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" /> Previous
+                </button>
+                <button
+                  disabled={pagination.page >= pagination.totalPages}
+                  onClick={() => updateFilters({ page: pagination.page + 1 })}
+                  className="flex items-center space-x-1 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 disabled:opacity-40 text-slate-700 dark:text-slate-300 transition-all cursor-pointer disabled:cursor-not-allowed"
+                >
+                  Next <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

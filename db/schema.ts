@@ -80,7 +80,89 @@ export const importJobs = pgTable("import_jobs", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
-// 4. Queue Table
+// 4. Creative Scans Table
+export const creativeScans = pgTable(
+  "creative_scans",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    trackedPageId: uuid("tracked_page_id")
+      .notNull()
+      .references(() => trackedPages.id, { onDelete: "cascade" }),
+    status: text("status").default("pending").notNull(), // pending | running | completed | partial | failed
+    configSnapshot: text("config_snapshot"), // JSON snapshot of scan settings
+    outcomeDetails: text("outcome_details"), // Summary / notes
+    extractedCount: integer("extracted_count").default(0).notNull(),
+    failureReason: text("failure_reason"), // captcha | rate_limited | payload_not_found | parse_error | timeout
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("idx_creative_scans_tracked_page_id").on(table.trackedPageId),
+    index("idx_creative_scans_status").on(table.status),
+    index("idx_creative_scans_created_at").on(table.createdAt),
+  ]
+);
+
+// 5. Canonical Ads Table
+export const ads = pgTable(
+  "ads",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    adArchiveId: text("ad_archive_id").notNull().unique(), // Meta's unique Ad Archive ID
+    pageId: text("page_id").notNull(),
+    pageName: text("page_name"),
+    startedRunningOn: timestamp("started_running_on", { withTimezone: true }),
+    caption: text("caption"),
+    title: text("title"),
+    ctaText: text("cta_text"),
+    linkUrl: text("link_url"),
+    mediaType: text("media_type"), // 'image' | 'video' | 'carousel' | 'unknown'
+    mediaUrls: text("media_urls").array(),
+    thumbnailUrl: text("thumbnail_url"),
+    thumbnailStoragePath: text("thumbnail_storage_path"),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).defaultNow().notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_ads_ad_archive_id").on(table.adArchiveId),
+    index("idx_ads_page_id").on(table.pageId),
+    index("idx_ads_started_running").on(table.startedRunningOn),
+    index("idx_ads_media_type").on(table.mediaType),
+  ]
+);
+
+// 6. Ad Observations Table (Links ad to creative_scan and tracked_page)
+export const adObservations = pgTable(
+  "ad_observations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    creativeScanId: uuid("creative_scan_id")
+      .notNull()
+      .references(() => creativeScans.id, { onDelete: "cascade" }),
+    adId: uuid("ad_id")
+      .notNull()
+      .references(() => ads.id, { onDelete: "cascade" }),
+    trackedPageId: uuid("tracked_page_id")
+      .notNull()
+      .references(() => trackedPages.id, { onDelete: "cascade" }),
+    isActive: boolean("is_active").default(true),
+    duplicationCount: integer("duplication_count").default(1).notNull(),
+    collationId: text("collation_id"),
+    observedAt: timestamp("observed_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_ad_obs_creative_scan_id").on(table.creativeScanId),
+    index("idx_ad_obs_ad_id").on(table.adId),
+    index("idx_ad_obs_tracked_page_id").on(table.trackedPageId),
+    index("idx_ad_obs_duplication").on(table.duplicationCount),
+    index("idx_ad_obs_scan_ad").on(table.creativeScanId, table.adId),
+  ]
+);
+
+// 7. Queue Table
 export const queue = pgTable(
   "queue",
   {
@@ -88,6 +170,8 @@ export const queue = pgTable(
     trackedPageId: uuid("tracked_page_id")
       .notNull()
       .references(() => trackedPages.id, { onDelete: "cascade" }),
+    jobType: text("job_type").default("count").notNull(), // count | creative
+    creativeScanId: uuid("creative_scan_id").references(() => creativeScans.id, { onDelete: "set null" }),
     status: text("status").default("pending"), // pending | running | completed | failed
     attempts: integer("attempts").default(0),
     failureReason: text("failure_reason"),
@@ -97,6 +181,7 @@ export const queue = pgTable(
   },
   (table) => [
     index("idx_queue_status").on(table.status),
+    index("idx_queue_job_type_status").on(table.jobType, table.status),
     index("idx_queue_created_at").on(table.createdAt),
     index("idx_queue_page_created_at").on(
       table.trackedPageId,
@@ -105,7 +190,7 @@ export const queue = pgTable(
   ]
 );
 
-// 5. Worker State Table (Single-row table for global worker state & controls)
+// 8. Worker State Table (Single-row table for global worker state & controls)
 export const workerState = pgTable("worker_state", {
   id: integer("id").default(1).primaryKey(),
   isPaused: boolean("is_paused").default(false),
@@ -118,3 +203,4 @@ export const workerState = pgTable("worker_state", {
   dayWindowStart: timestamp("day_window_start", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
+

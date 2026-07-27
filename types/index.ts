@@ -17,6 +17,8 @@ export interface TrackedPage {
   attempts?: number | null;
   notes?: string | null;
   isWatchlisted?: boolean;
+  lastCreativeScan?: string | null;
+  isCreativeQueued?: boolean;
 }
 
 export interface ScanHistoryEntry {
@@ -73,3 +75,81 @@ export interface TopMover {
   currentResults: number | null;
   difference: number;
 }
+
+export interface CreativeScan {
+  id: string;
+  trackedPageId: string;
+  status: "pending" | "running" | "completed" | "partial" | "failed";
+  configSnapshot?: string | null;
+  outcomeDetails?: string | null;
+  extractedCount: number;
+  failureReason?: "captcha" | "rate_limited" | "payload_not_found" | "parse_error" | "timeout" | null;
+  createdAt: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+}
+
+export interface Ad {
+  id: string;
+  adArchiveId: string;
+  pageId: string;
+  pageName: string | null;
+  startedRunningOn: string | null;
+  caption: string | null;
+  title: string | null;
+  ctaText: string | null;
+  linkUrl: string | null;
+  mediaType: "image" | "video" | "carousel" | "unknown" | null;
+  mediaUrls: string[] | null;
+  thumbnailUrl: string | null;
+  thumbnailStoragePath: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  createdAt: string;
+  updatedAt: string;
+
+  // Joined observation fields for feed display
+  duplicationCount?: number;
+  isActive?: boolean;
+  trackedPageId?: string;
+  signedThumbnailUrl?: string | null;
+}
+
+export interface AdObservation {
+  id: string;
+  creativeScanId: string;
+  adId: string;
+  trackedPageId: string;
+  isActive: boolean | null;
+  duplicationCount: number;
+  collationId?: string | null;
+  observedAt: string;
+}
+
+export interface AdSpyStats {
+  totalAdsCaptured: number;
+  launchedLast7Days: number;
+  scaledAdsCount: number; // ads with duplicationCount >= 5
+  mediaDistribution: {
+    image: number;
+    video: number;
+    carousel: number;
+    other: number;
+  };
+}
+
+export interface AdFilterParams {
+  trackedPageId?: string;
+  search?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  minDaysRunning?: number;
+  minDuplications?: number;
+  mediaType?: "all" | "image" | "video" | "carousel";
+  status?: "all" | "active" | "inactive" | "unknown";
+  sortBy?: "started_running_on" | "duplication_count" | "first_seen_at";
+  sortOrder?: "asc" | "desc";
+  page?: number;
+  limit?: number;
+}
+
