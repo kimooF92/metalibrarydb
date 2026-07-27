@@ -34,12 +34,8 @@ export async function GET(req: NextRequest) {
     const conditions = [];
 
     if (trackedPageId) {
-      conditions.push(
-        or(
-          eq(adObservations.trackedPageId, trackedPageId),
-          eq(ads.pageId, trackedPageId)
-        )
-      );
+      // trackedPageId is the UUID PK of tracked_pages — filter on adObservations.trackedPageId
+      conditions.push(eq(adObservations.trackedPageId, trackedPageId));
     }
 
     if (search && search.trim() !== "") {
@@ -92,7 +88,8 @@ export async function GET(req: NextRequest) {
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    // Build CTE subquery for latest distinct observation per ad (Left join ensures no ads dropped)
+    // Build CTE subquery — innerJoin on adObservations so we always have duplication/active metadata.
+    // DISTINCT ON (ads.id) keeps the latest observation per ad.
     const subquery = db
       .selectDistinctOn([ads.id], {
         id: ads.id,
@@ -112,14 +109,14 @@ export async function GET(req: NextRequest) {
         lastSeenAt: ads.lastSeenAt,
         createdAt: ads.createdAt,
         updatedAt: ads.updatedAt,
-        duplicationCount: sql<number>`coalesce(${adObservations.duplicationCount}, 1)`.as("duplication_count"),
-        isActive: sql<boolean>`coalesce(${adObservations.isActive}, true)`.as("is_active"),
+        duplicationCount: adObservations.duplicationCount,
+        isActive: adObservations.isActive,
         trackedPageId: adObservations.trackedPageId,
         pageDisplayName: trackedPages.displayName,
       })
       .from(ads)
-      .leftJoin(adObservations, eq(ads.id, adObservations.adId))
-      .leftJoin(trackedPages, or(eq(adObservations.trackedPageId, trackedPages.id), eq(ads.pageId, trackedPages.id), eq(ads.pageId, trackedPages.pageId)))
+      .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .leftJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
       .where(whereClause)
       .orderBy(ads.id, desc(adObservations.observedAt))
       .as("distinct_ads");
@@ -143,8 +140,8 @@ export async function GET(req: NextRequest) {
     const [countResult] = await db
       .select({ count: sql<number>`count(distinct ${ads.id})` })
       .from(ads)
-      .leftJoin(adObservations, eq(ads.id, adObservations.adId))
-      .leftJoin(trackedPages, or(eq(adObservations.trackedPageId, trackedPages.id), eq(ads.pageId, trackedPages.id), eq(ads.pageId, trackedPages.pageId)))
+      .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .leftJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
       .where(whereClause);
 
     const total = Number(countResult?.count || 0);
