@@ -25,7 +25,7 @@ export function StatsCards({ stats, loading }: StatsCardsProps) {
         {[...Array(6)].map((_, i) => (
           <div
             key={i}
-            className="h-20 glass-card rounded-xl animate-pulse bg-slate-900/40"
+            className="h-20 glass-card rounded-xl animate-pulse bg-slate-200/40 dark:bg-slate-900/40"
           />
         ))}
       </div>
@@ -37,7 +37,7 @@ export function StatsCards({ stats, loading }: StatsCardsProps) {
       title: "Total Pages",
       value: stats.totalPages.toLocaleString(),
       icon: FileText,
-      color: "text-blue-400",
+      color: "text-blue-500 dark:text-blue-400",
       bg: "bg-blue-500/10",
       border: "border-blue-500/20",
     },
@@ -45,7 +45,7 @@ export function StatsCards({ stats, loading }: StatsCardsProps) {
       title: "Pending",
       value: stats.pending.toLocaleString(),
       icon: Clock,
-      color: "text-amber-400",
+      color: "text-amber-500 dark:text-amber-400",
       bg: "bg-amber-500/10",
       border: "border-amber-500/20",
     },
@@ -53,7 +53,7 @@ export function StatsCards({ stats, loading }: StatsCardsProps) {
       title: "Running",
       value: stats.scanning.toLocaleString(),
       icon: RefreshCw,
-      color: "text-cyan-400",
+      color: "text-cyan-500 dark:text-cyan-400",
       bg: "bg-cyan-500/10",
       border: "border-cyan-500/20",
       animate: stats.scanning > 0,
@@ -62,7 +62,7 @@ export function StatsCards({ stats, loading }: StatsCardsProps) {
       title: "Completed",
       value: stats.completed.toLocaleString(),
       icon: CheckCircle2,
-      color: "text-emerald-400",
+      color: "text-emerald-500 dark:text-emerald-400",
       bg: "bg-emerald-500/10",
       border: "border-emerald-500/20",
     },
@@ -70,7 +70,7 @@ export function StatsCards({ stats, loading }: StatsCardsProps) {
       title: "Failed",
       value: stats.failed.toLocaleString(),
       icon: AlertCircle,
-      color: "text-rose-400",
+      color: "text-rose-500 dark:text-rose-400",
       bg: "bg-rose-500/10",
       border: "border-rose-500/20",
     },
@@ -78,7 +78,7 @@ export function StatsCards({ stats, loading }: StatsCardsProps) {
       title: "Unclear",
       value: stats.unclear.toLocaleString(),
       icon: ShieldAlert,
-      color: "text-purple-400",
+      color: "text-purple-500 dark:text-purple-400",
       bg: "bg-purple-500/10",
       border: "border-purple-500/20",
     },
@@ -94,7 +94,7 @@ export function StatsCards({ stats, loading }: StatsCardsProps) {
             className="glass-card rounded-xl p-3.5 transition-all duration-200 hover:-translate-y-0.5"
           >
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-medium text-slate-400 truncate">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">
                 {item.title}
               </span>
               <div className={`p-1 rounded-lg ${item.bg} ${item.color}`}>
@@ -108,7 +108,7 @@ export function StatsCards({ stats, loading }: StatsCardsProps) {
 
             <div className="mt-1">
               <div
-                className="font-bold tracking-tight text-slate-100 truncate text-lg sm:text-xl"
+                className="font-bold tracking-tight text-slate-900 dark:text-slate-100 truncate text-lg sm:text-xl"
                 title={item.value}
               >
                 {item.value}

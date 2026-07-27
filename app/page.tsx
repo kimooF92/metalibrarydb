@@ -5,7 +5,6 @@ import { TrackedPage, DashboardStats } from "@/types";
 import { StatsCards } from "@/components/stats-cards";
 import { AddUrlForm } from "@/components/add-url-form";
 import { PagesTable } from "@/components/pages-table";
-import { SidebarTrigger } from "@/components/sidebar-context";
 import { RefreshCw, X, Plus, BarChart3 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -184,32 +183,31 @@ export default function DashboardPage() {
         <div
           className={`fixed top-20 right-6 z-50 flex items-center space-x-3 px-4 py-3 rounded-xl shadow-2xl border text-xs font-semibold backdrop-blur-md animate-in slide-in-from-top-5 duration-200 ${
             toast.type === "success"
-              ? "bg-emerald-950/95 text-emerald-300 border-emerald-500/40"
+              ? "bg-emerald-50 dark:bg-emerald-950/95 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/40"
               : toast.type === "error"
-              ? "bg-rose-950/95 text-rose-300 border-rose-500/40"
-              : "bg-indigo-950/95 text-indigo-300 border-indigo-500/40"
+              ? "bg-rose-50 dark:bg-rose-950/95 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-500/40"
+              : "bg-indigo-50 dark:bg-indigo-950/95 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-500/40"
           }`}
         >
           <span>{toast.message}</span>
         </div>
       )}
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-800/40">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800/40">
         <div className="flex items-center flex-wrap gap-2">
           <div className="flex items-center space-x-2">
-            <SidebarTrigger />
-            <h1 className="text-base font-extrabold text-white tracking-tight">
+            <h1 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight">
               Dashboard
             </h1>
           </div>
           {stats && (
-            <span className="text-[10px] bg-slate-900 border border-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-medium hidden md:inline-block">
+            <span className="text-[10px] bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full font-medium hidden md:inline-block">
               {stats.totalPages} monitored • {stats.completed} completed • {stats.failed} failed
             </span>
           )}
           {stats && stats.scanning > 0 && (
-            <span className="flex items-center space-x-1.5 text-[10px] bg-cyan-950/80 border border-cyan-500/30 text-cyan-300 px-2 py-0.5 rounded-full font-semibold animate-pulse shrink-0">
-              <RefreshCw className="w-2.5 h-2.5 animate-spin text-cyan-400" />
+            <span className="flex items-center space-x-1.5 text-[10px] bg-cyan-50 dark:bg-cyan-950/80 border border-cyan-200 dark:border-cyan-500/30 text-cyan-700 dark:text-cyan-300 px-2 py-0.5 rounded-full font-semibold animate-pulse shrink-0">
+              <RefreshCw className="w-2.5 h-2.5 animate-spin text-cyan-500 dark:text-cyan-400" />
               <span>Scanning {stats.scanning} {stats.scanning === 1 ? "page" : "pages"}...</span>
             </span>
           )}
@@ -218,9 +216,9 @@ export default function DashboardPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowStatsModal(true)}
-            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-all cursor-pointer"
+            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 transition-all cursor-pointer"
           >
-            <BarChart3 className="w-3.5 h-3.5 text-indigo-400" />
+            <BarChart3 className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
             <span>Show Stats</span>
           </button>
 
@@ -235,7 +233,7 @@ export default function DashboardPage() {
           <button
             onClick={() => loadData()}
             title="Refresh dashboard data"
-            className="flex items-center space-x-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-all cursor-pointer"
+            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${pagesLoading ? "animate-spin" : ""}`} />
             <span>Refresh</span>

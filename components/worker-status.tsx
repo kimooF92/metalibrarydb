@@ -78,7 +78,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
 
   if (!state) {
     return (
-      <div className="flex items-center justify-center py-1.5 px-3 rounded-lg bg-slate-900/60 border border-slate-800 text-xs text-slate-400">
+      <div className="flex items-center justify-center py-1.5 px-3 rounded-lg bg-slate-105 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
         <Cpu className="w-3.5 h-3.5 animate-pulse mr-1.5" />
         {layout !== "collapsed" && <span>Checking...</span>}
       </div>
@@ -93,7 +93,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
         onClick={toggleWorker}
         disabled={loading}
         title={isPaused ? "Worker is Paused. Click to Resume." : isBackoffActive ? "Worker Cooldown. Click to Resume." : "Worker Active. Click to Pause."}
-        className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-slate-800/40 border border-transparent hover:border-slate-800/60 transition-all cursor-pointer relative"
+        className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-slate-200/40 dark:hover:bg-slate-805 border border-transparent hover:border-slate-200 dark:hover:border-slate-800/60 transition-all cursor-pointer relative"
       >
         <span className="relative flex h-3.5 w-3.5">
           {!isPaused && !isBackoffActive && (
@@ -133,7 +133,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
                 }`}
               ></span>
             </span>
-            <span className="text-xs font-semibold text-slate-200">
+            <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
               {isPaused
                 ? "Paused"
                 : isBackoffActive
@@ -147,8 +147,8 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
             disabled={loading}
             className={`text-[10px] px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
               isPaused
-                ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20"
-                : "bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/20"
+                ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/20"
+                : "bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/20 border border-rose-200 dark:border-rose-500/20"
             }`}
           >
             {isPaused ? "Resume" : "Pause"}
@@ -157,21 +157,21 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
 
         {/* Backoff / Warning */}
         {isBackoffActive && (
-          <div className="flex items-start space-x-1.5 text-[10px] text-amber-400 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
+          <div className="flex items-start space-x-1.5 text-[10px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 p-2 rounded-lg border border-amber-250 dark:border-amber-500/20">
             <ShieldAlert className="w-3.5 h-3.5 shrink-0 mt-0.5" />
             <span>Repeated scraper failures detected. Cooldown active.</span>
           </div>
         )}
 
         {/* Progress Bars Stack */}
-        <div className="flex flex-col space-y-2 bg-slate-950/65 p-2.5 rounded-lg border border-slate-900">
+        <div className="flex flex-col space-y-2 bg-white dark:bg-slate-950/65 p-2.5 rounded-lg border border-slate-200 dark:border-slate-900">
           {/* Hourly Scans */}
           <div className="flex flex-col space-y-1">
             <div className="flex justify-between text-[9px]">
-              <span className="text-slate-500 font-medium">Hourly Scans</span>
-              <span className="text-slate-400 font-mono font-bold">{state.scansThisHour ?? 0} / 20</span>
+              <span className="text-slate-450 dark:text-slate-500 font-medium">Hourly Scans</span>
+              <span className="text-slate-700 dark:text-slate-400 font-mono font-bold">{state.scansThisHour ?? 0} / 20</span>
             </div>
-            <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+            <div className="w-full h-1 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
@@ -188,10 +188,10 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
           {/* Daily Scans */}
           <div className="flex flex-col space-y-1">
             <div className="flex justify-between text-[9px]">
-              <span className="text-slate-500 font-medium">Daily Scans</span>
-              <span className="text-slate-400 font-mono font-bold">{state.scansToday ?? 0} / 150</span>
+              <span className="text-slate-450 dark:text-slate-500 font-medium">Daily Scans</span>
+              <span className="text-slate-700 dark:text-slate-400 font-mono font-bold">{state.scansToday ?? 0} / 150</span>
             </div>
-            <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+            <div className="w-full h-1 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
@@ -212,7 +212,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
           <button
             onClick={pruneQueue}
             disabled={pruning}
-            className="flex items-center justify-center space-x-1.5 text-[10px] w-full text-slate-400 hover:text-rose-300 bg-slate-900/60 hover:bg-rose-500/10 py-1.5 rounded-lg border border-slate-800 hover:border-rose-500/30 transition-all cursor-pointer"
+            className="flex items-center justify-center space-x-1.5 text-[10px] w-full text-slate-550 dark:text-slate-400 hover:text-rose-650 dark:hover:text-rose-300 bg-white dark:bg-slate-900/60 hover:bg-rose-50 dark:hover:bg-rose-500/10 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-rose-300 dark:hover:border-rose-500/30 transition-all cursor-pointer"
           >
             <Trash2 className="w-3 h-3" />
             <span>Prune {pruneCount} old jobs</span>
@@ -248,7 +248,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
       )}
 
       {/* Main Status Pill & Kill Switch Button */}
-      <div className="flex items-center space-x-2 bg-slate-900/80 p-1 pl-3 rounded-full border border-slate-800">
+      <div className="flex items-center space-x-2 bg-white dark:bg-slate-900/80 p-1 pl-3 rounded-full border border-slate-200 dark:border-slate-800">
         <div className="flex items-center space-x-2">
           <span className="relative flex h-2 w-2">
             {!isPaused && !isBackoffActive && (
@@ -264,7 +264,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
               }`}
             ></span>
           </span>
-          <span className="text-xs font-medium text-slate-300">
+          <span className="text-xs font-medium text-slate-705 dark:text-slate-300">
             {isPaused
               ? "Paused"
               : isBackoffActive
@@ -273,11 +273,11 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
           </span>
         </div>
 
-        <div className="hidden lg:flex flex-col gap-0.5 border-l border-slate-800 pl-2 min-w-[80px]">
+        <div className="hidden lg:flex flex-col gap-0.5 border-l border-slate-200 dark:border-slate-800 pl-2 min-w-[80px]">
           {/* Hourly rate bar */}
           <div className="flex items-center gap-1">
-            <span className="text-[9px] text-slate-500 w-4 shrink-0">1h</span>
-            <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
+            <span className="text-[9px] text-slate-400 dark:text-slate-500 w-4 shrink-0">1h</span>
+            <div className="flex-1 h-1 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
@@ -290,12 +290,12 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
                 }}
               />
             </div>
-            <span className="text-[9px] font-mono text-slate-400">{state.scansThisHour ?? 0}/20</span>
+            <span className="text-[9px] font-mono text-slate-600 dark:text-slate-400">{state.scansThisHour ?? 0}/20</span>
           </div>
           {/* Daily rate bar */}
           <div className="flex items-center gap-1">
-            <span className="text-[9px] text-slate-500 w-4 shrink-0">1d</span>
-            <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
+            <span className="text-[9px] text-slate-400 dark:text-slate-500 w-4 shrink-0">1d</span>
+            <div className="flex-1 h-1 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
@@ -308,7 +308,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
                 }}
               />
             </div>
-            <span className="text-[9px] font-mono text-slate-400">{state.scansToday ?? 0}/150</span>
+            <span className="text-[9px] font-mono text-slate-600 dark:text-slate-400">{state.scansToday ?? 0}/150</span>
           </div>
         </div>
 
@@ -318,8 +318,8 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
           title={isPaused ? "Resume worker activity" : "Immediately pause all worker activity"}
           className={`flex items-center space-x-1 text-xs px-2.5 py-1 rounded-full font-medium transition-all ${
             isPaused
-              ? "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30"
-              : "bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border border-rose-500/30"
+              ? "bg-emerald-50 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/30 border border-emerald-250 dark:border-emerald-500/30"
+              : "bg-rose-50 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-500/30 border border-rose-250 dark:border-rose-500/30"
           }`}
         >
           {isPaused ? (
@@ -342,7 +342,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
           onClick={pruneQueue}
           disabled={pruning}
           title={`Prune ${pruneCount} completed queue job(s) older than 30 days`}
-          className="hidden md:flex items-center space-x-1.5 text-xs text-slate-400 hover:text-rose-300 bg-slate-900/60 hover:bg-rose-500/10 px-2.5 py-1 rounded-full border border-slate-800 hover:border-rose-500/30 transition-all cursor-pointer"
+          className="hidden md:flex items-center space-x-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-rose-650 dark:hover:text-rose-300 bg-white dark:bg-slate-900/60 hover:bg-rose-50 dark:hover:bg-rose-505/10 px-2.5 py-1 rounded-full border border-slate-202 dark:border-slate-800 hover:border-rose-300 dark:hover:border-rose-500/30 transition-all cursor-pointer"
         >
           <Trash2 className="w-3 h-3" />
           <span>Prune ({pruneCount})</span>
