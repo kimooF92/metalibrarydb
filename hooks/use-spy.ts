@@ -24,7 +24,9 @@ export function useAdFeed(initialParams?: AdFilterParams) {
           prev.trackedPageId !== initialParams.trackedPageId ||
           prev.limit !== initialParams.limit ||
           prev.enabled !== initialParams.enabled ||
-          prev.search !== initialParams.search;
+          prev.search !== initialParams.search ||
+          prev.status !== initialParams.status ||
+          prev.mediaType !== initialParams.mediaType;
 
         if (hasChanged) {
           return {
@@ -41,6 +43,8 @@ export function useAdFeed(initialParams?: AdFilterParams) {
     initialParams?.limit,
     initialParams?.enabled,
     initialParams?.search,
+    initialParams?.status,
+    initialParams?.mediaType,
   ]);
 
   const [ads, setAds] = useState<Ad[]>([]);

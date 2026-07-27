@@ -3,6 +3,49 @@ import { ExtractedAdData } from "./spy-scanner";
 import { resolveDestinationUrl } from "../lib/utils";
 
 /**
+ * Robust date parser function for Meta Ad Library across English, French, Arabic, Spanish, German.
+ */
+export function extractDateFromCardText(cardText: string): Date | null {
+  if (!cardText) return null;
+
+  // 1. Match Month Day, Year (e.g. Mar 11, 2026 or March 11, 2026)
+  const monthDayYear = cardText.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})/i);
+  if (monthDayYear) {
+    const parsed = new Date(`${monthDayYear[1]} ${monthDayYear[2]}, ${monthDayYear[3]}`);
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+
+  // 2. Match Day Month Year (e.g. 4 juil 2026, 11 Mar 2026, 4. Jul. 2026)
+  const dayMonthYear = cardText.match(/\b(\d{1,2})\.?\s+(janv|janvier|févr|février|mars|avril|avr|mai|juin|juil|juillet|août|sept|septembre|oct|octobre|nov|novembre|déc|décembre|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{4})/i);
+  if (dayMonthYear) {
+    let monthStr = dayMonthYear[2].toLowerCase();
+    monthStr = monthStr.replace(/janv\.?|janvier/i, "Jan")
+                       .replace(/févr\.?|février/i, "Feb")
+                       .replace(/mars/i, "Mar")
+                       .replace(/avril|avr\.?/i, "Apr")
+                       .replace(/mai/i, "May")
+                       .replace(/juin/i, "Jun")
+                       .replace(/juil\.?|juillet/i, "Jul")
+                       .replace(/août/i, "Aug")
+                       .replace(/sept\.?|septembre/i, "Sep")
+                       .replace(/oct\.?|octobre/i, "Oct")
+                       .replace(/nov\.?|novembre/i, "Nov")
+                       .replace(/déc\.?|décembre/i, "Dec");
+    const parsed = new Date(`${dayMonthYear[1]} ${monthStr} ${dayMonthYear[3]}`);
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+
+  // 3. Match Numeric Date (e.g. 2026-07-04 or 04/07/2026)
+  const numericDate = cardText.match(/\b(\d{4}[\/\.-]\d{1,2}[\/\.-]\d{1,2}|\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{4})\b/);
+  if (numericDate) {
+    const parsed = new Date(numericDate[1]);
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+
+  return null;
+}
+
+/**
  * Deep DOM Scanner: Extracts visible ad cards directly from rendered page DOM elements
  * across all languages (English, French, Arabic, Spanish, German).
  */
@@ -28,7 +71,7 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
           const adArchiveId = idMatch[1];
           if (seenArchiveIds.has(adArchiveId)) continue;
 
-          // Check that this div is a outer card container with content (images, video, links, or CTA buttons)
+          // Check that this div is a outer card container with content
           const hasContent =
             card.querySelector('img[src*="fbcdn"], img[src*="scontent"], video, a[href*="l.facebook.com"], a[href*="http"], div[style*="white-space"]') !== null ||
             cardText.includes("Sponsored") ||
@@ -50,21 +93,14 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
           const pageNameEl = card.querySelector('a[href*="facebook.com/"] span, a[href*="facebook.com/"]');
           const pageName = pageNameEl ? pageNameEl.textContent?.trim() || null : null;
 
-          // 2. Started running date
-          const dateMatch =
-            cardText.match(/(?:Started running on|Début de diffusion le|Diffusion le|بدء التشغيل في|Lanzado el|Gestartet am)\s*([^\n\r\|]+)/i) ||
-            cardText.match(/([A-Za-zà-ÿ]+\s+\d+,\s+\d{4})/i) ||
-            cardText.match(/(\d{1,2}\s+[A-Za-zà-ÿ]+\s+\d{4})/i);
-          const startedRunningStr = dateMatch ? dateMatch[1].trim() : null;
-
-          // 3. Caption / Body copy
+          // 2. Caption / Body copy
           const bodyEl =
             card.querySelector('div[style*="white-space: pre-wrap"]') ||
             card.querySelector('div[class*="_4ik4 _4ik5"]') ||
             card.querySelector('div[class*="x2b8fe0"]');
           const caption = bodyEl ? bodyEl.textContent?.trim() || null : null;
 
-          // 4. Media (Images / Video / Carousel)
+          // 3. Media (Images / Video / Carousel)
           const imgs = Array.from(card.querySelectorAll<HTMLImageElement>("img")).filter(
             (img) => img.src && !img.src.includes("data:image") && (img.src.includes("scontent") || img.src.includes("fbcdn"))
           );
@@ -88,14 +124,14 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
             thumbnailUrl = imgs[0].src;
           }
 
-          // 5. CTA link & text
+          // 4. CTA link & text
           const linkEl = card.querySelector<HTMLAnchorElement>('a[href*="l.facebook.com"], a[data-lynx-mode], a[target="_blank"]:not([href*="facebook.com"])');
           const linkUrl = linkEl ? linkEl.href : null;
 
           const ctaEl = card.querySelector('div[class*="x1h4wwuj"], span[class*="x1h4wwuj"]');
           const ctaText = linkEl ? linkEl.textContent?.trim() || null : ctaEl ? ctaEl.textContent?.trim() || null : null;
 
-          // 6. Duplication / Collation Count (multilingual)
+          // 5. Duplication / Collation Count (multilingual)
           const dupMatch = cardText.match(/(\d+)\s+(?:ads?|إعلانات|publicités|anuncios)\s+(?:use this creative|تستخدم هذا الإعلان|utilisent cette|usan este)/i);
           const duplicationCount = dupMatch ? parseInt(dupMatch[1], 10) : 1;
 
@@ -103,7 +139,7 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
             adArchiveId,
             pageId: fallbackPageId,
             pageName,
-            startedRunningStr,
+            rawText: cardText,
             caption,
             title: null,
             ctaText,
@@ -123,24 +159,7 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
     }, defaultPageId);
 
     return rawAds.map((item) => {
-      let startedRunningOn: Date | null = null;
-      if (item.startedRunningStr) {
-        let s = item.startedRunningStr.trim().replace(/^le\s+/i, "");
-        s = s.replace(/janv\.?|janvier/i, "Jan")
-             .replace(/févr\.?|février/i, "Feb")
-             .replace(/mars/i, "Mar")
-             .replace(/avril|avr\.?/i, "Apr")
-             .replace(/mai/i, "May")
-             .replace(/juin/i, "Jun")
-             .replace(/juil\.?|juillet/i, "Jul")
-             .replace(/août/i, "Aug")
-             .replace(/sept\.?|septembre/i, "Sep")
-             .replace(/oct\.?|octobre/i, "Oct")
-             .replace(/nov\.?|novembre/i, "Nov")
-             .replace(/déc\.?|décembre/i, "Dec");
-        const parsed = new Date(s);
-        if (!isNaN(parsed.getTime())) startedRunningOn = parsed;
-      }
+      const startedRunningOn = extractDateFromCardText(item.rawText);
 
       return {
         adArchiveId: item.adArchiveId,

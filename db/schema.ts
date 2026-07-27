@@ -123,6 +123,8 @@ export const ads = pgTable(
     thumbnailStoragePath: text("thumbnail_storage_path"),
     firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).defaultNow().notNull(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),
+    isArchived: boolean("is_archived").default(false),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -131,6 +133,7 @@ export const ads = pgTable(
     index("idx_ads_page_id").on(table.pageId),
     index("idx_ads_started_running").on(table.startedRunningOn),
     index("idx_ads_media_type").on(table.mediaType),
+    index("idx_ads_is_archived").on(table.isArchived),
   ]
 );
 

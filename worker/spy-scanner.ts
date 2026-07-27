@@ -1,7 +1,7 @@
 import { Page, Response } from "playwright";
 import { db } from "../db";
 import { ads, adObservations, creativeScans, trackedPages } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { cacheThumbnail } from "./thumbnail-cache";
 import { extractAdsFromDOM } from "./dom-scanner";
 import { resolveDestinationUrl } from "../lib/utils";
@@ -364,6 +364,7 @@ export async function scanAdCreatives(
           target: ads.adArchiveId,
           set: {
             pageName: adData.pageName,
+            ...(adData.startedRunningOn ? { startedRunningOn: adData.startedRunningOn } : {}),
             caption: adData.caption,
             title: adData.title,
             ctaText: adData.ctaText,
@@ -390,6 +391,39 @@ export async function scanAdCreatives(
           observedAt: now,
         });
         savedCount++;
+      }
+    }
+
+    // Reconcile ads missing from this scan run (mark deactivated & archived)
+    if (savedCount > 0) {
+      const previousObservations = await db.query.adObservations.findMany({
+        where: eq(adObservations.trackedPageId, trackedPageId),
+        columns: { adId: true },
+      });
+      const previousAdIds = Array.from(new Set(previousObservations.map((o) => o.adId)));
+      const currentlyObservedAdIds = new Set(
+        Array.from(collectedAds.values()).map((a) => a.adArchiveId)
+      );
+
+      for (const prevAdId of previousAdIds) {
+        const existingAd = await db.query.ads.findFirst({
+          where: eq(ads.id, prevAdId),
+        });
+        if (existingAd && !currentlyObservedAdIds.has(existingAd.adArchiveId)) {
+          await db
+            .update(ads)
+            .set({ isArchived: true, archivedAt: now, updatedAt: now })
+            .where(eq(ads.id, prevAdId));
+
+          await db.insert(adObservations).values({
+            creativeScanId,
+            adId: prevAdId,
+            trackedPageId,
+            isActive: false,
+            duplicationCount: 0,
+            observedAt: now,
+          });
+        }
       }
     }
 

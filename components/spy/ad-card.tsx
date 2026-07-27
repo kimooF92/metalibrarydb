@@ -18,32 +18,66 @@ import {
   Flame,
   Globe,
   ZoomIn,
+  Archive,
+  ArchiveRestore,
 } from "lucide-react";
 
 interface AdCardProps {
   ad: Ad;
+  onArchiveToggle?: () => void;
 }
 
-export function AdCard({ ad }: AdCardProps) {
+export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
   const [imgError, setImgError] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isArchived, setIsArchived] = useState(Boolean(ad.isArchived));
+  const [isArchiving, setIsArchiving] = useState(false);
+
+  const toggleArchive = async () => {
+    setIsArchiving(true);
+    const nextState = !isArchived;
+    setIsArchived(nextState);
+    try {
+      const res = await fetch(`/api/spy/ads/${ad.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isArchived: nextState }),
+      });
+      if (res.ok) {
+        onArchiveToggle?.();
+      } else {
+        setIsArchived(!nextState);
+      }
+    } catch {
+      setIsArchived(!nextState);
+    } finally {
+      setIsArchiving(false);
+    }
+  };
 
   // Format launch date
-  const formatLaunchDate = (dateStr: string | null) => {
-    if (!dateStr) return "Unknown launch date";
-    const date = new Date(dateStr);
+  const formatLaunchDate = (dateStr: string | null, firstSeenStr?: string | null) => {
+    const isFirstSeen = !dateStr;
+    const targetStr = dateStr || firstSeenStr;
+    if (!targetStr) return "Unknown launch date";
+    const date = new Date(targetStr);
     if (isNaN(date.getTime())) return "Unknown launch date";
     
     const now = new Date();
-    const diffTime = Math.abs(now.getTime() - date.getTime());
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const launchDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+    const diffTime = today.getTime() - launchDay.getTime();
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
-    if (diffDays === 0) return "Launched today";
-    if (diffDays === 1) return "Launched yesterday";
-    if (diffDays < 30) return `Launched ${diffDays}d ago`;
-    return `Launched ${date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+    const prefix = isFirstSeen ? "First seen " : "Launched ";
+
+    if (diffDays <= 0) return `${prefix}today`;
+    if (diffDays === 1) return `${prefix}yesterday`;
+    if (diffDays < 30) return `${prefix}${diffDays}d ago`;
+    return `${prefix}${date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
   };
 
   const duplicationCount = ad.duplicationCount || 1;
@@ -74,17 +108,19 @@ export function AdCard({ ad }: AdCardProps) {
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {ad.isActive === true && (
+            {isArchived ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-600 dark:text-purple-400 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full">
+                <Archive className="w-3 h-3" /> Archived
+              </span>
+            ) : ad.isActive === true ? (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
                 <CheckCircle2 className="w-3 h-3" /> Active
               </span>
-            )}
-            {ad.isActive === false && (
+            ) : ad.isActive === false ? (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-2 py-0.5 rounded-full">
                 <XCircle className="w-3 h-3" /> Inactive
               </span>
-            )}
-            {ad.isActive === undefined && (
+            ) : (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
                 <HelpCircle className="w-3 h-3" /> Unknown
               </span>
@@ -96,7 +132,7 @@ export function AdCard({ ad }: AdCardProps) {
         <div className="flex flex-wrap items-center gap-1.5 mb-3">
           <span className="inline-flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-900 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-800 font-medium">
             <Calendar className="w-3 h-3 text-indigo-500 dark:text-indigo-400" />
-            {formatLaunchDate(ad.startedRunningOn)}
+            {formatLaunchDate(ad.startedRunningOn, ad.firstSeenAt)}
           </span>
 
           <span
@@ -219,6 +255,19 @@ export function AdCard({ ad }: AdCardProps) {
         )}
 
         <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={toggleArchive}
+            disabled={isArchiving}
+            className={`p-1.5 rounded-md transition-colors cursor-pointer ${
+              isArchived
+                ? "text-purple-500 hover:text-purple-400 hover:bg-purple-500/10"
+                : "text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-slate-100 dark:hover:bg-slate-900"
+            }`}
+            title={isArchived ? "Unarchive Ad (Move to Active Feed)" : "Archive Ad (Move to Vault)"}
+          >
+            {isArchived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+          </button>
+
           {(firstVideoUrl || displayImage) && (
             <button
               onClick={() => setIsPreviewOpen(true)}

@@ -87,8 +87,11 @@ export async function GET(req: NextRequest) {
     if (status && status !== "all") {
       if (status === "active") {
         conditions.push(eq(adObservations.isActive, true));
+        conditions.push(or(eq(ads.isArchived, false), sql`${ads.isArchived} IS NULL`));
       } else if (status === "inactive") {
         conditions.push(eq(adObservations.isActive, false));
+      } else if (status === "archived") {
+        conditions.push(eq(ads.isArchived, true));
       }
     }
 
@@ -113,6 +116,8 @@ export async function GET(req: NextRequest) {
         thumbnailStoragePath: ads.thumbnailStoragePath,
         firstSeenAt: ads.firstSeenAt,
         lastSeenAt: ads.lastSeenAt,
+        isArchived: ads.isArchived,
+        archivedAt: ads.archivedAt,
         createdAt: ads.createdAt,
         updatedAt: ads.updatedAt,
         duplicationCount: adObservations.duplicationCount,
@@ -193,6 +198,8 @@ export async function GET(req: NextRequest) {
           updatedAt: row.updatedAt,
           duplicationCount: Number(row.duplicationCount || 1),
           isActive: Boolean(row.isActive),
+          isArchived: Boolean(row.isArchived),
+          archivedAt: row.archivedAt ? new Date(row.archivedAt).toISOString() : null,
           trackedPageId: row.trackedPageId,
           signedThumbnailUrl: signedThumbnailUrl || row.thumbnailUrl,
         };

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useAdFeed } from "@/hooks/use-spy";
 import { AdCard } from "./ad-card";
 import { X, RefreshCw, Eye, Info, Layers } from "lucide-react";
@@ -19,8 +20,11 @@ export function PageAdLibraryDrawer({
   displayName,
   currentResults,
 }: PageAdLibraryDrawerProps) {
+  const [activeTab, setActiveTab] = useState<"active" | "archived" | "all">("active");
+
   const { ads, isLoading, error, refetch } = useAdFeed({
     trackedPageId: trackedPageId || undefined,
+    status: activeTab,
     limit: 100,
     enabled: isOpen && Boolean(trackedPageId),
   });
@@ -59,6 +63,40 @@ export function PageAdLibraryDrawer({
               <X className="w-5 h-5" />
             </button>
           </div>
+        </div>
+
+        {/* Tab Selection */}
+        <div className="flex items-center gap-2 px-6 py-2.5 bg-zinc-900/80 border-b border-zinc-800 text-xs">
+          <button
+            onClick={() => setActiveTab("active")}
+            className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+              activeTab === "active"
+                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+            }`}
+          >
+            Active Creatives
+          </button>
+          <button
+            onClick={() => setActiveTab("archived")}
+            className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+              activeTab === "archived"
+                ? "bg-purple-600 text-white shadow-md shadow-purple-600/30"
+                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+            }`}
+          >
+            Archived Vault
+          </button>
+          <button
+            onClick={() => setActiveTab("all")}
+            className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+              activeTab === "all"
+                ? "bg-zinc-800 text-zinc-100 border border-zinc-700"
+                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+            }`}
+          >
+            All Creatives
+          </button>
         </div>
 
         {/* Ad Count Comparison Callout Banner */}
@@ -107,7 +145,7 @@ export function PageAdLibraryDrawer({
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {ads.map((ad) => (
-                <AdCard key={ad.id} ad={ad} />
+                <AdCard key={ad.id} ad={ad} onArchiveToggle={() => refetch()} />
               ))}
             </div>
           )}
