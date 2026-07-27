@@ -65,8 +65,11 @@ interface PagesTableProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   page: number;
+  pageSize: number;
   totalPages: number;
+  totalCount?: number;
   onPageChange: (newPage: number) => void;
+  onPageSizeChange: (newPageSize: number) => void;
   sortBy: string;
   sortOrder: "asc" | "desc";
   onSortChange: (col: string) => void;
@@ -89,8 +92,11 @@ export function PagesTable({
   activeTab,
   onTabChange,
   page,
+  pageSize,
   totalPages,
+  totalCount,
   onPageChange,
+  onPageSizeChange,
   sortBy,
   sortOrder,
   onSortChange,
@@ -321,6 +327,21 @@ export function PagesTable({
               <option value="page" className="bg-slate-900">Page ID</option>
               <option value="keyword_exact_phrase" className="bg-slate-900">Exact Phrase</option>
               <option value="keyword_unordered" className="bg-slate-900">Unordered Keyword</option>
+            </select>
+          </div>
+
+          {/* Rows Limit Select Menu */}
+          <div className="flex items-center space-x-1.5 bg-slate-950/80 px-2 py-1.5 rounded-lg border border-slate-800 text-[11px]">
+            <span className="text-slate-400 font-medium">Rows:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => onPageSizeChange(Number(e.target.value))}
+              className="bg-transparent text-slate-200 font-medium focus:outline-none cursor-pointer"
+              aria-label="Select rows per page"
+            >
+              <option value={25} className="bg-slate-900">25 rows</option>
+              <option value={50} className="bg-slate-900">50 rows</option>
+              <option value={100} className="bg-slate-900">100 rows</option>
             </select>
           </div>
 
@@ -776,13 +797,36 @@ export function PagesTable({
         </div>
 
         {/* Pagination Footer */}
-        {totalPages > 1 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-900/60 border-t border-slate-800 text-xs text-slate-400">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-900/60 border-t border-slate-800 text-xs text-slate-400">
+          <div className="flex items-center space-x-4">
             <span>
               Page <strong className="text-slate-200">{page}</strong> of{" "}
               <strong className="text-slate-200">{totalPages}</strong>
+              {totalCount !== undefined && totalCount > 0 && (
+                <span className="ml-1 text-slate-500">({totalCount} total)</span>
+              )}
             </span>
 
+            {/* Rows Per Page Select */}
+            <div className="flex items-center space-x-1.5">
+              <label htmlFor="rows-per-page-select" className="text-slate-400 font-medium whitespace-nowrap">
+                Show:
+              </label>
+              <select
+                id="rows-per-page-select"
+                value={pageSize}
+                onChange={(e) => onPageSizeChange(Number(e.target.value))}
+                className="bg-slate-950 text-slate-200 font-semibold px-2 py-0.5 rounded border border-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer text-xs transition-colors hover:border-slate-700"
+                aria-label="Select number of rows per page"
+              >
+                <option value={25} className="bg-slate-900">25 rows</option>
+                <option value={50} className="bg-slate-900">50 rows</option>
+                <option value={100} className="bg-slate-900">100 rows</option>
+              </select>
+            </div>
+          </div>
+
+          {totalPages > 1 && (
             <div className="flex flex-wrap items-center gap-1.5">
               <button
                 disabled={page <= 1}
@@ -821,10 +865,11 @@ export function PagesTable({
                     <button
                       key={`page-${pageNum}`}
                       onClick={() => onPageChange(pageNum)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${isActive
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        isActive
                           ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30 border border-indigo-500"
                           : "bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800"
-                        }`}
+                      }`}
                     >
                       {pageNum}
                     </button>
@@ -841,8 +886,8 @@ export function PagesTable({
                 Next
               </button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Scan History Modal */}

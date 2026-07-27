@@ -25,7 +25,9 @@ export default function DashboardPage() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   const fetchStats = useCallback(async (silent = false) => {
     if (!silent) setStatsLoading(true);
@@ -47,7 +49,7 @@ export default function DashboardPage() {
     try {
       const params = new URLSearchParams();
       params.set("page", String(page));
-      params.set("limit", "25");
+      params.set("limit", String(pageSize));
       if (search) params.set("search", search);
       if (statusFilter !== "all") params.set("status", statusFilter);
       if (searchTypeFilter !== "all") params.set("searchType", searchTypeFilter);
@@ -60,13 +62,14 @@ export default function DashboardPage() {
         const data = await res.json();
         setPages(data.data || []);
         setTotalPages(data.pagination?.totalPages || 1);
+        setTotalCount(data.pagination?.total || 0);
       }
     } catch (err) {
       console.error("Failed to fetch pages", err);
     } finally {
       if (!silent) setPagesLoading(false);
     }
-  }, [page, search, statusFilter, searchTypeFilter, activeTab, sortBy, sortOrder]);
+  }, [page, pageSize, search, statusFilter, searchTypeFilter, activeTab, sortBy, sortOrder]);
 
   const loadData = useCallback((silent = false) => {
     fetchStats(silent);
@@ -269,8 +272,14 @@ export default function DashboardPage() {
           setPage(1);
         }}
         page={page}
+        pageSize={pageSize}
         totalPages={totalPages}
+        totalCount={totalCount}
         onPageChange={(p) => setPage(p)}
+        onPageSizeChange={(newSize) => {
+          setPageSize(newSize);
+          setPage(1);
+        }}
         sortBy={sortBy}
         sortOrder={sortOrder}
         onSortChange={handleSortChange}
