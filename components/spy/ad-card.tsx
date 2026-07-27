@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import NextImage from "next/image";
 import { Ad } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
 import {
@@ -24,6 +25,7 @@ interface AdCardProps {
 export function AdCard({ ad }: AdCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
+  const [imgError, setImgError] = useState(false);
 
   // Format launch date
   const formatLaunchDate = (dateStr: string | null) => {
@@ -118,16 +120,15 @@ export function AdCard({ ad }: AdCardProps) {
               autoPlay
               className="w-full h-full object-contain bg-black"
             />
-          ) : displayImage ? (
+          ) : displayImage && !imgError ? (
             <div className="relative w-full h-full group/media">
-              {/* eslint-disable-next-html-shortcut */}
-              <img
+              <NextImage
                 src={displayImage}
                 alt={ad.title || "Ad creative"}
-                className="w-full h-full object-cover transition-transform duration-300 group-hover/media:scale-105"
-                onError={(e) => {
-                  (e.target as HTMLElement).style.display = "none";
-                }}
+                fill
+                unoptimized
+                className="object-cover transition-transform duration-300 group-hover/media:scale-105"
+                onError={() => setImgError(true)}
               />
               {firstVideoUrl && (
                 <button
@@ -141,8 +142,14 @@ export function AdCard({ ad }: AdCardProps) {
             </div>
           ) : (
             <div className="flex flex-col items-center gap-1.5 text-slate-400 dark:text-slate-500">
-              <ImageIcon className="w-7 h-7 opacity-40" />
-              <span className="text-[11px]">No media preview available</span>
+              {ad.mediaType === "video" ? (
+                <Play className="w-7 h-7 opacity-40" />
+              ) : (
+                <ImageIcon className="w-7 h-7 opacity-40" />
+              )}
+              <span className="text-[11px]">
+                {imgError ? "Preview unavailable" : "No media preview"}
+              </span>
             </div>
           )}
         </div>
