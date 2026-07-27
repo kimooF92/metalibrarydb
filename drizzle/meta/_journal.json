@@ -15,6 +15,13 @@
       "when": 1784950464299,
       "tag": "0001_add_watchlist_and_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785165879323,
+      "tag": "0002_watery_justin_hammer",
+      "breakpoints": true
     }
   ]
 }

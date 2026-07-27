@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { TrackedPage, DashboardStats } from "@/types";
 import { StatsCards } from "@/components/stats-cards";
 import { AddUrlForm } from "@/components/add-url-form";
@@ -15,6 +15,7 @@ export default function DashboardPage() {
 
   const [pages, setPages] = useState<TrackedPage[]>([]);
   const [pagesLoading, setPagesLoading] = useState(true);
+  const isFetchingRef = useRef(false);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -27,6 +28,16 @@ export default function DashboardPage() {
   const [pageSize, setPageSize] = useState(25);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+
+  const [toast, setToast] = useState<{
+    type: "success" | "error" | "info";
+    message: string;
+  } | null>(null);
+
+  const showToast = useCallback((type: "success" | "error" | "info", message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 4000);
+  }, []);
 
   const fetchStats = useCallback(async (silent = false) => {
     if (!silent) setStatsLoading(true);
@@ -44,6 +55,8 @@ export default function DashboardPage() {
   }, []);
 
   const fetchPages = useCallback(async (silent = false) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     if (!silent) setPagesLoading(true);
     try {
       const params = new URLSearchParams();
@@ -62,13 +75,18 @@ export default function DashboardPage() {
         setPages(data.data || []);
         setTotalPages(data.pagination?.totalPages || 1);
         setTotalCount(data.pagination?.total || 0);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        showToast("error", errData.error || "Failed to load table pages.");
       }
     } catch (err) {
       console.error("Failed to fetch pages", err);
+      showToast("error", "Network error loading table pages.");
     } finally {
+      isFetchingRef.current = false;
       if (!silent) setPagesLoading(false);
     }
-  }, [page, pageSize, search, statusFilter, searchTypeFilter, activeTab, sortBy, sortOrder]);
+  }, [page, pageSize, search, statusFilter, searchTypeFilter, activeTab, sortBy, sortOrder, showToast]);
 
   const loadData = useCallback((silent = false) => {
     fetchStats(silent);
@@ -90,31 +108,22 @@ export default function DashboardPage() {
     loadData();
   }, [loadData]);
 
-  // Determine if there are active scans running or pending
+  // Determine if there are active scans currently running
   const isScanningActive =
-    (stats && (stats.scanning > 0 || stats.pending > 0)) ||
-    pages.some((p) => p.status === "scanning" || p.status === "pending");
+    (stats && stats.scanning > 0) ||
+    pages.some((p) => p.status === "scanning");
 
-  // Real-time polling when scraper jobs are active
+  // Real-time polling when scraper jobs are actively scanning
   useEffect(() => {
     if (!isScanningActive) return;
 
     const interval = setInterval(() => {
       loadData(true); // Silent reload
-    }, 2500);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [isScanningActive, loadData]);
 
-  const [toast, setToast] = useState<{
-    type: "success" | "error" | "info";
-    message: string;
-  } | null>(null);
-
-  const showToast = (type: "success" | "error" | "info", message: string) => {
-    setToast({ type, message });
-    setTimeout(() => setToast(null), 4000);
-  };
 
   const handleRefresh = async (ids: string[]) => {
     try {
@@ -281,6 +290,7 @@ export default function DashboardPage() {
         sortBy={sortBy}
         sortOrder={sortOrder}
         onSortChange={handleSortChange}
+        onWatchlistToggle={() => loadData(true)}
       />
 
       {/* Stats Modal */}

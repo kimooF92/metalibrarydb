@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { TrackedPage } from "@/types";
 import { HistoryModal } from "./history-modal";
 import { DeleteConfirmModal } from "./delete-confirm-modal";
@@ -74,6 +74,7 @@ interface PagesTableProps {
   sortOrder: "asc" | "desc";
   onSortChange: (col: string) => void;
   onBulkDelete?: (ids: string[]) => void;
+  onWatchlistToggle?: () => void;
 }
 
 export function PagesTable({
@@ -100,24 +101,39 @@ export function PagesTable({
   sortBy,
   sortOrder,
   onSortChange,
+  onWatchlistToggle,
 }: PagesTableProps) {
   const [watchlisted, setWatchlisted] = useState<Record<string, boolean>>(
     Object.fromEntries(pages.map((p) => [p.id, p.isWatchlisted ?? false]))
   );
 
+  useEffect(() => {
+    setWatchlisted(Object.fromEntries(pages.map((p) => [p.id, p.isWatchlisted ?? false])));
+  }, [pages]);
+
   const toggleWatchlist = useCallback(async (id: string) => {
     const next = !watchlisted[id];
     setWatchlisted((prev) => ({ ...prev, [id]: next }));
+    const target = pages.find((p) => p.id === id);
+    if (target) target.isWatchlisted = next;
+
     try {
-      await fetch(`/api/page/${id}`, {
+      const res = await fetch(`/api/page/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isWatchlisted: next }),
       });
+      if (res.ok) {
+        onWatchlistToggle?.();
+      } else {
+        if (target) target.isWatchlisted = !next;
+        setWatchlisted((prev) => ({ ...prev, [id]: !next }));
+      }
     } catch {
+      if (target) target.isWatchlisted = !next;
       setWatchlisted((prev) => ({ ...prev, [id]: !next }));
     }
-  }, [watchlisted]);
+  }, [watchlisted, pages, onWatchlistToggle]);
   const SortHeader = ({
     col,
     label,

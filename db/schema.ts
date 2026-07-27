@@ -40,6 +40,7 @@ export const trackedPages = pgTable(
   (table) => [
     index("idx_tracked_pages_status").on(table.status),
     index("idx_tracked_pages_page_id").on(table.pageId),
+    index("idx_tracked_pages_watchlist").on(table.isWatchlisted),
   ]
 );
 
@@ -60,6 +61,10 @@ export const scanHistory = pgTable(
   (table) => [
     index("idx_scan_history_tracked_page_id").on(table.trackedPageId),
     index("idx_scan_history_checked_at").on(table.checkedAt),
+    index("idx_scan_history_page_checked_at").on(
+      table.trackedPageId,
+      table.checkedAt.desc()
+    ),
   ]
 );
 
@@ -93,6 +98,10 @@ export const queue = pgTable(
   (table) => [
     index("idx_queue_status").on(table.status),
     index("idx_queue_created_at").on(table.createdAt),
+    index("idx_queue_page_created_at").on(
+      table.trackedPageId,
+      table.createdAt.desc()
+    ),
   ]
 );
 

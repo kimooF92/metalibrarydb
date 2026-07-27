@@ -66,16 +66,6 @@ export async function GET(request: Request) {
     const targetSortCol = sortColumns[sortBy] || trackedPages.createdAt;
     const orderClause = sortOrder === "asc" ? asc(targetSortCol) : desc(targetSortCol);
 
-    // Subquery for previous results (the scan history result prior to current_results)
-    const prevScanSubquery = db
-      .select({
-        trackedPageId: scanHistory.trackedPageId,
-        previousResults: scanHistory.results,
-        rn: sql<number>`row_number() over (partition by ${scanHistory.trackedPageId} order by ${scanHistory.checkedAt} desc)`.as("rn"),
-      })
-      .from(scanHistory)
-      .as("prev_scans");
-
     // Total count query
     let countQuery = db.select({ count: sql<number>`count(*)` }).from(trackedPages);
     if (whereClause) {
@@ -97,24 +87,25 @@ export async function GET(request: Request) {
     let prevResultsMap: Record<string, number | null> = {};
 
     if (pageIds.length > 0) {
-      // Find second most recent scan result for difference display
-      const prevScans = await db
+      // Rank only the rows for the currently visible pages. The former query
+      // ranked the entire scan_history table before applying this page filter.
+      const rankedScans = db
         .select({
           trackedPageId: scanHistory.trackedPageId,
           results: scanHistory.results,
+          rank: sql<number>`row_number() over (partition by ${scanHistory.trackedPageId} order by ${scanHistory.checkedAt} desc)`.as("rank"),
         })
         .from(scanHistory)
-        .where(
-          and(
-            inArray(scanHistory.trackedPageId, pageIds),
-            sql`${scanHistory.id} in (
-              select id from (
-                select id, row_number() over (partition by tracked_page_id order by checked_at desc) as rn
-                from scan_history
-              ) t where rn = 2
-            )`
-          )
-        );
+        .where(inArray(scanHistory.trackedPageId, pageIds))
+        .as("ranked_scans");
+
+      const prevScans = await db
+        .select({
+          trackedPageId: rankedScans.trackedPageId,
+          results: rankedScans.results,
+        })
+        .from(rankedScans)
+        .where(eq(rankedScans.rank, 2));
 
       prevResultsMap = Object.fromEntries(
         prevScans.map((s) => [s.trackedPageId, s.results])
@@ -124,24 +115,27 @@ export async function GET(request: Request) {
     // Fetch latest queue entry per page for failureReason + attempts
     let queueMap: Record<string, { failureReason?: string | null; attempts?: number }> = {};
     if (pageIds.length > 0) {
-      const latestQueue = await db
+      // Apply the visible-page filter inside the window query for the same reason
+      // as scan history: do not rank every queue row on each table request.
+      const rankedQueue = db
         .select({
           trackedPageId: queue.trackedPageId,
           failureReason: queue.failureReason,
           attempts: queue.attempts,
+          rank: sql<number>`row_number() over (partition by ${queue.trackedPageId} order by ${queue.createdAt} desc)`.as("rank"),
         })
         .from(queue)
-        .where(
-          and(
-            inArray(queue.trackedPageId, pageIds),
-            sql`${queue.id} in (
-              select id from (
-                select id, row_number() over (partition by tracked_page_id order by created_at desc) as rn
-                from queue
-              ) t where rn = 1
-            )`
-          )
-        );
+        .where(inArray(queue.trackedPageId, pageIds))
+        .as("ranked_queue");
+
+      const latestQueue = await db
+        .select({
+          trackedPageId: rankedQueue.trackedPageId,
+          failureReason: rankedQueue.failureReason,
+          attempts: rankedQueue.attempts,
+        })
+        .from(rankedQueue)
+        .where(eq(rankedQueue.rank, 1));
       queueMap = Object.fromEntries(
         latestQueue.map((q) => [q.trackedPageId, { failureReason: q.failureReason, attempts: q.attempts ?? 0 }])
       );

@@ -15,7 +15,7 @@ export const client =
   globalForDb.conn ??
   postgres(connectionString, {
     prepare: false,
-    max: 1,
+    max: 10,
     idle_timeout: 15,
     connect_timeout: 15,
     ssl: "require",
