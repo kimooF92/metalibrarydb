@@ -112,8 +112,8 @@ export async function GET(req: NextRequest) {
         lastSeenAt: ads.lastSeenAt,
         createdAt: ads.createdAt,
         updatedAt: ads.updatedAt,
-        duplicationCount: sql<number>`coalesce(${adObservations.duplicationCount}, 1)`,
-        isActive: sql<boolean>`coalesce(${adObservations.isActive}, true)`,
+        duplicationCount: sql<number>`coalesce(${adObservations.duplicationCount}, 1)`.as("duplication_count"),
+        isActive: sql<boolean>`coalesce(${adObservations.isActive}, true)`.as("is_active"),
         trackedPageId: adObservations.trackedPageId,
         pageDisplayName: trackedPages.displayName,
       })
