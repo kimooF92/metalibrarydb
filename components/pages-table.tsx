@@ -431,6 +431,7 @@ export function PagesTable({
                       "Bulk Spy Scans Queued",
                       `Queued ${data.enqueuedCount || 0} Ad Spy creative scan(s). ${data.skippedCount || 0} already in queue.`
                     );
+                    onWatchlistToggle?.();
                     setSelectedIds([]);
                   } else {
                     triggerToast("error", "Bulk Scan Failed", data.error || "Could not queue creative scans");
@@ -820,6 +821,7 @@ export function PagesTable({
                                       `Creative extraction scan queued for "${brandName}". Start worker to process.`
                                     );
                                   }
+                                  onWatchlistToggle?.();
                                 } else {
                                   triggerToast("error", "Scan Failed", data.error || "Could not queue creative scan");
                                 }

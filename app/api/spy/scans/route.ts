@@ -87,6 +87,29 @@ export async function POST(req: NextRequest) {
         status: "pending",
       });
 
+      // Update page status to pending for active scanning UI feedback
+      await db
+        .update(trackedPages)
+        .set({ status: "pending", updatedAt: new Date() })
+        .where(eq(trackedPages.id, page.id));
+
+      // Enqueue standard count scan refresh if not already pending/running
+      const existingCountJob = await db.query.queue.findFirst({
+        where: and(
+          eq(queue.trackedPageId, page.id),
+          eq(queue.jobType, "count"),
+          inArray(queue.status, ["pending", "running"])
+        ),
+      });
+
+      if (!existingCountJob) {
+        await db.insert(queue).values({
+          trackedPageId: page.id,
+          jobType: "count",
+          status: "pending",
+        });
+      }
+
       enqueuedCount++;
       pageStatuses.push({
         id: page.id,

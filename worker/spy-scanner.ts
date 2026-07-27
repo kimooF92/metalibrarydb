@@ -227,13 +227,15 @@ export async function scanAdCreatives(
   page.on("response", handleResponse);
 
   try {
-    // Normalize country=ALL to extract full worldwide ad feed
+    // Preserve targetUrl's explicit country filter if set (essential for keyword searches like TN/US), otherwise default to country=ALL
     let finalTargetUrl = targetUrl;
     try {
       const parsedUrl = new URL(targetUrl);
-      parsedUrl.searchParams.set("country", "ALL");
-      parsedUrl.searchParams.set("is_targeted_country", "false");
-      finalTargetUrl = parsedUrl.toString();
+      if (!parsedUrl.searchParams.get("country")) {
+        parsedUrl.searchParams.set("country", "ALL");
+        parsedUrl.searchParams.set("is_targeted_country", "false");
+        finalTargetUrl = parsedUrl.toString();
+      }
     } catch {
       // keep original targetUrl fallback
     }

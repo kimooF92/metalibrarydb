@@ -12,7 +12,7 @@ export async function getBrowserSession(): Promise<{ context: BrowserContext; pa
   const isHeadless = process.env.PLAYWRIGHT_HEADLESS !== "false";
   const userDataDir = path.join(process.cwd(), ".playwright_profile");
 
-  contextInstance = await chromium.launchPersistentContext(userDataDir, {
+  const options = {
     headless: isHeadless,
     viewport: { width: 1280, height: 800 },
     userAgent:
@@ -27,7 +27,18 @@ export async function getBrowserSession(): Promise<{ context: BrowserContext; pa
       "--disable-dev-shm-usage",
       "--disable-blink-features=AutomationControlled",
     ],
-  });
+  };
+
+  try {
+    contextInstance = await chromium.launchPersistentContext(userDataDir, options);
+  } catch (err: any) {
+    if (err?.message?.includes("existing browser session")) {
+      const fallbackDir = path.join(process.cwd(), ".playwright_profile_fallback");
+      contextInstance = await chromium.launchPersistentContext(fallbackDir, options);
+    } else {
+      throw err;
+    }
+  }
 
   const pages = contextInstance.pages();
   singlePageInstance = pages.length > 0 ? pages[0] : await contextInstance.newPage();

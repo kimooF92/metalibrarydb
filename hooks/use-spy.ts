@@ -155,7 +155,7 @@ export function useAdStats() {
 export function useEnqueueScan() {
   const [isEnqueueing, setIsEnqueueing] = useState(false);
 
-  const enqueueScan = async (trackedPageIds: string[]) => {
+  const enqueueScan = async (trackedPageIds: string[], onRefresh?: (ids: string[]) => void) => {
     setIsEnqueueing(true);
     try {
       const res = await fetch("/api/spy/scans", {
@@ -166,6 +166,9 @@ export function useEnqueueScan() {
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || "Failed to enqueue scan");
+      }
+      if (onRefresh) {
+        onRefresh(trackedPageIds);
       }
       return data;
     } finally {
