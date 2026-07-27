@@ -13,8 +13,35 @@ export function useAdFeed(initialParams?: AdFilterParams) {
       status: "all",
       sortBy: "started_running_on",
       sortOrder: "desc",
+      enabled: true,
     }
   );
+
+  useEffect(() => {
+    if (initialParams) {
+      setParams((prev) => {
+        const hasChanged =
+          prev.trackedPageId !== initialParams.trackedPageId ||
+          prev.limit !== initialParams.limit ||
+          prev.enabled !== initialParams.enabled ||
+          prev.search !== initialParams.search;
+
+        if (hasChanged) {
+          return {
+            ...prev,
+            ...initialParams,
+            page: initialParams.page !== undefined ? initialParams.page : 1,
+          };
+        }
+        return prev;
+      });
+    }
+  }, [
+    initialParams?.trackedPageId,
+    initialParams?.limit,
+    initialParams?.enabled,
+    initialParams?.search,
+  ]);
 
   const [ads, setAds] = useState<Ad[]>([]);
   const [pagination, setPagination] = useState<PaginationMeta>({
@@ -27,6 +54,10 @@ export function useAdFeed(initialParams?: AdFilterParams) {
   const [error, setError] = useState<string | null>(null);
 
   const fetchFeed = useCallback(async () => {
+    if (params.enabled === false) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {

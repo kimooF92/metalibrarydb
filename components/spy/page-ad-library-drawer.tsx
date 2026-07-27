@@ -19,9 +19,11 @@ export function PageAdLibraryDrawer({
   displayName,
   currentResults,
 }: PageAdLibraryDrawerProps) {
-  const { ads, isLoading, error, refetch } = useAdFeed(
-    trackedPageId ? { trackedPageId, limit: 100 } : undefined
-  );
+  const { ads, isLoading, error, refetch } = useAdFeed({
+    trackedPageId: trackedPageId || undefined,
+    limit: 100,
+    enabled: isOpen && Boolean(trackedPageId),
+  });
 
   if (!isOpen || !trackedPageId) return null;
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import NextImage from "next/image";
 import { Ad } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
+import { ImagePreviewModal } from "./image-preview-modal";
 import {
   Calendar,
   Layers,
@@ -16,6 +17,7 @@ import {
   HelpCircle,
   Flame,
   Globe,
+  ZoomIn,
 } from "lucide-react";
 
 interface AdCardProps {
@@ -26,6 +28,7 @@ export function AdCard({ ad }: AdCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   // Format launch date
   const formatLaunchDate = (dateStr: string | null) => {
@@ -52,6 +55,8 @@ export function AdCard({ ad }: AdCardProps) {
   const displayImage = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.[0];
   const destinationUrl = resolveDestinationUrl(ad.linkUrl);
   const targetDomain = getCleanDomain(ad.linkUrl);
+
+  const previewImages = ad.mediaUrls && ad.mediaUrls.length > 0 ? ad.mediaUrls : displayImage ? [displayImage] : [];
 
   return (
     <div className="group relative flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-4 shadow-sm transition-all hover:border-slate-300 dark:hover:border-slate-700/80 hover:shadow-md">
@@ -121,7 +126,7 @@ export function AdCard({ ad }: AdCardProps) {
               className="w-full h-full object-contain bg-black"
             />
           ) : displayImage && !imgError ? (
-            <div className="relative w-full h-full group/media">
+            <div className="relative w-full h-full group/media cursor-pointer" onClick={() => setIsPreviewOpen(true)}>
               <NextImage
                 src={displayImage}
                 alt={ad.title || "Ad creative"}
@@ -130,10 +135,20 @@ export function AdCard({ ad }: AdCardProps) {
                 className="object-cover transition-transform duration-300 group-hover/media:scale-105"
                 onError={() => setImgError(true)}
               />
+              {/* Hover Zoom Overlay */}
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center gap-2 text-white">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/80 border border-zinc-700 text-xs font-semibold shadow-lg backdrop-blur-sm">
+                  <ZoomIn className="w-4 h-4 text-indigo-400" /> Click to Preview
+                </span>
+              </div>
+
               {firstVideoUrl && (
                 <button
-                  onClick={() => setIsPlayingVideo(true)}
-                  className="absolute inset-0 m-auto w-11 h-11 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-lg hover:bg-indigo-500 hover:scale-110 transition-all cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsPlayingVideo(true);
+                  }}
+                  className="absolute inset-0 m-auto w-11 h-11 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-lg hover:bg-indigo-500 hover:scale-110 transition-all cursor-pointer z-10"
                   title="Play Video"
                 >
                   <Play className="w-5 h-5 fill-current ml-0.5" />
@@ -205,6 +220,16 @@ export function AdCard({ ad }: AdCardProps) {
 
         <div className="flex items-center gap-1.5 shrink-0">
           {(firstVideoUrl || displayImage) && (
+            <button
+              onClick={() => setIsPreviewOpen(true)}
+              className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors cursor-pointer"
+              title="Preview Image Ad"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {(firstVideoUrl || displayImage) && (
             <a
               href={firstVideoUrl || displayImage}
               target="_blank"
@@ -229,6 +254,18 @@ export function AdCard({ ad }: AdCardProps) {
           </a>
         </div>
       </div>
+
+      {/* Image Preview Modal */}
+      <ImagePreviewModal
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+        imageUrls={previewImages}
+        title={ad.title}
+        pageName={ad.pageName || `Page ${ad.pageId}`}
+        caption={ad.caption}
+        destinationUrl={destinationUrl}
+        adArchiveId={ad.adArchiveId}
+      />
     </div>
   );
 }

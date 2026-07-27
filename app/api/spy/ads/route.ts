@@ -34,8 +34,14 @@ export async function GET(req: NextRequest) {
     const conditions = [];
 
     if (trackedPageId) {
-      // trackedPageId is the UUID PK of tracked_pages — filter on adObservations.trackedPageId
-      conditions.push(eq(adObservations.trackedPageId, trackedPageId));
+      // trackedPageId can be the UUID PK of tracked_pages or pageId string — filter flexibly
+      conditions.push(
+        or(
+          eq(adObservations.trackedPageId, trackedPageId),
+          eq(trackedPages.pageId, trackedPageId),
+          eq(ads.pageId, trackedPageId)
+        )
+      );
     }
 
     if (search && search.trim() !== "") {

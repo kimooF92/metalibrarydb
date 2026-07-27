@@ -151,5 +151,6 @@ export interface AdFilterParams {
   sortOrder?: "asc" | "desc";
   page?: number;
   limit?: number;
+  enabled?: boolean;
 }
 

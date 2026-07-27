@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Ad } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
+import { ImagePreviewModal } from "./image-preview-modal";
 import {
   Calendar,
   Layers,
@@ -15,6 +16,7 @@ import {
   HelpCircle,
   Flame,
   Globe,
+  ZoomIn,
 } from "lucide-react";
 
 interface AdRowProps {
@@ -24,6 +26,7 @@ interface AdRowProps {
 export function AdRow({ ad }: AdRowProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   // Format launch date
   const formatLaunchDate = (dateStr: string | null) => {
@@ -51,6 +54,8 @@ export function AdRow({ ad }: AdRowProps) {
   const destinationUrl = resolveDestinationUrl(ad.linkUrl);
   const targetDomain = getCleanDomain(ad.linkUrl);
 
+  const previewImages = ad.mediaUrls && ad.mediaUrls.length > 0 ? ad.mediaUrls : displayImage ? [displayImage] : [];
+
   return (
     <div className="group relative flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3.5 shadow-sm hover:border-slate-300 dark:hover:border-slate-700/80 hover:shadow-md transition-all">
       {/* Left: Thumbnail & Brand Details */}
@@ -65,7 +70,7 @@ export function AdRow({ ad }: AdRowProps) {
               className="w-full h-full object-contain bg-black"
             />
           ) : displayImage ? (
-            <div className="relative w-full h-full group/media">
+            <div className="relative w-full h-full group/media cursor-pointer" onClick={() => setIsPreviewOpen(true)}>
               {/* eslint-disable-next-html-shortcut */}
               <img
                 src={displayImage}
@@ -75,10 +80,18 @@ export function AdRow({ ad }: AdRowProps) {
                   (e.target as HTMLElement).style.display = "none";
                 }}
               />
+              {/* Hover Zoom Overlay */}
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center text-white">
+                <ZoomIn className="w-5 h-5 text-indigo-300 drop-shadow-md" />
+              </div>
+
               {firstVideoUrl && (
                 <button
-                  onClick={() => setIsPlayingVideo(true)}
-                  className="absolute inset-0 m-auto w-8 h-8 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-lg hover:bg-indigo-500 hover:scale-110 transition-all cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsPlayingVideo(true);
+                  }}
+                  className="absolute inset-0 m-auto w-8 h-8 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-lg hover:bg-indigo-500 hover:scale-110 transition-all cursor-pointer z-10"
                   title="Play Video"
                 >
                   <Play className="w-4 h-4 fill-current ml-0.5" />
@@ -192,6 +205,16 @@ export function AdRow({ ad }: AdRowProps) {
 
         <div className="flex items-center gap-1.5 shrink-0">
           {(firstVideoUrl || displayImage) && (
+            <button
+              onClick={() => setIsPreviewOpen(true)}
+              className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors cursor-pointer"
+              title="Preview Image Ad"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {(firstVideoUrl || displayImage) && (
             <a
               href={firstVideoUrl || displayImage}
               target="_blank"
@@ -216,6 +239,18 @@ export function AdRow({ ad }: AdRowProps) {
           </a>
         </div>
       </div>
+
+      {/* Image Preview Modal */}
+      <ImagePreviewModal
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+        imageUrls={previewImages}
+        title={ad.title}
+        pageName={ad.pageName || `Page ${ad.pageId}`}
+        caption={ad.caption}
+        destinationUrl={destinationUrl}
+        adArchiveId={ad.adArchiveId}
+      />
     </div>
   );
 }
