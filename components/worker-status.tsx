@@ -76,6 +76,27 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
     }
   };
 
+  const resetWorkerLimits = async () => {
+    if (!state) return;
+    setLoading(true);
+    try {
+      const res = await fetch("/api/worker", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resetLimits: true }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setState(data.state);
+        setIsBackoffActive(false);
+      }
+    } catch (err) {
+      console.error("Failed to reset worker limits", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!state) {
     return (
       <div className="flex items-center justify-center py-1.5 px-3 rounded-lg bg-slate-105 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
@@ -207,6 +228,17 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
           </div>
         </div>
 
+        {/* Reset Limits Action */}
+        <button
+          onClick={resetWorkerLimits}
+          disabled={loading}
+          className="flex items-center justify-center space-x-1.5 text-[10px] w-full text-slate-550 dark:text-slate-400 hover:text-indigo-650 dark:hover:text-indigo-300 bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-500/10 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-500/30 transition-all cursor-pointer mb-2"
+          title="Reset hourly and daily scan count limits counters immediately"
+        >
+          <Cpu className="w-3 h-3" />
+          <span>Reset Rate Limits</span>
+        </button>
+
         {/* Queue Pruning Action */}
         {pruneCount !== null && pruneCount > 0 && (
           <button
@@ -335,6 +367,17 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
           )}
         </button>
       </div>
+
+      {/* Reset Limits button */}
+      <button
+        onClick={resetWorkerLimits}
+        disabled={loading}
+        title="Reset hourly/daily scan count limits counters immediately"
+        className="hidden md:flex items-center space-x-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-indigo-655 dark:hover:text-indigo-400 bg-white dark:bg-slate-900/60 hover:bg-slate-50 py-1.5 px-2.5 rounded-full border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-500/30 transition-all cursor-pointer"
+      >
+        <Cpu className="w-3 h-3" />
+        <span>Reset Limits</span>
+      </button>
 
       {/* Queue Prune button */}
       {pruneCount !== null && pruneCount > 0 && !pruneToast && (

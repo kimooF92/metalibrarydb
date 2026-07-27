@@ -44,6 +44,29 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const currentState = await getOrCreateWorkerState();
 
+    if (body.resetLimits === true) {
+      const now = new Date();
+      const [updated] = await db
+        .update(workerState)
+        .set({
+          scansThisHour: 0,
+          scansToday: 0,
+          hourWindowStart: now,
+          dayWindowStart: now,
+          consecutiveFailures: 0,
+          backoffUntil: null,
+          updatedAt: now,
+        })
+        .where(eq(workerState.id, 1))
+        .returning();
+
+      return NextResponse.json({
+        success: true,
+        message: "Worker rate limits reset successfully.",
+        state: updated,
+      });
+    }
+
     // Toggle if pause boolean provided, or flip current state
     const targetPaused =
       typeof body.pause === "boolean" ? body.pause : !currentState.isPaused;
