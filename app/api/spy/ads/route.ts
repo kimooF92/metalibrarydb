@@ -34,7 +34,12 @@ export async function GET(req: NextRequest) {
     const conditions = [];
 
     if (trackedPageId) {
-      conditions.push(eq(adObservations.trackedPageId, trackedPageId));
+      conditions.push(
+        or(
+          eq(adObservations.trackedPageId, trackedPageId),
+          eq(ads.pageId, trackedPageId)
+        )
+      );
     }
 
     if (search && search.trim() !== "") {
@@ -87,7 +92,7 @@ export async function GET(req: NextRequest) {
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    // Build CTE subquery for latest distinct observation per ad
+    // Build CTE subquery for latest distinct observation per ad (Left join ensures no ads dropped)
     const subquery = db
       .selectDistinctOn([ads.id], {
         id: ads.id,
@@ -107,14 +112,14 @@ export async function GET(req: NextRequest) {
         lastSeenAt: ads.lastSeenAt,
         createdAt: ads.createdAt,
         updatedAt: ads.updatedAt,
-        duplicationCount: adObservations.duplicationCount,
-        isActive: adObservations.isActive,
+        duplicationCount: sql<number>`coalesce(${adObservations.duplicationCount}, 1)`,
+        isActive: sql<boolean>`coalesce(${adObservations.isActive}, true)`,
         trackedPageId: adObservations.trackedPageId,
         pageDisplayName: trackedPages.displayName,
       })
       .from(ads)
-      .innerJoin(adObservations, eq(ads.id, adObservations.adId))
-      .leftJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+      .leftJoin(adObservations, eq(ads.id, adObservations.adId))
+      .leftJoin(trackedPages, or(eq(adObservations.trackedPageId, trackedPages.id), eq(ads.pageId, trackedPages.id), eq(ads.pageId, trackedPages.pageId)))
       .where(whereClause)
       .orderBy(ads.id, desc(adObservations.observedAt))
       .as("distinct_ads");
@@ -138,8 +143,8 @@ export async function GET(req: NextRequest) {
     const [countResult] = await db
       .select({ count: sql<number>`count(distinct ${ads.id})` })
       .from(ads)
-      .innerJoin(adObservations, eq(ads.id, adObservations.adId))
-      .leftJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+      .leftJoin(adObservations, eq(ads.id, adObservations.adId))
+      .leftJoin(trackedPages, or(eq(adObservations.trackedPageId, trackedPages.id), eq(ads.pageId, trackedPages.id), eq(ads.pageId, trackedPages.pageId)))
       .where(whereClause);
 
     const total = Number(countResult?.count || 0);
