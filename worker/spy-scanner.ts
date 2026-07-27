@@ -299,14 +299,24 @@ export async function scanAdCreatives(
       };
     }
 
-    // 4. Fallback to DOM extraction if GraphQL payload didn't populate
-    if (collectedAds.size === 0) {
-      console.log("[Spy Scanner] GraphQL payload empty, attempting DOM extraction fallback...");
-      const domAds = await extractAdsFromDOM(page, trackedPageId);
-      for (const ad of domAds) {
+    // 4. ALWAYS run DOM deep scan alongside GraphQL extraction to capture all visible cards
+    console.log(`[Spy Scanner] GraphQL captured ${collectedAds.size} items. Executing DOM deep scan to merge visible cards...`);
+    const domAds = await extractAdsFromDOM(page, trackedPageId);
+    let domMergedCount = 0;
+
+    for (const ad of domAds) {
+      if (!collectedAds.has(ad.adArchiveId)) {
         collectedAds.set(ad.adArchiveId, ad);
+        domMergedCount++;
+      } else {
+        // Enrich existing GraphQL node with DOM attributes if missing
+        const existing = collectedAds.get(ad.adArchiveId)!;
+        if (!existing.caption && ad.caption) existing.caption = ad.caption;
+        if (!existing.linkUrl && ad.linkUrl) existing.linkUrl = ad.linkUrl;
+        if (!existing.thumbnailUrl && ad.thumbnailUrl) existing.thumbnailUrl = ad.thumbnailUrl;
       }
     }
+    console.log(`[Spy Scanner] DOM deep scan merged ${domMergedCount} additional unique cards (Total captured: ${collectedAds.size}).`);
 
     if (collectedAds.size === 0) {
       return {

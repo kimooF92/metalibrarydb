@@ -3,37 +3,43 @@ import { ExtractedAdData } from "./spy-scanner";
 import { resolveDestinationUrl } from "../lib/utils";
 
 /**
- * Fallback parser: Extracts visible ad cards directly from DOM elements
- * if GraphQL network interception didn't capture payloads.
+ * Deep DOM Scanner: Extracts visible ad cards directly from rendered page DOM elements
+ * across all languages (English, French, Arabic, Spanish).
  */
 export async function extractAdsFromDOM(page: Page, defaultPageId: string): Promise<ExtractedAdData[]> {
   try {
     const rawAds = await page.evaluate((fallbackPageId) => {
       const results: any[] = [];
-      // Meta Ad Library ad card containers typically have data-testid or specific structural roles
-      const cardElements = Array.from(document.querySelectorAll('div[class*="x1n2onr3"], div[class*="x9f619"]'))
-        .filter((el) => {
-          const text = el.textContent || "";
-          return (text.includes("Library ID:") || text.includes("ID:")) && text.includes("Started running");
-        });
+
+      // Find all potential ad card container elements
+      const cardElements = Array.from(
+        document.querySelectorAll('div[class*="_7jvr"], div[class*="x1n2onr3"], div[role="article"]')
+      ).filter((el) => {
+        const text = el.textContent || "";
+        const hasId = /(?:Library ID|ID|معرّف المكتبة|Identifiant|Identificador):\s*\d+/i.test(text);
+        const hasDate = /(?:Started running|بدء التشغيل|Diffusion|Lanzado)/i.test(text);
+        return hasId || hasDate;
+      });
 
       for (const card of cardElements) {
         try {
           const cardText = card.textContent || "";
 
-          // Extract Archive ID
-          const idMatch = cardText.match(/(?:Library ID|ID):\s*(\d+)/i);
+          // Extract Archive ID (multilingual)
+          const idMatch = cardText.match(/(?:Library ID|ID|معرّف المكتبة|Identifiant|Identificador):\s*(\d+)/i) ||
+                          cardText.match(/(\d{14,16})/); // fallback 14-16 digit Meta Archive ID pattern
           if (!idMatch) continue;
           const adArchiveId = idMatch[1];
 
           // Extract Started running date
-          const dateMatch = cardText.match(/Started running on\s*([A-Za-z]+\s+\d+,\s+\d{4})/i) ||
-                            cardText.match(/Started running on\s*([\d\/\.\-]+)/i);
-          const startedRunningStr = dateMatch ? dateMatch[1] : null;
+          const dateMatch = cardText.match(/(?:Started running on|بدء التشغيل في|Diffusion le|Lanzado el)\s*([^\n\r\|]+)/i) ||
+                            cardText.match(/([A-Za-z]+\s+\d+,\s+\d{4})/i) ||
+                            cardText.match(/(\d{1,2}\s+[A-Za-z]+\s+\d{4})/i);
+          const startedRunningStr = dateMatch ? dateMatch[1].trim() : null;
 
           // Extract Copy / Caption
-          const bodyEl = card.querySelector('div[style*="white-space: pre-wrap"], div[class*="x2b8fe0"]');
-          const caption = bodyEl ? bodyEl.textContent : null;
+          const bodyEl = card.querySelector('div[style*="white-space: pre-wrap"], div[class*="x2b8fe0"], div[class*="_4ik4"]');
+          const caption = bodyEl ? bodyEl.textContent?.trim() || null : null;
 
           // Extract Media
           const imgEl = card.querySelector("img");
@@ -52,13 +58,13 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
             thumbnailUrl = imgEl.src;
           }
 
-          // Extract CTA link
+          // Extract CTA link & text
           const linkEl = card.querySelector('a[href*="l.facebook.com"], a[target="_blank"]') as HTMLAnchorElement;
           const linkUrl = linkEl ? linkEl.href : null;
-          const ctaText = linkEl ? linkEl.textContent : null;
+          const ctaText = linkEl ? linkEl.textContent?.trim() || null : null;
 
-          // Extract Duplication Count
-          const dupMatch = cardText.match(/(\d+)\s+ads?\s+use\s+this\s+creative/i);
+          // Extract Duplication / Collation Count (multilingual)
+          const dupMatch = cardText.match(/(\d+)\s+(?:ads?|إعلانات|publicités|anuncios)\s+(?:use this creative|تستخدم هذا الإعلان|utilisent cette)/i);
           const duplicationCount = dupMatch ? parseInt(dupMatch[1], 10) : 1;
 
           results.push({
@@ -74,10 +80,10 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
             mediaUrls,
             thumbnailUrl,
             duplicationCount,
-            isActive: !cardText.includes("Inactive"),
+            isActive: !cardText.includes("Inactive") && !cardText.includes("غير نشط") && !cardText.includes("Inactif"),
           });
         } catch {
-          // Ignore individual card parse errors
+          // Ignore single card parse errors
         }
       }
 
