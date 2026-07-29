@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { trackedPages, queue, importJobs } from "@/db/schema";
 import { isValidMetaAdLibraryUrl } from "@/lib/validators";
-import { extractUrlMetadata } from "@/lib/url-parser";
+import { extractUrlMetadata, normalizeAddUrlInput } from "@/lib/url-parser";
 import { parseImportFile } from "@/lib/file-parser";
 import { supabase } from "@/lib/supabase";
 import { inArray } from "drizzle-orm";
@@ -78,12 +78,13 @@ export async function processFileImport(
 
   for (const rawUrl of rawUrls) {
     const trimmed = rawUrl.trim();
-    if (!isValidMetaAdLibraryUrl(trimmed)) {
+    const normalizedUrl = normalizeAddUrlInput(trimmed);
+    if (!normalizedUrl || !isValidMetaAdLibraryUrl(trimmed)) {
       validationFailedCount++;
       continue;
     }
 
-    const meta = extractUrlMetadata(trimmed);
+    const meta = extractUrlMetadata(normalizedUrl);
     if (seenInBatch.has(meta.url)) {
       fileDuplicatesCount++;
     } else {
@@ -117,7 +118,10 @@ export async function processFileImport(
   }
 
   // 4. Check existing URLs in Database
-  const metadataList = uniqueRawUrls.map((url) => extractUrlMetadata(url));
+  const metadataList = uniqueRawUrls.map((url) => {
+    const normalizedUrl = normalizeAddUrlInput(url);
+    return extractUrlMetadata(normalizedUrl ?? url);
+  });
   const parsedUrls = metadataList.map((m) => m.url);
 
   // Query in chunks of 500 if large

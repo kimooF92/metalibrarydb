@@ -1,25 +1,13 @@
 import { z } from "zod";
+import { normalizeAddUrlInput } from "@/lib/url-parser";
 
 /**
- * Validates whether a string is a valid Meta Ad Library search URL.
- * Must include facebook.com/ads/library (with optional www, web, m subdomains or https protocol).
+ * Validates whether a string is either:
+ * - a Meta Ad Library search URL, or
+ * - a plain website domain such as wixi.com.tn
  */
 export function isValidMetaAdLibraryUrl(url: string): boolean {
-  if (!url || typeof url !== "string") return false;
-
-  try {
-    const trimmed = url.trim();
-    // Allow URLs with or without protocol
-    const urlToTest = trimmed.match(/^https?:\/\//i) ? trimmed : `https://${trimmed}`;
-    const parsed = new URL(urlToTest);
-
-    const isFacebookDomain = /(^|\.)facebook\.com$/i.test(parsed.hostname);
-    const isAdLibraryPath = /^\/ads\/library(\/|\?|$)/i.test(parsed.pathname);
-
-    return isFacebookDomain && isAdLibraryPath;
-  } catch {
-    return false;
-  }
+  return normalizeAddUrlInput(url) !== null;
 }
 
 export const singleUrlSchema = z.object({
@@ -27,7 +15,8 @@ export const singleUrlSchema = z.object({
     .string()
     .min(1, "URL is required")
     .refine((url) => isValidMetaAdLibraryUrl(url), {
-      message: "URL must be a valid Meta Ad Library URL (e.g. facebook.com/ads/library/...)",
+      message:
+        "Enter a Meta Ad Library URL or a website domain like wixi.com.tn.",
     }),
 });
 

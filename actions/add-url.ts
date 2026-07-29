@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { trackedPages, queue } from "@/db/schema";
 import { isValidMetaAdLibraryUrl } from "@/lib/validators";
-import { extractUrlMetadata } from "@/lib/url-parser";
+import { extractUrlMetadata, normalizeAddUrlInput } from "@/lib/url-parser";
 import { eq, or, sql } from "drizzle-orm";
 
 export interface AddUrlResult {
@@ -16,17 +16,19 @@ export async function addSingleUrl(
   allowDuplicate = false
 ): Promise<AddUrlResult> {
   const trimmed = rawUrl.trim();
+  const normalizedUrl = normalizeAddUrlInput(trimmed);
 
   // 1. Validation
-  if (!isValidMetaAdLibraryUrl(trimmed)) {
+  if (!normalizedUrl || !isValidMetaAdLibraryUrl(trimmed)) {
     return {
       success: false,
-      message: "Invalid Meta Ad Library URL. URL must contain facebook.com/ads/library.",
+      message:
+        "Enter a Meta Ad Library URL or a website domain like wixi.com.tn.",
     };
   }
 
   // Extract metadata
-  const meta = extractUrlMetadata(trimmed);
+  const meta = extractUrlMetadata(normalizedUrl);
 
   // 2. Check duplicates by URL, pageId, or case-insensitive displayName (unless allowDuplicate is true)
   if (!allowDuplicate) {
