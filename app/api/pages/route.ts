@@ -66,10 +66,10 @@ export async function GET(request: Request) {
     let orderClause;
     if (sortBy === "difference") {
       const differenceSql = sql`(
-        SELECT ${scanHistory.difference}
-        FROM ${scanHistory}
-        WHERE ${scanHistory.trackedPageId} = ${trackedPages.id}
-        ORDER BY ${scanHistory.checkedAt} DESC
+        SELECT s.difference
+        FROM scan_history s
+        WHERE s.tracked_page_id = "trackedPages".id
+        ORDER BY s.checked_at DESC
         LIMIT 1
       )`;
       orderClause = sortOrder === "asc"
