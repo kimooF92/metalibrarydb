@@ -63,8 +63,22 @@ export async function GET(request: Request) {
       createdAt: trackedPages.createdAt,
     };
 
-    const targetSortCol = sortColumns[sortBy] || trackedPages.createdAt;
-    const orderClause = sortOrder === "asc" ? asc(targetSortCol) : desc(targetSortCol);
+    let orderClause;
+    if (sortBy === "difference") {
+      const differenceSql = sql`(
+        SELECT ${scanHistory.difference}
+        FROM ${scanHistory}
+        WHERE ${scanHistory.trackedPageId} = ${trackedPages.id}
+        ORDER BY ${scanHistory.checkedAt} DESC
+        LIMIT 1
+      )`;
+      orderClause = sortOrder === "asc"
+        ? sql`${differenceSql} ASC NULLS LAST`
+        : sql`${differenceSql} DESC NULLS LAST`;
+    } else {
+      const targetSortCol = sortColumns[sortBy] || trackedPages.createdAt;
+      orderClause = sortOrder === "asc" ? asc(targetSortCol) : desc(targetSortCol);
+    }
 
     // Total count query
     let countQuery = db.select({ count: sql<number>`count(*)` }).from(trackedPages);

@@ -502,7 +502,7 @@ export function PagesTable({
                 <SortHeader col="displayName" label="Display Name" />
                 <SortHeader col="currentResults" label="Current Results" />
                 <th className="px-3 py-1.5 whitespace-nowrap">Previous Results</th>
-                <th className="px-3 py-1.5 whitespace-nowrap">Difference</th>
+                <SortHeader col="difference" label="Difference" />
                 <SortHeader col="status" label="Status" />
                 <SortHeader col="lastChecked" label="Last Checked" />
                 <th className="px-3 py-1.5 text-right whitespace-nowrap">Actions</th>
