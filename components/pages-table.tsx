@@ -472,7 +472,7 @@ export function PagesTable({
       )}
 
       {/* Main Table */}
-      <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 flex-1 min-h-0 flex flex-col overflow-hidden">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 flex-1 min-h-[400px] md:min-h-0 flex flex-col overflow-hidden">
         <div className="overflow-auto flex-1 min-h-0 relative">
           <table className="w-full text-left text-xs">
             <thead className="text-slate-500 dark:text-slate-400 uppercase font-semibold border-b border-slate-200 dark:border-slate-800 [&_th]:sticky [&_th]:top-0 [&_th]:z-20 [&_th]:bg-slate-50 [&_th]:dark:bg-slate-900/95 [&_th]:transition-all [&_th]:duration-200">

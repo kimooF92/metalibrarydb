@@ -50,7 +50,7 @@ export default function RootLayout({
       <body className={`${inter.className} bg-background text-foreground h-screen w-screen flex flex-col md:flex-row antialiased overflow-hidden`}>
         <SidebarProvider>
           <Navigation />
-          <main className="flex-1 min-w-0 h-full overflow-hidden flex flex-col p-4 md:px-6 md:py-5 bg-background">
+          <main className="flex-1 min-w-0 h-full overflow-y-auto md:overflow-hidden flex flex-col p-4 md:px-6 md:py-5 bg-background">
             {children}
           </main>
         </SidebarProvider>
