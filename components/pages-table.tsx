@@ -123,6 +123,8 @@ export function PagesTable({
     setTimeout(() => setToast(null), 4500);
   };
 
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+
   useEffect(() => {
     setWatchlisted(Object.fromEntries(pages.map((p) => [p.id, p.isWatchlisted ?? false])));
   }, [pages]);
@@ -291,8 +293,25 @@ export function PagesTable({
 
   return (
     <div className="flex-1 flex flex-col min-h-0 space-y-4">
+      {/* Mobile Toggle Button for Filters */}
+      <div className="flex lg:hidden items-center justify-between gap-2 p-1.5 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-800/80">
+        <button
+          onClick={() => setShowMobileFilters(!showMobileFilters)}
+          className="flex items-center space-x-2 text-xs font-semibold px-3 py-2 rounded-lg bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-250 border border-slate-200 dark:border-slate-800 transition-all cursor-pointer w-full justify-between"
+        >
+          <div className="flex items-center space-x-2">
+            <Filter className="w-3.5 h-3.5 text-indigo-500" />
+            <span>Filters & Smart Tabs</span>
+            {(statusFilter !== "all" || searchTypeFilter !== "all" || activeTab !== "all" || search !== "") && (
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+            )}
+          </div>
+          {showMobileFilters ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+        </button>
+      </div>
+
       {/* Search, Tabs, & Filters Combined Toolbar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800/40">
+      <div className={`${showMobileFilters ? "flex" : "hidden lg:flex"} flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800/40`}>
         {/* Left Side: Smart Tabs */}
         <div className="flex flex-wrap items-center gap-1">
           {[
