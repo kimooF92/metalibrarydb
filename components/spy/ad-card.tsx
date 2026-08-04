@@ -102,7 +102,7 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
             <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
               {ad.pageName || `Page ${ad.pageId}`}
             </span>
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+            <span className="text-[10px] text-slate-600 dark:text-slate-400 font-mono">
               ID: {ad.adArchiveId}
             </span>
           </div>
@@ -117,11 +117,11 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
                 <CheckCircle2 className="w-3 h-3" /> Active
               </span>
             ) : ad.isActive === false ? (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-2 py-0.5 rounded-full">
-                <XCircle className="w-3 h-3" /> Inactive
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-700 dark:text-slate-300 bg-slate-150 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 px-2 py-0.5 rounded-full">
+                <XCircle className="w-3 h-3 text-slate-600 dark:text-slate-400" /> Inactive
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-800 dark:text-amber-400 bg-amber-100 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/20 px-2 py-0.5 rounded-full">
                 <HelpCircle className="w-3 h-3" /> Unknown
               </span>
             )}
@@ -138,14 +138,14 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
           <span
             className={`inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md border font-semibold ${
               isScaled
-                ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30"
-                : "bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800"
+                ? "bg-amber-100 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-500/30"
+                : "bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-300 border-slate-250 dark:border-slate-800"
             }`}
           >
             {isScaled ? (
-              <Flame className="w-3 h-3 text-amber-500 dark:text-amber-400 fill-amber-500/20 animate-pulse" />
+              <Flame className="w-3 h-3 text-amber-600 dark:text-amber-400 fill-amber-500/20 animate-pulse" />
             ) : (
-              <Layers className="w-3 h-3 text-slate-400" />
+              <Layers className="w-3 h-3 text-slate-600 dark:text-slate-400" />
             )}
             {duplicationCount} {duplicationCount === 1 ? "Copy" : "Copies running"}
             {isScaled && <span className="ml-0.5">🔥 Scaled</span>}
@@ -192,11 +192,11 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
               )}
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-1.5 text-slate-400 dark:text-slate-500">
+            <div className="flex flex-col items-center gap-1.5 text-slate-600 dark:text-slate-400 font-medium">
               {ad.mediaType === "video" ? (
-                <Play className="w-7 h-7 opacity-40" />
+                <Play className="w-7 h-7 opacity-60" />
               ) : (
-                <ImageIcon className="w-7 h-7 opacity-40" />
+                <ImageIcon className="w-7 h-7 opacity-60" />
               )}
               <span className="text-[11px]">
                 {imgError ? "Preview unavailable" : "No media preview"}
@@ -251,7 +251,7 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
             <ExternalLink className="w-3 h-3 text-indigo-200 shrink-0 ml-0.5" />
           </a>
         ) : (
-          <span className="text-[11px] text-slate-400 italic">No store website link</span>
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 italic font-medium">No store website link</span>
         )}
 
         <div className="flex items-center gap-1.5 shrink-0">
@@ -260,8 +260,8 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
             disabled={isArchiving}
             className={`p-1.5 rounded-md transition-colors cursor-pointer ${
               isArchived
-                ? "text-purple-500 hover:text-purple-400 hover:bg-purple-500/10"
-                : "text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-slate-100 dark:hover:bg-slate-900"
+                ? "text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
+                : "text-slate-600 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-slate-100 dark:hover:bg-slate-900"
             }`}
             title={isArchived ? "Unarchive Ad (Move to Active Feed)" : "Archive Ad (Move to Vault)"}
           >
@@ -271,7 +271,7 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
           {(firstVideoUrl || displayImage) && (
             <button
               onClick={() => setIsPreviewOpen(true)}
-              className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors cursor-pointer"
+              className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors cursor-pointer"
               title="Preview Image Ad"
             >
               <ZoomIn className="w-3.5 h-3.5" />
@@ -284,7 +284,7 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
               target="_blank"
               rel="noopener noreferrer"
               download
-              className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors"
+              className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors"
               title="Download Media File"
             >
               <Download className="w-3.5 h-3.5" />
@@ -295,7 +295,7 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
             href={`https://www.facebook.com/ads/library/?id=${ad.adArchiveId}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline inline-flex items-center gap-1 p-1 rounded-md"
+            className="text-[11px] font-semibold text-slate-700 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline inline-flex items-center gap-1 p-1 rounded-md"
             title="Open in Meta Ad Library"
           >
             Meta

@@ -84,7 +84,7 @@ export function Navigation() {
                 <span className="font-extrabold text-sm text-slate-900 dark:text-white tracking-tight block leading-tight">
                   Meta Ad Tracker
                 </span>
-                <span className="text-[9px] text-slate-400 dark:text-slate-500 font-medium block">
+                <span className="text-[9px] text-slate-600 dark:text-slate-400 font-medium block">
                   Competitor Intelligence
                 </span>
               </div>
@@ -111,10 +111,10 @@ export function Navigation() {
                     className={`flex items-center justify-center w-10 h-10 mx-auto rounded-lg transition-all border ${
                       active
                         ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-300 shadow-md shadow-indigo-600/[0.03]"
-                        : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
+                        : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
                     }`}
                   >
-                    <Icon className={`w-4 h-4 ${active ? "text-indigo-650 dark:text-indigo-400" : "text-slate-500 dark:text-slate-400"}`} />
+                    <Icon className={`w-4 h-4 ${active ? "text-indigo-650 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"}`} />
                   </Link>
                 );
               }
@@ -126,10 +126,10 @@ export function Navigation() {
                   className={`flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all border ${
                     active
                       ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-650 dark:text-indigo-300 shadow-md shadow-indigo-600/[0.03]"
-                      : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
+                      : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
                   }`}
                 >
-                  <Icon className={`w-4 h-4 ${active ? "text-indigo-650 dark:text-indigo-400" : "text-slate-500 dark:text-slate-400"}`} />
+                  <Icon className={`w-4 h-4 ${active ? "text-indigo-650 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"}`} />
                   <span className="truncate">{item.label}</span>
                 </Link>
               );
@@ -145,18 +145,22 @@ export function Navigation() {
                 <button
                   onClick={toggleTheme}
                   title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
-                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                    theme === "dark" ? "bg-indigo-600" : "bg-slate-300"
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none ${
+                    theme === "dark"
+                      ? "bg-indigo-600 border-indigo-500"
+                      : "bg-slate-300 border-slate-400"
                   }`}
                   role="switch"
                   aria-checked={theme === "dark"}
                 >
                   <span
                     aria-hidden="true"
-                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                      theme === "dark" ? "translate-x-4" : "translate-x-0"
+                    className={`pointer-events-none flex items-center justify-center h-5 w-5 transform rounded-full bg-white shadow-md ring-1 ring-slate-400/40 transition duration-200 ease-in-out ${
+                      theme === "dark" ? "translate-x-5 text-indigo-600" : "translate-x-0 text-amber-600"
                     }`}
-                  />
+                  >
+                    {theme === "dark" ? <Moon className="w-3 h-3" /> : <Sun className="w-3 h-3" />}
+                  </span>
                 </button>
               </div>
             )}
@@ -166,15 +170,15 @@ export function Navigation() {
           <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80">
             {mounted && (
               <div className="flex items-center justify-between px-1 py-1 mb-4">
-                <div className="flex items-center space-x-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                <div className="flex items-center space-x-2 text-[11px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
                   {theme === "dark" ? (
                     <>
-                      <Moon className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
+                      <Moon className="w-3.5 h-3.5 text-indigo-400" />
                       <span>Dark Theme</span>
                     </>
                   ) : (
                     <>
-                      <Sun className="w-3.5 h-3.5 text-amber-500" />
+                      <Sun className="w-3.5 h-3.5 text-amber-600" />
                       <span>Light Theme</span>
                     </>
                   )}
@@ -182,22 +186,26 @@ export function Navigation() {
                 <button
                   onClick={toggleTheme}
                   title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
-                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                    theme === "dark" ? "bg-indigo-600" : "bg-slate-205 border border-slate-300"
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none ${
+                    theme === "dark"
+                      ? "bg-indigo-600 border-indigo-500"
+                      : "bg-slate-300 border-slate-400"
                   }`}
                   role="switch"
                   aria-checked={theme === "dark"}
                 >
                   <span
                     aria-hidden="true"
-                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                      theme === "dark" ? "translate-x-4" : "translate-x-0"
+                    className={`pointer-events-none flex items-center justify-center h-5 w-5 transform rounded-full bg-white shadow-md ring-1 ring-slate-400/40 transition duration-200 ease-in-out ${
+                      theme === "dark" ? "translate-x-5 text-indigo-600" : "translate-x-0 text-amber-600"
                     }`}
-                  />
+                  >
+                    {theme === "dark" ? <Moon className="w-3 h-3" /> : <Sun className="w-3 h-3" />}
+                  </span>
                 </button>
               </div>
             )}
-            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-2 px-1">
+            <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest block mb-2 px-1">
               System Status
             </span>
             <div className="bg-slate-100 dark:bg-slate-950/40 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800/60 overflow-hidden">
@@ -261,15 +269,15 @@ export function Navigation() {
           <div className="pt-6 border-t border-slate-200 dark:border-slate-800/80 mt-auto flex flex-col space-y-4">
             {mounted && (
               <div className="flex items-center justify-between px-1">
-                <div className="flex items-center space-x-2 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                <div className="flex items-center space-x-2 text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
                   {theme === "dark" ? (
                     <>
-                      <Moon className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
+                      <Moon className="w-3.5 h-3.5 text-indigo-400" />
                       <span>Dark Theme</span>
                     </>
                   ) : (
                     <>
-                      <Sun className="w-3.5 h-3.5 text-amber-500" />
+                      <Sun className="w-3.5 h-3.5 text-amber-600" />
                       <span>Light Theme</span>
                     </>
                   )}
@@ -277,24 +285,28 @@ export function Navigation() {
                 <button
                   onClick={toggleTheme}
                   title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
-                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                    theme === "dark" ? "bg-indigo-600" : "bg-slate-200 border border-slate-300"
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none ${
+                    theme === "dark"
+                      ? "bg-indigo-600 border-indigo-500"
+                      : "bg-slate-300 border-slate-400"
                   }`}
                   role="switch"
                   aria-checked={theme === "dark"}
                 >
                   <span
                     aria-hidden="true"
-                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                      theme === "dark" ? "translate-x-4" : "translate-x-0"
+                    className={`pointer-events-none flex items-center justify-center h-5 w-5 transform rounded-full bg-white shadow-md ring-1 ring-slate-400/40 transition duration-200 ease-in-out ${
+                      theme === "dark" ? "translate-x-5 text-indigo-600" : "translate-x-0 text-amber-600"
                     }`}
-                  />
+                  >
+                    {theme === "dark" ? <Moon className="w-3 h-3" /> : <Sun className="w-3 h-3" />}
+                  </span>
                 </button>
               </div>
             )}
 
             <div>
-              <span className="text-[9px] font-bold text-slate-450 dark:text-slate-500 uppercase tracking-widest block mb-2 px-1">
+              <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest block mb-2 px-1">
                 System Status
               </span>
               <div className="bg-slate-100 dark:bg-slate-950/40 p-3 rounded-xl border border-slate-200 dark:border-slate-800/60 overflow-hidden">

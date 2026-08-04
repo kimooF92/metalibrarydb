@@ -250,7 +250,7 @@ export default function AnalyticsPage() {
               Live Comparative Intelligence
             </span>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
             Real-time breakdown of page scaling up, page descaling down, market net velocity, and active ad distribution across {pages.length} monitored pages.
           </p>
         </div>
@@ -267,7 +267,7 @@ export default function AnalyticsPage() {
       </div>
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-24 text-slate-400 gap-3">
+        <div className="flex flex-col items-center justify-center py-24 text-slate-600 dark:text-slate-400 gap-3">
           <RefreshCw className="w-8 h-8 animate-spin text-indigo-500" />
           <span className="text-sm font-semibold">Aggregating page scaling & performance metrics...</span>
         </div>
@@ -327,7 +327,7 @@ export default function AnalyticsPage() {
                   {analytics.netAdsDelta >= 0 ? `+${analytics.netAdsDelta}` : analytics.netAdsDelta}
                 </div>
               </div>
-              <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mt-2 truncate">
+              <div className="text-[11px] font-medium text-slate-600 dark:text-slate-400 mt-2 truncate">
                 {analytics.netAdsDelta >= 0 ? "Bullish Market Growth" : "Net Ad Reduction"}
               </div>
             </div>
@@ -336,7 +336,7 @@ export default function AnalyticsPage() {
             <div className="glass-card rounded-2xl p-4 flex flex-col justify-between transition-all hover:-translate-y-0.5">
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-1">
                     <Minus className="w-3.5 h-3.5" /> Unchanged (Stable)
                   </span>
                 </div>
@@ -344,7 +344,7 @@ export default function AnalyticsPage() {
                   {analytics.stablePages.length}
                 </div>
               </div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 truncate">
+              <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-2 truncate">
                 0 ad count change
               </div>
             </div>
@@ -361,7 +361,7 @@ export default function AnalyticsPage() {
                   {analytics.megaVolume.length + analytics.highVolume.length}
                 </div>
               </div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 truncate">
+              <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-2 truncate">
                 {pages.length > 0 ? Math.round(((analytics.megaVolume.length + analytics.highVolume.length) / pages.length) * 100) : 0}% of all pages
               </div>
             </div>
@@ -378,7 +378,7 @@ export default function AnalyticsPage() {
                   {analytics.totalAds.toLocaleString()}
                 </div>
               </div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 truncate">
+              <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-2 truncate">
                 Across {analytics.withResults.length} active pages
               </div>
             </div>
@@ -387,7 +387,7 @@ export default function AnalyticsPage() {
             <div className="glass-card rounded-2xl p-4 flex flex-col justify-between transition-all hover:-translate-y-0.5">
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 flex items-center gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-1">
                     <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" /> Watchlist
                   </span>
                 </div>
@@ -395,7 +395,7 @@ export default function AnalyticsPage() {
                   {analytics.watchlistedPages.length}
                 </div>
               </div>
-              <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mt-2 truncate">
+              <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold mt-2 truncate">
                 +{analytics.watchlistedScaling.length} scaling / -{analytics.watchlistedDescaling.length} descaling
               </div>
             </div>
@@ -404,7 +404,7 @@ export default function AnalyticsPage() {
             <div className="glass-card rounded-2xl p-4 flex flex-col justify-between transition-all hover:-translate-y-0.5">
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
                     <CheckCircle2 className="w-3.5 h-3.5" /> Success Rate
                   </span>
                 </div>
@@ -412,7 +412,7 @@ export default function AnalyticsPage() {
                   {pages.length > 0 ? Math.round((analytics.completed.length / pages.length) * 100) : 0}%
                 </div>
               </div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 truncate">
+              <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-2 truncate">
                 {analytics.completed.length} of {pages.length} successful
               </div>
             </div>
@@ -440,9 +440,9 @@ export default function AnalyticsPage() {
                       <span className="w-2 h-2 rounded-full bg-emerald-500" />
                       🚀 Aggressive Scale (+20+ ads)
                     </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Heavy campaign expansion</p>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 font-medium">Heavy campaign expansion</p>
                   </div>
-                  <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                  <span className="text-base font-black text-emerald-700 dark:text-emerald-400 font-mono">
                     {analytics.aggressiveScaling.length}
                   </span>
                 </div>
@@ -454,9 +454,9 @@ export default function AnalyticsPage() {
                       <span className="w-2 h-2 rounded-full bg-teal-500" />
                       📈 Rapid Scale (+10 to +19)
                     </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Strong ad test scaling</p>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 font-medium">Strong ad test scaling</p>
                   </div>
-                  <span className="text-base font-black text-teal-600 dark:text-teal-400 font-mono">
+                  <span className="text-base font-black text-teal-700 dark:text-teal-400 font-mono">
                     {analytics.rapidScaling.length}
                   </span>
                 </div>
@@ -468,9 +468,9 @@ export default function AnalyticsPage() {
                       <span className="w-2 h-2 rounded-full bg-indigo-500" />
                       💹 Moderate Scale (+1 to +9)
                     </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Steady creative additions</p>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 font-medium">Steady creative additions</p>
                   </div>
-                  <span className="text-base font-black text-indigo-600 dark:text-indigo-400 font-mono">
+                  <span className="text-base font-black text-indigo-700 dark:text-indigo-400 font-mono">
                     {analytics.moderateScaling.length}
                   </span>
                 </div>
@@ -481,10 +481,10 @@ export default function AnalyticsPage() {
             <div className="glass-card rounded-2xl p-5 border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-2">
-                  <TrendingDown className="w-4 h-4 text-rose-500" />
+                  <TrendingDown className="w-4 h-4 text-rose-600 dark:text-rose-400" />
                   <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Descaling Tiers</h3>
                 </div>
-                <span className="text-[10px] bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold px-2 py-0.5 rounded-full">
+                <span className="text-[10px] bg-rose-500/10 text-rose-700 dark:text-rose-400 font-bold px-2 py-0.5 rounded-full">
                   {analytics.descalingPages.length} total descaling
                 </span>
               </div>
@@ -497,9 +497,9 @@ export default function AnalyticsPage() {
                       <span className="w-2 h-2 rounded-full bg-rose-500" />
                       📉 Heavy Descale (-20+ ads lost)
                     </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Major campaign shutdowns</p>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 font-medium">Major campaign shutdowns</p>
                   </div>
-                  <span className="text-base font-black text-rose-600 dark:text-rose-400 font-mono">
+                  <span className="text-base font-black text-rose-700 dark:text-rose-400 font-mono">
                     {analytics.heavyDescaling.length}
                   </span>
                 </div>
@@ -511,9 +511,9 @@ export default function AnalyticsPage() {
                       <span className="w-2 h-2 rounded-full bg-orange-500" />
                       🔻 Moderate Descale (-10 to -19)
                     </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Ad pruning & budget shifts</p>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 font-medium">Ad pruning & budget shifts</p>
                   </div>
-                  <span className="text-base font-black text-orange-600 dark:text-orange-400 font-mono">
+                  <span className="text-base font-black text-orange-700 dark:text-orange-400 font-mono">
                     {analytics.moderateDescaling.length}
                   </span>
                 </div>
@@ -525,9 +525,9 @@ export default function AnalyticsPage() {
                       <span className="w-2 h-2 rounded-full bg-amber-500" />
                       🤏 Light Descale (-1 to -9)
                     </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Minor ad expirations</p>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 font-medium">Minor ad expirations</p>
                   </div>
-                  <span className="text-base font-black text-amber-600 dark:text-amber-400 font-mono">
+                  <span className="text-base font-black text-amber-700 dark:text-amber-400 font-mono">
                     {analytics.lightDescaling.length}
                   </span>
                 </div>
@@ -640,13 +640,13 @@ export default function AnalyticsPage() {
 
               {/* Search Filter input */}
               <div className="relative w-full md:w-64">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400" />
                 <input
                   type="text"
                   placeholder="Filter page or keyword..."
                   value={searchQuery}
                   onChange={(e) => { setSearchQuery(e.target.value); setTablePage(1); }}
-                  className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
             </div>
@@ -655,7 +655,7 @@ export default function AnalyticsPage() {
             <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800/60">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="bg-slate-50 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800/80 text-slate-500 dark:text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
+                  <tr className="bg-slate-50 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800/80 text-slate-600 dark:text-slate-400 font-bold uppercase text-[10px] tracking-wider">
                     <th className="py-3 px-3.5 w-12 text-center">Rank</th>
                     <th className="py-3 px-3.5">Tracked Page Name</th>
                     <th className="py-3 px-3.5">Search Type</th>
@@ -683,7 +683,7 @@ export default function AnalyticsPage() {
 
                       return (
                         <tr key={p.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-900/40 transition-colors">
-                          <td className="py-3 px-3.5 text-center font-mono font-semibold text-slate-400 dark:text-slate-600">
+                          <td className="py-3 px-3.5 text-center font-mono font-semibold text-slate-600 dark:text-slate-400">
                             #{rank}
                           </td>
 
@@ -693,11 +693,11 @@ export default function AnalyticsPage() {
                                 onClick={() => toggleWatchlist(p.id, p.isWatchlisted)}
                                 disabled={updatingWatchlistId === p.id}
                                 title={p.isWatchlisted ? "Remove from watchlist" : "Add to watchlist"}
-                                className="text-slate-400 hover:text-amber-400 cursor-pointer transition-colors"
+                                className="text-slate-500 hover:text-amber-500 cursor-pointer transition-colors"
                               >
                                 <Star
                                   className={`w-3.5 h-3.5 ${
-                                    p.isWatchlisted ? "fill-amber-400 text-amber-400" : "text-slate-300 dark:text-slate-600"
+                                    p.isWatchlisted ? "fill-amber-400 text-amber-400" : "text-slate-400 dark:text-slate-600"
                                   }`}
                                 />
                               </button>
@@ -711,7 +711,7 @@ export default function AnalyticsPage() {
                                 >
                                   {p.displayName || "Meta Ad Search"}
                                 </a>
-                                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono truncate block">
+                                <span className="text-[10px] text-slate-600 dark:text-slate-400 font-mono truncate block">
                                   {p.pageId || p.url}
                                 </span>
                               </div>
@@ -719,7 +719,7 @@ export default function AnalyticsPage() {
                           </td>
 
                           <td className="py-3 px-3.5">
-                            <span className="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                            <span className="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                               {p.searchType === "page_id" || (!p.searchType && p.pageId) ? "Page ID" : "Keyword"}
                             </span>
                           </td>
@@ -728,23 +728,23 @@ export default function AnalyticsPage() {
                             {curr.toLocaleString()}
                           </td>
 
-                          <td className="py-3 px-3.5 text-right font-mono text-slate-500 dark:text-slate-400">
+                          <td className="py-3 px-3.5 text-right font-mono text-slate-600 dark:text-slate-400 font-medium">
                             {prev !== null && prev !== undefined ? prev.toLocaleString() : "—"}
                           </td>
 
                           <td className="py-3 px-3.5 text-right">
                             {diff > 0 ? (
-                              <span className="inline-flex items-center text-xs font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/20">
+                              <span className="inline-flex items-center text-xs font-extrabold text-emerald-800 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-300 dark:border-emerald-500/20">
                                 <ArrowUpRight className="w-3.5 h-3.5 mr-0.5" />
                                 +{diff} {pctChange !== null && `(+${pctChange}%)`}
                               </span>
                             ) : diff < 0 ? (
-                              <span className="inline-flex items-center text-xs font-extrabold text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-lg border border-rose-500/20">
+                              <span className="inline-flex items-center text-xs font-extrabold text-rose-800 dark:text-rose-400 bg-rose-100 dark:bg-rose-500/10 px-2 py-0.5 rounded-lg border border-rose-300 dark:border-rose-500/20">
                                 <ArrowDownRight className="w-3.5 h-3.5 mr-0.5" />
                                 {diff} {pctChange !== null && `(${pctChange}%)`}
                               </span>
                             ) : (
-                              <span className="inline-flex items-center text-xs font-medium text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                              <span className="inline-flex items-center text-xs font-medium text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
                                 <Minus className="w-3 h-3 mr-0.5" />
                                 0
                               </span>

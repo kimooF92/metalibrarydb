@@ -99,7 +99,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
 
   if (!state) {
     return (
-      <div className="flex items-center justify-center py-1.5 px-3 rounded-lg bg-slate-105 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
+      <div className="flex items-center justify-center py-1.5 px-3 rounded-lg bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400">
         <Cpu className="w-3.5 h-3.5 animate-pulse mr-1.5" />
         {layout !== "collapsed" && <span>Checking...</span>}
       </div>
@@ -178,7 +178,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
 
         {/* Backoff / Warning */}
         {isBackoffActive && (
-          <div className="flex items-start space-x-1.5 text-[10px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 p-2 rounded-lg border border-amber-250 dark:border-amber-500/20">
+          <div className="flex items-start space-x-1.5 text-[10px] text-amber-800 dark:text-amber-400 bg-amber-100/80 dark:bg-amber-500/10 p-2 rounded-lg border border-amber-300 dark:border-amber-500/20">
             <ShieldAlert className="w-3.5 h-3.5 shrink-0 mt-0.5" />
             <span>Repeated scraper failures detected. Cooldown active.</span>
           </div>
@@ -189,7 +189,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
           {/* Hourly Scans */}
           <div className="flex flex-col space-y-1">
             <div className="flex justify-between text-[9px]">
-              <span className="text-slate-450 dark:text-slate-500 font-medium">Hourly Scans</span>
+              <span className="text-slate-600 dark:text-slate-400 font-medium">Hourly Scans</span>
               <span className="text-slate-700 dark:text-slate-400 font-mono font-bold">{state.scansThisHour ?? 0} / 20</span>
             </div>
             <div className="w-full h-1 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -209,7 +209,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
           {/* Daily Scans */}
           <div className="flex flex-col space-y-1">
             <div className="flex justify-between text-[9px]">
-              <span className="text-slate-450 dark:text-slate-500 font-medium">Daily Scans</span>
+              <span className="text-slate-600 dark:text-slate-400 font-medium">Daily Scans</span>
               <span className="text-slate-700 dark:text-slate-400 font-mono font-bold">{state.scansToday ?? 0} / 150</span>
             </div>
             <div className="w-full h-1 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -232,7 +232,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
         <button
           onClick={resetWorkerLimits}
           disabled={loading}
-          className="flex items-center justify-center space-x-1.5 text-[10px] w-full text-slate-550 dark:text-slate-400 hover:text-indigo-650 dark:hover:text-indigo-300 bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-500/10 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-500/30 transition-all cursor-pointer mb-2"
+          className="flex items-center justify-center space-x-1.5 text-[10px] w-full text-slate-600 dark:text-slate-400 hover:text-indigo-650 dark:hover:text-indigo-300 bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-500/10 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-500/30 transition-all cursor-pointer mb-2"
           title="Reset hourly and daily scan count limits counters immediately"
         >
           <Cpu className="w-3 h-3" />
@@ -244,7 +244,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
           <button
             onClick={pruneQueue}
             disabled={pruning}
-            className="flex items-center justify-center space-x-1.5 text-[10px] w-full text-slate-550 dark:text-slate-400 hover:text-rose-650 dark:hover:text-rose-300 bg-white dark:bg-slate-900/60 hover:bg-rose-50 dark:hover:bg-rose-500/10 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-rose-300 dark:hover:border-rose-500/30 transition-all cursor-pointer"
+            className="flex items-center justify-center space-x-1.5 text-[10px] w-full text-slate-600 dark:text-slate-400 hover:text-rose-650 dark:hover:text-rose-300 bg-white dark:bg-slate-900/60 hover:bg-rose-50 dark:hover:bg-rose-500/10 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-rose-300 dark:hover:border-rose-500/30 transition-all cursor-pointer"
           >
             <Trash2 className="w-3 h-3" />
             <span>Prune {pruneCount} old jobs</span>
@@ -266,14 +266,14 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
     <div className="flex items-center space-x-3">
       {/* Prune Toast */}
       {pruneToast && (
-        <div className="hidden md:flex items-center space-x-1.5 text-xs text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+        <div className="hidden md:flex items-center space-x-1.5 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-300 dark:border-emerald-500/20">
           <CheckCircle2 className="w-3.5 h-3.5" />
           <span>{pruneToast}</span>
         </div>
       )}
       {/* Backoff Warning Banner */}
       {isBackoffActive && (
-        <div className="hidden md:flex items-center space-x-1.5 text-xs text-amber-400 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20">
+        <div className="hidden md:flex items-center space-x-1.5 text-xs text-amber-800 dark:text-amber-400 bg-amber-100 dark:bg-amber-500/10 px-3 py-1 rounded-full border border-amber-300 dark:border-amber-500/20">
           <ShieldAlert className="w-3.5 h-3.5" />
           <span>Worker paused — repeated failures detected</span>
         </div>
@@ -308,7 +308,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
         <div className="hidden lg:flex flex-col gap-0.5 border-l border-slate-200 dark:border-slate-800 pl-2 min-w-[80px]">
           {/* Hourly rate bar */}
           <div className="flex items-center gap-1">
-            <span className="text-[9px] text-slate-400 dark:text-slate-500 w-4 shrink-0">1h</span>
+            <span className="text-[9px] text-slate-600 dark:text-slate-400 font-medium w-4 shrink-0">1h</span>
             <div className="flex-1 h-1 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-500"
@@ -326,7 +326,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
           </div>
           {/* Daily rate bar */}
           <div className="flex items-center gap-1">
-            <span className="text-[9px] text-slate-400 dark:text-slate-500 w-4 shrink-0">1d</span>
+            <span className="text-[9px] text-slate-600 dark:text-slate-400 font-medium w-4 shrink-0">1d</span>
             <div className="flex-1 h-1 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-500"
@@ -373,7 +373,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
         onClick={resetWorkerLimits}
         disabled={loading}
         title="Reset hourly/daily scan count limits counters immediately"
-        className="hidden md:flex items-center space-x-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-indigo-655 dark:hover:text-indigo-400 bg-white dark:bg-slate-900/60 hover:bg-slate-50 py-1.5 px-2.5 rounded-full border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-500/30 transition-all cursor-pointer"
+        className="hidden md:flex items-center space-x-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-indigo-650 dark:hover:text-indigo-400 bg-white dark:bg-slate-900/60 hover:bg-slate-50 py-1.5 px-2.5 rounded-full border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-500/30 transition-all cursor-pointer"
       >
         <Cpu className="w-3 h-3" />
         <span>Reset Limits</span>
@@ -385,7 +385,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
           onClick={pruneQueue}
           disabled={pruning}
           title={`Prune ${pruneCount} completed queue job(s) older than 30 days`}
-          className="hidden md:flex items-center space-x-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-rose-650 dark:hover:text-rose-300 bg-white dark:bg-slate-900/60 hover:bg-rose-50 dark:hover:bg-rose-505/10 px-2.5 py-1 rounded-full border border-slate-202 dark:border-slate-800 hover:border-rose-300 dark:hover:border-rose-500/30 transition-all cursor-pointer"
+          className="hidden md:flex items-center space-x-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-rose-650 dark:hover:text-rose-300 bg-white dark:bg-slate-900/60 hover:bg-rose-50 dark:hover:bg-rose-505/10 px-2.5 py-1 rounded-full border border-slate-202 dark:border-slate-800 hover:border-rose-300 dark:hover:border-rose-500/30 transition-all cursor-pointer"
         >
           <Trash2 className="w-3 h-3" />
           <span>Prune ({pruneCount})</span>

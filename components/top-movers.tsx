@@ -50,8 +50,8 @@ export function TopMovers({ pages }: TopMoversProps) {
       {gainers.length > 0 && (
         <div className="glass-card rounded-xl p-4">
           <div className="flex items-center space-x-2 mb-3">
-            <TrendingUp className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-300 uppercase tracking-wider">
+            <TrendingUp className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
               Top Gainers
             </span>
           </div>
@@ -65,16 +65,16 @@ export function TopMovers({ pages }: TopMoversProps) {
                   href={p.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-xs font-medium text-slate-800 dark:text-slate-200 hover:text-emerald-650 dark:hover:text-emerald-300 truncate max-w-[160px] transition-colors"
+                  className="text-xs font-medium text-slate-800 dark:text-slate-200 hover:text-emerald-700 dark:hover:text-emerald-300 truncate max-w-[160px] transition-colors"
                   title={p.url}
                 >
                   {p.displayName || "Meta Ad Search"}
                 </a>
                 <div className="flex items-center space-x-2 shrink-0">
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                  <span className="text-xs text-slate-600 dark:text-slate-400 font-mono font-medium">
                     {p.currentResults?.toLocaleString() ?? "—"}
                   </span>
-                  <span className="inline-flex items-center text-xs font-bold text-emerald-650 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                  <span className="inline-flex items-center text-xs font-bold text-emerald-800 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-500/20">
                     <ArrowUpRight className="w-3 h-3 mr-0.5" />
                     +{p.difference}
                   </span>
@@ -89,8 +89,8 @@ export function TopMovers({ pages }: TopMoversProps) {
       {losers.length > 0 && (
         <div className="glass-card rounded-xl p-4">
           <div className="flex items-center space-x-2 mb-3">
-            <TrendingDown className="w-4 h-4 text-rose-500 dark:text-rose-400" />
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-300 uppercase tracking-wider">
+            <TrendingDown className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
               Top Decliners
             </span>
           </div>
@@ -104,16 +104,16 @@ export function TopMovers({ pages }: TopMoversProps) {
                   href={p.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-xs font-medium text-slate-800 dark:text-slate-200 hover:text-rose-650 dark:hover:text-rose-300 truncate max-w-[160px] transition-colors"
+                  className="text-xs font-medium text-slate-800 dark:text-slate-200 hover:text-rose-600 dark:hover:text-rose-300 truncate max-w-[160px] transition-colors"
                   title={p.url}
                 >
                   {p.displayName || "Meta Ad Search"}
                 </a>
                 <div className="flex items-center space-x-2 shrink-0">
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                  <span className="text-xs text-slate-600 dark:text-slate-400 font-mono font-medium">
                     {p.currentResults?.toLocaleString() ?? "—"}
                   </span>
-                  <span className="inline-flex items-center text-xs font-bold text-rose-650 dark:text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
+                  <span className="inline-flex items-center text-xs font-bold text-rose-800 dark:text-rose-400 bg-rose-100 dark:bg-rose-500/10 px-2 py-0.5 rounded border border-rose-300 dark:border-rose-500/20">
                     <ArrowDownRight className="w-3 h-3 mr-0.5" />
                     {p.difference}
                   </span>

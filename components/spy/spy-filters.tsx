@@ -50,13 +50,13 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
       <div className="flex flex-col sm:flex-row items-center gap-3 justify-between">
         {/* Keyword Search Bar */}
         <div className="relative w-full sm:w-80 md:w-96">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500 dark:text-slate-400" />
+          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-600 dark:text-slate-400" />
           <input
             type="text"
             placeholder="Search ad copy, title, brand name, or ad ID..."
             value={filters.search || ""}
             onChange={(e) => onFilterChange({ search: e.target.value })}
-            className="w-full bg-white dark:bg-slate-950/80 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-lg pl-9 pr-3 py-2 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 transition-all"
+            className="w-full bg-white dark:bg-slate-950/80 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-400 rounded-lg pl-9 pr-3 py-2 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 transition-all"
           />
         </div>
 
@@ -70,7 +70,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
               className={`p-1.5 rounded-md transition-all cursor-pointer ${
                 viewMode === "grid"
                   ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
-                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
               }`}
               title="Grid View (4 Cards Per Row)"
             >
@@ -82,7 +82,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
               className={`p-1.5 rounded-md transition-all cursor-pointer ${
                 viewMode === "list"
                   ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
-                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
               }`}
               title="List View (Line by Line)"
             >
@@ -90,7 +90,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
             </button>
           </div>
 
-          <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 ml-1" />
+          <SlidersHorizontal className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400 ml-1" />
           <select
             value={filters.sortBy || "started_running_on"}
             onChange={(e) => onFilterChange({ sortBy: e.target.value as any })}
@@ -107,8 +107,8 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
       <div className="flex flex-wrap items-center gap-2.5 pt-2.5 border-t border-slate-200 dark:border-slate-800/40 text-[11px]">
         {/* Running For (List of Days) Filter */}
         <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
-          <Clock className="w-3 h-3 text-indigo-500 dark:text-indigo-400" />
-          <span className="text-slate-500 dark:text-slate-400 font-medium">Running For:</span>
+          <Clock className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+          <span className="text-slate-600 dark:text-slate-400 font-semibold">Running For:</span>
           <select
             value={filters.minDaysRunning || 0}
             onChange={(e) => onFilterChange({ minDaysRunning: Number(e.target.value) })}
@@ -125,8 +125,8 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
 
         {/* Added / Launched Date Presets */}
         <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
-          <Calendar className="w-3 h-3 text-emerald-500 dark:text-emerald-400" />
-          <span className="text-slate-500 dark:text-slate-400 font-medium">Launched:</span>
+          <Calendar className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+          <span className="text-slate-600 dark:text-slate-400 font-semibold">Launched:</span>
           <select
             value={
               showCustomDates
@@ -149,8 +149,8 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
 
         {/* Scale Filter (Min Duplications) */}
         <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
-          <Layers className="w-3 h-3 text-amber-500 dark:text-amber-400" />
-          <span className="text-slate-500 dark:text-slate-400 font-medium">Scale:</span>
+          <Layers className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+          <span className="text-slate-600 dark:text-slate-400 font-semibold">Scale:</span>
           <select
             value={filters.minDuplications || 1}
             onChange={(e) => onFilterChange({ minDuplications: Number(e.target.value) })}
@@ -165,8 +165,8 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
 
         {/* Media Type Filter */}
         <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
-          <Filter className="w-3 h-3 text-indigo-500 dark:text-indigo-400" />
-          <span className="text-slate-500 dark:text-slate-400 font-medium">Media:</span>
+          <Filter className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+          <span className="text-slate-600 dark:text-slate-400 font-semibold">Media:</span>
           <select
             value={filters.mediaType || "all"}
             onChange={(e) => onFilterChange({ mediaType: e.target.value as any })}
@@ -181,7 +181,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
 
         {/* Active Status Filter */}
         <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
-          <span className="text-slate-500 dark:text-slate-400 font-medium">Status:</span>
+          <span className="text-slate-600 dark:text-slate-400 font-semibold">Status:</span>
           <select
             value={filters.status || "all"}
             onChange={(e) => onFilterChange({ status: e.target.value as any })}
@@ -200,7 +200,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
             setShowCustomDates(false);
             onReset();
           }}
-          className="ml-auto text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors cursor-pointer"
+          className="ml-auto text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors cursor-pointer"
         >
           <RefreshCw className="w-3 h-3" /> Reset Filters
         </button>
@@ -209,9 +209,9 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
       {/* Custom Date Range Pickers (Rendered when Custom Range option is selected) */}
       {showCustomDates && (
         <div className="flex flex-wrap items-center gap-3 pt-2.5 border-t border-slate-200 dark:border-slate-800/40 text-xs">
-          <span className="text-slate-500 dark:text-slate-400 font-medium">Select Date Range:</span>
+          <span className="text-slate-600 dark:text-slate-400 font-semibold">Select Date Range:</span>
           <div className="flex items-center gap-1.5">
-            <span className="text-slate-400 dark:text-slate-500 text-[11px]">From:</span>
+            <span className="text-slate-600 dark:text-slate-400 text-[11px] font-medium">From:</span>
             <input
               type="date"
               value={filters.dateFrom ? filters.dateFrom.substring(0, 10) : ""}
@@ -225,7 +225,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className="text-slate-400 dark:text-slate-500 text-[11px]">To:</span>
+            <span className="text-slate-600 dark:text-slate-400 text-[11px] font-medium">To:</span>
             <input
               type="date"
               value={filters.dateTo ? filters.dateTo.substring(0, 10) : ""}
