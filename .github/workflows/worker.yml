@@ -9,6 +9,8 @@ on:
 jobs:
   run-worker:
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.49.0-noble
     timeout-minutes: 15
 
     steps:
@@ -23,9 +25,6 @@ jobs:
 
       - name: Install Dependencies
         run: npm ci
-
-      - name: Install Playwright Browsers & OS Dependencies
-        run: npx playwright install --with-deps chromium
 
       - name: Run Background Worker Queue
         env:
