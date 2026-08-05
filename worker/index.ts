@@ -1,6 +1,11 @@
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
+import WebSocket from "ws";
+if (typeof globalThis.WebSocket === "undefined") {
+  (globalThis as any).WebSocket = WebSocket;
+}
+
 import { db } from "../db";
 import { trackedPages, creativeScans } from "../db/schema";
 import { getBrowserSession, closeBrowserSession } from "./browser";
