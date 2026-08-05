@@ -26,9 +26,14 @@ export async function GET() {
     const isBackoffActive =
       state.backoffUntil !== null && new Date(state.backoffUntil) > new Date();
 
+    const maxHour = parseInt(process.env.MAX_SCANS_PER_HOUR || "100", 10);
+    const maxDay = parseInt(process.env.MAX_SCANS_PER_DAY || "0", 10);
+
     return NextResponse.json({
       state,
       isBackoffActive,
+      maxHour,
+      maxDay,
     });
   } catch (error) {
     console.error("Error in GET /api/worker:", error);

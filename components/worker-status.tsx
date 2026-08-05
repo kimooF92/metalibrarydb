@@ -12,6 +12,9 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
   const [pruneCount, setPruneCount] = useState<number | null>(null);
   const [pruneToast, setPruneToast] = useState<string | null>(null);
 
+  const [maxHour, setMaxHour] = useState(100);
+  const [maxDay, setMaxDay] = useState(0);
+
   const fetchWorkerState = async () => {
     try {
       const res = await fetch("/api/worker");
@@ -19,6 +22,8 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
         const data = await res.json();
         setState(data.state);
         setIsBackoffActive(data.isBackoffActive);
+        if (data.maxHour !== undefined) setMaxHour(data.maxHour);
+        if (data.maxDay !== undefined) setMaxDay(data.maxDay);
       }
     } catch {
       // Quiet failure
@@ -190,16 +195,16 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
           <div className="flex flex-col space-y-1">
             <div className="flex justify-between text-[9px]">
               <span className="text-slate-600 dark:text-slate-400 font-medium">Hourly Scans</span>
-              <span className="text-slate-700 dark:text-slate-400 font-mono font-bold">{state.scansThisHour ?? 0} / 20</span>
+              <span className="text-slate-700 dark:text-slate-400 font-mono font-bold">{state.scansThisHour ?? 0} / {maxHour}</span>
             </div>
             <div className="w-full h-1 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
-                  width: `${Math.min(100, ((state.scansThisHour ?? 0) / 20) * 100)}%`,
-                  background: (state.scansThisHour ?? 0) >= 18
+                  width: `${Math.min(100, ((state.scansThisHour ?? 0) / maxHour) * 100)}%`,
+                  background: (state.scansThisHour ?? 0) >= maxHour * 0.9
                     ? "#f87171"
-                    : (state.scansThisHour ?? 0) >= 12
+                    : (state.scansThisHour ?? 0) >= maxHour * 0.6
                     ? "#fbbf24"
                     : "#6366f1",
                 }}
@@ -210,18 +215,22 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
           <div className="flex flex-col space-y-1">
             <div className="flex justify-between text-[9px]">
               <span className="text-slate-600 dark:text-slate-400 font-medium">Daily Scans</span>
-              <span className="text-slate-700 dark:text-slate-400 font-mono font-bold">{state.scansToday ?? 0} / 150</span>
+              <span className="text-slate-700 dark:text-slate-400 font-mono font-bold">
+                {state.scansToday ?? 0} / {maxDay > 0 ? maxDay : "Unlimited"}
+              </span>
             </div>
             <div className="w-full h-1 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
-                  width: `${Math.min(100, ((state.scansToday ?? 0) / 150) * 100)}%`,
-                  background: (state.scansToday ?? 0) >= 135
+                  width: maxDay > 0
+                    ? `${Math.min(100, ((state.scansToday ?? 0) / maxDay) * 100)}%`
+                    : `${Math.min(100, Math.max(10, ((state.scansToday ?? 0) / (maxHour * 24)) * 100))}%`,
+                  background: maxDay > 0 && (state.scansToday ?? 0) >= maxDay * 0.9
                     ? "#f87171"
-                    : (state.scansToday ?? 0) >= 100
+                    : maxDay > 0 && (state.scansToday ?? 0) >= maxDay * 0.6
                     ? "#fbbf24"
-                    : "#6366f1",
+                    : "#10b981",
                 }}
               />
             </div>
@@ -313,16 +322,16 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
-                  width: `${Math.min(100, ((state.scansThisHour ?? 0) / 20) * 100)}%`,
-                  background: (state.scansThisHour ?? 0) >= 18
+                  width: `${Math.min(100, ((state.scansThisHour ?? 0) / maxHour) * 100)}%`,
+                  background: (state.scansThisHour ?? 0) >= maxHour * 0.9
                     ? "#f87171"
-                    : (state.scansThisHour ?? 0) >= 12
+                    : (state.scansThisHour ?? 0) >= maxHour * 0.6
                     ? "#fbbf24"
                     : "#6366f1",
                 }}
               />
             </div>
-            <span className="text-[9px] font-mono text-slate-600 dark:text-slate-400">{state.scansThisHour ?? 0}/20</span>
+            <span className="text-[9px] font-mono text-slate-600 dark:text-slate-400">{state.scansThisHour ?? 0}/{maxHour}</span>
           </div>
           {/* Daily rate bar */}
           <div className="flex items-center gap-1">
@@ -331,16 +340,18 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
-                  width: `${Math.min(100, ((state.scansToday ?? 0) / 150) * 100)}%`,
-                  background: (state.scansToday ?? 0) >= 135
+                  width: maxDay > 0
+                    ? `${Math.min(100, ((state.scansToday ?? 0) / maxDay) * 100)}%`
+                    : `${Math.min(100, Math.max(10, ((state.scansToday ?? 0) / (maxHour * 24)) * 100))}%`,
+                  background: maxDay > 0 && (state.scansToday ?? 0) >= maxDay * 0.9
                     ? "#f87171"
-                    : (state.scansToday ?? 0) >= 100
+                    : maxDay > 0 && (state.scansToday ?? 0) >= maxDay * 0.6
                     ? "#fbbf24"
-                    : "#6366f1",
+                    : "#10b981",
                 }}
               />
             </div>
-            <span className="text-[9px] font-mono text-slate-600 dark:text-slate-400">{state.scansToday ?? 0}/150</span>
+            <span className="text-[9px] font-mono text-slate-600 dark:text-slate-400">{state.scansToday ?? 0}/{maxDay > 0 ? maxDay : "∞"}</span>
           </div>
         </div>
 

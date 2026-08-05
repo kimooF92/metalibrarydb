@@ -247,7 +247,7 @@ export function ImportDropzone() {
                   </h4>
                   <p className="text-xs text-amber-800 dark:text-amber-200/80 mt-1 leading-relaxed">
                     You have queued <strong>{summary.imported.toLocaleString()}</strong> URLs.
-                    At conservative human rate caps (150 scans/day), processing this batch will take approximately{" "}
+                    At configured system rate caps (2,400 scans/day), processing this batch will take approximately{" "}
                     <strong>{summary.estimatedDaysToComplete} day(s)</strong> to complete.
                   </p>
 
