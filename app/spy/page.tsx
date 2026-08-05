@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useAdFeed, useAdStats } from "@/hooks/use-spy";
 import { AdCard } from "@/components/spy/ad-card";
 import { AdRow } from "@/components/spy/ad-row";
@@ -8,9 +8,10 @@ import { SpyFilters } from "@/components/spy/spy-filters";
 import { Layers, Calendar, Video, Image as ImageIcon, RefreshCw, ChevronLeft, ChevronRight, Eye } from "lucide-react";
 
 export default function AdSpyPage() {
-  const { ads, pagination, isLoading, error, params, updateFilters, refetch } = useAdFeed();
+  const { ads, pagination, isLoading, isFetchingMore, error, params, updateFilters, refetch } = useAdFeed();
   const { stats } = useAdStats();
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const handleResetFilters = () => {
     updateFilters({
@@ -25,6 +26,35 @@ export default function AdSpyPage() {
       page: 1,
     });
   };
+
+  // IntersectionObserver for continuous infinite scroll
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (
+          first.isIntersecting &&
+          !isLoading &&
+          !isFetchingMore &&
+          pagination.page < pagination.totalPages
+        ) {
+          updateFilters({ page: pagination.page + 1 });
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentSentinel = sentinelRef.current;
+    if (currentSentinel) {
+      observer.observe(currentSentinel);
+    }
+
+    return () => {
+      if (currentSentinel) {
+        observer.unobserve(currentSentinel);
+      }
+    };
+  }, [isLoading, isFetchingMore, pagination.page, pagination.totalPages, updateFilters]);
 
   return (
     <div className="h-full overflow-y-auto bg-background text-foreground space-y-4">
@@ -44,7 +74,7 @@ export default function AdSpyPage() {
           onClick={() => refetch()}
           className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shrink-0"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-indigo-500" : ""}`} />
+          <RefreshCw className={`w-3.5 h-3.5 ${isLoading || isFetchingMore ? "animate-spin text-indigo-500" : ""}`} />
           <span>Refresh Feed</span>
         </button>
       </div>
@@ -115,7 +145,7 @@ export default function AdSpyPage() {
       />
 
       {/* Main Feed Content */}
-      {isLoading ? (
+      {isLoading && ads.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 text-slate-500 dark:text-slate-400 gap-2.5">
           <RefreshCw className="w-7 h-7 animate-spin text-indigo-500" />
           <span className="text-xs font-semibold">Loading ad creatives feed...</span>
@@ -155,24 +185,35 @@ export default function AdSpyPage() {
             </div>
           )}
 
-          {/* Pagination Controls */}
+          {/* Sentinel element for infinite scroll */}
+          <div ref={sentinelRef} className="h-4 w-full" />
+
+          {/* Inline Loading Footer when fetching next page */}
+          {isFetchingMore && (
+            <div className="flex items-center justify-center py-4 text-xs font-medium text-slate-500 dark:text-slate-400 gap-2">
+              <RefreshCw className="w-4 h-4 animate-spin text-indigo-500" />
+              <span>Loading more ad creatives...</span>
+            </div>
+          )}
+
+          {/* Pagination Controls / Summary Footer */}
           {pagination.totalPages > 1 && (
             <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800/60 pb-4">
               <span className="text-xs text-slate-500 dark:text-slate-400">
-                Showing page <strong className="text-slate-900 dark:text-slate-100">{pagination.page}</strong> of{" "}
-                <strong className="text-slate-900 dark:text-slate-100">{pagination.totalPages}</strong> ({pagination.total} total ads)
+                Loaded <strong className="text-slate-900 dark:text-slate-100">{ads.length}</strong> of{" "}
+                <strong className="text-slate-900 dark:text-slate-100">{pagination.total}</strong> total ads (Page {pagination.page} of {pagination.totalPages})
               </span>
 
               <div className="flex items-center gap-2">
                 <button
-                  disabled={pagination.page <= 1}
+                  disabled={pagination.page <= 1 || isFetchingMore}
                   onClick={() => updateFilters({ page: pagination.page - 1 })}
                   className="flex items-center space-x-1 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 disabled:opacity-40 text-slate-700 dark:text-slate-300 transition-all cursor-pointer disabled:cursor-not-allowed"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" /> Previous
                 </button>
                 <button
-                  disabled={pagination.page >= pagination.totalPages}
+                  disabled={pagination.page >= pagination.totalPages || isFetchingMore}
                   onClick={() => updateFilters({ page: pagination.page + 1 })}
                   className="flex items-center space-x-1 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 disabled:opacity-40 text-slate-700 dark:text-slate-300 transition-all cursor-pointer disabled:cursor-not-allowed"
                 >

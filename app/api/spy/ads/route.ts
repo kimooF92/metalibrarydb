@@ -149,62 +149,37 @@ export async function GET(req: NextRequest) {
 
     // Count total matching distinct ads
     const [countResult] = await db
-      .select({ count: sql<number>`count(distinct ${ads.id})` })
-      .from(ads)
-      .innerJoin(adObservations, eq(ads.id, adObservations.adId))
-      .leftJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
-      .where(whereClause);
+      .select({ count: sql<number>`count(*)::int` })
+      .from(subquery);
 
     const total = Number(countResult?.count || 0);
 
-    // Optional Supabase client for signing cached thumbnails
-    let supabaseClient: any = null;
-    if (supabaseUrl && supabaseKey) {
-      supabaseClient = createClient(supabaseUrl, supabaseKey);
-    }
-
-    // Format final response items with signed URL fallback
-    const items = await Promise.all(
-      rows.map(async (row) => {
-        let signedThumbnailUrl: string | null = null;
-        if (row.thumbnailStoragePath && supabaseClient) {
-          try {
-            const { data } = await supabaseClient.storage
-              .from("ad-thumbnails")
-              .createSignedUrl(row.thumbnailStoragePath, 3600); // 1 hour expiration
-            signedThumbnailUrl = data?.signedUrl || null;
-          } catch {
-            signedThumbnailUrl = null;
-          }
-        }
-
-        return {
-          id: row.id,
-          adArchiveId: row.adArchiveId,
-          pageId: row.pageId,
-          pageName: row.pageName || row.pageDisplayName,
-          startedRunningOn: row.startedRunningOn,
-          caption: row.caption,
-          title: row.title,
-          ctaText: row.ctaText,
-          linkUrl: row.linkUrl,
-          mediaType: row.mediaType,
-          mediaUrls: row.mediaUrls,
-          thumbnailUrl: signedThumbnailUrl || row.thumbnailUrl,
-          thumbnailStoragePath: row.thumbnailStoragePath,
-          firstSeenAt: row.firstSeenAt,
-          lastSeenAt: row.lastSeenAt,
-          createdAt: row.createdAt,
-          updatedAt: row.updatedAt,
-          duplicationCount: Number(row.duplicationCount || 1),
-          isActive: Boolean(row.isActive),
-          isArchived: Boolean(row.isArchived),
-          archivedAt: row.archivedAt ? new Date(row.archivedAt).toISOString() : null,
-          trackedPageId: row.trackedPageId,
-          signedThumbnailUrl: signedThumbnailUrl || row.thumbnailUrl,
-        };
-      })
-    );
+    // Format final response items using stored public thumbnailUrl / Meta CDN URL
+    const items = rows.map((row) => ({
+      id: row.id,
+      adArchiveId: row.adArchiveId,
+      pageId: row.pageId,
+      pageName: row.pageName || row.pageDisplayName,
+      startedRunningOn: row.startedRunningOn,
+      caption: row.caption,
+      title: row.title,
+      ctaText: row.ctaText,
+      linkUrl: row.linkUrl,
+      mediaType: row.mediaType,
+      mediaUrls: row.mediaUrls,
+      thumbnailUrl: row.thumbnailUrl,
+      thumbnailStoragePath: row.thumbnailStoragePath,
+      firstSeenAt: row.firstSeenAt,
+      lastSeenAt: row.lastSeenAt,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      duplicationCount: Number(row.duplicationCount || 1),
+      isActive: Boolean(row.isActive),
+      isArchived: Boolean(row.isArchived),
+      archivedAt: row.archivedAt ? new Date(row.archivedAt).toISOString() : null,
+      trackedPageId: row.trackedPageId,
+      signedThumbnailUrl: row.thumbnailUrl,
+    }));
 
     return NextResponse.json({
       items,

@@ -55,15 +55,25 @@ export function useAdFeed(initialParams?: AdFilterParams) {
     totalPages: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchFeed = useCallback(async () => {
     if (params.enabled === false) {
       setIsLoading(false);
+      setIsFetchingMore(false);
       return;
     }
-    setIsLoading(true);
+
+    const currentPage = params.page || 1;
+    if (ads.length === 0 || currentPage === 1) {
+      setIsLoading(ads.length === 0);
+      setIsFetchingMore(ads.length > 0);
+    } else {
+      setIsFetchingMore(true);
+    }
     setError(null);
+
     try {
       const query = new URLSearchParams();
       if (params.trackedPageId) query.set("trackedPageId", params.trackedPageId);
@@ -80,7 +90,7 @@ export function useAdFeed(initialParams?: AdFilterParams) {
       if (params.status && params.status !== "all") query.set("status", params.status);
       if (params.sortBy) query.set("sortBy", params.sortBy);
       if (params.sortOrder) query.set("sortOrder", params.sortOrder);
-      query.set("page", (params.page || 1).toString());
+      query.set("page", currentPage.toString());
       query.set("limit", (params.limit || 24).toString());
 
       const res = await fetch(`/api/spy/ads?${query.toString()}`);
@@ -90,12 +100,22 @@ export function useAdFeed(initialParams?: AdFilterParams) {
         throw new Error(data.error || "Failed to fetch ad feed");
       }
 
-      setAds(data.items || []);
+      const newItems = data.items || [];
+      if (currentPage > 1) {
+        setAds((prev) => {
+          const existingIds = new Set(prev.map((item) => item.id));
+          const filteredNew = newItems.filter((item: Ad) => !existingIds.has(item.id));
+          return [...prev, ...filteredNew];
+        });
+      } else {
+        setAds(newItems);
+      }
       setPagination(data.pagination || { page: 1, limit: 24, total: 0, totalPages: 0 });
     } catch (err: any) {
       setError(err.message || "Failed to fetch ad feed");
     } finally {
       setIsLoading(false);
+      setIsFetchingMore(false);
     }
   }, [params]);
 
@@ -115,6 +135,7 @@ export function useAdFeed(initialParams?: AdFilterParams) {
     ads,
     pagination,
     isLoading,
+    isFetchingMore,
     error,
     params,
     updateFilters,

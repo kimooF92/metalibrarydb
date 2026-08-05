@@ -162,6 +162,8 @@ export const adObservations = pgTable(
     index("idx_ad_obs_tracked_page_id").on(table.trackedPageId),
     index("idx_ad_obs_duplication").on(table.duplicationCount),
     index("idx_ad_obs_scan_ad").on(table.creativeScanId, table.adId),
+    index("idx_ad_obs_ad_observed").on(table.adId, table.observedAt.desc()),
+    index("idx_ad_obs_page_observed").on(table.trackedPageId, table.observedAt.desc()),
   ]
 );
 

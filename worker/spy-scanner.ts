@@ -31,10 +31,10 @@ export interface SpyScanOutcome {
 }
 
 // Configurable constants
-const MAX_SCROLL_ATTEMPTS = 30;
-const NO_PROGRESS_CAP = 5;
-const SCROLL_WAIT_MS = 1800;
-const RESPONSE_TIMEOUT_MS = 30000;
+const MAX_SCROLL_ATTEMPTS = parseInt(process.env.SPY_MAX_SCROLL_ATTEMPTS || "50", 10);
+const NO_PROGRESS_CAP = parseInt(process.env.SPY_NO_PROGRESS_CAP || "6", 10);
+const SCROLL_WAIT_MS = parseInt(process.env.SPY_SCROLL_WAIT_MS || "3000", 10);
+const RESPONSE_TIMEOUT_MS = parseInt(process.env.PAGE_TIMEOUT || "30000", 10);
 
 /**
  * Extract normalized ad attributes from Meta GraphQL payload node
@@ -171,9 +171,9 @@ function extractAdsFromJSON(obj: any, collectedMap: Map<string, ExtractedAdData>
     }
   }
 
-  // Recurse into object properties
+  // Recurse into object properties (allow full traversal)
   for (const key of Object.keys(obj)) {
-    if (key !== "snapshot" && typeof obj[key] === "object") {
+    if (typeof obj[key] === "object") {
       extractAdsFromJSON(obj[key], collectedMap);
     }
   }
@@ -191,6 +191,7 @@ export async function scanAdCreatives(
   const collectedAds = new Map<string, ExtractedAdData>();
   let hasCaptchaOrBlock = false;
   let isRateLimited = false;
+  let graphqlResponseReceived = false;
 
   // 1. Response Listener for Meta GraphQL responses
   const handleResponse = async (response: Response) => {
@@ -206,19 +207,40 @@ export async function scanAdCreatives(
 
       if (status !== 200) return;
 
-      const text = await response.text();
-      const json = JSON.parse(text);
-      if (json.errors && Array.isArray(json.errors)) {
-        const hasSecurityErr = json.errors.some((e: any) =>
-          /captcha|security check|unusual activity/i.test(e.message || "")
-        );
-        if (hasSecurityErr) {
-          hasCaptchaOrBlock = true;
-          return;
+      let text = await response.text();
+      text = text.replace(/^\s*for\s*\(\s*;\s*;\s*\)\s*;\s*/i, "").trim();
+
+      const parseAndExtract = (jsonObj: any) => {
+        if (jsonObj.errors && Array.isArray(jsonObj.errors)) {
+          const hasSecurityErr = jsonObj.errors.some((e: any) =>
+            /captcha|security check|unusual activity/i.test(e.message || "")
+          );
+          if (hasSecurityErr) {
+            hasCaptchaOrBlock = true;
+            return;
+          }
+        }
+        extractAdsFromJSON(jsonObj, collectedAds);
+        graphqlResponseReceived = true;
+      };
+
+      try {
+        const json = JSON.parse(text);
+        parseAndExtract(json);
+      } catch {
+        // Multi-line NDJSON fallback
+        const lines = text.split("\n");
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const json = JSON.parse(trimmed);
+            parseAndExtract(json);
+          } catch {
+            // ignore non-JSON chunk
+          }
         }
       }
-
-      extractAdsFromJSON(json, collectedAds);
     } catch {
       // Ignore non-JSON or response stream read errors
     }
@@ -275,12 +297,44 @@ export async function scanAdCreatives(
       if (hasCaptchaOrBlock) break;
       if (isRateLimited) break;
 
-      // Scroll down deep to trigger GraphQL pagination
+      graphqlResponseReceived = false;
+
+      // Scroll down container & window to trigger GraphQL pagination
       await page.evaluate(() => {
+        const feedContainer =
+          document.querySelector('div[role="feed"]') ||
+          Array.from(document.querySelectorAll("div")).find((div) => {
+            const style = window.getComputedStyle(div);
+            return (
+              (style.overflowY === "auto" || style.overflowY === "scroll") &&
+              div.scrollHeight > div.clientHeight + 200
+            );
+          });
+
+        if (feedContainer) {
+          feedContainer.scrollBy(0, 1600);
+          feedContainer.scrollTop = feedContainer.scrollHeight;
+        }
+
         window.scrollBy(0, 1600);
         window.scrollTo(0, document.body.scrollHeight);
       });
-      await page.waitForTimeout(SCROLL_WAIT_MS);
+
+      // Adaptive response-aware polling wait
+      const waitStart = Date.now();
+      while (!graphqlResponseReceived && Date.now() - waitStart < SCROLL_WAIT_MS) {
+        await page.waitForTimeout(300);
+      }
+
+      // Interleaved DOM extraction every 5 scroll iterations to catch virtualized cards
+      if (i % 5 === 4) {
+        const tempDomAds = await extractAdsFromDOM(page, trackedPageId);
+        for (const ad of tempDomAds) {
+          if (!collectedAds.has(ad.adArchiveId)) {
+            collectedAds.set(ad.adArchiveId, ad);
+          }
+        }
+      }
 
       const currentSize = collectedAds.size;
       if (currentSize === lastSize) {
@@ -301,8 +355,8 @@ export async function scanAdCreatives(
       };
     }
 
-    // 4. ALWAYS run DOM deep scan alongside GraphQL extraction to capture all visible cards
-    console.log(`[Spy Scanner] GraphQL captured ${collectedAds.size} items. Executing DOM deep scan to merge visible cards...`);
+    // 4. ALWAYS run final DOM deep scan alongside GraphQL extraction to capture all visible cards
+    console.log(`[Spy Scanner] GraphQL captured ${collectedAds.size} items. Executing final DOM deep scan to merge visible cards...`);
     const domAds = await extractAdsFromDOM(page, trackedPageId);
     let domMergedCount = 0;
 
@@ -399,8 +453,11 @@ export async function scanAdCreatives(
       }
     }
 
-    // Reconcile ads missing from this scan run (mark deactivated & archived)
-    if (savedCount > 0) {
+    const finalStatus: "completed" | "partial" =
+      noProgressCount >= NO_PROGRESS_CAP ? "completed" : "partial";
+
+    // Reconcile missing ads ONLY on completed full scans to prevent partial scan data corruption
+    if (savedCount > 0 && finalStatus === "completed") {
       const previousObservations = await db.query.adObservations.findMany({
         where: eq(adObservations.trackedPageId, trackedPageId),
         columns: { adId: true },
@@ -440,9 +497,6 @@ export async function scanAdCreatives(
         updatedAt: now,
       })
       .where(eq(trackedPages.id, trackedPageId));
-
-    const finalStatus: "completed" | "partial" =
-      noProgressCount >= NO_PROGRESS_CAP ? "completed" : "partial";
 
     return {
       status: finalStatus,
