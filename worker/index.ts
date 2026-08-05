@@ -39,6 +39,7 @@ async function runWorker() {
   const args = process.argv.slice(2);
   const testUrlIdx = args.indexOf("--test-url");
   const testSpyIdx = args.indexOf("--test-spy-url");
+  const isSingleRun = args.includes("--once") || process.env.SINGLE_RUN === "true";
 
   if (testUrlIdx !== -1 && args[testUrlIdx + 1]) {
     const testUrl = args[testUrlIdx + 1];
@@ -92,6 +93,10 @@ async function runWorker() {
       const backoff = await checkBackoffStatus();
       if (backoff.inBackoff) {
         console.log(`[Worker Paused] ${backoff.reason}`);
+        if (isSingleRun) {
+          console.log("[Single Run] Worker paused due to backoff. Exiting.");
+          process.exit(0);
+        }
         await randomDelay(15000, 30000);
         continue;
       }
@@ -100,6 +105,10 @@ async function runWorker() {
       const caps = await checkRateCaps();
       if (!caps.allowed) {
         console.log(`[Rate Limit] ${caps.reason}`);
+        if (isSingleRun) {
+          console.log("[Single Run] Rate cap reached. Exiting.");
+          process.exit(0);
+        }
         await randomDelay(30000, 60000);
         continue;
       }
@@ -109,6 +118,10 @@ async function runWorker() {
 
       if (!nextJob) {
         console.log(`[Queue Empty] All pending jobs completed. Worker idling (${ranJobs} processed).`);
+        if (isSingleRun) {
+          console.log("[Single Run] Queue is empty. Exiting worker cleanly.");
+          process.exit(0);
+        }
         await randomDelay(15000, 30000);
         continue;
       }
