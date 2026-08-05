@@ -46,10 +46,18 @@ async function runWorker() {
   const testUrlIdx = args.indexOf("--test-url");
   const testSpyIdx = args.indexOf("--test-spy-url");
   const isSingleRun = args.includes("--once") || process.env.SINGLE_RUN === "true";
-  const shouldRefreshAll = args.includes("--refresh-all") || process.env.REFRESH_ALL === "true";
+
+  const currentUTCHour = new Date().getUTCHours();
+  // Initial burst hours: 8:00 UTC (9 AM UTC+1) and 20:00 UTC (9 PM UTC+1)
+  const isInitialBurstHour = currentUTCHour === 8 || currentUTCHour === 20;
+
+  const shouldRefreshAll =
+    args.includes("--refresh-all") ||
+    process.env.REFRESH_ALL === "true" ||
+    (isInitialBurstHour && process.env.AUTO_BURST_ENQUEUE !== "false");
 
   if (shouldRefreshAll) {
-    console.log("[Refresh Mode] Enqueuing all tracked pages for auto-refresh...");
+    console.log(`[Refresh Mode] Initial burst hour (UTC: ${currentUTCHour}). Enqueuing all tracked pages for auto-refresh...`);
     await enqueueAllPagesForRefresh();
   }
 
