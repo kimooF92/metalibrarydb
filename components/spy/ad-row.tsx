@@ -17,16 +17,44 @@ import {
   Flame,
   Globe,
   ZoomIn,
+  Archive,
+  ArchiveRestore,
+  Clock,
 } from "lucide-react";
 
 interface AdRowProps {
   ad: Ad;
+  onArchiveToggle?: () => void;
 }
 
-export function AdRow({ ad }: AdRowProps) {
+export function AdRow({ ad, onArchiveToggle }: AdRowProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isArchived, setIsArchived] = useState(Boolean(ad.isArchived));
+  const [isArchiving, setIsArchiving] = useState(false);
+
+  const toggleArchive = async () => {
+    setIsArchiving(true);
+    const nextState = !isArchived;
+    setIsArchived(nextState);
+    try {
+      const res = await fetch(`/api/spy/ads/${ad.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isArchived: nextState }),
+      });
+      if (res.ok) {
+        onArchiveToggle?.();
+      } else {
+        setIsArchived(!nextState);
+      }
+    } catch {
+      setIsArchived(!nextState);
+    } finally {
+      setIsArchiving(false);
+    }
+  };
 
   // Format launch date
   const formatLaunchDate = (dateStr: string | null) => {
@@ -44,8 +72,20 @@ export function AdRow({ ad }: AdRowProps) {
     return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   };
 
+  const formatFreshnessDate = (dateStr?: string | Date | null) => {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return null;
+    const diffHours = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60));
+    if (diffHours < 1) return "Verified just now";
+    if (diffHours < 24) return `Verified ${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `Verified ${diffDays}d ago`;
+  };
+
   const duplicationCount = ad.duplicationCount || 1;
   const isScaled = duplicationCount >= 5;
+  const freshnessLabel = formatFreshnessDate(ad.lastSeenAt);
 
   const firstVideoUrl = ad.mediaUrls?.find(
     (url) => url.includes(".mp4") || url.includes("video") || ad.mediaType === "video"
@@ -114,24 +154,26 @@ export function AdRow({ ad }: AdRowProps) {
               ID: {ad.adArchiveId}
             </span>
 
-            {ad.isActive === true && (
+            {isArchived ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-600 dark:text-purple-400 bg-purple-500/10 border border-purple-500/20 px-2 py-0.2 rounded-full">
+                <Archive className="w-2.5 h-2.5" /> Archived
+              </span>
+            ) : ad.isActive === true ? (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.2 rounded-full">
                 <CheckCircle2 className="w-2.5 h-2.5" /> Active
               </span>
-            )}
-            {ad.isActive === false && (
+            ) : ad.isActive === false ? (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-2 py-0.2 rounded-full">
                 <XCircle className="w-2.5 h-2.5" /> Inactive
               </span>
-            )}
-            {ad.isActive === undefined && (
+            ) : (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.2 rounded-full">
                 <HelpCircle className="w-2.5 h-2.5" /> Unknown
               </span>
             )}
           </div>
 
-          {/* Badges: Launch Date & Scale */}
+          {/* Badges: Launch Date, Scale & Freshness */}
           <div className="flex items-center gap-2 flex-wrap my-0.5">
             <span className="inline-flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-900 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-800 font-medium">
               <Calendar className="w-3 h-3 text-indigo-500 dark:text-indigo-400" />
@@ -153,6 +195,13 @@ export function AdRow({ ad }: AdRowProps) {
               {duplicationCount} {duplicationCount === 1 ? "Copy" : "Copies"}
               {isScaled && <span className="ml-0.5">🔥 Scaled</span>}
             </span>
+
+            {freshnessLabel && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-900/60 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-800">
+                <Clock className="w-2.5 h-2.5 text-slate-400" />
+                {freshnessLabel}
+              </span>
+            )}
           </div>
 
           {/* Ad Title & Copy Text */}
@@ -183,7 +232,7 @@ export function AdRow({ ad }: AdRowProps) {
         </div>
       </div>
 
-      {/* Right Column: Direct Brand Store CTA Link */}
+      {/* Right Column: Direct Brand Store CTA Link & Actions */}
       <div className="flex md:flex-col items-center md:items-end justify-between gap-2 border-t md:border-t-0 pt-2 md:pt-0 border-slate-200 dark:border-slate-800/60 shrink-0">
         {destinationUrl ? (
           <a
@@ -204,6 +253,19 @@ export function AdRow({ ad }: AdRowProps) {
         )}
 
         <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={toggleArchive}
+            disabled={isArchiving}
+            className={`p-1.5 rounded-md transition-colors cursor-pointer ${
+              isArchived
+                ? "text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
+                : "text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-slate-100 dark:hover:bg-slate-900"
+            }`}
+            title={isArchived ? "Unarchive Ad (Move to Active Feed)" : "Archive Ad (Move to Vault)"}
+          >
+            {isArchived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+          </button>
+
           {(firstVideoUrl || displayImage) && (
             <button
               onClick={() => setIsPreviewOpen(true)}

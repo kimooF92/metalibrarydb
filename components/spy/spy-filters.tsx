@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AdFilterParams } from "@/types";
 import { Search, Filter, Calendar, Layers, SlidersHorizontal, RefreshCw, LayoutGrid, LayoutList, Clock } from "lucide-react";
 
@@ -14,8 +14,25 @@ interface SpyFiltersProps {
 
 export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange, onReset }: SpyFiltersProps) {
   const [showCustomDates, setShowCustomDates] = useState(Boolean(filters.dateFrom || filters.dateTo));
+  const [datePreset, setDatePreset] = useState<string>("all");
+  const [searchValue, setSearchValue] = useState<string>(filters.search || "");
+
+  // Sync search input with 350ms debounce
+  useEffect(() => {
+    setSearchValue(filters.search || "");
+  }, [filters.search]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if ((filters.search || "") !== searchValue) {
+        onFilterChange({ search: searchValue });
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchValue, filters.search, onFilterChange]);
 
   const handleDatePreset = (preset: string) => {
+    setDatePreset(preset);
     const now = new Date();
     if (preset === "all") {
       setShowCustomDates(false);
@@ -54,8 +71,8 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
           <input
             type="text"
             placeholder="Search ad copy, title, brand name, or ad ID..."
-            value={filters.search || ""}
-            onChange={(e) => onFilterChange({ search: e.target.value })}
+            value={searchValue}
+            onChange={(e) => setSearchValue(e.target.value)}
             className="w-full bg-white dark:bg-slate-950/80 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-400 rounded-lg pl-9 pr-3 py-2 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 transition-all"
           />
         </div>
@@ -128,13 +145,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
           <Calendar className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
           <span className="text-slate-600 dark:text-slate-400 font-semibold">Launched:</span>
           <select
-            value={
-              showCustomDates
-                ? "custom"
-                : filters.dateFrom
-                ? "7days"
-                : "all"
-            }
+            value={showCustomDates ? "custom" : datePreset}
             onChange={(e) => handleDatePreset(e.target.value)}
             className="bg-transparent text-slate-800 dark:text-slate-200 font-semibold focus:outline-none cursor-pointer"
           >
@@ -190,6 +201,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
             <option value="all" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All Statuses</option>
             <option value="active" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Active Only</option>
             <option value="inactive" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Inactive Only</option>
+            <option value="archived" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Archived (Vault)</option>
           </select>
         </div>
 
@@ -198,6 +210,8 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
           type="button"
           onClick={() => {
             setShowCustomDates(false);
+            setDatePreset("all");
+            setSearchValue("");
             onReset();
           }}
           className="ml-auto text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors cursor-pointer"

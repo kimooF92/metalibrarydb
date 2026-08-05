@@ -20,6 +20,7 @@ import {
   ZoomIn,
   Archive,
   ArchiveRestore,
+  Clock,
 } from "lucide-react";
 
 interface AdCardProps {
@@ -80,8 +81,20 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
     return `${prefix}${date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
   };
 
+  const formatFreshnessDate = (dateStr?: string | Date | null) => {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return null;
+    const diffHours = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60));
+    if (diffHours < 1) return "Verified just now";
+    if (diffHours < 24) return `Verified ${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `Verified ${diffDays}d ago`;
+  };
+
   const duplicationCount = ad.duplicationCount || 1;
   const isScaled = duplicationCount >= 5;
+  const freshnessLabel = formatFreshnessDate(ad.lastSeenAt);
 
   const firstVideoUrl = ad.mediaUrls?.find(
     (url) => url.includes(".mp4") || url.includes("video") || ad.mediaType === "video"
@@ -128,7 +141,7 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
           </div>
         </div>
 
-        {/* Badges Bar: Launch Date & Scale */}
+        {/* Badges Bar: Launch Date, Scale & Freshness */}
         <div className="flex flex-wrap items-center gap-1.5 mb-3">
           <span className="inline-flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-900 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-800 font-medium">
             <Calendar className="w-3 h-3 text-indigo-500 dark:text-indigo-400" />
@@ -150,6 +163,13 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
             {duplicationCount} {duplicationCount === 1 ? "Copy" : "Copies running"}
             {isScaled && <span className="ml-0.5">🔥 Scaled</span>}
           </span>
+
+          {freshnessLabel && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-900/60 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-800">
+              <Clock className="w-2.5 h-2.5 text-slate-400" />
+              {freshnessLabel}
+            </span>
+          )}
         </div>
 
         {/* Media Container */}

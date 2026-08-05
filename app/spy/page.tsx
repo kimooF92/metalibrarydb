@@ -174,13 +174,13 @@ export default function AdSpyPage() {
           {viewMode === "grid" ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5">
               {ads.map((ad) => (
-                <AdCard key={ad.id} ad={ad} />
+                <AdCard key={ad.id} ad={ad} onArchiveToggle={() => refetch()} />
               ))}
             </div>
           ) : (
             <div className="flex flex-col gap-2.5">
               {ads.map((ad) => (
-                <AdRow key={ad.id} ad={ad} />
+                <AdRow key={ad.id} ad={ad} onArchiveToggle={() => refetch()} />
               ))}
             </div>
           )}
