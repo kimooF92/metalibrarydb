@@ -207,10 +207,12 @@ export async function processFileImport(
   );
   const autoStartThresholdExceeded = successfulCount >= autoStartThreshold;
 
-  // Estimate completion time based on default max scans per day (e.g. 150/day)
-  const maxScansPerDay = parseInt(process.env.MAX_SCANS_PER_DAY || "150", 10);
+  // Estimate completion time based on daily capacity (if MAX_SCANS_PER_DAY is 0/unlimited, use hourly capacity * 24)
+  const configuredMaxDay = parseInt(process.env.MAX_SCANS_PER_DAY || "0", 10);
+  const maxPerHour = parseInt(process.env.MAX_SCANS_PER_HOUR || "100", 10);
+  const effectiveDailyCapacity = configuredMaxDay > 0 ? configuredMaxDay : (maxPerHour * 24);
   const estimatedDaysToComplete = Math.ceil(
-    successfulCount / Math.max(maxScansPerDay, 1)
+    successfulCount / Math.max(effectiveDailyCapacity, 1)
   );
 
   return {

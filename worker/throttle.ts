@@ -20,8 +20,8 @@ export async function checkRateCaps(): Promise<{ allowed: boolean; reason?: stri
   const state = await getWorkerState();
   const now = new Date();
 
-  const maxHour = parseInt(process.env.MAX_SCANS_PER_HOUR || "20", 10);
-  const maxDay = parseInt(process.env.MAX_SCANS_PER_DAY || "150", 10);
+  const maxHour = parseInt(process.env.MAX_SCANS_PER_HOUR || "100", 10);
+  const maxDay = parseInt(process.env.MAX_SCANS_PER_DAY || "0", 10);
 
   // Check hourly window
   const hourStart = state.hourWindowStart ? new Date(state.hourWindowStart) : now;
@@ -32,14 +32,14 @@ export async function checkRateCaps(): Promise<{ allowed: boolean; reason?: stri
       scansThisHour: 0,
       hourWindowStart: now,
     });
-  } else if ((state.scansThisHour || 0) >= maxHour) {
+  } else if (maxHour > 0 && (state.scansThisHour || 0) >= maxHour) {
     return {
       allowed: false,
       reason: `Hourly scan cap reached (${state.scansThisHour}/${maxHour}). Waiting for hourly window reset.`,
     };
   }
 
-  // Check daily window
+  // Check daily window (skipped if maxDay <= 0 for unlimited)
   const dayStart = state.dayWindowStart ? new Date(state.dayWindowStart) : now;
   const isNewDay = now.getTime() - dayStart.getTime() > 24 * 60 * 60 * 1000;
 
@@ -48,7 +48,7 @@ export async function checkRateCaps(): Promise<{ allowed: boolean; reason?: stri
       scansToday: 0,
       dayWindowStart: now,
     });
-  } else if ((state.scansToday || 0) >= maxDay) {
+  } else if (maxDay > 0 && (state.scansToday || 0) >= maxDay) {
     return {
       allowed: false,
       reason: `Daily scan cap reached (${state.scansToday}/${maxDay}). Waiting for daily window reset.`,
