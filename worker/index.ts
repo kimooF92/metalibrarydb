@@ -19,6 +19,7 @@ import {
   markCreativeJobCompleted,
   markCreativeJobFailed,
   resetStuckJobs,
+  enqueueAllPagesForRefresh,
 } from "./db";
 import {
   checkRateCaps,
@@ -40,11 +41,17 @@ async function runWorker() {
   // Clear any orphaned scanning/running jobs from previous unexpected shutdowns
   await resetStuckJobs();
 
-  // Check command line arguments for test mode
+  // Check command line arguments and environment variables
   const args = process.argv.slice(2);
   const testUrlIdx = args.indexOf("--test-url");
   const testSpyIdx = args.indexOf("--test-spy-url");
   const isSingleRun = args.includes("--once") || process.env.SINGLE_RUN === "true";
+  const shouldRefreshAll = args.includes("--refresh-all") || process.env.REFRESH_ALL === "true";
+
+  if (shouldRefreshAll) {
+    console.log("[Refresh Mode] Enqueuing all tracked pages for auto-refresh...");
+    await enqueueAllPagesForRefresh();
+  }
 
   if (testUrlIdx !== -1 && args[testUrlIdx + 1]) {
     const testUrl = args[testUrlIdx + 1];

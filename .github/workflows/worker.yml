@@ -2,8 +2,8 @@ name: Meta Ad Tracker Worker
 
 on:
   schedule:
-    # Run every 30 minutes
-    - cron: '*/30 * * * *'
+    # Run every day at 10:00 AM UTC+1 (09:00 UTC) and 9:00 PM UTC+1 (20:00 UTC)
+    - cron: '0 9,20 * * *'
   workflow_dispatch: # Allows manual trigger from GitHub UI anytime
 
 jobs:
@@ -35,5 +35,6 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           SINGLE_RUN: "true"
+          REFRESH_ALL: "true"
           PLAYWRIGHT_HEADLESS: "true"
         run: npm run worker

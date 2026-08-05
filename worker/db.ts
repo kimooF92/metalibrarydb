@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { trackedPages, queue, scanHistory, workerState, creativeScans } from "../db/schema";
-import { eq, asc, sql } from "drizzle-orm";
+import { eq, asc, sql, inArray } from "drizzle-orm";
 
 export async function resetStuckJobs() {
   await db
@@ -12,6 +12,45 @@ export async function resetStuckJobs() {
     .update(trackedPages)
     .set({ status: "pending" })
     .where(eq(trackedPages.status, "scanning"));
+}
+
+export async function enqueueAllPagesForRefresh() {
+  const allPages = await db.query.trackedPages.findMany({
+    columns: { id: true },
+  });
+
+  if (allPages.length === 0) {
+    console.log("[Enqueue Refresh] No tracked pages found.");
+    return 0;
+  }
+
+  const pageIds = allPages.map((p) => p.id);
+
+  await db
+    .update(trackedPages)
+    .set({ status: "pending", updatedAt: new Date() })
+    .where(inArray(trackedPages.id, pageIds));
+
+  const existingPending = await db.query.queue.findMany({
+    where: eq(queue.status, "pending"),
+    columns: { trackedPageId: true },
+  });
+  const pendingSet = new Set(existingPending.map((q) => q.trackedPageId));
+
+  const newJobs = pageIds
+    .filter((id) => !pendingSet.has(id))
+    .map((id) => ({
+      trackedPageId: id,
+      status: "pending",
+      jobType: "count",
+    }));
+
+  if (newJobs.length > 0) {
+    await db.insert(queue).values(newJobs);
+  }
+
+  console.log(`[Enqueue Refresh] Enqueued ${newJobs.length} page(s) for refresh.`);
+  return newJobs.length;
 }
 
 export async function getWorkerState() {
