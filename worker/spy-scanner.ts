@@ -312,10 +312,15 @@ export async function scanAdCreatives(
         domMergedCount++;
       } else {
         // Enrich existing GraphQL node with DOM attributes if missing
+        const isLogoUrl = (url: string | null) =>
+          url ? /_s60x60|_s50x50|_s100x100|_p60x60|_p50x50|s60x60|p60x60|s50x50|s100x100/i.test(url) || url.includes("profile") || url.includes("avatar") : false;
+
         const existing = collectedAds.get(ad.adArchiveId)!;
         if (!existing.caption && ad.caption) existing.caption = ad.caption;
         if (!existing.linkUrl && ad.linkUrl) existing.linkUrl = ad.linkUrl;
-        if (!existing.thumbnailUrl && ad.thumbnailUrl) existing.thumbnailUrl = ad.thumbnailUrl;
+        if ((!existing.thumbnailUrl || isLogoUrl(existing.thumbnailUrl)) && ad.thumbnailUrl && !isLogoUrl(ad.thumbnailUrl)) {
+          existing.thumbnailUrl = ad.thumbnailUrl;
+        }
       }
     }
     console.log(`[Spy Scanner] DOM deep scan merged ${domMergedCount} additional unique cards (Total captured: ${collectedAds.size}).`);

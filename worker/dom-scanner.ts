@@ -101,9 +101,32 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
           const caption = bodyEl ? bodyEl.textContent?.trim() || null : null;
 
           // 3. Media (Images / Video / Carousel)
-          const imgs = Array.from(card.querySelectorAll<HTMLImageElement>("img")).filter(
-            (img) => img.src && !img.src.includes("data:image") && (img.src.includes("scontent") || img.src.includes("fbcdn"))
-          );
+          const isLogoUrl = (url: string) =>
+            /_s60x60|_s50x50|_s100x100|_p60x60|_p50x50|s60x60|p60x60|s50x50|s100x100/i.test(url) ||
+            url.includes("profile") ||
+            url.includes("avatar");
+
+          const imgs = Array.from(card.querySelectorAll<HTMLImageElement>("img")).filter((img) => {
+            if (!img.src || img.src.includes("data:image")) return false;
+            if (!img.src.includes("scontent") && !img.src.includes("fbcdn")) return false;
+            if (isLogoUrl(img.src)) return false;
+
+            const alt = (img.alt || "").toLowerCase();
+            if (alt.includes("profile") || alt.includes("logo") || alt.includes("avatar")) return false;
+
+            const isHeaderImg =
+              !!img.closest('a[href*="facebook.com/"]') ||
+              !!img.closest('div[class*="header"]') ||
+              !!img.closest('div[role="header"]');
+            const width = img.width || img.clientWidth || img.naturalWidth || 0;
+            const height = img.height || img.clientHeight || img.naturalHeight || 0;
+
+            if (isHeaderImg) return false;
+            if (width > 0 && width <= 120 && height > 0 && height <= 120) return false;
+
+            return true;
+          });
+
           const videoEl = card.querySelector<HTMLVideoElement>("video");
 
           let mediaType: "image" | "video" | "carousel" | "unknown" = "unknown";
@@ -113,7 +136,7 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
           if (videoEl) {
             mediaType = "video";
             if (videoEl.src) mediaUrls.push(videoEl.src);
-            if (videoEl.poster) thumbnailUrl = videoEl.poster;
+            if (videoEl.poster && !isLogoUrl(videoEl.poster)) thumbnailUrl = videoEl.poster;
           } else if (imgs.length > 1) {
             mediaType = "carousel";
             for (const img of imgs) mediaUrls.push(img.src);

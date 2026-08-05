@@ -153,27 +153,40 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
         </div>
 
         {/* Media Container */}
-        <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800/80 bg-slate-100 dark:bg-slate-900 mb-3 flex items-center justify-center">
+        <div className="relative w-full h-[280px] sm:h-[320px] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800/80 bg-slate-900/95 dark:bg-slate-950 mb-3 flex items-center justify-center">
           {isPlayingVideo && firstVideoUrl ? (
             <video
               src={firstVideoUrl}
               controls
               autoPlay
-              className="w-full h-full object-contain bg-black"
+              className="w-full h-full object-contain bg-black rounded-xl"
             />
           ) : displayImage && !imgError ? (
-            <div className="relative w-full h-full group/media cursor-pointer" onClick={() => setIsPreviewOpen(true)}>
+            <div className="relative w-full h-full group/media cursor-pointer flex items-center justify-center" onClick={() => setIsPreviewOpen(true)}>
+              {/* Ambient Blurred Background Canvas */}
               <NextImage
                 src={displayImage}
-                alt={ad.title || "Ad creative"}
+                alt=""
                 fill
                 unoptimized
-                className="object-cover transition-transform duration-300 group-hover/media:scale-105"
-                onError={() => setImgError(true)}
+                className="object-cover blur-2xl opacity-40 dark:opacity-30 scale-125 select-none pointer-events-none"
               />
+
+              {/* Main Crisp Uncropped Image */}
+              <div className="relative w-full h-full p-2 flex items-center justify-center z-10">
+                <NextImage
+                  src={displayImage}
+                  alt={ad.title || "Ad creative"}
+                  fill
+                  unoptimized
+                  className="object-contain transition-transform duration-300 group-hover/media:scale-[1.02] drop-shadow-md"
+                  onError={() => setImgError(true)}
+                />
+              </div>
+
               {/* Hover Zoom Overlay */}
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center gap-2 text-white">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/80 border border-zinc-700 text-xs font-semibold shadow-lg backdrop-blur-sm">
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center gap-2 text-white z-20">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/85 border border-zinc-700 text-xs font-semibold shadow-lg backdrop-blur-sm">
                   <ZoomIn className="w-4 h-4 text-indigo-400" /> Click to Preview
                 </span>
               </div>
@@ -184,7 +197,7 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
                     e.stopPropagation();
                     setIsPlayingVideo(true);
                   }}
-                  className="absolute inset-0 m-auto w-11 h-11 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-lg hover:bg-indigo-500 hover:scale-110 transition-all cursor-pointer z-10"
+                  className="absolute inset-0 m-auto w-11 h-11 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-lg hover:bg-indigo-500 hover:scale-110 transition-all cursor-pointer z-30"
                   title="Play Video"
                 >
                   <Play className="w-5 h-5 fill-current ml-0.5" />
@@ -192,7 +205,7 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
               )}
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-1.5 text-slate-600 dark:text-slate-400 font-medium">
+            <div className="flex flex-col items-center gap-1.5 text-slate-400 font-medium">
               {ad.mediaType === "video" ? (
                 <Play className="w-7 h-7 opacity-60" />
               ) : (

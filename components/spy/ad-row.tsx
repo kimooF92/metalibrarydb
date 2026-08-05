@@ -70,12 +70,12 @@ export function AdRow({ ad }: AdRowProps) {
               className="w-full h-full object-contain bg-black"
             />
           ) : displayImage ? (
-            <div className="relative w-full h-full group/media cursor-pointer" onClick={() => setIsPreviewOpen(true)}>
+            <div className="relative w-full h-full group/media cursor-pointer flex items-center justify-center bg-slate-900 overflow-hidden" onClick={() => setIsPreviewOpen(true)}>
               {/* eslint-disable-next-html-shortcut */}
               <img
                 src={displayImage}
                 alt={ad.title || "Ad creative"}
-                className="w-full h-full object-cover transition-transform duration-300 group-hover/media:scale-105"
+                className="w-full h-full object-contain transition-transform duration-300 group-hover/media:scale-105"
                 onError={(e) => {
                   (e.target as HTMLElement).style.display = "none";
                 }}
