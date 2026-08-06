@@ -20,6 +20,7 @@ import {
   markCreativeJobFailed,
   resetStuckJobs,
   enqueueAllPagesForRefresh,
+  enqueuePagesForCreativeScan,
 } from "./db";
 import {
   checkRateCaps,
@@ -48,17 +49,35 @@ async function runWorker() {
   const isSingleRun = args.includes("--once") || process.env.SINGLE_RUN === "true";
 
   const currentUTCHour = new Date().getUTCHours();
-  // Initial burst hours: 8:00 UTC (9 AM UTC+1) and 20:00 UTC (9 PM UTC+1)
-  const isInitialBurstHour = currentUTCHour === 8 || currentUTCHour === 20;
+  // Configurable burst hours in UTC (defaults: 8, 9, 10 UTC = 9 AM, 10 AM, 11 AM UTC+1; 20, 21, 22 UTC = 9 PM, 10 PM, 11 PM UTC+1)
+  const burstHoursEnv = process.env.BURST_HOURS
+    ? process.env.BURST_HOURS.split(",").map((h) => parseInt(h.trim(), 10))
+    : [8, 9, 10, 20, 21, 22];
 
+  const isInitialBurstHour = burstHoursEnv.includes(currentUTCHour);
+
+  const isForceRefresh = args.includes("--refresh-all") || process.env.REFRESH_ALL === "true";
   const shouldRefreshAll =
-    args.includes("--refresh-all") ||
-    process.env.REFRESH_ALL === "true" ||
+    isForceRefresh ||
     (isInitialBurstHour && process.env.AUTO_BURST_ENQUEUE !== "false");
 
   if (shouldRefreshAll) {
-    console.log(`[Refresh Mode] Initial burst hour (UTC: ${currentUTCHour}). Enqueuing all tracked pages for auto-refresh...`);
-    await enqueueAllPagesForRefresh();
+    const cooldownHours = isForceRefresh
+      ? 0
+      : parseInt(process.env.AUTO_REFRESH_COOLDOWN_HOURS || "6", 10);
+    console.log(
+      `[Refresh Mode] Burst hour trigger (UTC: ${currentUTCHour}). Enqueuing eligible pages for auto-refresh (cooldown: ${cooldownHours}h)...`
+    );
+    await enqueueAllPagesForRefresh(cooldownHours);
+  }
+
+  const shouldEnqueueSpy = args.includes("--enqueue-spy") || process.env.ENQUEUE_SPY === "true";
+  if (shouldEnqueueSpy) {
+    const spyCooldownDays = parseInt(process.env.SPY_COOLDOWN_DAYS || "3", 10);
+    console.log(
+      `[Spy Mode] Enqueuing eligible pages for Ad Spy creative scan (cooldown: ${spyCooldownDays}d)...`
+    );
+    await enqueuePagesForCreativeScan(spyCooldownDays);
   }
 
   if (testUrlIdx !== -1 && args[testUrlIdx + 1]) {

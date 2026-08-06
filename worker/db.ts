@@ -14,17 +14,28 @@ export async function resetStuckJobs() {
     .where(eq(trackedPages.status, "scanning"));
 }
 
-export async function enqueueAllPagesForRefresh() {
-  const allPages = await db.query.trackedPages.findMany({
-    columns: { id: true },
-  });
+export async function enqueueAllPagesForRefresh(cooldownHours: number = 6) {
+  const cutoff = new Date(Date.now() - cooldownHours * 60 * 60 * 1000);
 
-  if (allPages.length === 0) {
-    console.log("[Enqueue Refresh] No tracked pages found.");
+  // Find pages that either have never been checked, or were last checked before the cutoff time
+  const pagesToRefresh = cooldownHours > 0
+    ? await db.query.trackedPages.findMany({
+        where: (pages, { or, isNull, lt }) =>
+          or(isNull(pages.lastChecked), lt(pages.lastChecked, cutoff)),
+        columns: { id: true },
+      })
+    : await db.query.trackedPages.findMany({
+        columns: { id: true },
+      });
+
+  if (pagesToRefresh.length === 0) {
+    console.log(
+      `[Enqueue Refresh] No tracked pages due for refresh (all scanned within last ${cooldownHours}h).`
+    );
     return 0;
   }
 
-  const pageIds = allPages.map((p) => p.id);
+  const pageIds = pagesToRefresh.map((p) => p.id);
 
   await db
     .update(trackedPages)
@@ -49,8 +60,88 @@ export async function enqueueAllPagesForRefresh() {
     await db.insert(queue).values(newJobs);
   }
 
-  console.log(`[Enqueue Refresh] Enqueued ${newJobs.length} page(s) for refresh.`);
+  console.log(
+    `[Enqueue Refresh] Enqueued ${newJobs.length} page(s) for refresh (cooldown: ${cooldownHours}h).`
+  );
   return newJobs.length;
+}
+
+export async function enqueuePagesForCreativeScan(cooldownDays: number = 3) {
+  const cutoff = new Date(Date.now() - cooldownDays * 24 * 60 * 60 * 1000);
+
+  const allPages = await db.query.trackedPages.findMany({
+    columns: { id: true, lastCreativeScan: true, currentResults: true },
+  });
+
+  const eligibleIds: string[] = [];
+
+  for (const page of allPages) {
+    // Respect cooldown window
+    if (page.lastCreativeScan && page.lastCreativeScan > cutoff) {
+      continue;
+    }
+
+    const isFirstTimeCreativeScan = !page.lastCreativeScan;
+
+    if (isFirstTimeCreativeScan) {
+      // First-time creative scan: requires currentResults >= 1
+      if ((page.currentResults || 0) >= 1) {
+        eligibleIds.push(page.id);
+      }
+    } else {
+      // Subsequent scan: requires latest scanHistory difference >= 1 (new ads added)
+      const latestHistory = await db.query.scanHistory.findFirst({
+        where: eq(scanHistory.trackedPageId, page.id),
+        orderBy: [sql`${scanHistory.checkedAt} desc`],
+      });
+
+      if (latestHistory && (latestHistory.difference || 0) >= 1) {
+        eligibleIds.push(page.id);
+      }
+    }
+  }
+
+  if (eligibleIds.length === 0) {
+    console.log(
+      `[Enqueue Spy] No eligible pages found for Ad Spy creative scan (difference < +1 or cooldown active).`
+    );
+    return 0;
+  }
+
+  let enqueuedCount = 0;
+
+  for (const pageId of eligibleIds) {
+    const existingQueueJob = await db.query.queue.findFirst({
+      where: (q, { eq, and, inArray }) =>
+        and(
+          eq(q.trackedPageId, pageId),
+          eq(q.jobType, "creative"),
+          inArray(q.status, ["pending", "running"])
+        ),
+    });
+
+    if (existingQueueJob) continue;
+
+    const [scanRecord] = await db
+      .insert(creativeScans)
+      .values({
+        trackedPageId: pageId,
+        status: "pending",
+      })
+      .returning();
+
+    await db.insert(queue).values({
+      trackedPageId: pageId,
+      jobType: "creative",
+      creativeScanId: scanRecord.id,
+      status: "pending",
+    });
+
+    enqueuedCount++;
+  }
+
+  console.log(`[Enqueue Spy] Enqueued ${enqueuedCount} page(s) for Ad Spy creative scan.`);
+  return enqueuedCount;
 }
 
 export async function getWorkerState() {

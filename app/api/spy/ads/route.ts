@@ -130,11 +130,19 @@ export async function GET(req: NextRequest) {
       .as("distinct_ads");
 
     // Outer sorting order
-    let outerOrderBy = sortOrder === "asc" ? asc(subquery.startedRunningOn) : desc(subquery.startedRunningOn);
-    if (sortBy === "duplication_count") {
+    let outerOrderBy = desc(subquery.startedRunningOn);
+
+    if (sortBy === "oldest") {
+      outerOrderBy = asc(subquery.startedRunningOn);
+    } else if (sortBy === "duplication_count" || sortBy === "scale" || sortBy === "most_duplicated") {
       outerOrderBy = sortOrder === "asc" ? asc(subquery.duplicationCount) : desc(subquery.duplicationCount);
+    } else if (sortBy === "recently_observed" || sortBy === "last_seen_at") {
+      outerOrderBy = sortOrder === "asc" ? asc(subquery.lastSeenAt) : desc(subquery.lastSeenAt);
     } else if (sortBy === "first_seen_at") {
       outerOrderBy = sortOrder === "asc" ? asc(subquery.firstSeenAt) : desc(subquery.firstSeenAt);
+    } else {
+      // Default: newest started_running_on
+      outerOrderBy = sortOrder === "asc" ? asc(subquery.startedRunningOn) : desc(subquery.startedRunningOn);
     }
 
     const rows = await db

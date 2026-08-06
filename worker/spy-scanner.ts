@@ -1,9 +1,10 @@
 import { Page, Response } from "playwright";
 import { db } from "../db";
-import { ads, adObservations, creativeScans, trackedPages } from "../db/schema";
+import { ads, adObservations, creativeScans, trackedPages, scanHistory } from "../db/schema";
 import { eq, sql } from "drizzle-orm";
 import { cacheThumbnail } from "./thumbnail-cache";
 import { extractAdsFromDOM } from "./dom-scanner";
+import { parseResultCountFromText } from "./scanner";
 import { resolveDestinationUrl } from "../lib/utils";
 
 export interface ExtractedAdData {
@@ -289,6 +290,50 @@ export async function scanAdCreatives(
       };
     }
 
+    // 2. Pre-scan live result count update before creative extraction
+    try {
+      const bodyText = await page.evaluate(() => document.body?.innerText || "");
+      const parsedOutcome = parseResultCountFromText(bodyText);
+
+      if (parsedOutcome.status === "success" && parsedOutcome.results !== null) {
+        const liveResults = parsedOutcome.results;
+        const now = new Date();
+        const lastScan = await db.query.scanHistory.findFirst({
+          where: eq(scanHistory.trackedPageId, trackedPageId),
+          orderBy: [sql`${scanHistory.checkedAt} desc`],
+        });
+
+        let difference: number | null = null;
+        if (lastScan?.results !== null && lastScan?.results !== undefined) {
+          difference = liveResults - lastScan.results;
+        }
+
+        await db.insert(scanHistory).values({
+          trackedPageId,
+          results: liveResults,
+          difference,
+          checkedAt: now,
+          status: "success",
+        });
+
+        await db
+          .update(trackedPages)
+          .set({
+            currentResults: liveResults,
+            lastChecked: now,
+            lastSuccessAt: now,
+            updatedAt: now,
+          })
+          .where(eq(trackedPages.id, trackedPageId));
+
+        console.log(
+          `[Spy Scanner] Pre-scan live result count updated: ${liveResults} (difference: ${difference ?? "N/A"})`
+        );
+      }
+    } catch (countErr) {
+      console.warn("[Spy Scanner] Pre-scan live result count extraction failed, continuing creative extraction:", countErr);
+    }
+
     // 3. Scroll loop to trigger infinite loading payloads
     let lastSize = collectedAds.size;
     let noProgressCount = 0;
@@ -458,35 +503,10 @@ export async function scanAdCreatives(
 
     // Reconcile missing ads ONLY on completed full scans to prevent partial scan data corruption
     if (savedCount > 0 && finalStatus === "completed") {
-      const previousObservations = await db.query.adObservations.findMany({
-        where: eq(adObservations.trackedPageId, trackedPageId),
-        columns: { adId: true },
-      });
-      const previousAdIds = Array.from(new Set(previousObservations.map((o) => o.adId)));
-      const currentlyObservedAdIds = new Set(
+      const currentlyObservedArchiveIds = new Set(
         Array.from(collectedAds.values()).map((a) => a.adArchiveId)
       );
-
-      for (const prevAdId of previousAdIds) {
-        const existingAd = await db.query.ads.findFirst({
-          where: eq(ads.id, prevAdId),
-        });
-        if (existingAd && !currentlyObservedAdIds.has(existingAd.adArchiveId)) {
-          await db
-            .update(ads)
-            .set({ isArchived: true, archivedAt: now, updatedAt: now })
-            .where(eq(ads.id, prevAdId));
-
-          await db.insert(adObservations).values({
-            creativeScanId,
-            adId: prevAdId,
-            trackedPageId,
-            isActive: false,
-            duplicationCount: 0,
-            observedAt: now,
-          });
-        }
-      }
+      await reconcileArchivedAds(trackedPageId, creativeScanId, currentlyObservedArchiveIds, now);
     }
 
     // Update tracked page last_creative_scan
@@ -512,5 +532,42 @@ export async function scanAdCreatives(
     };
   } finally {
     page.off("response", handleResponse);
+  }
+}
+
+/**
+ * Standalone archival reconciliation: Marks previously observed ads missing from full scan as isArchived = true
+ */
+export async function reconcileArchivedAds(
+  trackedPageId: string,
+  creativeScanId: string,
+  currentlyObservedAdArchiveIds: Set<string>,
+  now: Date = new Date()
+) {
+  const previousObservations = await db.query.adObservations.findMany({
+    where: eq(adObservations.trackedPageId, trackedPageId),
+    columns: { adId: true },
+  });
+  const previousAdIds = Array.from(new Set(previousObservations.map((o) => o.adId)));
+
+  for (const prevAdId of previousAdIds) {
+    const existingAd = await db.query.ads.findFirst({
+      where: eq(ads.id, prevAdId),
+    });
+    if (existingAd && !currentlyObservedAdArchiveIds.has(existingAd.adArchiveId)) {
+      await db
+        .update(ads)
+        .set({ isArchived: true, archivedAt: now, updatedAt: now })
+        .where(eq(ads.id, prevAdId));
+
+      await db.insert(adObservations).values({
+        creativeScanId,
+        adId: prevAdId,
+        trackedPageId,
+        isActive: false,
+        duplicationCount: 0,
+        observedAt: now,
+      });
+    }
   }
 }
