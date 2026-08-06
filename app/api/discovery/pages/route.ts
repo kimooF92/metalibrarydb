@@ -106,6 +106,35 @@ export async function GET(req: Request) {
       };
     });
 
+    const sortBy = searchParams.get("sortBy") || "matchingAdCount";
+    const sortOrder = searchParams.get("sortOrder") === "asc" ? "asc" : "desc";
+
+    enrichedPages.sort((a, b) => {
+      let valA: any = a[sortBy as keyof typeof a];
+      let valB: any = b[sortBy as keyof typeof b];
+
+      if (sortBy === "verifiedAdCount") {
+        valA = a.verifiedAdCount ?? -1;
+        valB = b.verifiedAdCount ?? -1;
+      } else if (sortBy === "displayName") {
+        valA = (a.displayName || "").toLowerCase();
+        valB = (b.displayName || "").toLowerCase();
+      } else if (sortBy === "status") {
+        const statusOrder: Record<string, number> = {
+          verifying: 1,
+          imported: 2,
+          discovered: 3,
+          ignored: 4,
+        };
+        valA = statusOrder[a.status] || 99;
+        valB = statusOrder[b.status] || 99;
+      }
+
+      if (valA < valB) return sortOrder === "asc" ? -1 : 1;
+      if (valA > valB) return sortOrder === "asc" ? 1 : -1;
+      return 0;
+    });
+
     return NextResponse.json({
       success: true,
       pages: enrichedPages,

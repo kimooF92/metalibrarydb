@@ -18,6 +18,9 @@ import {
   ArrowRight,
   Loader2,
   Check,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
 } from "lucide-react";
 
 interface DiscoveryRun {
@@ -77,11 +80,22 @@ export default function DiscoveryPage() {
   const [startDateMin, setStartDateMin] = useState(getSevenDaysAgoStr());
   const [startDateMax, setStartDateMax] = useState(getTodayStr());
 
-  // Table Filter & Selection State
+  // Table Filter, Sorting & Selection State
   const [searchFilter, setSearchFilter] = useState("");
+  const [sortBy, setSortBy] = useState<string>("matchingAdCount");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [selectedPageIds, setSelectedPageIds] = useState<Set<string>>(new Set());
   const [isActionPending, startTransition] = useTransition();
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+
+  const handleSortChange = (col: string) => {
+    if (col === sortBy) {
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(col);
+      setSortOrder("desc");
+    }
+  };
 
   // 1. Fetch Discovery Runs
   const fetchRuns = async () => {
@@ -106,7 +120,7 @@ export default function DiscoveryPage() {
   const fetchPages = async (runId: string) => {
     try {
       setIsLoadingPages(true);
-      const url = `/api/discovery/pages?runId=${runId}${
+      const url = `/api/discovery/pages?runId=${runId}&sortBy=${sortBy}&sortOrder=${sortOrder}${
         searchFilter ? `&q=${encodeURIComponent(searchFilter)}` : ""
       }`;
       const res = await fetch(url);
@@ -129,7 +143,7 @@ export default function DiscoveryPage() {
     if (selectedRunId) {
       fetchPages(selectedRunId);
     }
-  }, [selectedRunId, searchFilter]);
+  }, [selectedRunId, searchFilter, sortBy, sortOrder]);
 
   // Handle Launching New Country Discovery Scan
   const handleLaunchScan = async () => {
@@ -305,6 +319,59 @@ export default function DiscoveryPage() {
 
   const activeRun = runs.find((r) => r.id === selectedRunId);
   const untrackedCount = pages.filter((p) => !p.isTracked).length;
+
+  const SortHeader = ({ col, label }: { col: string; label: string }) => {
+    const active = sortBy === col;
+    return (
+      <th className="p-4 whitespace-nowrap">
+        <button
+          onClick={() => handleSortChange(col)}
+          className={`flex items-center space-x-1.5 uppercase font-bold text-[10px] tracking-wider transition-colors cursor-pointer ${
+            active ? "text-indigo-400 font-extrabold" : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <span>{label}</span>
+          <span className="shrink-0">
+            {active ? (
+              sortOrder === "asc" ? (
+                <ChevronUp className="w-3.5 h-3.5 text-indigo-400" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-indigo-400" />
+              )
+            ) : (
+              <ChevronsUpDown className="w-3.5 h-3.5 opacity-40 hover:opacity-100" />
+            )}
+          </span>
+        </button>
+      </th>
+    );
+  };
+
+  const sortedPages = [...pages].sort((a, b) => {
+    let valA: any = a[sortBy as keyof DiscoveredPage];
+    let valB: any = b[sortBy as keyof DiscoveredPage];
+
+    if (sortBy === "verifiedAdCount") {
+      valA = a.verifiedAdCount ?? -1;
+      valB = b.verifiedAdCount ?? -1;
+    } else if (sortBy === "displayName") {
+      valA = (a.displayName || "").toLowerCase();
+      valB = (b.displayName || "").toLowerCase();
+    } else if (sortBy === "status") {
+      const statusOrder: Record<string, number> = {
+        verifying: 1,
+        imported: 2,
+        discovered: 3,
+        ignored: 4,
+      };
+      valA = statusOrder[a.status] || 99;
+      valB = statusOrder[b.status] || 99;
+    }
+
+    if (valA < valB) return sortOrder === "asc" ? -1 : 1;
+    if (valA > valB) return sortOrder === "asc" ? 1 : -1;
+    return 0;
+  });
 
 
   return (
@@ -618,12 +685,12 @@ export default function DiscoveryPage() {
                       className="rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-0"
                     />
                   </th>
-                  <th className="p-4">Page Name & Meta Link</th>
-                  <th className="p-4">Page ID</th>
-                  <th className="p-4">Active Ads (Discovery)</th>
-                  <th className="p-4">Verified Count</th>
+                  <SortHeader col="displayName" label="Page Name & Meta Link" />
+                  <SortHeader col="pageId" label="Page ID" />
+                  <SortHeader col="matchingAdCount" label="Active Ads (Discovery)" />
+                  <SortHeader col="verifiedAdCount" label="Verified Count" />
                   <th className="p-4">Sample CTAs</th>
-                  <th className="p-4">Status</th>
+                  <SortHeader col="status" label="Status" />
                   <th className="p-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -635,14 +702,14 @@ export default function DiscoveryPage() {
                       <div>Loading discovered pages...</div>
                     </td>
                   </tr>
-                ) : pages.length === 0 ? (
+                ) : sortedPages.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="p-12 text-center text-slate-500">
                       No discovered pages found for this scan run yet. Launch a new country scan above!
                     </td>
                   </tr>
                 ) : (
-                  pages.map((page) => {
+                  sortedPages.map((page) => {
                     const isSelected = selectedPageIds.has(page.id);
                     const metaAdLibraryUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${page.country || "TN"}&view_all_page_id=${page.pageId}&search_type=page&media_type=all`;
 
