@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { AdFilterParams } from "@/types";
-import { Search, Filter, Calendar, Layers, SlidersHorizontal, RefreshCw, LayoutGrid, LayoutList, Clock } from "lucide-react";
+import { Search, Filter, Calendar, Layers, SlidersHorizontal, RefreshCw, LayoutGrid, LayoutList, Clock, Archive } from "lucide-react";
 
 interface SpyFiltersProps {
   filters: AdFilterParams;
@@ -77,8 +77,22 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
           />
         </div>
 
-        {/* View Mode Toggle & Sort By Dropdown */}
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+        {/* View Mode Toggle & Sort By Dropdown & Vault Shortcut */}
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+          {/* Quick Archive Vault Toggle Button */}
+          <button
+            type="button"
+            onClick={() => onFilterChange({ status: filters.status === "archived" ? "all" : "archived" })}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+              filters.status === "archived"
+                ? "bg-purple-600 text-white border-purple-500 shadow-md shadow-purple-600/30"
+                : "bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-900/50 hover:bg-purple-50 dark:hover:bg-purple-950/30"
+            }`}
+          >
+            <Archive className="w-3.5 h-3.5" />
+            <span>{filters.status === "archived" ? "Exit Vault" : "Archive Vault"}</span>
+          </button>
+
           {/* View Mode Switcher: Grid vs Line / List */}
           <div className="flex items-center bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800">
             <button

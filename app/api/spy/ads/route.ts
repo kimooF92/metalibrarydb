@@ -3,10 +3,6 @@ import { db } from "@/db";
 import { ads, adObservations, trackedPages } from "@/db/schema";
 import { eq, ilike, gte, lte, and, sql, desc, asc, or } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 export async function GET(req: NextRequest) {
   const authError = validateApiSecret(req);
@@ -84,14 +80,15 @@ export async function GET(req: NextRequest) {
       conditions.push(eq(ads.mediaType, mediaType));
     }
 
-    if (status && status !== "all") {
+    if (status === "archived") {
+      conditions.push(eq(ads.isArchived, true));
+    } else {
+      // Hide archived ads from main feed states (all, active, inactive)
+      conditions.push(or(eq(ads.isArchived, false), sql`${ads.isArchived} IS NULL`));
       if (status === "active") {
         conditions.push(eq(adObservations.isActive, true));
-        conditions.push(or(eq(ads.isArchived, false), sql`${ads.isArchived} IS NULL`));
       } else if (status === "inactive") {
         conditions.push(eq(adObservations.isActive, false));
-      } else if (status === "archived") {
-        conditions.push(eq(ads.isArchived, true));
       }
     }
 
@@ -149,12 +146,15 @@ export async function GET(req: NextRequest) {
 
     // Count total matching distinct ads
     const [countResult] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(subquery);
+      .select({ count: sql<number>`count(distinct ${ads.id})` })
+      .from(ads)
+      .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .leftJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+      .where(whereClause);
 
     const total = Number(countResult?.count || 0);
 
-    // Format final response items using stored public thumbnailUrl / Meta CDN URL
+    // Synchronous row mapping using stored public/CDN thumbnailUrl
     const items = rows.map((row) => ({
       id: row.id,
       adArchiveId: row.adArchiveId,
