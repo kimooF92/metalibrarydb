@@ -9,7 +9,7 @@ on:
 jobs:
   run-spy-worker:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: Checkout Code
