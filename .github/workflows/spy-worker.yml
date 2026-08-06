@@ -6,6 +6,11 @@ on:
     - cron: '0 13 * * *'
   workflow_dispatch: # Allows manual trigger from GitHub UI anytime
 
+# Global concurrency group to guarantee zero job overlap across workflows
+concurrency:
+  group: meta-ad-worker-group
+  cancel-in-progress: false
+
 jobs:
   run-spy-worker:
     runs-on: ubuntu-latest

@@ -209,3 +209,58 @@ export const workerState = pgTable("worker_state", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
+// 9. Discovery Runs Table
+export const discoveryRuns = pgTable(
+  "discovery_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    country: text("country").notNull().default("TN"),
+    searchUrl: text("search_url").notNull(),
+    query: text("query"),
+    startDateMin: timestamp("start_date_min", { withTimezone: true }),
+    startDateMax: timestamp("start_date_max", { withTimezone: true }),
+    status: text("status").default("pending").notNull(), // pending | running | completed | partial | failed
+    totalAdsScanned: integer("total_ads_scanned").default(0).notNull(),
+    totalPagesDiscovered: integer("total_pages_discovered").default(0).notNull(),
+    failureReason: text("failure_reason"),
+    outcomeDetails: text("outcome_details"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("idx_discovery_runs_status").on(table.status),
+    index("idx_discovery_runs_created_at").on(table.createdAt),
+  ]
+);
+
+// 10. Discovered Pages Table
+export const discoveredPages = pgTable(
+  "discovered_pages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => discoveryRuns.id, { onDelete: "cascade" }),
+    pageId: text("page_id").notNull(),
+    displayName: text("display_name"),
+    country: text("country").default("TN"),
+    matchingAdCount: integer("matching_ad_count").default(0).notNull(),
+    verifiedAdCount: integer("verified_ad_count"),
+    sampleAdArchiveIds: text("sample_ad_archive_ids").array(),
+    sampleCtas: text("sample_ctas").array(),
+    sampleUrls: text("sample_urls").array(),
+    status: text("status").default("discovered").notNull(), // discovered | verifying | imported | ignored
+    trackedPageId: uuid("tracked_page_id").references(() => trackedPages.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_discovered_pages_run_id").on(table.runId),
+    index("idx_discovered_pages_page_id").on(table.pageId),
+    index("idx_discovered_pages_status").on(table.status),
+    index("idx_discovered_pages_run_page").on(table.runId, table.pageId),
+  ]
+);
+
+

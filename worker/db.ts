@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { trackedPages, queue, scanHistory, workerState, creativeScans } from "../db/schema";
+import { trackedPages, queue, scanHistory, workerState, creativeScans, discoveredPages } from "../db/schema";
 import { eq, asc, sql, inArray } from "drizzle-orm";
 
 export async function resetStuckJobs() {
@@ -10,8 +10,13 @@ export async function resetStuckJobs() {
 
   await db
     .update(trackedPages)
-    .set({ status: "pending" })
+    .set({ status: "failed" })
     .where(eq(trackedPages.status, "scanning"));
+
+  await db
+    .update(discoveredPages)
+    .set({ status: "discovered" })
+    .where(eq(discoveredPages.status, "verifying"));
 }
 
 export async function enqueueAllPagesForRefresh(cooldownHours: number = 6) {
@@ -271,6 +276,16 @@ export async function markJobCompleted(
     })
     .where(eq(trackedPages.id, pageId));
 
+  // Update matching discovered_pages record with verified count & reset status from verifying to discovered
+  await db
+    .update(discoveredPages)
+    .set({
+      verifiedAdCount: results,
+      status: "discovered",
+      updatedAt: now,
+    })
+    .where(eq(discoveredPages.trackedPageId, pageId));
+
   // 4. Mark queue job completed
   await db
     .update(queue)
@@ -334,7 +349,16 @@ export async function markJobFailed(
     })
     .where(eq(trackedPages.id, pageId));
 
-  // 3. Mark queue job failed
+  // 3. Reset matching discovered_pages status from verifying back to discovered
+  await db
+    .update(discoveredPages)
+    .set({
+      status: "discovered",
+      updatedAt: now,
+    })
+    .where(eq(discoveredPages.trackedPageId, pageId));
+
+  // 4. Mark queue job failed
   await db
     .update(queue)
     .set({

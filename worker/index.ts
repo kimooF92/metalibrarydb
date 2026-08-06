@@ -7,10 +7,12 @@ if (typeof globalThis.WebSocket === "undefined") {
 }
 
 import { db } from "../db";
-import { trackedPages, creativeScans } from "../db/schema";
+import { trackedPages, creativeScans, discoveryRuns } from "../db/schema";
 import { getBrowserSession, closeBrowserSession } from "./browser";
 import { scanMetaAdPage } from "./scanner";
 import { scanAdCreatives } from "./spy-scanner";
+import { runDiscoveryScan } from "./discovery-scanner";
+import { eq, asc } from "drizzle-orm";
 import {
   getNextPendingJob,
   markJobRunning,
@@ -46,10 +48,11 @@ async function runWorker() {
   const args = process.argv.slice(2);
   const testUrlIdx = args.indexOf("--test-url");
   const testSpyIdx = args.indexOf("--test-spy-url");
+  const testDiscoveryIdx = args.indexOf("--discovery-url");
   const isSingleRun = args.includes("--once") || process.env.SINGLE_RUN === "true";
 
   const currentUTCHour = new Date().getUTCHours();
-  // Configurable burst hours in UTC (defaults: 8, 9, 10 UTC = 9 AM, 10 AM, 11 AM UTC+1; 20, 21, 22 UTC = 9 PM, 10 PM, 11 PM UTC+1)
+  // Configurable burst hours in UTC
   const burstHoursEnv = process.env.BURST_HOURS
     ? process.env.BURST_HOURS.split(",").map((h) => parseInt(h.trim(), 10))
     : [8, 9, 10, 20, 21, 22];
@@ -94,7 +97,6 @@ async function runWorker() {
     const testUrl = args[testSpyIdx + 1];
     console.log(`[Test Mode] Running single Ad Spy Creative scan for URL: ${testUrl}`);
     
-    // Create or fetch real test tracked page and scan records for valid UUIDs
     const [testPage] = await db
       .insert(trackedPages)
       .values({
@@ -124,10 +126,60 @@ async function runWorker() {
     process.exit(0);
   }
 
+  if (testDiscoveryIdx !== -1 && args[testDiscoveryIdx + 1]) {
+    const discoveryUrl = args[testDiscoveryIdx + 1];
+    console.log(`[Discovery Mode] Running standalone country discovery scan for URL: ${discoveryUrl}`);
+
+    const [runRecord] = await db
+      .insert(discoveryRuns)
+      .values({
+        country: "TN",
+        searchUrl: discoveryUrl,
+        status: "running",
+        startedAt: new Date(),
+      })
+      .returning();
+
+    const { page } = await getBrowserSession();
+    const outcome = await runDiscoveryScan(page, runRecord.id, discoveryUrl, "TN");
+    console.log("[Discovery Mode] Discovery scan outcome:", outcome);
+    await closeBrowserSession();
+    process.exit(0);
+  }
+
   let ranJobs = 0;
 
   try {
     while (true) {
+      // 0. Check for pending country discovery runs first
+      const pendingDiscoveryRun = await db.query.discoveryRuns.findFirst({
+        where: eq(discoveryRuns.status, "pending"),
+        orderBy: [asc(discoveryRuns.createdAt)],
+      });
+
+      if (pendingDiscoveryRun) {
+        console.log(
+          `\n[Processing DISCOVERY Job] ID: ${pendingDiscoveryRun.id} | Country: ${pendingDiscoveryRun.country}`
+        );
+        const { page } = await getBrowserSession();
+        const outcome = await runDiscoveryScan(
+          page,
+          pendingDiscoveryRun.id,
+          pendingDiscoveryRun.searchUrl,
+          pendingDiscoveryRun.country
+        );
+        console.log(
+          `[Discovery Finished] Status: ${outcome.status} | Discovered: ${outcome.totalPagesDiscovered} pages from ${outcome.totalAdsScanned} ads`
+        );
+        if (outcome.status === "completed" || outcome.status === "partial") {
+          await recordSuccessfulScan();
+          await handleSuccess();
+        } else {
+          await handleFailure();
+        }
+        ranJobs++;
+        continue;
+      }
       // 1. Check backoff / pause status
       const backoff = await checkBackoffStatus();
       if (backoff.inBackoff) {

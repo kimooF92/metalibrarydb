@@ -113,12 +113,17 @@ export default function DashboardPage() {
     (stats && stats.scanning > 0) ||
     pages.some((p) => p.status === "scanning");
 
-  // Real-time polling when scraper jobs are actively scanning
+  // Bounded real-time polling when scraper jobs are actively scanning (max 6 cycles = 30s)
   useEffect(() => {
     if (!isScanningActive) return;
 
+    let pollCount = 0;
     const interval = setInterval(() => {
-      loadData(true); // Silent reload
+      pollCount++;
+      loadData(true);
+      if (pollCount >= 6) {
+        clearInterval(interval);
+      }
     }, 5000);
 
     return () => clearInterval(interval);

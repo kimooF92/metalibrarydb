@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { trackedPages, queue } from "@/db/schema";
 import { inArray, eq } from "drizzle-orm";
 import { refreshSchema } from "@/lib/validators";
+import { triggerGitHubWorkflow } from "@/lib/github";
 
 export async function POST(request: Request) {
   try {
@@ -39,6 +40,9 @@ export async function POST(request: Request) {
         status: "pending",
       }))
     );
+
+    // Trigger GitHub Action worker workflow
+    await triggerGitHubWorkflow("worker.yml").catch(() => {});
 
     return NextResponse.json({
       success: true,
