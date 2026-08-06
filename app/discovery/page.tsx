@@ -195,17 +195,6 @@ export default function DiscoveryPage() {
     setSelectedPageIds(next);
   };
 
-  const triggerVerificationPoll = (targetRunId: string) => {
-    let count = 0;
-    const interval = setInterval(async () => {
-      count++;
-      await fetchPages(targetRunId);
-      if (count >= 5) {
-        clearInterval(interval);
-      }
-    }, 2500);
-  };
-
   // Batch Action 1: Verify Ad Counts
   const handleVerifySelected = async () => {
     if (selectedPageIds.size === 0) return;
@@ -222,10 +211,7 @@ export default function DiscoveryPage() {
           setActionMessage(
             `Enqueued ad count verification for ${data.verifiedCount} pages! Worker is checking Meta...`
           );
-          if (selectedRunId) {
-            await fetchPages(selectedRunId);
-            triggerVerificationPoll(selectedRunId);
-          }
+          if (selectedRunId) fetchPages(selectedRunId);
         } else {
           setActionMessage(`Verification failed: ${data.error}`);
         }
@@ -250,10 +236,7 @@ export default function DiscoveryPage() {
           setActionMessage(
             `Enqueued ad count verification! Worker is checking Meta...`
           );
-          if (selectedRunId) {
-            await fetchPages(selectedRunId);
-            triggerVerificationPoll(selectedRunId);
-          }
+          if (selectedRunId) fetchPages(selectedRunId);
         } else {
           setActionMessage(`Verification failed: ${data.error}`);
         }
