@@ -293,6 +293,16 @@ async function runWorker() {
           const mergeRes = await mergeExactMatchWithPageId(trackedPage.id, singlePageId);
           if (mergeRes.mergedPageId) {
             await enqueueOrEscalateJob(mergeRes.mergedPageId, "creative", 10);
+            await markCreativeJobCompleted(
+              queueJob.id,
+              creativeScan.id,
+              0,
+              "completed"
+            );
+            await recordSuccessfulScan();
+            await handleSuccess();
+            ranJobs++;
+            continue;
           }
         } else if (pageIdsFound.length > 1) {
           console.log(
