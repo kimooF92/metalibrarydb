@@ -79,14 +79,42 @@ export default function DiscoveryPage() {
 
   const [startDateMin, setStartDateMin] = useState(getSevenDaysAgoStr());
   const [startDateMax, setStartDateMax] = useState(getTodayStr());
+  const [activeDatePreset, setActiveDatePreset] = useState<"last7" | "last30" | "today" | "custom">("last7");
 
   // Table Filter, Sorting & Selection State
   const [searchFilter, setSearchFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "discovered" | "verifying" | "imported">("all");
   const [sortBy, setSortBy] = useState<string>("matchingAdCount");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [selectedPageIds, setSelectedPageIds] = useState<Set<string>>(new Set());
   const [isActionPending, startTransition] = useTransition();
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [mergeConfirmPending, setMergeConfirmPending] = useState(false);
+
+  const applyDatePreset = (preset: "today" | "last7" | "last30" | "thisMonth") => {
+    const today = new Date();
+    const todayStr = today.toISOString().split("T")[0];
+    setStartDateMax(todayStr);
+
+    if (preset === "today") {
+      setStartDateMin(todayStr);
+      setActiveDatePreset("today");
+    } else if (preset === "last7") {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      setStartDateMin(d.toISOString().split("T")[0]);
+      setActiveDatePreset("last7");
+    } else if (preset === "last30") {
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      setStartDateMin(d.toISOString().split("T")[0]);
+      setActiveDatePreset("last30");
+    } else if (preset === "thisMonth") {
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      setStartDateMin(firstDay.toISOString().split("T")[0]);
+      setActiveDatePreset("custom");
+    }
+  };
 
   const handleSortChange = (col: string) => {
     if (col === sortBy) {
@@ -176,12 +204,17 @@ export default function DiscoveryPage() {
     }
   };
 
-  // Selection toggle handlers
+  // Selection toggle handlers (operates on currently visible filtered pages)
   const toggleSelectAll = () => {
-    if (selectedPageIds.size === pages.length) {
-      setSelectedPageIds(new Set());
+    const selectableIds = filteredPages.map((p) => p.id);
+    if (selectableIds.every((id) => selectedPageIds.has(id)) && selectableIds.length > 0) {
+      const next = new Set(selectedPageIds);
+      selectableIds.forEach((id) => next.delete(id));
+      setSelectedPageIds(next);
     } else {
-      setSelectedPageIds(new Set(pages.map((p) => p.id)));
+      const next = new Set(selectedPageIds);
+      selectableIds.forEach((id) => next.add(id));
+      setSelectedPageIds(next);
     }
   };
 
@@ -246,21 +279,25 @@ export default function DiscoveryPage() {
     });
   };
 
-  // Batch Action 2: Merge Selected Pages to Main Dashboard
-  const handleMergeSelected = async () => {
-    if (selectedPageIds.size === 0) return;
+  // Batch Action 2: Merge Selected (non-tracked) Pages to Main Dashboard
+  const handleMergeSelected = async (explicitIds?: string[]) => {
+    const idsToMerge = explicitIds ?? Array.from(selectedPageIds).filter(
+      (id) => !pages.find((p) => p.id === id)?.isTracked
+    );
+    if (idsToMerge.length === 0) return;
+    setMergeConfirmPending(false);
     startTransition(async () => {
       try {
         setActionMessage(null);
         const res = await fetch("/api/discovery/import", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ discoveredPageIds: Array.from(selectedPageIds) }),
+          body: JSON.stringify({ discoveredPageIds: idsToMerge }),
         });
         const data = await res.json();
         if (data.success) {
           setActionMessage(
-            `Successfully merged ${data.importedCount} pages into main tracking dashboard!`
+            `✓ Successfully merged ${data.importedCount} page${data.importedCount !== 1 ? "s" : ""} into your tracking dashboard!`
           );
           setSelectedPageIds(new Set());
           if (selectedRunId) fetchPages(selectedRunId);
@@ -273,53 +310,32 @@ export default function DiscoveryPage() {
     });
   };
 
-  // Batch Action 3: Merge ALL Discovered Pages for active run into Main Dashboard
-  const handleMergeAllRunPages = async () => {
-    if (!selectedRunId) return;
-    startTransition(async () => {
-      try {
-        setActionMessage(null);
-        const res = await fetch("/api/discovery/import", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ runId: selectedRunId }),
-        });
-        const data = await res.json();
-        if (data.success) {
-          setActionMessage(
-            `Successfully merged ${data.importedCount} pages into main tracking dashboard! Enqueued ${data.enqueuedQueueJobs} count jobs.`
-          );
-          setSelectedPageIds(new Set());
-          if (selectedRunId) fetchPages(selectedRunId);
-        } else {
-          setActionMessage(`Merge failed: ${data.error}`);
-        }
-      } catch (err: any) {
-        setActionMessage(`Merge error: ${err.message}`);
-      }
-    });
+  // Single-row Merge — takes pageId directly to avoid stale closure race
+  const handleMergeSinglePage = async (pageId: string) => {
+    await handleMergeSelected([pageId]);
   };
 
   const activeRun = runs.find((r) => r.id === selectedRunId);
   const untrackedCount = pages.filter((p) => !p.isTracked).length;
+  const newDiscoveredCount = pages.filter((p) => !p.isTracked && p.status === "discovered").length;
 
-  const SortHeader = ({ col, label }: { col: string; label: string }) => {
+  const SortHeader = ({ col, label, className = "" }: { col: string; label: string; className?: string }) => {
     const active = sortBy === col;
     return (
-      <th className="p-4 whitespace-nowrap">
+      <th className={`p-3 whitespace-nowrap ${className}`}>
         <button
           onClick={() => handleSortChange(col)}
           className={`flex items-center space-x-1.5 uppercase font-bold text-[10px] tracking-wider transition-colors cursor-pointer ${
-            active ? "text-indigo-400 font-extrabold" : "text-slate-400 hover:text-slate-200"
+            active ? "text-indigo-600 dark:text-indigo-400 font-extrabold" : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
           }`}
         >
           <span>{label}</span>
           <span className="shrink-0">
             {active ? (
               sortOrder === "asc" ? (
-                <ChevronUp className="w-3.5 h-3.5 text-indigo-400" />
+                <ChevronUp className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
               ) : (
-                <ChevronDown className="w-3.5 h-3.5 text-indigo-400" />
+                <ChevronDown className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
               )
             ) : (
               <ChevronsUpDown className="w-3.5 h-3.5 opacity-40 hover:opacity-100" />
@@ -340,15 +356,21 @@ export default function DiscoveryPage() {
     } else if (sortBy === "displayName") {
       valA = (a.displayName || "").toLowerCase();
       valB = (b.displayName || "").toLowerCase();
+    } else if (sortBy === "pageId") {
+      valA = (a.pageId || "").toLowerCase();
+      valB = (b.pageId || "").toLowerCase();
     } else if (sortBy === "status") {
       const statusOrder: Record<string, number> = {
         verifying: 1,
-        imported: 2,
-        discovered: 3,
-        ignored: 4,
+        discovered: 2,
+        tracked: 3,
+        imported: 4,
+        ignored: 5,
       };
-      valA = statusOrder[a.status] || 99;
-      valB = statusOrder[b.status] || 99;
+      const statusA = a.isTracked ? "tracked" : a.status;
+      const statusB = b.isTracked ? "tracked" : b.status;
+      valA = statusOrder[statusA] || 99;
+      valB = statusOrder[statusB] || 99;
     }
 
     if (valA < valB) return sortOrder === "asc" ? -1 : 1;
@@ -356,50 +378,56 @@ export default function DiscoveryPage() {
     return 0;
   });
 
+  // Filtered view for the table (client-side status filter on top of server results)
+  const filteredPages = sortedPages.filter((p) => {
+    if (statusFilter === "all") return true;
+    if (statusFilter === "discovered") return !p.isTracked && p.status !== "imported";
+    if (statusFilter === "verifying") return p.status === "verifying";
+    if (statusFilter === "imported") return p.isTracked || p.status === "imported";
+    return true;
+  });
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-8 space-y-8">
+    <div className="space-y-4 pb-12 bg-background text-foreground">
       {/* Top Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-6">
-        <div>
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
-              <Globe className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-extrabold tracking-tight text-white flex items-center gap-2">
-                Country Brand Discovery
-                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
-                  Tunisia & Global
-                </span>
-              </h1>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Scan full Meta Ad Library by country to uncover active e-commerce brands matching "Shop Now" & "Order Now"
-              </p>
-            </div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800/40">
+        <div className="flex items-center space-x-3">
+          <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+            <Globe className="w-5 h-5" />
+          </div>
+          <div>
+            <h1 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+              Country Brand Discovery
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20">
+                Tunisia & Global
+              </span>
+            </h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Scan Meta Ad Library by country to uncover e-commerce brands matching "Shop Now" & "Order Now"
+            </p>
           </div>
         </div>
 
         <button
           onClick={fetchRuns}
           title="Refresh Scans"
-          className="inline-flex items-center space-x-2 px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-xs font-semibold text-slate-300 transition"
+          className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shrink-0"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoadingRuns ? "animate-spin" : ""}`} />
+          <RefreshCw className={`w-3.5 h-3.5 ${isLoadingRuns ? "animate-spin text-indigo-500" : ""}`} />
           <span>Refresh</span>
         </button>
       </div>
 
       {/* Action Notification Banner */}
       {actionMessage && (
-        <div className="p-4 rounded-xl bg-indigo-950/60 border border-indigo-500/30 text-indigo-200 text-xs font-medium flex items-center justify-between animate-in fade-in duration-200">
+        <div className="p-3.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-500/40 text-indigo-900 dark:text-indigo-200 text-xs font-medium flex items-center justify-between animate-in fade-in duration-150 shadow-sm">
           <div className="flex items-center space-x-2">
-            <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
+            <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
             <span>{actionMessage}</span>
           </div>
           <button
             onClick={() => setActionMessage(null)}
-            className="text-slate-400 hover:text-white text-xs"
+            className="text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white text-xs font-bold cursor-pointer ml-3"
           >
             Dismiss
           </button>
@@ -407,31 +435,68 @@ export default function DiscoveryPage() {
       )}
 
       {/* Discovery Scanner Controls Panel */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-xl p-6 space-y-6">
-        <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
-          <div className="flex items-center space-x-2 text-sm font-bold text-white uppercase tracking-wider">
-            <Filter className="w-4 h-4 text-indigo-400" />
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3.5 sm:p-4 space-y-3 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800/80 pb-2.5">
+          <div className="flex items-center space-x-2 text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+            <Filter className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
             <span>Discovery Search Controls</span>
           </div>
-          <div className="flex items-center space-x-2">
-            <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              CTA Filter Active: "Shop Now" & "Order Now"
+
+          <div className="flex items-center space-x-2 flex-wrap gap-1">
+            {/* Quick Date Presets */}
+            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mr-1">Presets:</span>
+            <button
+              type="button"
+              onClick={() => applyDatePreset("today")}
+              className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition cursor-pointer ${
+                activeDatePreset === "today"
+                  ? "bg-indigo-600 text-white border-indigo-600"
+                  : "bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-200 dark:hover:bg-slate-800"
+              }`}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => applyDatePreset("last7")}
+              className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition cursor-pointer ${
+                activeDatePreset === "last7"
+                  ? "bg-indigo-600 text-white border-indigo-600"
+                  : "bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-200 dark:hover:bg-slate-800"
+              }`}
+            >
+              Last 7 Days
+            </button>
+            <button
+              type="button"
+              onClick={() => applyDatePreset("last30")}
+              className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition cursor-pointer ${
+                activeDatePreset === "last30"
+                  ? "bg-indigo-600 text-white border-indigo-600"
+                  : "bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-200 dark:hover:bg-slate-800"
+              }`}
+            >
+              Last 30 Days
+            </button>
+
+            <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 px-2 py-0.5 rounded-md flex items-center gap-1 ml-auto sm:ml-2">
+              <ShieldCheck className="w-3 h-3" />
+              CTA Active: "Shop Now" & "Order Now"
             </span>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 text-xs">
           {/* Country Selection */}
-          <div className="space-y-1.5">
-            <label className="font-semibold text-slate-300 flex items-center gap-1.5">
-              <Globe className="w-3.5 h-3.5 text-indigo-400" />
+          <div className="space-y-1">
+            <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <Globe className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
               Target Country
             </label>
             <select
               value={country}
               onChange={(e) => setCountry(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white font-medium focus:outline-none focus:border-indigo-500"
+              className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:border-indigo-500 transition cursor-pointer"
             >
               <option value="TN">TN — Tunisia 🇹🇳</option>
               <option value="FR">FR — France 🇫🇷</option>
@@ -444,44 +509,50 @@ export default function DiscoveryPage() {
             </select>
           </div>
 
-          {/* Start Date Min (Default Last 7 Days) */}
-          <div className="space-y-1.5">
-            <label className="font-semibold text-slate-300 flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+          {/* Start Date Min */}
+          <div className="space-y-1">
+            <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
               Start Date Min
             </label>
             <input
               type="date"
               value={startDateMin}
-              onChange={(e) => setStartDateMin(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white font-medium focus:outline-none focus:border-indigo-500"
+              onChange={(e) => {
+                setStartDateMin(e.target.value);
+                setActiveDatePreset("custom");
+              }}
+              className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-1.5 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:border-indigo-500 transition cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
             />
           </div>
 
-          {/* Start Date Max (Default Today) */}
-          <div className="space-y-1.5">
-            <label className="font-semibold text-slate-300 flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+          {/* Start Date Max */}
+          <div className="space-y-1">
+            <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
               Start Date Max
             </label>
             <input
               type="date"
               value={startDateMax}
-              onChange={(e) => setStartDateMax(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white font-medium focus:outline-none focus:border-indigo-500"
+              onChange={(e) => {
+                setStartDateMax(e.target.value);
+                setActiveDatePreset("custom");
+              }}
+              className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-1.5 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:border-indigo-500 transition cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
             />
           </div>
 
           {/* Media Type */}
-          <div className="space-y-1.5">
-            <label className="font-semibold text-slate-300 flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-indigo-400" />
+          <div className="space-y-1">
+            <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
               Media Format
             </label>
             <select
               value={mediaType}
               onChange={(e) => setMediaType(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white font-medium focus:outline-none focus:border-indigo-500"
+              className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:border-indigo-500 transition cursor-pointer"
             >
               <option value="video">Video Ads Only</option>
               <option value="image">Image Ads Only</option>
@@ -494,7 +565,7 @@ export default function DiscoveryPage() {
             <button
               onClick={handleLaunchScan}
               disabled={isLaunchingScan}
-              className="w-full h-[38px] bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-bold rounded-lg shadow-lg shadow-indigo-600/20 flex items-center justify-center space-x-2 transition disabled:opacity-50"
+              className="w-full h-[36px] bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg shadow-md shadow-indigo-600/20 flex items-center justify-center space-x-2 transition disabled:opacity-50 cursor-pointer"
             >
               {isLaunchingScan ? (
                 <>
@@ -503,7 +574,7 @@ export default function DiscoveryPage() {
                 </>
               ) : (
                 <>
-                  <Play className="w-4 h-4 fill-current" />
+                  <Play className="w-3.5 h-3.5 fill-current" />
                   <span>Launch Discovery</span>
                 </>
               )}
@@ -514,11 +585,11 @@ export default function DiscoveryPage() {
 
       {/* Discovery Runs Timeline Bar */}
       {runs.length > 0 && (
-        <div className="space-y-3">
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">
+        <div className="space-y-2">
+          <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-1">
             Recent Discovery Scan Runs
           </div>
-          <div className="flex items-center space-x-3 overflow-x-auto pb-2 scrollbar-none">
+          <div className="flex items-center space-x-2.5 overflow-x-auto pb-1.5 scrollbar-none">
             {runs.map((run) => {
               const isSelected = run.id === selectedRunId;
               const isRunning = run.status === "running" || run.status === "pending";
@@ -527,34 +598,42 @@ export default function DiscoveryPage() {
                 <button
                   key={run.id}
                   onClick={() => setSelectedRunId(run.id)}
-                  className={`flex items-center space-x-3 px-4 py-3 rounded-xl border text-left shrink-0 transition ${
+                  className={`flex items-center space-x-2.5 px-3.5 py-2.5 rounded-xl border text-left shrink-0 transition cursor-pointer ${
                     isSelected
-                      ? "bg-indigo-950/60 border-indigo-500 text-white shadow-md shadow-indigo-500/10"
-                      : "bg-slate-900/40 border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-slate-200"
+                      ? "bg-indigo-50 dark:bg-indigo-950/60 border-indigo-500 text-slate-900 dark:text-white shadow-sm shadow-indigo-500/10"
+                      : "bg-white dark:bg-slate-950/40 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 hover:text-slate-900 dark:hover:text-slate-200"
                   }`}
                 >
                   <div className="flex items-center space-x-2">
                     {isRunning ? (
-                      <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
+                      <Loader2 className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
                     ) : run.status === "completed" ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                     ) : (
-                      <AlertCircle className="w-4 h-4 text-amber-400" />
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
                     )}
                     <div>
-                      <div className="font-bold text-xs text-white">
+                      <div className="font-bold text-xs">
                         Country: {run.country}
                       </div>
-                      <div className="text-[10px] text-slate-400">
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400">
                         {run.totalPagesDiscovered} pages | {run.totalAdsScanned} ads
                       </div>
                     </div>
                   </div>
-                  <div className="text-[10px] text-slate-500 pl-2 border-l border-slate-800">
-                    {new Date(run.createdAt).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                  <div className="text-[10px] text-slate-400 dark:text-slate-500 pl-2 border-l border-slate-200 dark:border-slate-800 text-right">
+                    <div>
+                      {new Date(run.createdAt).toLocaleDateString([], {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </div>
+                    <div>
+                      {new Date(run.createdAt).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
                   </div>
                 </button>
               );
@@ -564,233 +643,286 @@ export default function DiscoveryPage() {
       )}
 
       {/* Active Run Stats & Batch Actions Bar */}
-      <div className="space-y-4">
+      <div className="space-y-3">
         {activeRun && (
-          <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs">
+          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shadow-sm">
             <div className="flex items-center space-x-4">
               <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">Status</span>
-                <span className="font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
+                <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase font-bold">Status</span>
+                <span className="font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
                   {activeRun.status === "running" && (
-                    <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
+                    <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
                   )}
                   {activeRun.status}
                 </span>
               </div>
-              <div className="h-6 w-[1px] bg-slate-800" />
+              <div className="h-6 w-[1px] bg-slate-200 dark:bg-slate-800" />
               <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">Ads Analyzed</span>
-                <span className="font-extrabold text-indigo-400 text-sm">
+                <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase font-bold">Ads Scanned</span>
+                <span className="font-extrabold text-indigo-600 dark:text-indigo-400 text-sm">
                   {activeRun.totalAdsScanned.toLocaleString()}
                 </span>
               </div>
-              <div className="h-6 w-[1px] bg-slate-800" />
+              <div className="h-6 w-[1px] bg-slate-200 dark:bg-slate-800" />
               <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">Unique Pages Found</span>
-                <span className="font-extrabold text-emerald-400 text-sm">
+                <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase font-bold">Discovered Pages</span>
+                <span className="font-extrabold text-emerald-600 dark:text-emerald-400 text-sm">
                   {activeRun.totalPagesDiscovered.toLocaleString()}
                 </span>
               </div>
             </div>
 
             {/* Batch Selection & Action Buttons */}
-            <div className="flex items-center space-x-2 animate-in fade-in duration-150 flex-wrap gap-2">
+            <div className="flex items-center gap-2 animate-in fade-in duration-150 flex-wrap">
+              {/* Step indicator */}
+              <div className="hidden md:flex items-center gap-1 text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-2 border-r border-slate-200 dark:border-slate-700 pr-3">
+                <span className={`px-1.5 py-0.5 rounded ${selectedPageIds.size > 0 ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300" : "opacity-40"}`}>① Select</span>
+                <span className="opacity-30">›</span>
+                <span className={`px-1.5 py-0.5 rounded opacity-40`}>② Verify</span>
+                <span className="opacity-30">›</span>
+                <span className={`px-1.5 py-0.5 rounded opacity-40`}>③ Merge</span>
+              </div>
+
               {selectedPageIds.size > 0 && (
                 <>
-                  <span className="text-xs font-semibold text-slate-300 mr-1">
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                     {selectedPageIds.size} selected
                   </span>
                   <button
                     onClick={handleVerifySelected}
                     disabled={isActionPending}
-                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-indigo-500/30 text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                    className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30 text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
                     <span>Verify Ad Counts</span>
                   </button>
-                  <button
-                    onClick={handleMergeSelected}
-                    disabled={isActionPending}
-                    className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Merge Selected ({selectedPageIds.size})</span>
-                  </button>
+
+                  {/* Merge Selected — with confirmation guard */}
+                  {mergeConfirmPending ? (
+                    <div className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-500/40 rounded-lg px-2.5 py-1">
+                      <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300">Merge {Array.from(selectedPageIds).filter(id => !pages.find(p => p.id === id)?.isTracked).length} new pages?</span>
+                      <button
+                        onClick={() => handleMergeSelected()}
+                        disabled={isActionPending}
+                        className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition cursor-pointer disabled:opacity-50"
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        onClick={() => setMergeConfirmPending(false)}
+                        className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold transition cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setMergeConfirmPending(true)}
+                      disabled={isActionPending || Array.from(selectedPageIds).every(id => pages.find(p => p.id === id)?.isTracked)}
+                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Merge New Selected ({Array.from(selectedPageIds).filter(id => !pages.find(p => p.id === id)?.isTracked).length})</span>
+                    </button>
+                  )}
                 </>
               )}
-
-              <button
-                onClick={handleMergeAllRunPages}
-                disabled={isActionPending || untrackedCount === 0}
-                className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-extrabold shadow-lg shadow-emerald-600/20 transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                title="Merge all discovered pages in this run directly to main tracked pages"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>
-                  {untrackedCount > 0
-                    ? `Merge ALL Discovered Pages (${untrackedCount})`
-                    : "All Pages Already Merged ✓"}
-                </span>
-              </button>
             </div>
           </div>
         )}
 
         {/* Discovered Pages Table */}
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-xl overflow-hidden">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 flex flex-col shadow-sm">
           {/* Table Header Controls */}
-          <div className="p-4 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                placeholder="Filter discovered pages by name..."
-                value={searchFilter}
-                onChange={(e) => setSearchFilter(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-4 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-              />
+          <div className="p-3 border-b border-slate-200 dark:border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-900/30">
+            <div className="flex items-center gap-2 flex-1">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Filter by page name..."
+                  value={searchFilter}
+                  onChange={(e) => setSearchFilter(e.target.value)}
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                />
+              </div>
+              {/* Status filter tabs */}
+              <div className="flex items-center gap-1 shrink-0">
+                {(["all", "discovered", "verifying", "imported"] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setStatusFilter(f)}
+                    className={`px-2 py-1 rounded text-[10px] font-bold border transition cursor-pointer capitalize ${
+                      statusFilter === f
+                        ? "bg-indigo-600 text-white border-indigo-600"
+                        : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    {f === "all" ? `All (${pages.length})` :
+                     f === "discovered" ? `New (${newDiscoveredCount})` :
+                     f === "verifying" ? `Verifying` :
+                     `Merged`}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="text-xs text-slate-400">
-              Showing <span className="font-bold text-white">{pages.length}</span> discovered pages
+            <div className="text-xs text-slate-500 dark:text-slate-400 shrink-0">
+              Showing <span className="font-bold text-slate-900 dark:text-white">{filteredPages.length}</span> of {pages.length}
             </div>
           </div>
 
-          {/* Table Element */}
-          <div className="overflow-x-auto">
+          {/* Table Element - Fits laptop screens cleanly and scrolls with page */}
+          <div className="overflow-x-auto relative">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-950/60 border-b border-slate-800 text-slate-400 font-bold uppercase text-[10px] tracking-wider">
+              <thead className="bg-slate-50 dark:bg-slate-900/95 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-semibold uppercase text-[10px] tracking-wider sticky top-0 z-10">
                 <tr>
-                  <th className="p-4 w-10">
+                  <th className="p-3 w-8 text-center">
                     <input
                       type="checkbox"
                       checked={pages.length > 0 && selectedPageIds.size === pages.length}
                       onChange={toggleSelectAll}
-                      className="rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-0"
+                      className="rounded border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-indigo-600 focus:ring-0 cursor-pointer"
                     />
                   </th>
-                  <SortHeader col="displayName" label="Page Name & Meta Link" />
-                  <SortHeader col="pageId" label="Page ID" />
-                  <SortHeader col="matchingAdCount" label="Active Ads (Discovery)" />
-                  <SortHeader col="verifiedAdCount" label="Verified Count" />
-                  <th className="p-4">Sample CTAs</th>
+                  <SortHeader col="displayName" label="Brand & Meta Link" />
+                  <SortHeader col="matchingAdCount" label="Ads (Active / Verified)" />
+                  <th className="p-3">Sample CTAs</th>
                   <SortHeader col="status" label="Status" />
-                  <th className="p-4 text-right">Actions</th>
+                  <th className="p-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
                 {isLoadingPages ? (
                   <tr>
-                    <td colSpan={8} className="p-12 text-center text-slate-500 space-y-2">
-                      <Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-400" />
+                    <td colSpan={6} className="p-12 text-center text-slate-500 dark:text-slate-400 space-y-2">
+                      <Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-500 dark:text-indigo-400" />
                       <div>Loading discovered pages...</div>
                     </td>
                   </tr>
-                ) : sortedPages.length === 0 ? (
+                ) : filteredPages.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-12 text-center text-slate-500">
-                      No discovered pages found for this scan run yet. Launch a new country scan above!
+                    <td colSpan={6} className="p-12 text-center text-slate-500 dark:text-slate-400">
+                      {pages.length === 0
+                        ? "No discovered pages found for this scan run yet. Launch a new country scan above!"
+                        : `No pages match the "${statusFilter}" filter.`}
                     </td>
                   </tr>
                 ) : (
-                  sortedPages.map((page) => {
+                  filteredPages.map((page) => {
                     const isSelected = selectedPageIds.has(page.id);
                     const metaAdLibraryUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${page.country || "TN"}&view_all_page_id=${page.pageId}&search_type=page&media_type=all`;
 
                     return (
                       <tr
                         key={page.id}
-                        className={`hover:bg-slate-800/40 transition ${
-                          isSelected ? "bg-indigo-950/20" : ""
+                        className={`hover:bg-slate-50 dark:hover:bg-slate-900/50 transition ${
+                          isSelected ? "bg-indigo-50/70 dark:bg-indigo-950/40" : ""
                         }`}
                       >
-                        <td className="p-4">
+                        <td className="p-3 text-center">
                           <input
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => toggleSelectPage(page.id)}
-                            className="rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-0"
+                            className="rounded border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-indigo-600 focus:ring-0 cursor-pointer"
                           />
                         </td>
-                        <td className="p-4">
-                          <div className="font-bold text-white text-sm flex items-center space-x-2">
-                            <span>{page.displayName || `Page ${page.pageId}`}</span>
-                            <a
-                              href={metaAdLibraryUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-indigo-400 hover:text-indigo-300"
-                              title="Open in Meta Ad Library"
-                            >
-                              <ExternalLink className="w-3.5 h-3.5" />
-                            </a>
+                        <td className="p-3">
+                          <div className="flex flex-col gap-0.5">
+                            <div className="font-bold text-slate-900 dark:text-white text-xs flex items-center space-x-1.5 truncate max-w-[200px] sm:max-w-xs">
+                              <span className="truncate">{page.displayName || `Page ${page.pageId}`}</span>
+                              <a
+                                href={metaAdLibraryUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300 shrink-0"
+                                title="Open in Meta Ad Library"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            </div>
+                            <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                              ID: {page.pageId}
+                            </span>
                           </div>
                         </td>
-                        <td className="p-4 font-mono text-slate-400">{page.pageId}</td>
-                        <td className="p-4">
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-500/10 border border-indigo-500/30 text-indigo-400">
-                            {page.matchingAdCount} active ads
-                          </span>
-                        </td>
-                        <td className="p-4">
-                          {page.verifiedAdCount !== null ? (
-                            <span className="font-bold text-emerald-400">
-                              {page.verifiedAdCount} verified
+                        <td className="p-3">
+                          <div className="flex flex-col gap-1">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 text-indigo-700 dark:text-indigo-400 w-fit">
+                              {page.matchingAdCount} active ads
                             </span>
-                          ) : (
-                            <span className="text-slate-500 italic">Unverified</span>
-                          )}
+                            {page.verifiedAdCount !== null ? (
+                              page.verifiedAdCount >= 10 ? (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-600/40 w-fit">
+                                  <Sparkles className="w-3 h-3 text-amber-500 fill-amber-400 shrink-0" />
+                                  <span>{page.verifiedAdCount} verified (High Signal)</span>
+                                </span>
+                              ) : page.verifiedAdCount > 0 ? (
+                                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                                  <CheckCircle2 className="w-3 h-3 shrink-0" />
+                                  <span>{page.verifiedAdCount} verified</span>
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                                  <span>0 verified (No active ads)</span>
+                                </span>
+                              )
+                            ) : (
+                              <span className="text-[10px] text-slate-400 dark:text-slate-500 italic">Unverified</span>
+                            )}
+                          </div>
                         </td>
-                        <td className="p-4">
-                          <div className="flex flex-wrap gap-1 max-w-xs">
+                        <td className="p-3">
+                          <div className="flex flex-wrap gap-1 max-w-[180px]">
                             {page.sampleCtas && page.sampleCtas.length > 0 ? (
-                              page.sampleCtas.map((cta, idx) => (
+                              page.sampleCtas.slice(0, 3).map((cta, idx) => (
                                 <span
                                   key={idx}
-                                  className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700"
+                                  className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700/80"
                                 >
                                   {cta}
                                 </span>
                               ))
                             ) : (
-                              <span className="text-slate-500">Shop Now</span>
+                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">Shop Now</span>
                             )}
                           </div>
                         </td>
-                        <td className="p-4">
+                        <td className="p-3">
                           {page.isTracked ? (
-                            <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400">
                               <Check className="w-3 h-3" />
                               <span>Already Tracked</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-300 border border-slate-700 uppercase">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 uppercase">
                               {page.status}
                             </span>
                           )}
                         </td>
-                        <td className="p-4 text-right space-x-2">
-                          <button
-                            onClick={() => handleVerifyPage(page.id)}
-                            disabled={isActionPending || page.status === "verifying"}
-                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-indigo-500/30 text-xs font-bold transition inline-flex items-center space-x-1 disabled:opacity-50"
-                            title="Verify exact active ad count via worker"
-                          >
-                            <RefreshCw className={`w-3 h-3 ${page.status === "verifying" ? "animate-spin text-indigo-400" : ""}`} />
-                            <span>{page.status === "verifying" ? "Verifying..." : "Verify"}</span>
-                          </button>
-
-                          {!page.isTracked && (
+                        <td className="p-3 text-right">
+                          <div className="flex items-center justify-end space-x-1.5">
                             <button
-                              onClick={() => {
-                                setSelectedPageIds(new Set([page.id]));
-                                handleMergeSelected();
-                              }}
-                              className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition inline-flex items-center space-x-1"
+                              onClick={() => handleVerifyPage(page.id)}
+                              disabled={isActionPending || page.status === "verifying"}
+                              className="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-indigo-600 dark:text-indigo-300 border border-slate-200 dark:border-indigo-500/30 text-xs font-semibold transition inline-flex items-center space-x-1 disabled:opacity-50 cursor-pointer"
+                              title="Verify exact active ad count via worker"
                             >
-                              <ArrowRight className="w-3 h-3" />
-                              <span>Merge</span>
+                              <RefreshCw className={`w-3 h-3 ${page.status === "verifying" ? "animate-spin text-indigo-500" : ""}`} />
+                              <span className="hidden sm:inline">{page.status === "verifying" ? "Verifying..." : "Verify"}</span>
                             </button>
-                          )}
+
+                            {!page.isTracked && (
+                              <button
+                                onClick={() => handleMergeSinglePage(page.id)}
+                                disabled={isActionPending}
+                                className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition inline-flex items-center space-x-1 shadow-sm cursor-pointer disabled:opacity-50"
+                              >
+                                <ArrowRight className="w-3 h-3" />
+                                <span>Merge</span>
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

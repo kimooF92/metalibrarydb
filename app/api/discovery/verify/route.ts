@@ -1,8 +1,21 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { discoveredPages, trackedPages, queue } from "@/db/schema";
+import { discoveredPages } from "@/db/schema";
 import { inArray, eq } from "drizzle-orm";
 
+/**
+ * POST /api/discovery/verify
+ *
+ * Marks selected discovered pages as "verifying" so the background worker
+ * can fetch real ad counts from Meta.
+ *
+ * IMPORTANT: This endpoint does NOT create trackedPages rows.
+ * Creating a trackedPages row is the exclusive responsibility of /api/discovery/import
+ * (the explicit user-initiated Merge action).
+ *
+ * Previously this route inserted into trackedPages which caused pages to appear
+ * as "Already Tracked" before the user ever clicked Merge — that was a bug.
+ */
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
@@ -22,52 +35,17 @@ export async function POST(req: Request) {
     let enqueuedCount = 0;
 
     for (const discPage of pagesToVerify) {
-      const pageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${discPage.country || "TN"}&view_all_page_id=${discPage.pageId}&search_type=page&media_type=all`;
-
-      // Create or find tracked page record
-      const [tp] = await db
-        .insert(trackedPages)
-        .values({
-          url: pageUrl,
-          displayName: discPage.displayName || `Page ${discPage.pageId}`,
-          pageId: discPage.pageId,
-          searchType: "page",
-          country: discPage.country || "TN",
-          status: "pending",
-        })
-        .onConflictDoUpdate({
-          target: trackedPages.url,
-          set: { updatedAt: new Date() },
-        })
-        .returning();
-
-      // Check if job already pending in queue
-      const existingQueueJob = await db.query.queue.findFirst({
-        where: (q, { and, eq, inArray }) =>
-          and(
-            eq(q.trackedPageId, tp.id),
-            eq(q.jobType, "count"),
-            inArray(q.status, ["pending", "running"])
-          ),
-      });
-
-      if (!existingQueueJob) {
-        await db.insert(queue).values({
-          trackedPageId: tp.id,
-          jobType: "count",
-          status: "pending",
-        });
-        enqueuedCount++;
-      }
-
+      // Only mark as verifying — do NOT insert into trackedPages.
+      // The worker will update verifiedAdCount directly on discoveredPages.
       await db
         .update(discoveredPages)
         .set({
           status: "verifying",
-          trackedPageId: tp.id,
           updatedAt: new Date(),
         })
         .where(eq(discoveredPages.id, discPage.id));
+
+      enqueuedCount++;
     }
 
     return NextResponse.json({

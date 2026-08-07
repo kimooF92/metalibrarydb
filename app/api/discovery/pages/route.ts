@@ -28,29 +28,6 @@ export async function GET(req: Request) {
     });
     const activeJobSet = new Set(activeJobs.map((j) => j.trackedPageId));
 
-    // Auto-clean any discovered pages stuck in "verifying" status if no queue job is running
-    const verifyingPages = await db.query.discoveredPages.findMany({
-      where: eq(discoveredPages.status, "verifying"),
-    });
-    for (const vp of verifyingPages) {
-      const tId = vp.trackedPageId;
-      if (!tId || !activeJobSet.has(tId)) {
-        const tp = tId
-          ? await db.query.trackedPages.findFirst({
-              where: eq(trackedPages.id, tId),
-            })
-          : null;
-        await db
-          .update(discoveredPages)
-          .set({
-            status: "discovered",
-            verifiedAdCount: tp?.currentResults ?? vp.verifiedAdCount ?? null,
-            updatedAt: new Date(),
-          })
-          .where(eq(discoveredPages.id, vp.id));
-      }
-    }
-
     const whereConditions = [];
 
     if (runId) {
@@ -119,15 +96,21 @@ export async function GET(req: Request) {
       } else if (sortBy === "displayName") {
         valA = (a.displayName || "").toLowerCase();
         valB = (b.displayName || "").toLowerCase();
+      } else if (sortBy === "pageId") {
+        valA = (a.pageId || "").toLowerCase();
+        valB = (b.pageId || "").toLowerCase();
       } else if (sortBy === "status") {
         const statusOrder: Record<string, number> = {
           verifying: 1,
-          imported: 2,
-          discovered: 3,
-          ignored: 4,
+          discovered: 2,
+          tracked: 3,
+          imported: 4,
+          ignored: 5,
         };
-        valA = statusOrder[a.status] || 99;
-        valB = statusOrder[b.status] || 99;
+        const statusA = a.isTracked ? "tracked" : a.status;
+        const statusB = b.isTracked ? "tracked" : b.status;
+        valA = statusOrder[statusA] || 99;
+        valB = statusOrder[statusB] || 99;
       }
 
       if (valA < valB) return sortOrder === "asc" ? -1 : 1;
