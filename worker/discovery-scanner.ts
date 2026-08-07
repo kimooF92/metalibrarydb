@@ -401,7 +401,7 @@ export async function runDiscoveryScan(
       // DOM link extraction fallback error ignore
     }
 
-    // 4. Save Discovered Pages to Database
+    // 4. Save Discovered Pages to Database (Cross-Scan Memory: check tracked & previously ignored pages)
     const finishedAt = new Date();
     const existingTracked = await db.query.trackedPages.findMany({
       columns: { id: true, pageId: true, url: true },
@@ -415,11 +415,19 @@ export async function runDiscoveryScan(
       }
     }
 
+    const previouslyIgnored = await db.query.discoveredPages.findMany({
+      where: eq(discoveredPages.status, "ignored"),
+      columns: { pageId: true },
+    });
+    const ignoredPageSet = new Set(previouslyIgnored.map((p) => p.pageId));
+
     let savedPagesCount = 0;
     const pageEntries = Array.from(collectedPages.values());
 
     for (const pageData of pageEntries) {
       const existingTrackedId = trackedPageMap.get(pageData.pageId) || null;
+      const isIgnored = ignoredPageSet.has(pageData.pageId);
+      const initialStatus = existingTrackedId ? "imported" : isIgnored ? "ignored" : "discovered";
 
       await db
         .insert(discoveredPages)
@@ -432,7 +440,7 @@ export async function runDiscoveryScan(
           sampleAdArchiveIds: Array.from(pageData.sampleAdArchiveIds),
           sampleCtas: Array.from(pageData.sampleCtas),
           sampleUrls: Array.from(pageData.sampleUrls),
-          status: existingTrackedId ? "imported" : "discovered",
+          status: initialStatus,
           trackedPageId: existingTrackedId,
           createdAt: finishedAt,
           updatedAt: finishedAt,
@@ -445,7 +453,7 @@ export async function runDiscoveryScan(
             sampleAdArchiveIds: Array.from(pageData.sampleAdArchiveIds),
             sampleCtas: Array.from(pageData.sampleCtas),
             sampleUrls: Array.from(pageData.sampleUrls),
-            status: existingTrackedId ? "imported" : "discovered",
+            status: initialStatus,
             trackedPageId: existingTrackedId,
             updatedAt: finishedAt,
           },

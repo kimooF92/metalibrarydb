@@ -21,6 +21,10 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
+  EyeOff,
+  RotateCcw,
+  Trash2,
+  XCircle,
 } from "lucide-react";
 
 interface DiscoveryRun {
@@ -83,7 +87,7 @@ export default function DiscoveryPage() {
 
   // Table Filter, Sorting & Selection State
   const [searchFilter, setSearchFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "discovered" | "verifying" | "imported">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "discovered" | "verifying" | "imported" | "ignored">("all");
   const [sortBy, setSortBy] = useState<string>("matchingAdCount");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [selectedPageIds, setSelectedPageIds] = useState<Set<string>>(new Set());
@@ -315,9 +319,62 @@ export default function DiscoveryPage() {
     await handleMergeSelected([pageId]);
   };
 
+  // Action 3: Ignore or Restore Selected Pages
+  const handleIgnoreSelected = async (explicitIds?: string[], restore: boolean = false) => {
+    const idsToUpdate = explicitIds ?? Array.from(selectedPageIds);
+    if (idsToUpdate.length === 0) return;
+    startTransition(async () => {
+      try {
+        setActionMessage(null);
+        const res = await fetch("/api/discovery/ignore", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ discoveredPageIds: idsToUpdate, restore }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setActionMessage(data.message || "Updated page ignore status");
+          setSelectedPageIds(new Set());
+          if (selectedRunId) fetchPages(selectedRunId);
+        } else {
+          setActionMessage(`Ignore action failed: ${data.error}`);
+        }
+      } catch (err: any) {
+        setActionMessage(`Ignore action error: ${err.message}`);
+      }
+    });
+  };
+
+  // Action 4: Dismiss all remaining unmerged pages in current run
+  const handleDismissRemainingRun = async () => {
+    if (!selectedRunId) return;
+    startTransition(async () => {
+      try {
+        setActionMessage(null);
+        const res = await fetch("/api/discovery/ignore", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ runId: selectedRunId, dismissRemaining: true }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setActionMessage(`Dismissed ${data.ignoredCount} remaining pages in this run!`);
+          setSelectedPageIds(new Set());
+          if (selectedRunId) fetchPages(selectedRunId);
+        } else {
+          setActionMessage(`Dismiss remaining failed: ${data.error}`);
+        }
+      } catch (err: any) {
+        setActionMessage(`Dismiss remaining error: ${err.message}`);
+      }
+    });
+  };
+
   const activeRun = runs.find((r) => r.id === selectedRunId);
-  const untrackedCount = pages.filter((p) => !p.isTracked).length;
+  const untrackedCount = pages.filter((p) => !p.isTracked && p.status !== "ignored").length;
   const newDiscoveredCount = pages.filter((p) => !p.isTracked && p.status === "discovered").length;
+  const ignoredCount = pages.filter((p) => p.status === "ignored").length;
+  const dismissableRemainingCount = pages.filter((p) => !p.isTracked && p.status !== "imported" && p.status !== "ignored").length;
 
   const SortHeader = ({ col, label, className = "" }: { col: string; label: string; className?: string }) => {
     const active = sortBy === col;
@@ -381,9 +438,10 @@ export default function DiscoveryPage() {
   // Filtered view for the table (client-side status filter on top of server results)
   const filteredPages = sortedPages.filter((p) => {
     if (statusFilter === "all") return true;
-    if (statusFilter === "discovered") return !p.isTracked && p.status !== "imported";
+    if (statusFilter === "discovered") return !p.isTracked && p.status !== "imported" && p.status !== "ignored";
     if (statusFilter === "verifying") return p.status === "verifying";
-    if (statusFilter === "imported") return p.isTracked || p.status === "imported";
+    if (statusFilter === "imported") return (p.isTracked || p.status === "imported") && p.status !== "ignored";
+    if (statusFilter === "ignored") return p.status === "ignored";
     return true;
   });
 
@@ -697,6 +755,16 @@ export default function DiscoveryPage() {
                     <span>Verify Ad Counts</span>
                   </button>
 
+                  {/* Ignore Selected */}
+                  <button
+                    onClick={() => handleIgnoreSelected()}
+                    disabled={isActionPending}
+                    className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-700 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 border border-slate-200 dark:border-slate-800 text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <EyeOff className="w-3.5 h-3.5" />
+                    <span>Ignore Selected ({selectedPageIds.size})</span>
+                  </button>
+
                   {/* Merge Selected — with confirmation guard */}
                   {mergeConfirmPending ? (
                     <div className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-500/40 rounded-lg px-2.5 py-1">
@@ -727,6 +795,19 @@ export default function DiscoveryPage() {
                   )}
                 </>
               )}
+
+              {/* Dismiss Remaining button for active run */}
+              {selectedRunId && dismissableRemainingCount > 0 && selectedPageIds.size === 0 && (
+                <button
+                  onClick={handleDismissRemainingRun}
+                  disabled={isActionPending}
+                  className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                  title="Mark all remaining unselected pages in this run as ignored"
+                >
+                  <EyeOff className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Dismiss Remaining ({dismissableRemainingCount})</span>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -747,8 +828,8 @@ export default function DiscoveryPage() {
                 />
               </div>
               {/* Status filter tabs */}
-              <div className="flex items-center gap-1 shrink-0">
-                {(["all", "discovered", "verifying", "imported"] as const).map((f) => (
+              <div className="flex items-center gap-1 shrink-0 flex-wrap">
+                {(["all", "discovered", "verifying", "imported", "ignored"] as const).map((f) => (
                   <button
                     key={f}
                     onClick={() => setStatusFilter(f)}
@@ -761,7 +842,8 @@ export default function DiscoveryPage() {
                     {f === "all" ? `All (${pages.length})` :
                      f === "discovered" ? `New (${newDiscoveredCount})` :
                      f === "verifying" ? `Verifying` :
-                     `Merged`}
+                     f === "imported" ? `Merged` :
+                     `Ignored (${ignoredCount})`}
                   </button>
                 ))}
               </div>
@@ -889,7 +971,12 @@ export default function DiscoveryPage() {
                           </div>
                         </td>
                         <td className="p-3">
-                          {page.isTracked ? (
+                          {page.status === "ignored" ? (
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400">
+                              <EyeOff className="w-3 h-3" />
+                              <span>Ignored</span>
+                            </span>
+                          ) : page.isTracked ? (
                             <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400">
                               <Check className="w-3 h-3" />
                               <span>Already Tracked</span>
@@ -912,7 +999,30 @@ export default function DiscoveryPage() {
                               <span className="hidden sm:inline">{page.status === "verifying" ? "Verifying..." : "Verify"}</span>
                             </button>
 
-                            {!page.isTracked && (
+                            {/* Ignore or Restore button */}
+                            {page.status === "ignored" ? (
+                              <button
+                                onClick={() => handleIgnoreSelected([page.id], true)}
+                                disabled={isActionPending}
+                                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-semibold transition inline-flex items-center space-x-1 cursor-pointer disabled:opacity-50"
+                                title="Restore to active discovery feed"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                <span>Restore</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleIgnoreSelected([page.id], false)}
+                                disabled={isActionPending}
+                                className="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 border border-slate-200 dark:border-slate-800 text-xs font-medium transition inline-flex items-center space-x-1 cursor-pointer disabled:opacity-50"
+                                title="Ignore and hide from discovery feed (remembered on future scans)"
+                              >
+                                <EyeOff className="w-3 h-3" />
+                                <span className="hidden sm:inline">Ignore</span>
+                              </button>
+                            )}
+
+                            {!page.isTracked && page.status !== "ignored" && (
                               <button
                                 onClick={() => handleMergeSinglePage(page.id)}
                                 disabled={isActionPending}
