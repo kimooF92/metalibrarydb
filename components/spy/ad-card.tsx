@@ -31,10 +31,24 @@ interface AdCardProps {
 export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
+  const [isProxied, setIsProxied] = useState(false);
   const [imgError, setImgError] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isArchived, setIsArchived] = useState(Boolean(ad.isArchived));
   const [isArchiving, setIsArchiving] = useState(false);
+
+  const initialDisplayImage = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.[0];
+  const activeImageSrc = isProxied && initialDisplayImage
+    ? `/api/spy/image-proxy?url=${encodeURIComponent(initialDisplayImage)}`
+    : initialDisplayImage;
+
+  const handleImageError = () => {
+    if (!isProxied && initialDisplayImage) {
+      setIsProxied(true);
+    } else {
+      setImgError(true);
+    }
+  };
 
   const toggleArchive = async () => {
     setIsArchiving(true);
@@ -181,26 +195,28 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
               autoPlay
               className="w-full h-full object-contain bg-black rounded-xl"
             />
-          ) : displayImage && !imgError ? (
+          ) : activeImageSrc && !imgError ? (
             <div className="relative w-full h-full group/media cursor-pointer flex items-center justify-center" onClick={() => setIsPreviewOpen(true)}>
               {/* Ambient Blurred Background Canvas */}
               <NextImage
-                src={displayImage}
+                src={activeImageSrc}
                 alt=""
                 fill
                 unoptimized
+                referrerPolicy="no-referrer"
                 className="object-cover blur-2xl opacity-40 dark:opacity-30 scale-125 select-none pointer-events-none"
               />
 
               {/* Main Crisp Uncropped Image */}
               <div className="relative w-full h-full p-2 flex items-center justify-center z-10">
                 <NextImage
-                  src={displayImage}
+                  src={activeImageSrc}
                   alt={ad.title || "Ad creative"}
                   fill
                   unoptimized
+                  referrerPolicy="no-referrer"
                   className="object-contain transition-transform duration-300 group-hover/media:scale-[1.02] drop-shadow-md"
-                  onError={() => setImgError(true)}
+                  onError={handleImageError}
                 />
               </div>
 

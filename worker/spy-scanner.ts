@@ -93,26 +93,67 @@ function parseAdGraphQLNode(node: any): ExtractedAdData | null {
     const mediaUrls: string[] = [];
     let thumbnailUrl: string | null = null;
 
-    if (Array.isArray(snapshot.cards) && snapshot.cards.length > 1) {
+    const cards = Array.isArray(snapshot.cards) ? snapshot.cards : [];
+
+    if (cards.length > 1) {
       mediaType = "carousel";
-      for (const card of snapshot.cards) {
-        if (card.resized_image_url) mediaUrls.push(card.resized_image_url);
-        if (card.video_hd_url) mediaUrls.push(card.video_hd_url);
+      for (const card of cards) {
+        const imgUrl = card.resized_image_url || card.original_image_url || (Array.isArray(card.images) ? card.images[0]?.resized_image_url || card.images[0]?.original_image_url : null);
+        if (imgUrl) mediaUrls.push(imgUrl);
+        const vidUrl = card.video_hd_url || card.video_sd_url;
+        if (vidUrl) mediaUrls.push(vidUrl);
       }
-      thumbnailUrl = snapshot.cards[0]?.resized_image_url || null;
-    } else if (snapshot.videos && snapshot.videos.length > 0) {
-      mediaType = "video";
-      const video = snapshot.videos[0];
-      if (video.video_hd_url) mediaUrls.push(video.video_hd_url);
-      if (video.video_sd_url) mediaUrls.push(video.video_sd_url);
-      thumbnailUrl = video.video_preview_image_url || video.preview_image_url || null;
-    } else if (snapshot.images && snapshot.images.length > 0) {
-      mediaType = "image";
-      for (const img of snapshot.images) {
-        const url = img.resized_image_url || img.original_image_url || img.src;
-        if (url) mediaUrls.push(url);
+      thumbnailUrl = cards[0]?.resized_image_url || cards[0]?.original_image_url || cards[0]?.video_preview_image_url || null;
+    } else if (cards.length === 1) {
+      const card = cards[0];
+      const cardVideos = Array.isArray(card.videos) ? card.videos : (card.video_hd_url || card.video_sd_url) ? [card] : [];
+      const cardImages = Array.isArray(card.images) ? card.images : (card.resized_image_url || card.original_image_url) ? [card] : [];
+
+      if (cardVideos.length > 0) {
+        mediaType = "video";
+        for (const v of cardVideos) {
+          if (v.video_hd_url) mediaUrls.push(v.video_hd_url);
+          if (v.video_sd_url) mediaUrls.push(v.video_sd_url);
+          if (v.src) mediaUrls.push(v.src);
+        }
+        thumbnailUrl = card.video_preview_image_url || card.preview_image_url || card.resized_image_url || null;
+      } else if (cardImages.length > 0) {
+        mediaType = "image";
+        for (const img of cardImages) {
+          const url = img.resized_image_url || img.original_image_url || img.src;
+          if (url) mediaUrls.push(url);
+        }
+        thumbnailUrl = card.resized_image_url || card.original_image_url || mediaUrls[0] || null;
       }
-      thumbnailUrl = mediaUrls[0] || null;
+    }
+
+    // Fallback if cards array was empty or didn't yield media: check root snapshot properties
+    if (mediaUrls.length === 0) {
+      if (Array.isArray(snapshot.videos) && snapshot.videos.length > 0) {
+        mediaType = "video";
+        for (const video of snapshot.videos) {
+          if (video.video_hd_url) mediaUrls.push(video.video_hd_url);
+          if (video.video_sd_url) mediaUrls.push(video.video_sd_url);
+          if (!thumbnailUrl) thumbnailUrl = video.video_preview_image_url || video.preview_image_url || null;
+        }
+      } else if (Array.isArray(snapshot.images) && snapshot.images.length > 0) {
+        mediaType = "image";
+        for (const img of snapshot.images) {
+          const url = img.resized_image_url || img.original_image_url || img.src;
+          if (url) mediaUrls.push(url);
+        }
+        if (!thumbnailUrl) thumbnailUrl = mediaUrls[0] || null;
+      } else if (snapshot.resized_image_url || snapshot.original_image_url) {
+        mediaType = "image";
+        const url = snapshot.resized_image_url || snapshot.original_image_url;
+        mediaUrls.push(url);
+        if (!thumbnailUrl) thumbnailUrl = url;
+      } else if (snapshot.video_hd_url || snapshot.video_sd_url || snapshot.video_preview_image_url) {
+        mediaType = "video";
+        if (snapshot.video_hd_url) mediaUrls.push(snapshot.video_hd_url);
+        if (snapshot.video_sd_url) mediaUrls.push(snapshot.video_sd_url);
+        if (!thumbnailUrl) thumbnailUrl = snapshot.video_preview_image_url || null;
+      }
     }
 
     // Duplication / collation count

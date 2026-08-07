@@ -158,7 +158,14 @@ export function ImagePreviewModal({
           <img
             src={currentImage}
             alt={title || pageName || "Ad preview"}
+            referrerPolicy="no-referrer"
             className="max-h-[75vh] max-w-full object-contain rounded-xl select-none"
+            onError={(e) => {
+              const target = e.currentTarget;
+              if (currentImage && !target.src.includes("/api/spy/image-proxy")) {
+                target.src = `/api/spy/image-proxy?url=${encodeURIComponent(currentImage)}`;
+              }
+            }}
           />
         </div>
 

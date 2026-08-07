@@ -30,9 +30,24 @@ interface AdRowProps {
 export function AdRow({ ad, onArchiveToggle }: AdRowProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
+  const [isProxied, setIsProxied] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isArchived, setIsArchived] = useState(Boolean(ad.isArchived));
   const [isArchiving, setIsArchiving] = useState(false);
+
+  const initialDisplayImage = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.[0];
+  const activeImageSrc = isProxied && initialDisplayImage
+    ? `/api/spy/image-proxy?url=${encodeURIComponent(initialDisplayImage)}`
+    : initialDisplayImage;
+
+  const handleImageError = () => {
+    if (!isProxied && initialDisplayImage) {
+      setIsProxied(true);
+    } else {
+      setImgError(true);
+    }
+  };
 
   const toggleArchive = async () => {
     setIsArchiving(true);
@@ -88,7 +103,7 @@ export function AdRow({ ad, onArchiveToggle }: AdRowProps) {
   const freshnessLabel = formatFreshnessDate(ad.lastSeenAt);
 
   const firstVideoUrl = ad.mediaUrls?.find(
-    (url) => url.includes(".mp4") || url.includes("video") || ad.mediaType === "video"
+    (url: string) => url.includes(".mp4") || url.includes("video") || ad.mediaType === "video"
   );
   const displayImage = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.[0];
   const destinationUrl = resolveDestinationUrl(ad.linkUrl);
@@ -109,16 +124,15 @@ export function AdRow({ ad, onArchiveToggle }: AdRowProps) {
               autoPlay
               className="w-full h-full object-contain bg-black"
             />
-          ) : displayImage ? (
+          ) : activeImageSrc && !imgError ? (
             <div className="relative w-full h-full group/media cursor-pointer flex items-center justify-center bg-slate-900 overflow-hidden" onClick={() => setIsPreviewOpen(true)}>
               {/* eslint-disable-next-html-shortcut */}
               <img
-                src={displayImage}
+                src={activeImageSrc}
                 alt={ad.title || "Ad creative"}
+                referrerPolicy="no-referrer"
                 className="w-full h-full object-contain transition-transform duration-300 group-hover/media:scale-105"
-                onError={(e) => {
-                  (e.target as HTMLElement).style.display = "none";
-                }}
+                onError={handleImageError}
               />
               {/* Hover Zoom Overlay */}
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center text-white">
