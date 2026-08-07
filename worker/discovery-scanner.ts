@@ -106,12 +106,25 @@ function parseDiscoveryGraphQLNode(
     if (!adArchiveId || scannedAdIds.has(adArchiveId)) return;
     scannedAdIds.add(adArchiveId);
 
-    const rawPageId = String(node.pageID || node.page_id || "");
+    const snapshot = node.snapshot || node;
+    const rawPageId = String(
+      node.pageID ||
+      node.page_id ||
+      snapshot.page_id ||
+      snapshot.pageID ||
+      snapshot.publisher_page_id ||
+      ""
+    );
     if (!rawPageId || rawPageId === "0") return;
 
-    const pageName = node.pageName || node.page_name || node.publisherPlatformPageName || null;
+    const pageName =
+      node.pageName ||
+      node.page_name ||
+      snapshot.pageName ||
+      snapshot.page_name ||
+      node.publisherPlatformPageName ||
+      null;
 
-    const snapshot = node.snapshot || node;
     const ctaType = snapshot.cta_type || snapshot.cta_text || null;
     const ctaText = snapshot.action_link_title || snapshot.cta_text || snapshot.cta_type || null;
 
@@ -124,43 +137,8 @@ function parseDiscoveryGraphQLNode(
       null;
     const linkUrl = resolveDestinationUrl(rawLinkUrl);
 
-    // Resolve Canonical Page ID
-    let targetPageId = rawPageId;
-
-    if (canonicalPageIds.size > 0 && !canonicalPageIds.has(rawPageId)) {
-      const rawNameNorm = (pageName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-      const domainMatch = linkUrl ? linkUrl.match(/https?:\/\/(?:www\.)?([^\/]+)/i) : null;
-      const domainName = domainMatch ? domainMatch[1].toLowerCase().split(".")[0] : "";
-
-      let matchedCanonicalId: string | null = null;
-      for (const cId of canonicalPageIds) {
-        const cPage = collectedPages.get(cId);
-        if (!cPage) continue;
-        const cNameNorm = (cPage.displayName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-
-        const isNameMatch =
-          rawNameNorm &&
-          cNameNorm &&
-          (rawNameNorm.includes(cNameNorm) || cNameNorm.includes(rawNameNorm) || rawNameNorm.slice(0, 5) === cNameNorm.slice(0, 5));
-
-        const isDomainMatch =
-          domainName &&
-          cNameNorm &&
-          (cNameNorm.includes(domainName) || domainName.includes(cNameNorm));
-
-        if (isNameMatch || isDomainMatch) {
-          matchedCanonicalId = cId;
-          break;
-        }
-      }
-
-      if (matchedCanonicalId) {
-        targetPageId = matchedCanonicalId;
-      } else {
-        // If canonical filter list exists and no brand match was found, drop non-canonical ID
-        return;
-      }
-    }
+    // Always use the authentic Page ID from the ad node
+    const targetPageId = rawPageId;
 
     let pageRecord = collectedPages.get(targetPageId);
     if (!pageRecord) {
