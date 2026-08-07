@@ -45,6 +45,60 @@ export function extractDateFromCardText(cardText: string): Date | null {
   return null;
 }
 
+export interface ExtractedPageIdInfo {
+  pageId: string;
+  pageName: string | null;
+}
+
+/**
+ * Deep Page ID Extractor: Scans DOM anchor tags, script tags, and inline HTML to extract Meta Page IDs.
+ */
+export async function extractPageIdsFromPage(page: Page): Promise<ExtractedPageIdInfo[]> {
+  try {
+    const pageInfos = await page.evaluate(() => {
+      const resultsMap = new Map<string, string | null>();
+
+      // 1. Extract from anchor tags
+      const allAnchors = Array.from(
+        document.querySelectorAll<HTMLAnchorElement>('a[href*="page_id"], a[href*="facebook.com/"]')
+      );
+      for (const a of allAnchors) {
+        const href = a.href || "";
+        const match =
+          href.match(/(?:view_all_page_id|page_id)=(\d{10,20})/i) ||
+          href.match(/facebook\.com\/(\d{10,20})(?:[\/?#]|$)/i);
+        if (match && match[1] && match[1] !== "0") {
+          const pageId = match[1];
+          const pageName = a.textContent?.trim() || null;
+          if (!resultsMap.has(pageId) || (pageName && !resultsMap.get(pageId))) {
+            resultsMap.set(pageId, pageName);
+          }
+        }
+      }
+
+      // 2. Extract from script tags & document innerHTML
+      const scriptTexts = Array.from(document.querySelectorAll("script")).map((s) => s.textContent || "");
+      const fullText = scriptTexts.join("\n") + "\n" + (document.body?.innerHTML || "");
+
+      const pageIdRegex = /"(?:view_all_page_id|page_id|publisherPlatformPageId|pageID)"\s*:\s*"?(\d{10,20})"?/gi;
+      let match: RegExpExecArray | null;
+
+      while ((match = pageIdRegex.exec(fullText)) !== null) {
+        const pageId = match[1];
+        if (pageId && pageId !== "0" && !resultsMap.has(pageId)) {
+          resultsMap.set(pageId, null);
+        }
+      }
+
+      return Array.from(resultsMap.entries()).map(([pageId, pageName]) => ({ pageId, pageName }));
+    });
+
+    return pageInfos;
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Deep DOM Scanner: Extracts visible ad cards directly from rendered page DOM elements
  * across all languages (English, French, Arabic, Spanish, German).

@@ -3,7 +3,7 @@ import { db } from "../db";
 import { ads, adObservations, creativeScans, trackedPages, scanHistory } from "../db/schema";
 import { eq, sql } from "drizzle-orm";
 import { cacheThumbnail } from "./thumbnail-cache";
-import { extractAdsFromDOM } from "./dom-scanner";
+import { extractAdsFromDOM, extractPageIdsFromPage } from "./dom-scanner";
 import { parseResultCountFromText } from "./scanner";
 import { resolveDestinationUrl } from "../lib/utils";
 
@@ -426,12 +426,28 @@ export async function scanAdCreatives(
         }
       }
     }
-    console.log(`[Spy Scanner] DOM deep scan merged ${domMergedCount} additional unique cards (Total captured: ${collectedAds.size}).`);
+    // Collect unique Facebook Page IDs found during scan (from GraphQL ads & deep DOM inspection)
+    const extractedPageIdsSet = new Set<string>();
+    for (const adData of collectedAds.values()) {
+      if (adData.pageId && adData.pageId !== "0" && adData.pageId.trim() !== "") {
+        extractedPageIdsSet.add(adData.pageId.trim());
+      }
+    }
+
+    const pageInfos = await extractPageIdsFromPage(page);
+    for (const pInfo of pageInfos) {
+      if (pInfo.pageId && pInfo.pageId !== "0") {
+        extractedPageIdsSet.add(pInfo.pageId.trim());
+      }
+    }
+
+    const extractedPageIds = Array.from(extractedPageIdsSet);
 
     if (collectedAds.size === 0) {
       return {
         status: "failed",
         extractedCount: 0,
+        extractedPageIds,
         failureReason: "payload_not_found",
         outcomeDetails: "No GraphQL ad payloads or DOM ad cards captured during scan",
       };
@@ -521,33 +537,6 @@ export async function scanAdCreatives(
         updatedAt: now,
       })
       .where(eq(trackedPages.id, trackedPageId));
-
-    // Collect unique Facebook Page IDs found during scan
-    const extractedPageIdsSet = new Set<string>();
-    for (const adData of collectedAds.values()) {
-      if (adData.pageId && adData.pageId !== "0" && adData.pageId.trim() !== "") {
-        extractedPageIdsSet.add(adData.pageId.trim());
-      }
-    }
-
-    try {
-      const domLinks = await page.evaluate(() => {
-        const links = Array.from(document.querySelectorAll('a[href*="view_all_page_id="]'));
-        return links
-          .map((l) => {
-            const m = (l as HTMLAnchorElement).href.match(/view_all_page_id=(\d+)/);
-            return m ? m[1] : null;
-          })
-          .filter(Boolean) as string[];
-      });
-      for (const pId of domLinks) {
-        if (pId && pId !== "0") extractedPageIdsSet.add(pId);
-      }
-    } catch {
-      // ignore DOM link extraction error
-    }
-
-    const extractedPageIds = Array.from(extractedPageIdsSet);
 
     return {
       status: finalStatus,

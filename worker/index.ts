@@ -271,49 +271,52 @@ async function runWorker() {
           creativeScan.id
         );
 
-        if (outcome.status === "completed" || outcome.status === "partial") {
-          const pageIdsFound = outcome.extractedPageIds || [];
+        const pageIdsFound = outcome.extractedPageIds || [];
 
-          // Case A: Exactly 1 Page ID found -> Auto-merge exact match entry into official Page ID record
-          if (pageIdsFound.length === 1 && trackedPage.searchType !== "page") {
-            const singlePageId = pageIdsFound[0];
-            console.log(
-              `[Auto-Merge] Exact match page "${targetDisplayName}" resolved to single Meta Page ID "${singlePageId}". Merging records...`
-            );
-            await mergeExactMatchWithPageId(trackedPage.id, singlePageId);
-          } else if (pageIdsFound.length > 1) {
-            // Case B: 2+ Page IDs found -> Create tracked page records & enqueue creative scans for all discovered pages
-            console.log(
-              `[Multi-Page Disambiguation] Exact match target "${targetDisplayName}" revealed ${pageIdsFound.length} unique Facebook Page IDs (${pageIdsFound.join(", ")}). Creating page records & enqueuing creative scans...`
-            );
-            for (const pId of pageIdsFound) {
-              const pageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${
-                trackedPage.country || "TN"
-              }&view_all_page_id=${pId}&search_type=page&media_type=all`;
+        // Case A: Exactly 1 Page ID found -> Auto-merge exact match entry into official Page ID record
+        if (pageIdsFound.length === 1 && trackedPage.searchType !== "page") {
+          const singlePageId = pageIdsFound[0];
+          console.log(
+            `[Auto-Merge] Exact match page "${targetDisplayName}" resolved to single Meta Page ID "${singlePageId}". Merging records and queueing Page ID creative scan...`
+          );
+          const mergeRes = await mergeExactMatchWithPageId(trackedPage.id, singlePageId);
+          if (mergeRes.mergedPageId) {
+            await enqueueOrEscalateJob(mergeRes.mergedPageId, "creative", 10);
+          }
+        } else if (pageIdsFound.length > 1) {
+          // Case B: 2+ Page IDs found -> Create tracked page records & enqueue creative scans for all discovered pages
+          console.log(
+            `[Multi-Page Disambiguation] Exact match target "${targetDisplayName}" revealed ${pageIdsFound.length} unique Facebook Page IDs (${pageIdsFound.join(", ")}). Creating page records & enqueuing creative scans...`
+          );
+          for (const pId of pageIdsFound) {
+            const pageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${
+              trackedPage.country || "TN"
+            }&view_all_page_id=${pId}&search_type=page&media_type=all`;
 
-              const [newTp] = await db
-                .insert(trackedPages)
-                .values({
-                  url: pageUrl,
-                  displayName: `Page ${pId}`,
-                  pageId: pId,
-                  searchType: "page",
-                  country: trackedPage.country || "TN",
-                  landingPage: trackedPage.displayName || trackedPage.landingPage,
-                  status: "pending",
-                })
-                .onConflictDoUpdate({
-                  target: trackedPages.url,
-                  set: { updatedAt: new Date() },
-                })
-                .returning();
+            const [newTp] = await db
+              .insert(trackedPages)
+              .values({
+                url: pageUrl,
+                displayName: `Page ${pId}`,
+                pageId: pId,
+                searchType: "page",
+                country: trackedPage.country || "TN",
+                landingPage: trackedPage.displayName || trackedPage.landingPage,
+                status: "pending",
+              })
+              .onConflictDoUpdate({
+                target: trackedPages.url,
+                set: { updatedAt: new Date() },
+              })
+              .returning();
 
-              if (newTp) {
-                await enqueueOrEscalateJob(newTp.id, "creative", 10);
-              }
+            if (newTp) {
+              await enqueueOrEscalateJob(newTp.id, "creative", 10);
             }
           }
+        }
 
+        if (outcome.status === "completed" || outcome.status === "partial") {
           console.log(
             `[Creative Success] Status: ${outcome.status} | Extracted: ${outcome.extractedCount} ads`
           );
