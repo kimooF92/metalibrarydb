@@ -130,17 +130,18 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
           const cText = candidate.textContent || "";
           if (cText.length > 12000) continue; // safety cap for giant body wrappers
 
-          const hasContent =
-            candidate.querySelector('img[src*="fbcdn"], img[src*="scontent"], video, a[href*="l.facebook.com"], a[href*="http"]') !== null ||
+          const hasMediaOrLinks =
+            candidate.querySelector('img[src*="fbcdn"], img[src*="scontent"], video, a[href*="l.facebook.com"], a[href*="http"]') !== null;
+
+          const hasCardLabels =
             cText.includes("Sponsored") ||
             cText.includes("Sponsorisé") ||
+            cText.includes("إعلان ممول") ||
             cText.includes("See ad details") ||
             cText.includes("Voir les détails") ||
-            cText.includes("Started running") ||
-            cText.includes("Lancée le") ||
-            cText.includes("بدأ التشغيل");
+            cText.includes("عرض تفاصيل الإعلان");
 
-          if (hasContent) {
+          if (hasMediaOrLinks || hasCardLabels) {
             targetCard = candidate;
             break;
           }
