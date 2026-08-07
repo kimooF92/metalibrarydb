@@ -4,6 +4,8 @@ import { creativeScans, queue, trackedPages } from "@/db/schema";
 import { inArray, eq, and } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 
+import { extractUrlMetadata } from "@/lib/url-parser";
+
 export async function POST(req: NextRequest) {
   const authError = validateApiSecret(req);
   if (authError) return authError;
@@ -24,21 +26,18 @@ export async function POST(req: NextRequest) {
       where: inArray(trackedPages.id, trackedPageIds),
     });
 
-    const eligiblePages = pages.filter(
-      (p) =>
-        p.url &&
-        p.url.trim() !== "" &&
-        p.status === "success" &&
-        Boolean(p.pageId) &&
-        p.searchType !== "keyword_exact_phrase"
-    );
+    const eligiblePages = pages.filter((p) => {
+      if (!p.url || p.url.trim() === "") return false;
+      const urlMeta = extractUrlMetadata(p.url);
+      return Boolean(p.pageId || urlMeta.pageId);
+    });
     const ineligibleCount = pages.length - eligiblePages.length;
 
     if (eligiblePages.length === 0) {
       return NextResponse.json(
         {
           error:
-            "No eligible verified pages found. Pages must have a completed count scan (status: 'success') and a resolved Facebook Page ID before initiating an Ad Spy creative scan.",
+            "No eligible pages found with valid Meta Ad Library URLs or Page IDs.",
           ineligibleCount,
         },
         { status: 400 }

@@ -12,6 +12,7 @@ import { getBrowserSession, closeBrowserSession } from "./browser";
 import { scanMetaAdPage } from "./scanner";
 import { scanAdCreatives } from "./spy-scanner";
 import { runDiscoveryScan } from "./discovery-scanner";
+import { extractUrlMetadata } from "../lib/url-parser";
 import { eq, asc } from "drizzle-orm";
 import {
   getNextPendingJob,
@@ -260,22 +261,40 @@ async function runWorker() {
           await handleFailure();
         }
       } else if (jobType === "creative" && creativeScan && trackedPage) {
-        // Lifecycle Guard: Ensure page is verified ('success') and has a resolved pageId
-        if (
-          trackedPage.status !== "success" ||
-          !trackedPage.pageId ||
-          trackedPage.searchType === "keyword_exact_phrase"
-        ) {
+        // Smart Page ID Resolution: check DB column or URL parameter
+        const urlMeta = extractUrlMetadata(trackedPage.url);
+        const effectivePageId = trackedPage.pageId || urlMeta.pageId;
+
+        if (!effectivePageId) {
           console.warn(
-            `[Creative Guard] Skipping creative scan for unverified/pending page ID: ${trackedPage.id} (Status: ${trackedPage.status}, PageId: ${trackedPage.pageId ?? "N/A"})`
+            `[Creative Guard] Page ID unresolved for target "${targetDisplayName}". Running initial count scan first to resolve Page ID...`
           );
-          await markCreativeJobFailed(
-            queueJob.id,
-            creativeScan.id,
-            "unverified_page",
-            "Page count scan must complete successfully before running Ad Spy creative scan"
-          );
-          continue;
+          const countOutcome = await scanMetaAdPage(page, trackedPage.url);
+          if (countOutcome.status === "success" || countOutcome.status === "unclear") {
+            await markJobCompleted(
+              queueJob.id,
+              trackedPage.id,
+              countOutcome.results,
+              countOutcome.status
+            );
+            await recordSuccessfulScan();
+            await handleSuccess();
+          } else {
+            await markCreativeJobFailed(
+              queueJob.id,
+              creativeScan.id,
+              "unverified_page",
+              "Page count scan failed prior to creative scan"
+            );
+            await handleFailure();
+            continue;
+          }
+        } else if (!trackedPage.pageId && effectivePageId) {
+          // Backfill pageId into trackedPages DB record if extracted from URL
+          await db
+            .update(trackedPages)
+            .set({ pageId: effectivePageId, updatedAt: new Date() })
+            .where(eq(trackedPages.id, trackedPage.id));
         }
 
         // Run Ad Spy GraphQL extraction
