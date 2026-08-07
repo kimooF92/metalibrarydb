@@ -51,25 +51,17 @@ async function runWorker() {
   const testDiscoveryIdx = args.indexOf("--discovery-url");
   const isSingleRun = args.includes("--once") || process.env.SINGLE_RUN === "true";
 
-  const currentUTCHour = new Date().getUTCHours();
-  // Configurable burst hours in UTC
-  const burstHoursEnv = process.env.BURST_HOURS
-    ? process.env.BURST_HOURS.split(",").map((h) => parseInt(h.trim(), 10))
-    : [8, 9, 10, 20, 21, 22];
-
-  const isInitialBurstHour = burstHoursEnv.includes(currentUTCHour);
-
   const isForceRefresh = args.includes("--refresh-all") || process.env.REFRESH_ALL === "true";
   const shouldRefreshAll =
     isForceRefresh ||
-    (isInitialBurstHour && process.env.AUTO_BURST_ENQUEUE !== "false");
+    process.env.AUTO_BURST_ENQUEUE !== "false";
 
   if (shouldRefreshAll) {
     const cooldownHours = isForceRefresh
       ? 0
       : parseInt(process.env.AUTO_REFRESH_COOLDOWN_HOURS || "6", 10);
     console.log(
-      `[Refresh Mode] Burst hour trigger (UTC: ${currentUTCHour}). Enqueuing eligible pages for auto-refresh (cooldown: ${cooldownHours}h)...`
+      `[Refresh Mode] Enqueuing eligible pages for auto-refresh (cooldown: ${cooldownHours}h)...`
     );
     await enqueueAllPagesForRefresh(cooldownHours);
   }
@@ -77,10 +69,11 @@ async function runWorker() {
   const shouldEnqueueSpy = args.includes("--enqueue-spy") || process.env.ENQUEUE_SPY === "true";
   if (shouldEnqueueSpy) {
     const spyCooldownDays = parseInt(process.env.SPY_COOLDOWN_DAYS || "3", 10);
+    const spyMaxPages = parseInt(process.env.SPY_MAX_PAGES_PER_RUN || "25", 10);
     console.log(
-      `[Spy Mode] Enqueuing eligible pages for Ad Spy creative scan (cooldown: ${spyCooldownDays}d)...`
+      `[Spy Mode] Enqueuing eligible pages for Ad Spy creative scan (cooldown: ${spyCooldownDays}d, max: ${spyMaxPages} pages/round)...`
     );
-    await enqueuePagesForCreativeScan(spyCooldownDays);
+    await enqueuePagesForCreativeScan(spyCooldownDays, spyMaxPages);
   }
 
   if (testUrlIdx !== -1 && args[testUrlIdx + 1]) {

@@ -71,14 +71,18 @@ export async function enqueueAllPagesForRefresh(cooldownHours: number = 6) {
   return newJobs.length;
 }
 
-export async function enqueuePagesForCreativeScan(cooldownDays: number = 3) {
+export async function enqueuePagesForCreativeScan(
+  cooldownDays: number = 3,
+  maxPages: number = 25
+) {
   const cutoff = new Date(Date.now() - cooldownDays * 24 * 60 * 60 * 1000);
 
   const allPages = await db.query.trackedPages.findMany({
     columns: { id: true, lastCreativeScan: true, currentResults: true },
   });
 
-  const eligibleIds: string[] = [];
+  // --- Option A+B: Collect eligible pages with their ad count for priority sorting ---
+  const eligiblePages: { id: string; currentResults: number }[] = [];
 
   for (const page of allPages) {
     // Respect cooldown window
@@ -91,7 +95,7 @@ export async function enqueuePagesForCreativeScan(cooldownDays: number = 3) {
     if (isFirstTimeCreativeScan) {
       // First-time creative scan: requires currentResults >= 1
       if ((page.currentResults || 0) >= 1) {
-        eligibleIds.push(page.id);
+        eligiblePages.push({ id: page.id, currentResults: page.currentResults || 0 });
       }
     } else {
       // Subsequent scan: requires latest scanHistory difference >= 1 (new ads added)
@@ -101,21 +105,34 @@ export async function enqueuePagesForCreativeScan(cooldownDays: number = 3) {
       });
 
       if (latestHistory && (latestHistory.difference || 0) >= 1) {
-        eligibleIds.push(page.id);
+        eligiblePages.push({ id: page.id, currentResults: page.currentResults || 0 });
       }
     }
   }
 
-  if (eligibleIds.length === 0) {
+  if (eligiblePages.length === 0) {
     console.log(
       `[Enqueue Spy] No eligible pages found for Ad Spy creative scan (difference < +1 or cooldown active).`
     );
     return 0;
   }
 
+  // Option B: Sort by highest active ad count first (most active advertisers get priority)
+  eligiblePages.sort((a, b) => b.currentResults - a.currentResults);
+
+  // Option A: Cap at maxPages to stay within GitHub Actions 60-min timeout
+  const batch = eligiblePages.slice(0, maxPages);
+  const skipped = eligiblePages.length - batch.length;
+
+  console.log(
+    `[Enqueue Spy] ${eligiblePages.length} eligible page(s) found. Enqueuing top ${batch.length} by ad count (cap: ${maxPages}${
+      skipped > 0 ? `, ${skipped} deferred to next round` : ""
+    }).`
+  );
+
   let enqueuedCount = 0;
 
-  for (const pageId of eligibleIds) {
+  for (const { id: pageId } of batch) {
     const existingQueueJob = await db.query.queue.findFirst({
       where: (q, { eq, and, inArray }) =>
         and(

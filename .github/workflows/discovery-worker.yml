@@ -61,6 +61,7 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           SINGLE_RUN: "true"
           PLAYWRIGHT_HEADLESS: "true"
+          AUTO_BURST_ENQUEUE: "false"
           DISCOVERY_MAX_ADS: ${{ inputs.max_ads || '2500' }}
           TARGET_COUNTRY: ${{ inputs.country || 'TN' }}
         run: |

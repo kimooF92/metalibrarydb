@@ -2,8 +2,8 @@ name: Meta Ad Tracker Spy Worker
 
 on:
   schedule:
-    # Run once per day in afternoon window (2:00 PM UTC+1 / 13:00 UTC) with zero overlap against count workers
-    - cron: '0 13 * * *'
+    # 2 rounds per day: Midday (12:00 PM UTC+1 / 11:00 UTC) & Midnight (00:00 AM UTC+1 / 23:00 UTC)
+    - cron: '0 11,23 * * *'
   workflow_dispatch: # Allows manual trigger from GitHub UI anytime
 
 # Global concurrency group to guarantee zero job overlap across workflows
@@ -14,7 +14,7 @@ concurrency:
 jobs:
   run-spy-worker:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 180
 
     steps:
       - name: Checkout Code
@@ -49,6 +49,9 @@ jobs:
           SINGLE_RUN: "true"
           PLAYWRIGHT_HEADLESS: "true"
           ENQUEUE_SPY: "true"
+          AUTO_BURST_ENQUEUE: "false"
+          SPY_COOLDOWN_DAYS: "3"
+          SPY_MAX_PAGES_PER_RUN: "50"
           MAX_SCANS_PER_HOUR: "100"
           MAX_SCANS_PER_DAY: "0"
         run: npm run worker -- --enqueue-spy
