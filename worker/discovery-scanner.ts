@@ -90,10 +90,14 @@ function isMatchingEcommerceCta(ctaTypeRaw?: string | null, ctaTextRaw?: string 
 /**
  * Extracts page info and CTA data from Meta GraphQL payload node
  */
+/**
+ * Extracts page info and CTA data from Meta GraphQL payload node
+ */
 function parseDiscoveryGraphQLNode(
   node: any,
   collectedPages: Map<string, DiscoveredPageData>,
-  scannedAdIds: Set<string>
+  scannedAdIds: Set<string>,
+  canonicalPageIds: Set<string>
 ) {
   try {
     const adArchiveId = String(
@@ -102,8 +106,8 @@ function parseDiscoveryGraphQLNode(
     if (!adArchiveId || scannedAdIds.has(adArchiveId)) return;
     scannedAdIds.add(adArchiveId);
 
-    const pageId = String(node.pageID || node.page_id || "");
-    if (!pageId || pageId === "0") return;
+    const rawPageId = String(node.pageID || node.page_id || "");
+    if (!rawPageId || rawPageId === "0") return;
 
     const pageName = node.pageName || node.page_name || node.publisherPlatformPageName || null;
 
@@ -120,24 +124,66 @@ function parseDiscoveryGraphQLNode(
       null;
     const linkUrl = resolveDestinationUrl(rawLinkUrl);
 
-    let pageRecord = collectedPages.get(pageId);
+    // Resolve Canonical Page ID
+    let targetPageId = rawPageId;
+
+    if (canonicalPageIds.size > 0 && !canonicalPageIds.has(rawPageId)) {
+      const rawNameNorm = (pageName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const domainMatch = linkUrl ? linkUrl.match(/https?:\/\/(?:www\.)?([^\/]+)/i) : null;
+      const domainName = domainMatch ? domainMatch[1].toLowerCase().split(".")[0] : "";
+
+      let matchedCanonicalId: string | null = null;
+      for (const cId of canonicalPageIds) {
+        const cPage = collectedPages.get(cId);
+        if (!cPage) continue;
+        const cNameNorm = (cPage.displayName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+        const isNameMatch =
+          rawNameNorm &&
+          cNameNorm &&
+          (rawNameNorm.includes(cNameNorm) || cNameNorm.includes(rawNameNorm) || rawNameNorm.slice(0, 5) === cNameNorm.slice(0, 5));
+
+        const isDomainMatch =
+          domainName &&
+          cNameNorm &&
+          (cNameNorm.includes(domainName) || domainName.includes(cNameNorm));
+
+        if (isNameMatch || isDomainMatch) {
+          matchedCanonicalId = cId;
+          break;
+        }
+      }
+
+      if (matchedCanonicalId) {
+        targetPageId = matchedCanonicalId;
+      } else {
+        // If canonical filter list exists and no brand match was found, drop non-canonical ID
+        return;
+      }
+    }
+
+    let pageRecord = collectedPages.get(targetPageId);
     if (!pageRecord) {
       pageRecord = {
-        pageId,
+        pageId: targetPageId,
         displayName: pageName ? String(pageName) : null,
         matchingAdCount: 0,
         sampleAdArchiveIds: new Set(),
         sampleCtas: new Set(),
         sampleUrls: new Set(),
       };
-      collectedPages.set(pageId, pageRecord);
+      collectedPages.set(targetPageId, pageRecord);
     }
 
     if (!pageRecord.displayName && pageName) {
       pageRecord.displayName = String(pageName);
     }
 
-    pageRecord.matchingAdCount++;
+    // Only increment count if it wasn't pre-populated from dynamic_filter_options
+    if (canonicalPageIds.size === 0 || !canonicalPageIds.has(targetPageId)) {
+      pageRecord.matchingAdCount++;
+    }
+
     if (adArchiveId && pageRecord.sampleAdArchiveIds.size < 5) {
       pageRecord.sampleAdArchiveIds.add(adArchiveId);
     }
@@ -158,16 +204,45 @@ function parseDiscoveryGraphQLNode(
 function extractDiscoveryFromJSON(
   obj: any,
   collectedPages: Map<string, DiscoveredPageData>,
-  scannedAdIds: Set<string>
+  scannedAdIds: Set<string>,
+  canonicalPageIds: Set<string>
 ) {
   if (!obj || typeof obj !== "object") return;
+
+  // Parse authoritative Canonical Page IDs from Meta's dynamic filter options first
+  if (obj.dynamic_filter_options?.pages && Array.isArray(obj.dynamic_filter_options.pages)) {
+    for (const pOpt of obj.dynamic_filter_options.pages) {
+      const pageId = String(pOpt.key || pOpt.page_id || "");
+      const displayName = pOpt.display_name || pOpt.name || null;
+      const count = typeof pOpt.count === "number" ? pOpt.count : 0;
+
+      if (pageId && pageId !== "0") {
+        canonicalPageIds.add(pageId);
+        let pageRecord = collectedPages.get(pageId);
+        if (!pageRecord) {
+          pageRecord = {
+            pageId,
+            displayName: displayName ? String(displayName) : null,
+            matchingAdCount: count,
+            sampleAdArchiveIds: new Set(),
+            sampleCtas: new Set(["Shop Now"]),
+            sampleUrls: new Set(),
+          };
+          collectedPages.set(pageId, pageRecord);
+        } else {
+          if (!pageRecord.displayName && displayName) pageRecord.displayName = String(displayName);
+          if (count > pageRecord.matchingAdCount) pageRecord.matchingAdCount = count;
+        }
+      }
+    }
+  }
 
   if (Array.isArray(obj)) {
     for (const item of obj) {
       if (item && typeof item === "object" && (item.adArchiveID || item.ad_archive_id || item.snapshot)) {
-        parseDiscoveryGraphQLNode(item, collectedPages, scannedAdIds);
+        parseDiscoveryGraphQLNode(item, collectedPages, scannedAdIds, canonicalPageIds);
       } else {
-        extractDiscoveryFromJSON(item, collectedPages, scannedAdIds);
+        extractDiscoveryFromJSON(item, collectedPages, scannedAdIds, canonicalPageIds);
       }
     }
     return;
@@ -178,14 +253,14 @@ function extractDiscoveryFromJSON(
     if (Array.isArray(list)) {
       for (const item of list) {
         const targetNode = item.node || item;
-        parseDiscoveryGraphQLNode(targetNode, collectedPages, scannedAdIds);
+        parseDiscoveryGraphQLNode(targetNode, collectedPages, scannedAdIds, canonicalPageIds);
       }
     }
   }
 
   for (const key of Object.keys(obj)) {
     if (typeof obj[key] === "object") {
-      extractDiscoveryFromJSON(obj[key], collectedPages, scannedAdIds);
+      extractDiscoveryFromJSON(obj[key], collectedPages, scannedAdIds, canonicalPageIds);
     }
   }
 }
@@ -200,6 +275,7 @@ export async function runDiscoveryScan(
   country: string = "TN"
 ): Promise<DiscoveryScanOutcome> {
   const collectedPages = new Map<string, DiscoveredPageData>();
+  const canonicalPageIds = new Set<string>();
   const scannedAdIds = new Set<string>();
   let hasCaptchaOrBlock = false;
   let isRateLimited = false;
@@ -229,7 +305,7 @@ export async function runDiscoveryScan(
             return;
           }
         }
-        extractDiscoveryFromJSON(jsonObj, collectedPages, scannedAdIds);
+        extractDiscoveryFromJSON(jsonObj, collectedPages, scannedAdIds, canonicalPageIds);
         graphqlResponseReceived = true;
       };
 
