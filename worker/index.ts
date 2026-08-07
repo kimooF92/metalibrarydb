@@ -13,6 +13,7 @@ import { scanMetaAdPage } from "./scanner";
 import { scanAdCreatives } from "./spy-scanner";
 import { runDiscoveryScan } from "./discovery-scanner";
 import { extractUrlMetadata } from "../lib/url-parser";
+import { mergeExactMatchWithPageId } from "../actions/merge-pages";
 import { eq, asc } from "drizzle-orm";
 import {
   getNextPendingJob,
@@ -27,6 +28,7 @@ import {
   enqueueAllPagesForRefresh,
   enqueuePagesForCreativeScan,
   updateWorkerState,
+  enqueueOrEscalateJob,
 } from "./db";
 import {
   checkRateCaps,
@@ -261,35 +263,7 @@ async function runWorker() {
           await handleFailure();
         }
       } else if (jobType === "creative" && creativeScan && trackedPage) {
-        // Smart Page ID Resolution: check DB column or URL parameter
-        const urlMeta = extractUrlMetadata(trackedPage.url);
-        const effectivePageId = trackedPage.pageId || urlMeta.pageId;
-
-        if (
-          !effectivePageId ||
-          trackedPage.searchType === "keyword_exact_phrase" ||
-          trackedPage.searchType === "keyword_unordered"
-        ) {
-          console.warn(
-            `[Creative Guard] Target "${targetDisplayName}" is a keyword/domain search URL matching multiple Facebook Pages. Skipping Ad Spy and recommending Discovery scan...`
-          );
-          await markCreativeJobFailed(
-            queueJob.id,
-            creativeScan.id,
-            "requires_discovery",
-            `Target "${targetDisplayName}" is a keyword search URL matching 2+ Facebook Pages. Please run a Discovery Scan to extract and track individual Page IDs before running Ad Spy.`
-          );
-          await handleFailure();
-          continue;
-        } else if (!trackedPage.pageId && effectivePageId) {
-          // Backfill pageId into trackedPages DB record if extracted from URL
-          await db
-            .update(trackedPages)
-            .set({ pageId: effectivePageId, updatedAt: new Date() })
-            .where(eq(trackedPages.id, trackedPage.id));
-        }
-
-        // Run Ad Spy GraphQL extraction
+        // Run Ad Spy GraphQL & DOM extraction
         const outcome = await scanAdCreatives(
           page,
           trackedPage.id,
@@ -298,6 +272,48 @@ async function runWorker() {
         );
 
         if (outcome.status === "completed" || outcome.status === "partial") {
+          const pageIdsFound = outcome.extractedPageIds || [];
+
+          // Case A: Exactly 1 Page ID found -> Auto-merge exact match entry into official Page ID record
+          if (pageIdsFound.length === 1 && trackedPage.searchType !== "page") {
+            const singlePageId = pageIdsFound[0];
+            console.log(
+              `[Auto-Merge] Exact match page "${targetDisplayName}" resolved to single Meta Page ID "${singlePageId}". Merging records...`
+            );
+            await mergeExactMatchWithPageId(trackedPage.id, singlePageId);
+          } else if (pageIdsFound.length > 1) {
+            // Case B: 2+ Page IDs found -> Create tracked page records & enqueue creative scans for all discovered pages
+            console.log(
+              `[Multi-Page Disambiguation] Exact match target "${targetDisplayName}" revealed ${pageIdsFound.length} unique Facebook Page IDs (${pageIdsFound.join(", ")}). Creating page records & enqueuing creative scans...`
+            );
+            for (const pId of pageIdsFound) {
+              const pageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${
+                trackedPage.country || "TN"
+              }&view_all_page_id=${pId}&search_type=page&media_type=all`;
+
+              const [newTp] = await db
+                .insert(trackedPages)
+                .values({
+                  url: pageUrl,
+                  displayName: `Page ${pId}`,
+                  pageId: pId,
+                  searchType: "page",
+                  country: trackedPage.country || "TN",
+                  landingPage: trackedPage.displayName || trackedPage.landingPage,
+                  status: "pending",
+                })
+                .onConflictDoUpdate({
+                  target: trackedPages.url,
+                  set: { updatedAt: new Date() },
+                })
+                .returning();
+
+              if (newTp) {
+                await enqueueOrEscalateJob(newTp.id, "creative", 10);
+              }
+            }
+          }
+
           console.log(
             `[Creative Success] Status: ${outcome.status} | Extracted: ${outcome.extractedCount} ads`
           );

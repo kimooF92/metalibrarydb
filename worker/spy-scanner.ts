@@ -27,6 +27,7 @@ export interface ExtractedAdData {
 export interface SpyScanOutcome {
   status: "completed" | "partial" | "failed";
   extractedCount: number;
+  extractedPageIds?: string[];
   failureReason?: "captcha" | "rate_limited" | "payload_not_found" | "parse_error" | "timeout";
   outcomeDetails?: string;
 }
@@ -521,9 +522,37 @@ export async function scanAdCreatives(
       })
       .where(eq(trackedPages.id, trackedPageId));
 
+    // Collect unique Facebook Page IDs found during scan
+    const extractedPageIdsSet = new Set<string>();
+    for (const adData of collectedAds.values()) {
+      if (adData.pageId && adData.pageId !== "0" && adData.pageId.trim() !== "") {
+        extractedPageIdsSet.add(adData.pageId.trim());
+      }
+    }
+
+    try {
+      const domLinks = await page.evaluate(() => {
+        const links = Array.from(document.querySelectorAll('a[href*="view_all_page_id="]'));
+        return links
+          .map((l) => {
+            const m = (l as HTMLAnchorElement).href.match(/view_all_page_id=(\d+)/);
+            return m ? m[1] : null;
+          })
+          .filter(Boolean) as string[];
+      });
+      for (const pId of domLinks) {
+        if (pId && pId !== "0") extractedPageIdsSet.add(pId);
+      }
+    } catch {
+      // ignore DOM link extraction error
+    }
+
+    const extractedPageIds = Array.from(extractedPageIdsSet);
+
     return {
       status: finalStatus,
       extractedCount: savedCount,
+      extractedPageIds,
       outcomeDetails: `Successfully extracted and normalized ${savedCount} ad creatives.`,
     };
   } catch (err: any) {
