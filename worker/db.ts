@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { trackedPages, queue, scanHistory, workerState, creativeScans, discoveredPages } from "../db/schema";
+import { trackedPages, queue, scanHistory, workerState, creativeScans, discoveredPages, discoveryRuns } from "../db/schema";
 import { eq, asc, desc, sql, inArray } from "drizzle-orm";
 
 export async function resetStuckJobs() {
@@ -183,6 +183,78 @@ export async function enqueuePagesForCreativeScan(
 
   console.log(`[Enqueue Spy] Enqueued ${enqueuedCount} page(s) for Ad Spy creative scan.`);
   return enqueuedCount;
+}
+
+/**
+ * Saves extracted Page IDs into discovery_runs and discovered_pages tables so they appear on Discovery UI
+ */
+export async function saveExtractedPageIdsToDiscovery(
+  pageIds: string[],
+  searchUrl: string,
+  country: string = "TN",
+  parentTrackedPageId?: string | null
+) {
+  if (!pageIds || pageIds.length === 0) return [];
+
+  const now = new Date();
+
+  // 1. Create a discovery run record for this inline extraction
+  const [runRecord] = await db
+    .insert(discoveryRuns)
+    .values({
+      country,
+      searchUrl,
+      query: searchUrl,
+      status: "completed",
+      totalAdsScanned: pageIds.length,
+      totalPagesDiscovered: pageIds.length,
+      outcomeDetails: `Inline page extraction from: ${searchUrl}`,
+      startedAt: now,
+      finishedAt: now,
+      createdAt: now,
+    })
+    .returning();
+
+  const savedDiscovered: any[] = [];
+
+  for (const pageId of pageIds) {
+    const cleanId = pageId.trim();
+    if (!cleanId || cleanId === "0") continue;
+
+    // Check if page is already tracked
+    const existingTracked = await db.query.trackedPages.findFirst({
+      where: (tp, { or, eq }) =>
+        or(
+          eq(tp.pageId, cleanId),
+          eq(
+            tp.url,
+            `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&view_all_page_id=${cleanId}&search_type=page&media_type=all`
+          )
+        ),
+    });
+
+    const status = existingTracked ? "imported" : "discovered";
+    const trackedPageId = existingTracked?.id || parentTrackedPageId || null;
+
+    const [saved] = await db
+      .insert(discoveredPages)
+      .values({
+        runId: runRecord.id,
+        pageId: cleanId,
+        displayName: existingTracked?.displayName || `Page ${cleanId}`,
+        country,
+        matchingAdCount: 1,
+        status,
+        trackedPageId,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+
+    if (saved) savedDiscovered.push(saved);
+  }
+
+  return savedDiscovered;
 }
 
 export async function getWorkerState() {

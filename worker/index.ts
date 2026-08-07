@@ -29,6 +29,7 @@ import {
   enqueuePagesForCreativeScan,
   updateWorkerState,
   enqueueOrEscalateJob,
+  saveExtractedPageIdsToDiscovery,
 } from "./db";
 import {
   checkRateCaps,
@@ -272,6 +273,16 @@ async function runWorker() {
         );
 
         const pageIdsFound = outcome.extractedPageIds || [];
+
+        // Save all extracted Page IDs to discovered_pages table so they show up on the Discovery UI Table
+        if (pageIdsFound.length > 0) {
+          await saveExtractedPageIdsToDiscovery(
+            pageIdsFound,
+            trackedPage.url,
+            trackedPage.country || "TN",
+            trackedPage.id
+          );
+        }
 
         // Case A: Exactly 1 Page ID found -> Auto-merge exact match entry into official Page ID record
         if (pageIdsFound.length === 1 && trackedPage.searchType !== "page") {
