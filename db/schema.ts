@@ -172,10 +172,10 @@ export const queue = pgTable(
   "queue",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    trackedPageId: uuid("tracked_page_id")
-      .notNull()
-      .references(() => trackedPages.id, { onDelete: "cascade" }),
-    jobType: text("job_type").default("count").notNull(), // count | creative
+    trackedPageId: uuid("tracked_page_id").references(() => trackedPages.id, { onDelete: "cascade" }),
+    discoveredPageId: uuid("discovered_page_id").references(() => discoveredPages.id, { onDelete: "cascade" }),
+    jobType: text("job_type").default("count").notNull(), // count | creative | discovery_count
+    priority: integer("priority").default(1).notNull(), // 1 (routine background refresh) | 10 (user-initiated high priority)
     creativeScanId: uuid("creative_scan_id").references(() => creativeScans.id, { onDelete: "set null" }),
     status: text("status").default("pending"), // pending | running | completed | failed
     attempts: integer("attempts").default(0),
@@ -187,11 +187,13 @@ export const queue = pgTable(
   (table) => [
     index("idx_queue_status").on(table.status),
     index("idx_queue_job_type_status").on(table.jobType, table.status),
+    index("idx_queue_priority_created_at").on(table.priority.desc(), table.createdAt),
     index("idx_queue_created_at").on(table.createdAt),
     index("idx_queue_page_created_at").on(
       table.trackedPageId,
       table.createdAt.desc()
     ),
+    index("idx_queue_discovered_page_id").on(table.discoveredPageId),
   ]
 );
 

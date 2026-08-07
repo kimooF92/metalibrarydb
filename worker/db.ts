@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { trackedPages, queue, scanHistory, workerState, creativeScans, discoveredPages } from "../db/schema";
-import { eq, asc, sql, inArray } from "drizzle-orm";
+import { eq, asc, desc, sql, inArray } from "drizzle-orm";
 
 export async function resetStuckJobs() {
   await db
@@ -59,6 +59,7 @@ export async function enqueueAllPagesForRefresh(cooldownHours: number = 6) {
       trackedPageId: id,
       status: "pending",
       jobType: "count",
+      priority: 1,
     }));
 
   if (newJobs.length > 0) {
@@ -157,6 +158,7 @@ export async function enqueuePagesForCreativeScan(
       jobType: "creative",
       creativeScanId: scanRecord.id,
       status: "pending",
+      priority: 1,
     });
 
     enqueuedCount++;
@@ -200,16 +202,26 @@ export async function updateWorkerState(
 export async function getNextPendingJob() {
   const job = await db.query.queue.findFirst({
     where: eq(queue.status, "pending"),
-    orderBy: [asc(queue.createdAt)],
+    orderBy: [desc(queue.priority), asc(queue.createdAt)],
   });
 
   if (!job) return null;
 
-  const page = await db.query.trackedPages.findFirst({
-    where: eq(trackedPages.id, job.trackedPageId),
-  });
+  let page = null;
+  if (job.trackedPageId) {
+    page = await db.query.trackedPages.findFirst({
+      where: eq(trackedPages.id, job.trackedPageId),
+    });
+  }
 
-  if (!page) return null;
+  let discoveredPage = null;
+  if (job.discoveredPageId) {
+    discoveredPage = await db.query.discoveredPages.findFirst({
+      where: eq(discoveredPages.id, job.discoveredPageId),
+    });
+  }
+
+  if (!page && !discoveredPage) return null;
 
   let creativeScanRecord = null;
   if (job.jobType === "creative" && job.creativeScanId) {
@@ -221,11 +233,12 @@ export async function getNextPendingJob() {
   return {
     queueJob: job,
     trackedPage: page,
+    discoveredPage,
     creativeScan: creativeScanRecord,
   };
 }
 
-export async function markJobRunning(queueId: string, pageId: string, creativeScanId?: string | null) {
+export async function markJobRunning(queueId: string, pageId?: string | null, creativeScanId?: string | null, discoveredPageId?: string | null) {
   const now = new Date();
 
   await db
@@ -245,11 +258,16 @@ export async function markJobRunning(queueId: string, pageId: string, creativeSc
         startedAt: now,
       })
       .where(eq(creativeScans.id, creativeScanId));
-  } else {
+  } else if (pageId) {
     await db
       .update(trackedPages)
       .set({ status: "scanning", updatedAt: now })
       .where(eq(trackedPages.id, pageId));
+  } else if (discoveredPageId) {
+    await db
+      .update(discoveredPages)
+      .set({ status: "verifying", updatedAt: now })
+      .where(eq(discoveredPages.id, discoveredPageId));
   }
 }
 
@@ -413,4 +431,55 @@ export async function markCreativeJobFailed(
     })
     .where(eq(queue.id, queueId));
 }
+
+export async function markDiscoveryJobCompleted(
+  queueId: string,
+  discoveredPageId: string,
+  results: number | null
+) {
+  const now = new Date();
+
+  await db
+    .update(discoveredPages)
+    .set({
+      verifiedAdCount: results,
+      status: "discovered",
+      updatedAt: now,
+    })
+    .where(eq(discoveredPages.id, discoveredPageId));
+
+  await db
+    .update(queue)
+    .set({
+      status: "completed",
+      finishedAt: now,
+    })
+    .where(eq(queue.id, queueId));
+}
+
+export async function markDiscoveryJobFailed(
+  queueId: string,
+  discoveredPageId: string,
+  reason: string
+) {
+  const now = new Date();
+
+  await db
+    .update(discoveredPages)
+    .set({
+      status: "discovered",
+      updatedAt: now,
+    })
+    .where(eq(discoveredPages.id, discoveredPageId));
+
+  await db
+    .update(queue)
+    .set({
+      status: "failed",
+      failureReason: reason,
+      finishedAt: now,
+    })
+    .where(eq(queue.id, queueId));
+}
+
 

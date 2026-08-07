@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { discoveredPages } from "@/db/schema";
+import { discoveredPages, queue } from "@/db/schema";
 import { inArray, eq } from "drizzle-orm";
+import { triggerGitHubWorkflow } from "@/lib/github";
 
 /**
  * POST /api/discovery/verify
  *
- * Marks selected discovered pages as "verifying" so the background worker
- * can fetch real ad counts from Meta.
+ * Marks selected discovered pages as "verifying" and enqueues high-priority (priority: 10)
+ * background jobs so the worker can fetch real ad counts directly into discoveredPages.
  *
  * IMPORTANT: This endpoint does NOT create trackedPages rows.
  * Creating a trackedPages row is the exclusive responsibility of /api/discovery/import
  * (the explicit user-initiated Merge action).
- *
- * Previously this route inserted into trackedPages which caused pages to appear
- * as "Already Tracked" before the user ever clicked Merge — that was a bug.
  */
 export async function POST(req: Request) {
   try {
@@ -35,8 +33,7 @@ export async function POST(req: Request) {
     let enqueuedCount = 0;
 
     for (const discPage of pagesToVerify) {
-      // Only mark as verifying — do NOT insert into trackedPages.
-      // The worker will update verifiedAdCount directly on discoveredPages.
+      // 1. Mark status as verifying on discoveredPages
       await db
         .update(discoveredPages)
         .set({
@@ -45,8 +42,30 @@ export async function POST(req: Request) {
         })
         .where(eq(discoveredPages.id, discPage.id));
 
-      enqueuedCount++;
+      // 2. Check if a high-priority verification job is already pending/running
+      const existingJob = await db.query.queue.findFirst({
+        where: (q, { and, eq, inArray }) =>
+          and(
+            eq(q.discoveredPageId, discPage.id),
+            eq(q.jobType, "discovery_count"),
+            inArray(q.status, ["pending", "running"])
+          ),
+      });
+
+      // 3. Enqueue high priority (priority 10) verification job
+      if (!existingJob) {
+        await db.insert(queue).values({
+          discoveredPageId: discPage.id,
+          jobType: "discovery_count",
+          priority: 10,
+          status: "pending",
+        });
+        enqueuedCount++;
+      }
     }
+
+    // 4. Trigger GitHub Actions worker workflow to process queue immediately
+    await triggerGitHubWorkflow("worker.yml").catch(() => {});
 
     return NextResponse.json({
       success: true,
@@ -60,3 +79,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

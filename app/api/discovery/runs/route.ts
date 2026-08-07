@@ -57,7 +57,7 @@ export async function POST(req: Request) {
       .returning();
 
     // Trigger GitHub Action worker if configured
-    await triggerGitHubWorkflow("discovery-worker.yml", { country }).catch(() => {});
+    await triggerGitHubWorkflow("discovery-worker.yml", { country }).catch(() => { });
 
     return NextResponse.json({
       success: true,

@@ -20,6 +20,8 @@ import {
   markJobFailed,
   markCreativeJobCompleted,
   markCreativeJobFailed,
+  markDiscoveryJobCompleted,
+  markDiscoveryJobFailed,
   resetStuckJobs,
   enqueueAllPagesForRefresh,
   enqueuePagesForCreativeScan,
@@ -210,20 +212,58 @@ async function runWorker() {
         continue;
       }
 
-      const { queueJob, trackedPage, creativeScan } = nextJob;
+      const { queueJob, trackedPage, discoveredPage, creativeScan } = nextJob;
       const jobType = queueJob.jobType || "count";
+      const targetDisplayName =
+        trackedPage?.displayName ||
+        trackedPage?.id ||
+        discoveredPage?.displayName ||
+        discoveredPage?.pageId ||
+        queueJob.id;
 
       console.log(
-        `\n[Processing ${jobType.toUpperCase()} Job] ID: ${queueJob.id} | Page: "${trackedPage.displayName || trackedPage.id}"`
+        `\n[Processing ${jobType.toUpperCase()} Job (Priority: ${queueJob.priority || 1})] ID: ${queueJob.id} | Target: "${targetDisplayName}"`
       );
 
       // 4. Mark running
-      await markJobRunning(queueJob.id, trackedPage.id, queueJob.creativeScanId);
+      await markJobRunning(
+        queueJob.id,
+        trackedPage?.id,
+        queueJob.creativeScanId,
+        discoveredPage?.id
+      );
 
       // 5. Route job by type
       const { page } = await getBrowserSession();
 
-      if (jobType === "creative" && creativeScan) {
+      if (jobType === "discovery_count" && discoveredPage) {
+        // Run Discovery Page Verification count scan
+        const discoveryUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${discoveredPage.country || "TN"}&view_all_page_id=${discoveredPage.pageId}&search_type=page&media_type=all`;
+        const outcome = await scanMetaAdPage(page, discoveryUrl);
+
+        if (outcome.status === "success" || outcome.status === "unclear") {
+          console.log(
+            `[Discovery Verify Success] Status: ${outcome.status} | Verified Ad Count: ${outcome.results ?? "N/A"}`
+          );
+          await markDiscoveryJobCompleted(
+            queueJob.id,
+            discoveredPage.id,
+            outcome.results
+          );
+          await recordSuccessfulScan();
+          await handleSuccess();
+        } else {
+          console.warn(
+            `[Discovery Verify Failed] Reason: ${outcome.failureReason}`
+          );
+          await markDiscoveryJobFailed(
+            queueJob.id,
+            discoveredPage.id,
+            outcome.failureReason || "navigation_error"
+          );
+          await handleFailure();
+        }
+      } else if (jobType === "creative" && creativeScan && trackedPage) {
         // Run Ad Spy GraphQL extraction
         const outcome = await scanAdCreatives(
           page,
@@ -256,8 +296,8 @@ async function runWorker() {
           );
           await handleFailure();
         }
-      } else {
-        // Run Result Count scan
+      } else if (trackedPage) {
+        // Run Result Count scan for Tracked Page
         const outcome = await scanMetaAdPage(page, trackedPage.url);
 
         if (outcome.status === "success" || outcome.status === "unclear") {

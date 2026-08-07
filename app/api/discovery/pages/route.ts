@@ -20,13 +20,22 @@ export async function GET(req: Request) {
       }
     }
 
-    // Fetch active queue jobs (pending/running count jobs) to check real-time verification state
+    // Fetch active queue jobs (pending/running count or discovery_count jobs) to check real-time verification state
     const activeJobs = await db.query.queue.findMany({
       where: (q, { and, eq, inArray }) =>
         and(eq(q.jobType, "count"), inArray(q.status, ["pending", "running"])),
       columns: { trackedPageId: true },
     });
     const activeJobSet = new Set(activeJobs.map((j) => j.trackedPageId));
+
+    const activeDiscoveryJobs = await db.query.queue.findMany({
+      where: (q, { and, eq, inArray }) =>
+        and(eq(q.jobType, "discovery_count"), inArray(q.status, ["pending", "running"])),
+      columns: { discoveredPageId: true },
+    });
+    const activeDiscoverySet = new Set(
+      activeDiscoveryJobs.map((j) => j.discoveredPageId).filter(Boolean)
+    );
 
     const whereConditions = [];
 
@@ -71,7 +80,7 @@ export async function GET(req: Request) {
       const trackedInfo = trackedMap.get(page.pageId);
       const verifiedAdCount = page.verifiedAdCount ?? trackedInfo?.currentResults ?? null;
       const tId = trackedInfo?.id || page.trackedPageId || null;
-      const isActivelyVerifying = tId ? activeJobSet.has(tId) : false;
+      const isActivelyVerifying = tId ? activeJobSet.has(tId) : activeDiscoverySet.has(page.id);
 
       return {
         ...page,
