@@ -191,6 +191,7 @@ export async function scanAdCreatives(
   creativeScanId: string
 ): Promise<SpyScanOutcome> {
   const collectedAds = new Map<string, ExtractedAdData>();
+  const canonicalPageIdsFromFilter = new Map<string, string>(); // pageId -> displayName
   let hasCaptchaOrBlock = false;
   let isRateLimited = false;
   let graphqlResponseReceived = false;
@@ -224,6 +225,24 @@ export async function scanAdCreatives(
         }
         extractAdsFromJSON(jsonObj, collectedAds);
         graphqlResponseReceived = true;
+
+        // Also extract canonical Page IDs from dynamic_filter_options.pages
+        const extractFilterPages = (o: any) => {
+          if (!o || typeof o !== "object") return;
+          if (o.dynamic_filter_options?.pages && Array.isArray(o.dynamic_filter_options.pages)) {
+            for (const pOpt of o.dynamic_filter_options.pages) {
+              const pageId = String(pOpt.key || pOpt.page_id || "");
+              const displayName = pOpt.display_name || pOpt.name || null;
+              if (pageId && pageId !== "0") {
+                canonicalPageIdsFromFilter.set(pageId, displayName || pageId);
+              }
+            }
+          }
+          for (const key of Object.keys(o)) {
+            if (typeof o[key] === "object") extractFilterPages(o[key]);
+          }
+        };
+        extractFilterPages(jsonObj);
       };
 
       try {
@@ -441,9 +460,18 @@ export async function scanAdCreatives(
       }
     }
 
+    // Add canonical Page IDs from dynamic_filter_options.pages (most authoritative source)
+    for (const pageId of canonicalPageIdsFromFilter.keys()) {
+      extractedPageIdsSet.add(pageId);
+    }
+
     const extractedPageIds = Array.from(extractedPageIdsSet);
 
     if (collectedAds.size === 0) {
+      if (extractedPageIds.length > 0) {
+        const names = extractedPageIds.map(id => canonicalPageIdsFromFilter.get(id) || id).join(", ");
+        console.log(`[Spy Scanner] 0 ad payloads but resolved ${extractedPageIds.length} canonical Page ID(s) from dynamic filter: ${names}`);
+      }
       return {
         status: "failed",
         extractedCount: 0,
