@@ -188,7 +188,8 @@ export async function scanAdCreatives(
   page: Page,
   trackedPageId: string,
   targetUrl: string,
-  creativeScanId: string
+  creativeScanId: string,
+  country: string = "TN"
 ): Promise<SpyScanOutcome> {
   const collectedAds = new Map<string, ExtractedAdData>();
   const canonicalPageIdsFromFilter = new Map<string, string>(); // pageId -> displayName
@@ -321,16 +322,21 @@ export async function scanAdCreatives(
   page.on("response", handleResponse);
 
   try {
-    // Preserve targetUrl's explicit country filter if set, otherwise default to country=ALL
+    // Ensure effective country parameter is set (replace country=ALL with tracked country or TN default)
     let finalTargetUrl = targetUrl;
     try {
       const parsedUrl = new URL(targetUrl.match(/^https?:\/\//i) ? targetUrl : `https://${targetUrl}`);
       if (!parsedUrl.searchParams.get("view_all_page_id") && !parsedUrl.searchParams.get("id")) {
         console.warn(`[Spy Scanner] Target URL does not contain explicit view_all_page_id parameter: "${targetUrl}"`);
       }
-      if (!parsedUrl.searchParams.get("country")) {
-        parsedUrl.searchParams.set("country", "ALL");
-        parsedUrl.searchParams.set("is_targeted_country", "false");
+      const currentCountry = parsedUrl.searchParams.get("country");
+      const effectiveCountry = country && country !== "ALL" ? country : "TN";
+
+      if (!currentCountry || currentCountry === "ALL") {
+        parsedUrl.searchParams.set("country", effectiveCountry);
+        if (!currentCountry) {
+          parsedUrl.searchParams.set("is_targeted_country", "false");
+        }
         finalTargetUrl = parsedUrl.toString();
       }
     } catch {

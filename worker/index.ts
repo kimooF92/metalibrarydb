@@ -269,7 +269,8 @@ async function runWorker() {
           page,
           trackedPage.id,
           trackedPage.url,
-          creativeScan.id
+          creativeScan.id,
+          trackedPage.country || "TN"
         );
 
         const pageIdsFound = outcome.extractedPageIds || [];
