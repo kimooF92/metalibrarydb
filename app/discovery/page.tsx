@@ -641,14 +641,35 @@ export default function DiscoveryPage() {
         </div>
       </div>
 
-      {/* Discovery Runs Timeline Bar */}
+      {/* Discovery Runs Selector */}
       {runs.length > 0 && (
-        <div className="space-y-2">
-          <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-1">
-            Recent Discovery Scan Runs
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3 space-y-2.5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Recent Discovery Scan Runs ({runs.length})</span>
+            </div>
+            
+            {runs.length > 4 && (
+              <div className="flex items-center space-x-2">
+                <label className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Select Run:</label>
+                <select
+                  value={selectedRunId || ""}
+                  onChange={(e) => setSelectedRunId(e.target.value)}
+                  className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-semibold rounded-lg px-2.5 py-1 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  {runs.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.country} — {r.totalPagesDiscovered} pages, {r.totalAdsScanned} ads ({new Date(r.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })} {new Date(r.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
-          <div className="flex items-center space-x-2.5 overflow-x-auto pb-1.5 scrollbar-none">
-            {runs.map((run) => {
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+            {runs.slice(0, 4).map((run) => {
               const isSelected = run.id === selectedRunId;
               const isRunning = run.status === "running" || run.status === "pending";
 
@@ -656,30 +677,33 @@ export default function DiscoveryPage() {
                 <button
                   key={run.id}
                   onClick={() => setSelectedRunId(run.id)}
-                  className={`flex items-center space-x-2.5 px-3.5 py-2.5 rounded-xl border text-left shrink-0 transition cursor-pointer ${
+                  className={`flex items-center justify-between p-2.5 rounded-lg border text-left transition cursor-pointer ${
                     isSelected
-                      ? "bg-indigo-50 dark:bg-indigo-950/60 border-indigo-500 text-slate-900 dark:text-white shadow-sm shadow-indigo-500/10"
-                      : "bg-white dark:bg-slate-950/40 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 hover:text-slate-900 dark:hover:text-slate-200"
+                      ? "bg-indigo-50/80 dark:bg-indigo-950/70 border-indigo-500 text-slate-900 dark:text-white shadow-sm ring-1 ring-indigo-500/30"
+                      : "bg-slate-50/50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800/80 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-slate-900 dark:hover:text-slate-200"
                   }`}
                 >
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-2 min-w-0">
                     {isRunning ? (
-                      <Loader2 className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
+                      <Loader2 className="w-3.5 h-3.5 text-indigo-500 animate-spin shrink-0" />
                     ) : run.status === "completed" ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                     ) : (
-                      <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                     )}
-                    <div>
-                      <div className="font-bold text-xs">
-                        Country: {run.country}
+                    <div className="min-w-0">
+                      <div className="font-bold text-xs flex items-center gap-1.5">
+                        <span>Country: {run.country}</span>
+                        {isSelected && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400 shrink-0" />
+                        )}
                       </div>
-                      <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                        {run.totalPagesDiscovered} pages | {run.totalAdsScanned} ads
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                        {run.totalPagesDiscovered} pages · {run.totalAdsScanned} ads
                       </div>
                     </div>
                   </div>
-                  <div className="text-[10px] text-slate-400 dark:text-slate-500 pl-2 border-l border-slate-200 dark:border-slate-800 text-right">
+                  <div className="text-[9px] text-slate-400 dark:text-slate-500 text-right shrink-0 pl-1.5">
                     <div>
                       {new Date(run.createdAt).toLocaleDateString([], {
                         month: "short",
