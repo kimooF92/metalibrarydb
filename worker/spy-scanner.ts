@@ -47,7 +47,7 @@ function parseAdGraphQLNode(node: any): ExtractedAdData | null {
       node.adArchiveID || node.ad_archive_id || node.id || node.adArchiveId;
     if (!adArchiveId) return null;
 
-    const pageId = node.pageID || node.page_id || node.publisherPlatformPageId || "";
+    const pageId = node.pageID || node.page_id || "";
     const pageName = node.pageName || node.page_name || node.publisherPlatformPageName || null;
 
     // Started running date parsing

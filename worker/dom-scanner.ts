@@ -80,7 +80,7 @@ export async function extractPageIdsFromPage(page: Page): Promise<ExtractedPageI
       const scriptTexts = Array.from(document.querySelectorAll("script")).map((s) => s.textContent || "");
       const fullText = scriptTexts.join("\n") + "\n" + (document.body?.innerHTML || "");
 
-      const pageIdRegex = /"(?:view_all_page_id|page_id|publisherPlatformPageId|pageID)"\s*:\s*"?(\d{10,20})"?/gi;
+      const pageIdRegex = /"(?:view_all_page_id|page_id|pageID)"\s*:\s*"?(\d{10,20})"?/gi;
       let match: RegExpExecArray | null;
 
       while ((match = pageIdRegex.exec(fullText)) !== null) {

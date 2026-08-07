@@ -102,7 +102,7 @@ function parseDiscoveryGraphQLNode(
     if (!adArchiveId || scannedAdIds.has(adArchiveId)) return;
     scannedAdIds.add(adArchiveId);
 
-    const pageId = String(node.pageID || node.page_id || node.publisherPlatformPageId || "");
+    const pageId = String(node.pageID || node.page_id || "");
     if (!pageId || pageId === "0") return;
 
     const pageName = node.pageName || node.page_name || node.publisherPlatformPageName || null;
