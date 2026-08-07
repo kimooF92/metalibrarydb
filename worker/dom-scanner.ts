@@ -89,7 +89,8 @@ export async function extractPageIdsFromPage(page: Page): Promise<ExtractedPageI
  */
 export async function extractAdsFromDOM(page: Page, defaultPageId: string): Promise<ExtractedAdData[]> {
   try {
-    const rawAds = await page.evaluate((fallbackPageId) => {
+    const rawAdsAndLogs = await page.evaluate((fallbackPageId) => {
+      const logs: string[] = [];
       const results: any[] = [];
       const seenArchiveIds = new Set<string>();
 
@@ -100,11 +101,10 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
 
       for (const div of allDivs) {
         const text = div.textContent || "";
-        const idMatch =
-          text.match(/(?:Library ID|ID dans la bibliothèque|Identifiant|Identificador|معرّف المكتبة|ID)\s*[:\s]\s*(\d{14,16})/i) ||
-          text.match(/\b(\d{14,16})\b/);
+        // Require explicit Library ID prefix label
+        const idMatch = text.match(/(?:Library ID|ID dans la bibliothèque|Identifiant|Identificador|معرّف المكتبة|ID)\s*[:\s]\s*(\d{14,16})/i);
 
-        if (idMatch && idMatch[1]) {
+        if (idMatch && idMatch[1] && idMatch[1] !== fallbackPageId) {
           candidateDivs.push({ adArchiveId: idMatch[1], div: div as HTMLDivElement });
         }
       }
@@ -122,7 +122,7 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
         if (seenArchiveIds.has(adArchiveId)) continue;
 
         // Sort divs by textContent length ASC to find the smallest containing div
-        divs.sort((a, b) => (a.textContent || "").length - (b.textContent || "").length);
+        divs.sort(function(a, b) { return (a.textContent || "").length - (b.textContent || "").length; });
 
         // Find the smallest div that actually contains card media or links or CTA
         let targetCard: HTMLDivElement | null = null;
@@ -149,7 +149,7 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
 
         if (!targetCard) {
           // Fallback: pick smallest div with length >= 100
-          targetCard = divs.find((d) => (d.textContent || "").length >= 100) || divs[0] || null;
+          targetCard = divs.find(function(d) { return (d.textContent || "").length >= 100; }) || divs[0] || null;
         }
 
         if (!targetCard) continue;
@@ -170,15 +170,12 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
           const caption = bodyEl ? bodyEl.textContent?.trim() || null : null;
 
           // 3. Media (Images / Video / Carousel)
-          const isLogoUrl = (url: string) =>
-            /_s60x60|_s50x50|_s100x100|_p60x60|_p50x50|s60x60|p60x60|s50x50|s100x100/i.test(url) ||
-            url.includes("profile") ||
-            url.includes("avatar");
-
-          const imgs = Array.from(targetCard.querySelectorAll<HTMLImageElement>("img")).filter((img) => {
+          const imgs = Array.from(targetCard.querySelectorAll<HTMLImageElement>("img")).filter(function(img) {
             if (!img.src || img.src.includes("data:image")) return false;
             if (!img.src.includes("scontent") && !img.src.includes("fbcdn")) return false;
-            if (isLogoUrl(img.src)) return false;
+            
+            const isLogo = /_s60x60|_s50x50|_s100x100|_p60x60|_p50x50|s60x60|p60x60|s50x50|s100x100/i.test(img.src) || img.src.includes("profile") || img.src.includes("avatar");
+            if (isLogo) return false;
 
             const alt = (img.alt || "").toLowerCase();
             if (alt.includes("profile") || alt.includes("logo") || alt.includes("avatar")) return false;
@@ -205,7 +202,10 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
           if (videoEl) {
             mediaType = "video";
             if (videoEl.src) mediaUrls.push(videoEl.src);
-            if (videoEl.poster && !isLogoUrl(videoEl.poster)) thumbnailUrl = videoEl.poster;
+            if (videoEl.poster) {
+              const isLogo = /_s60x60|_s50x50|_s100x100|_p60x60|_p50x50|s60x60|p60x60|s50x50|s100x100/i.test(videoEl.poster) || videoEl.poster.includes("profile") || videoEl.poster.includes("avatar");
+              if (!isLogo) thumbnailUrl = videoEl.poster;
+            }
           } else if (imgs.length > 1) {
             mediaType = "carousel";
             for (const img of imgs) mediaUrls.push(img.src);
@@ -242,15 +242,17 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
             duplicationCount,
             isActive: !cardText.includes("Inactive") && !cardText.includes("غير نشط") && !cardText.includes("Inactif") && !cardText.includes("Inactivo"),
           });
-        } catch {
-          // Ignore single card parse errors
+        } catch (err: any) {
+          logs.push(`Error on card ${adArchiveId}: ${err.message}`);
         }
       }
 
-      return results;
+      return { results, logs };
     }, defaultPageId);
 
-    return rawAds.map((item) => {
+    const rawAds = rawAdsAndLogs.results;
+
+    return rawAds.map((item: any) => {
       const startedRunningOn = extractDateFromCardText(item.rawText);
 
       return {
