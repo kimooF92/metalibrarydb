@@ -48,7 +48,8 @@ export async function mergeExactMatchWithPageId(
       };
     }
 
-    const newPageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&view_all_page_id=${cleanPageId}&search_type=page&media_type=all`;
+    const pageCountry = exactMatchPage.country || "TN";
+    const newPageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${pageCountry}&view_all_page_id=${cleanPageId}&search_type=page&media_type=all`;
     const preservedDomain =
       exactMatchPage.landingPage ||
       exactMatchPage.displayName ||
