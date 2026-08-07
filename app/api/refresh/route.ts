@@ -27,27 +27,45 @@ export async function POST(request: Request) {
 
     const foundIds = pages.map((p) => p.id);
 
-    // 2. Update status to 'pending' in tracked_pages
-    await db
-      .update(trackedPages)
-      .set({ status: "pending", updatedAt: new Date() })
-      .where(inArray(trackedPages.id, foundIds));
+    // 2. Fetch existing pending/running queue jobs for these page IDs
+    const existingQueueJobs = await db.query.queue.findMany({
+      where: (q, { and, inArray }) =>
+        and(
+          inArray(q.trackedPageId, foundIds),
+          inArray(q.status, ["pending", "running"])
+        ),
+      columns: { trackedPageId: true },
+    });
+    const existingSet = new Set(existingQueueJobs.map((q) => q.trackedPageId));
 
-    // 3. Insert pending queue jobs
-    await db.insert(queue).values(
-      foundIds.map((id) => ({
-        trackedPageId: id,
-        status: "pending",
-      }))
-    );
+    const idsToEnqueue = foundIds.filter((id) => !existingSet.has(id));
+
+    if (idsToEnqueue.length > 0) {
+      // Update status to 'pending' in tracked_pages
+      await db
+        .update(trackedPages)
+        .set({ status: "pending", updatedAt: new Date() })
+        .where(inArray(trackedPages.id, idsToEnqueue));
+
+      // Insert pending queue jobs
+      await db.insert(queue).values(
+        idsToEnqueue.map((id) => ({
+          trackedPageId: id,
+          jobType: "count",
+          status: "pending",
+          priority: 10,
+        }))
+      );
+    }
 
     // Trigger GitHub Action worker workflow
     await triggerGitHubWorkflow("worker.yml").catch(() => {});
 
     return NextResponse.json({
       success: true,
-      message: `Enqueued ${foundIds.length} page(s) for refresh.`,
-      enqueuedCount: foundIds.length,
+      message: `Enqueued ${idsToEnqueue.length} page(s) for refresh (${foundIds.length - idsToEnqueue.length} already in progress).`,
+      enqueuedCount: idsToEnqueue.length,
+      skippedCount: foundIds.length - idsToEnqueue.length,
     });
   } catch (error: any) {
     if (error.name === "ZodError") {

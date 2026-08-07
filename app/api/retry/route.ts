@@ -63,20 +63,37 @@ export async function POST(request: Request) {
     }
 
     if (eligibleForRetry.length > 0) {
-      // Update status to 'pending'
-      await db
-        .update(trackedPages)
-        .set({ status: "pending", updatedAt: new Date() })
-        .where(inArray(trackedPages.id, eligibleForRetry));
+      // Check existing pending/running queue jobs
+      const existingQueueJobs = await db.query.queue.findMany({
+        where: (q, { and, inArray }) =>
+          and(
+            inArray(q.trackedPageId, eligibleForRetry),
+            inArray(q.status, ["pending", "running"])
+          ),
+        columns: { trackedPageId: true },
+      });
+      const existingSet = new Set(existingQueueJobs.map((q) => q.trackedPageId));
 
-      // Insert new queue entries
-      await db.insert(queue).values(
-        eligibleForRetry.map((id) => ({
-          trackedPageId: id,
-          status: "pending",
-          attempts: (attemptsMap[id] || 0) + 1,
-        }))
-      );
+      const newRetryIds = eligibleForRetry.filter((id) => !existingSet.has(id));
+
+      if (newRetryIds.length > 0) {
+        // Update status to 'pending'
+        await db
+          .update(trackedPages)
+          .set({ status: "pending", updatedAt: new Date() })
+          .where(inArray(trackedPages.id, newRetryIds));
+
+        // Insert new queue entries
+        await db.insert(queue).values(
+          newRetryIds.map((id) => ({
+            trackedPageId: id,
+            jobType: "count",
+            priority: 10,
+            status: "pending",
+            attempts: (attemptsMap[id] || 0) + 1,
+          }))
+        );
+      }
     }
 
     return NextResponse.json({

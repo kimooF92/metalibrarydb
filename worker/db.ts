@@ -79,14 +79,31 @@ export async function enqueuePagesForCreativeScan(
   const cutoff = new Date(Date.now() - cooldownDays * 24 * 60 * 60 * 1000);
 
   const allPages = await db.query.trackedPages.findMany({
-    columns: { id: true, lastCreativeScan: true, currentResults: true },
+    columns: {
+      id: true,
+      status: true,
+      searchType: true,
+      pageId: true,
+      lastCreativeScan: true,
+      currentResults: true,
+    },
   });
 
   // --- Option A+B: Collect eligible pages with their ad count for priority sorting ---
   const eligiblePages: { id: string; currentResults: number }[] = [];
 
   for (const page of allPages) {
-    // Respect cooldown window
+    // 1. MUST be a verified successful count scan (not 'pending', 'scanning', or 'failed')
+    if (page.status !== "success") {
+      continue;
+    }
+
+    // 2. MUST have a resolved Meta Page ID (not unverified domain/keyword search)
+    if (!page.pageId || page.searchType === "keyword_exact_phrase") {
+      continue;
+    }
+
+    // 3. Respect cooldown window
     if (page.lastCreativeScan && page.lastCreativeScan > cutoff) {
       continue;
     }
@@ -199,13 +216,84 @@ export async function updateWorkerState(
   return updated;
 }
 
-export async function getNextPendingJob() {
-  const job = await db.query.queue.findFirst({
-    where: eq(queue.status, "pending"),
-    orderBy: [desc(queue.priority), asc(queue.createdAt)],
+/**
+ * Enqueue a job or escalate priority if already pending to prevent duplicate queue rows
+ */
+export async function enqueueOrEscalateJob(
+  trackedPageId: string,
+  jobType: "count" | "creative" = "count",
+  priority: number = 1
+) {
+  const existingJob = await db.query.queue.findFirst({
+    where: (q, { and, eq, inArray }) =>
+      and(
+        eq(q.trackedPageId, trackedPageId),
+        eq(q.jobType, jobType),
+        inArray(q.status, ["pending", "running"])
+      ),
   });
 
-  if (!job) return null;
+  if (existingJob) {
+    if (existingJob.status === "pending" && existingJob.priority < priority) {
+      await db
+        .update(queue)
+        .set({ priority })
+        .where(eq(queue.id, existingJob.id));
+    }
+    return { job: existingJob, isNew: false };
+  }
+
+  const [newJob] = await db
+    .insert(queue)
+    .values({
+      trackedPageId,
+      jobType,
+      priority,
+      status: "pending",
+    })
+    .returning();
+
+  return { job: newJob, isNew: true };
+}
+
+/**
+ * Atomically claim the next pending queue job using PostgreSQL FOR UPDATE SKIP LOCKED
+ */
+export async function claimNextPendingJob() {
+  const result = await db.execute(sql`
+    UPDATE queue
+    SET 
+      status = 'running',
+      started_at = NOW(),
+      attempts = attempts + 1
+    WHERE id = (
+      SELECT id FROM queue
+      WHERE status = 'pending'
+      ORDER BY priority DESC, created_at ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT 1
+    )
+    RETURNING *;
+  `);
+
+  const claimedRows = (Array.isArray(result) ? result : (result as any)?.rows || []) as any[];
+  if (!claimedRows || claimedRows.length === 0) return null;
+  const jobRow = claimedRows[0];
+
+  const job = {
+    id: String(jobRow.id),
+    trackedPageId: jobRow.tracked_page_id ? String(jobRow.tracked_page_id) : null,
+    discoveredPageId: jobRow.discovered_page_id ? String(jobRow.discovered_page_id) : null,
+    jobType: String(jobRow.job_type || "count"),
+    priority: Number(jobRow.priority || 1),
+    creativeScanId: jobRow.creative_scan_id ? String(jobRow.creative_scan_id) : null,
+    status: String(jobRow.status),
+    attempts: Number(jobRow.attempts || 1),
+    failureReason: jobRow.failure_reason ? String(jobRow.failure_reason) : null,
+    createdAt: jobRow.created_at ? new Date(jobRow.created_at) : null,
+    startedAt: jobRow.started_at ? new Date(jobRow.started_at) : null,
+    finishedAt: jobRow.finished_at ? new Date(jobRow.finished_at) : null,
+  };
 
   let page = null;
   if (job.trackedPageId) {
@@ -225,9 +313,24 @@ export async function getNextPendingJob() {
 
   let creativeScanRecord = null;
   if (job.jobType === "creative" && job.creativeScanId) {
+    await db
+      .update(creativeScans)
+      .set({ status: "running", startedAt: new Date() })
+      .where(eq(creativeScans.id, job.creativeScanId));
+
     creativeScanRecord = await db.query.creativeScans.findFirst({
       where: eq(creativeScans.id, job.creativeScanId),
     });
+  } else if (job.trackedPageId) {
+    await db
+      .update(trackedPages)
+      .set({ status: "scanning", updatedAt: new Date() })
+      .where(eq(trackedPages.id, job.trackedPageId));
+  } else if (job.discoveredPageId) {
+    await db
+      .update(discoveredPages)
+      .set({ status: "verifying", updatedAt: new Date() })
+      .where(eq(discoveredPages.id, job.discoveredPageId));
   }
 
   return {
@@ -238,15 +341,23 @@ export async function getNextPendingJob() {
   };
 }
 
-export async function markJobRunning(queueId: string, pageId?: string | null, creativeScanId?: string | null, discoveredPageId?: string | null) {
-  const now = new Date();
+export async function getNextPendingJob() {
+  return claimNextPendingJob();
+}
 
+export async function markJobRunning(
+  queueId: string,
+  pageId?: string | null,
+  creativeScanId?: string | null,
+  discoveredPageId?: string | null
+) {
+  // Retained for backward compatibility if called directly
+  const now = new Date();
   await db
     .update(queue)
     .set({
       status: "running",
       startedAt: now,
-      attempts: sql`${queue.attempts} + 1`,
     })
     .where(eq(queue.id, queueId));
 

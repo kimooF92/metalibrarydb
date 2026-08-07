@@ -25,6 +25,7 @@ import {
   resetStuckJobs,
   enqueueAllPagesForRefresh,
   enqueuePagesForCreativeScan,
+  updateWorkerState,
 } from "./db";
 import {
   checkRateCaps,
@@ -146,6 +147,9 @@ async function runWorker() {
 
   try {
     while (true) {
+      // Heartbeat update
+      await updateWorkerState({ updatedAt: new Date() }).catch(() => {});
+
       // 0. Check for pending country discovery runs first
       const pendingDiscoveryRun = await db.query.discoveryRuns.findFirst({
         where: eq(discoveryRuns.status, "pending"),
@@ -225,15 +229,7 @@ async function runWorker() {
         `\n[Processing ${jobType.toUpperCase()} Job (Priority: ${queueJob.priority || 1})] ID: ${queueJob.id} | Target: "${targetDisplayName}"`
       );
 
-      // 4. Mark running
-      await markJobRunning(
-        queueJob.id,
-        trackedPage?.id,
-        queueJob.creativeScanId,
-        discoveredPage?.id
-      );
-
-      // 5. Route job by type
+      // 4. Route job by type
       const { page } = await getBrowserSession();
 
       if (jobType === "discovery_count" && discoveredPage) {
@@ -264,6 +260,24 @@ async function runWorker() {
           await handleFailure();
         }
       } else if (jobType === "creative" && creativeScan && trackedPage) {
+        // Lifecycle Guard: Ensure page is verified ('success') and has a resolved pageId
+        if (
+          trackedPage.status !== "success" ||
+          !trackedPage.pageId ||
+          trackedPage.searchType === "keyword_exact_phrase"
+        ) {
+          console.warn(
+            `[Creative Guard] Skipping creative scan for unverified/pending page ID: ${trackedPage.id} (Status: ${trackedPage.status}, PageId: ${trackedPage.pageId ?? "N/A"})`
+          );
+          await markCreativeJobFailed(
+            queueJob.id,
+            creativeScan.id,
+            "unverified_page",
+            "Page count scan must complete successfully before running Ad Spy creative scan"
+          );
+          continue;
+        }
+
         // Run Ad Spy GraphQL extraction
         const outcome = await scanAdCreatives(
           page,
