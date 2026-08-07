@@ -196,7 +196,7 @@ export async function scanAdCreatives(
   let isRateLimited = false;
   let graphqlResponseReceived = false;
 
-  // Derive normalized domain segments from the search query (e.g. "oslo.tn" -> ["oslo", "tn"])
+  // Derive normalized domain segments from the search query (e.g. "oslo.tn" -> ["oslo"], "shop-lbaraka.converty.shop" -> ["lbaraka"])
   let queryDomainSegments: string[] = [];
   try {
     const parsedTargetUrl = new URL(targetUrl.match(/^https?:\/\//i) ? targetUrl : `https://${targetUrl}`);
@@ -204,7 +204,8 @@ export async function scanAdCreatives(
     // Strip surrounding quotes, then split on dots/dashes
     const cleanQ = rawQ.replace(/^"|"$/g, "").trim().toLowerCase();
     if (cleanQ) {
-      queryDomainSegments = cleanQ.split(/[.\-_]/).filter((s) => s.length > 2);
+      const STOP_WORDS = new Set(["shop", "store", "converty", "com", "tn", "net", "org", "online", "site", "page", "official", "buy", "deal", "deals"]);
+      queryDomainSegments = cleanQ.split(/[.\-_]/).filter((s) => s.length > 2 && !STOP_WORDS.has(s));
     }
   } catch {
     // ignore URL parse errors
