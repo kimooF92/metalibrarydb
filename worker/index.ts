@@ -295,36 +295,9 @@ async function runWorker() {
             await enqueueOrEscalateJob(mergeRes.mergedPageId, "creative", 10);
           }
         } else if (pageIdsFound.length > 1) {
-          // Case B: 2+ Page IDs found -> Create tracked page records & enqueue creative scans for all discovered pages
           console.log(
-            `[Multi-Page Disambiguation] Exact match target "${targetDisplayName}" revealed ${pageIdsFound.length} unique Facebook Page IDs (${pageIdsFound.join(", ")}). Creating page records & enqueuing creative scans...`
+            `[Discovered Pages] Keyword search target "${targetDisplayName}" revealed ${pageIdsFound.length} unique Facebook Page IDs (${pageIdsFound.join(", ")}). Saved to Discovered Pages for user review.`
           );
-          for (const pId of pageIdsFound) {
-            const pageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${
-              trackedPage.country || "TN"
-            }&view_all_page_id=${pId}&search_type=page&media_type=all`;
-
-            const [newTp] = await db
-              .insert(trackedPages)
-              .values({
-                url: pageUrl,
-                displayName: `Page ${pId}`,
-                pageId: pId,
-                searchType: "page",
-                country: trackedPage.country || "TN",
-                landingPage: trackedPage.displayName || trackedPage.landingPage,
-                status: "pending",
-              })
-              .onConflictDoUpdate({
-                target: trackedPages.url,
-                set: { updatedAt: new Date() },
-              })
-              .returning();
-
-            if (newTp) {
-              await enqueueOrEscalateJob(newTp.id, "creative", 10);
-            }
-          }
         }
 
         if (outcome.status === "completed" || outcome.status === "partial") {

@@ -58,35 +58,19 @@ export async function extractPageIdsFromPage(page: Page): Promise<ExtractedPageI
     const pageInfos = await page.evaluate(() => {
       const resultsMap = new Map<string, string | null>();
 
-      // 1. Extract from anchor tags
-      const allAnchors = Array.from(
-        document.querySelectorAll<HTMLAnchorElement>('a[href*="page_id"], a[href*="facebook.com/"]')
+      // Extract exclusively from view_all_page_id anchor tags (Canonical Page IDs)
+      const viewAllAnchors = Array.from(
+        document.querySelectorAll<HTMLAnchorElement>('a[href*="view_all_page_id="]')
       );
-      for (const a of allAnchors) {
+      for (const a of viewAllAnchors) {
         const href = a.href || "";
-        const match =
-          href.match(/(?:view_all_page_id|page_id)=(\d{10,20})/i) ||
-          href.match(/facebook\.com\/(\d{10,20})(?:[\/?#]|$)/i);
+        const match = href.match(/view_all_page_id=(\d{10,20})/i);
         if (match && match[1] && match[1] !== "0") {
           const pageId = match[1];
           const pageName = a.textContent?.trim() || null;
           if (!resultsMap.has(pageId) || (pageName && !resultsMap.get(pageId))) {
             resultsMap.set(pageId, pageName);
           }
-        }
-      }
-
-      // 2. Extract from script tags & document innerHTML
-      const scriptTexts = Array.from(document.querySelectorAll("script")).map((s) => s.textContent || "");
-      const fullText = scriptTexts.join("\n") + "\n" + (document.body?.innerHTML || "");
-
-      const pageIdRegex = /"(?:view_all_page_id|page_id|pageID)"\s*:\s*"?(\d{10,20})"?/gi;
-      let match: RegExpExecArray | null;
-
-      while ((match = pageIdRegex.exec(fullText)) !== null) {
-        const pageId = match[1];
-        if (pageId && pageId !== "0" && !resultsMap.has(pageId)) {
-          resultsMap.set(pageId, null);
         }
       }
 
