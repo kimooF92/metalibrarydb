@@ -93,49 +93,79 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
       const results: any[] = [];
       const seenArchiveIds = new Set<string>();
 
+      // Bottom-Up DOM Isolation:
+      // First find all candidate elements containing 14-16 digit Meta Library IDs
       const allDivs = Array.from(document.querySelectorAll("div"));
+      const candidateDivs: Array<{ adArchiveId: string; div: HTMLDivElement }> = [];
 
-      for (const card of allDivs) {
-        try {
-          const cardText = card.textContent || "";
+      for (const div of allDivs) {
+        const text = div.textContent || "";
+        const idMatch =
+          text.match(/(?:Library ID|ID dans la bibliothèque|Identifiant|Identificador|معرّف المكتبة|ID)\s*[:\s]\s*(\d{14,16})/i) ||
+          text.match(/\b(\d{14,16})\b/);
 
-          // Extract 14-16 digit Meta Archive ID
-          const idMatch =
-            cardText.match(/(?:Library ID|ID dans la bibliothèque|Identifiant|Identificador|معرّف المكتبة|ID)\s*[:\s]\s*(\d{14,16})/i) ||
-            cardText.match(/\b(\d{14,16})\b/);
+        if (idMatch && idMatch[1]) {
+          candidateDivs.push({ adArchiveId: idMatch[1], div: div as HTMLDivElement });
+        }
+      }
 
-          if (!idMatch) continue;
+      // Group by unique adArchiveId
+      const idToDivsMap = new Map<string, HTMLDivElement[]>();
+      for (const { adArchiveId, div } of candidateDivs) {
+        if (!idToDivsMap.has(adArchiveId)) {
+          idToDivsMap.set(adArchiveId, []);
+        }
+        idToDivsMap.get(adArchiveId)!.push(div);
+      }
 
-          const adArchiveId = idMatch[1];
-          if (seenArchiveIds.has(adArchiveId)) continue;
+      for (const [adArchiveId, divs] of idToDivsMap.entries()) {
+        if (seenArchiveIds.has(adArchiveId)) continue;
 
-          // Check that this div is a outer card container with content
+        // Sort divs by textContent length ASC to find the smallest containing div
+        divs.sort((a, b) => (a.textContent || "").length - (b.textContent || "").length);
+
+        // Find the smallest div that actually contains card media or links or CTA
+        let targetCard: HTMLDivElement | null = null;
+        for (const candidate of divs) {
+          const cText = candidate.textContent || "";
+          if (cText.length > 12000) continue; // safety cap for giant body wrappers
+
           const hasContent =
-            card.querySelector('img[src*="fbcdn"], img[src*="scontent"], video, a[href*="l.facebook.com"], a[href*="http"], div[style*="white-space"]') !== null ||
-            cardText.includes("Sponsored") ||
-            cardText.includes("Sponsorisé") ||
-            cardText.includes("See ad details") ||
-            cardText.includes("Voir les détails");
+            candidate.querySelector('img[src*="fbcdn"], img[src*="scontent"], video, a[href*="l.facebook.com"], a[href*="http"]') !== null ||
+            cText.includes("Sponsored") ||
+            cText.includes("Sponsorisé") ||
+            cText.includes("See ad details") ||
+            cText.includes("Voir les détails") ||
+            cText.includes("Started running") ||
+            cText.includes("Lancée le") ||
+            cText.includes("بدأ التشغيل");
 
-          if (!hasContent) continue;
-          if (cardText.length > 8000) continue; // skip giant body wrappers
+          if (hasContent) {
+            targetCard = candidate;
+            break;
+          }
+        }
 
-          // Ensure it doesn't contain multiple ad card IDs
-          const allIdsInCard = (cardText.match(/\b\d{14,16}\b/g) || []);
-          const uniqueIdsInCard = new Set(allIdsInCard);
-          if (uniqueIdsInCard.size > 2) continue;
+        if (!targetCard) {
+          // Fallback: pick smallest div with length >= 100
+          targetCard = divs.find((d) => (d.textContent || "").length >= 100) || divs[0] || null;
+        }
 
+        if (!targetCard) continue;
+
+        try {
+          const cardText = targetCard.textContent || "";
           seenArchiveIds.add(adArchiveId);
 
           // 1. Page Name
-          const pageNameEl = card.querySelector('a[href*="facebook.com/"] span, a[href*="facebook.com/"]');
+          const pageNameEl = targetCard.querySelector('a[href*="facebook.com/"] span, a[href*="facebook.com/"]');
           const pageName = pageNameEl ? pageNameEl.textContent?.trim() || null : null;
 
           // 2. Caption / Body copy
           const bodyEl =
-            card.querySelector('div[style*="white-space: pre-wrap"]') ||
-            card.querySelector('div[class*="_4ik4 _4ik5"]') ||
-            card.querySelector('div[class*="x2b8fe0"]');
+            targetCard.querySelector('div[style*="white-space: pre-wrap"]') ||
+            targetCard.querySelector('div[class*="_4ik4 _4ik5"]') ||
+            targetCard.querySelector('div[class*="x2b8fe0"]');
           const caption = bodyEl ? bodyEl.textContent?.trim() || null : null;
 
           // 3. Media (Images / Video / Carousel)
@@ -144,7 +174,7 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
             url.includes("profile") ||
             url.includes("avatar");
 
-          const imgs = Array.from(card.querySelectorAll<HTMLImageElement>("img")).filter((img) => {
+          const imgs = Array.from(targetCard.querySelectorAll<HTMLImageElement>("img")).filter((img) => {
             if (!img.src || img.src.includes("data:image")) return false;
             if (!img.src.includes("scontent") && !img.src.includes("fbcdn")) return false;
             if (isLogoUrl(img.src)) return false;
@@ -165,7 +195,7 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
             return true;
           });
 
-          const videoEl = card.querySelector<HTMLVideoElement>("video");
+          const videoEl = targetCard.querySelector<HTMLVideoElement>("video");
 
           let mediaType: "image" | "video" | "carousel" | "unknown" = "unknown";
           const mediaUrls: string[] = [];
@@ -186,10 +216,10 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
           }
 
           // 4. CTA link & text
-          const linkEl = card.querySelector<HTMLAnchorElement>('a[href*="l.facebook.com"], a[data-lynx-mode], a[target="_blank"]:not([href*="facebook.com"])');
+          const linkEl = targetCard.querySelector<HTMLAnchorElement>('a[href*="l.facebook.com"], a[data-lynx-mode], a[target="_blank"]:not([href*="facebook.com"])');
           const linkUrl = linkEl ? linkEl.href : null;
 
-          const ctaEl = card.querySelector('div[class*="x1h4wwuj"], span[class*="x1h4wwuj"]');
+          const ctaEl = targetCard.querySelector('div[class*="x1h4wwuj"], span[class*="x1h4wwuj"]');
           const ctaText = linkEl ? linkEl.textContent?.trim() || null : ctaEl ? ctaEl.textContent?.trim() || null : null;
 
           // 5. Duplication / Collation Count (multilingual)
