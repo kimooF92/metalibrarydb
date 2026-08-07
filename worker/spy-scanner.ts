@@ -196,6 +196,20 @@ export async function scanAdCreatives(
   let isRateLimited = false;
   let graphqlResponseReceived = false;
 
+  // Derive normalized domain segments from the search query (e.g. "oslo.tn" -> ["oslo", "tn"])
+  let queryDomainSegments: string[] = [];
+  try {
+    const parsedTargetUrl = new URL(targetUrl.match(/^https?:\/\//i) ? targetUrl : `https://${targetUrl}`);
+    const rawQ = parsedTargetUrl.searchParams.get("q") || "";
+    // Strip surrounding quotes, then split on dots/dashes
+    const cleanQ = rawQ.replace(/^"|"$/g, "").trim().toLowerCase();
+    if (cleanQ) {
+      queryDomainSegments = cleanQ.split(/[.\-_]/).filter((s) => s.length > 2);
+    }
+  } catch {
+    // ignore URL parse errors
+  }
+
   // 1. Response Listener for Meta GraphQL responses
   const handleResponse = async (response: Response) => {
     try {
@@ -226,16 +240,36 @@ export async function scanAdCreatives(
         extractAdsFromJSON(jsonObj, collectedAds);
         graphqlResponseReceived = true;
 
-        // Also extract canonical Page IDs from dynamic_filter_options.pages
+        // Also extract canonical Page IDs from dynamic_filter_options.pages, filtered to match search domain
         const extractFilterPages = (o: any) => {
           if (!o || typeof o !== "object") return;
           if (o.dynamic_filter_options?.pages && Array.isArray(o.dynamic_filter_options.pages)) {
+            const allCandidates: Array<{ pageId: string; displayName: string }> = [];
+
             for (const pOpt of o.dynamic_filter_options.pages) {
               const pageId = String(pOpt.key || pOpt.page_id || "");
-              const displayName = pOpt.display_name || pOpt.name || null;
+              const displayName = String(pOpt.display_name || pOpt.name || "");
               if (pageId && pageId !== "0") {
-                canonicalPageIdsFromFilter.set(pageId, displayName || pageId);
+                allCandidates.push({ pageId, displayName });
               }
+            }
+
+            // If we have domain segments to match against, filter candidates
+            let matched = allCandidates;
+            if (queryDomainSegments.length > 0) {
+              const domainBase = queryDomainSegments[0]; // primary segment e.g. "oslo"
+              const filtered = allCandidates.filter(({ displayName }) => {
+                const norm = displayName.toLowerCase().replace(/[^a-z0-9]/g, "");
+                return norm.startsWith(domainBase);
+              });
+              // Only use filtered list if we found at least one match
+              if (filtered.length > 0) {
+                matched = filtered;
+              }
+            }
+
+            for (const { pageId, displayName } of matched) {
+              canonicalPageIdsFromFilter.set(pageId, displayName || pageId);
             }
           }
           for (const key of Object.keys(o)) {
