@@ -26,19 +26,36 @@ export async function POST(req: NextRequest) {
       where: inArray(trackedPages.id, trackedPageIds),
     });
 
-    const eligiblePages = pages.filter((p) => {
-      if (!p.url || p.url.trim() === "") return false;
+    const eligiblePages: typeof pages = [];
+    const keywordPages: typeof pages = [];
+
+    for (const p of pages) {
+      if (!p.url || p.url.trim() === "") continue;
       const urlMeta = extractUrlMetadata(p.url);
-      return Boolean(p.pageId || urlMeta.pageId);
-    });
+      const effectivePageId = p.pageId || urlMeta.pageId;
+
+      if (
+        effectivePageId &&
+        p.searchType !== "keyword_exact_phrase" &&
+        p.searchType !== "keyword_unordered"
+      ) {
+        eligiblePages.push(p);
+      } else {
+        keywordPages.push(p);
+      }
+    }
+
     const ineligibleCount = pages.length - eligiblePages.length;
 
     if (eligiblePages.length === 0) {
+      const keywordNames = keywordPages
+        .map((p) => `"${p.displayName || p.url}"`)
+        .join(", ");
       return NextResponse.json(
         {
-          error:
-            "No eligible pages found with valid Meta Ad Library URLs or Page IDs.",
+          error: `Ad Spy cannot be run directly on keyword/domain search URLs (${keywordNames || "selected targets"}) because exact phrase searches aggregate multiple Facebook Pages. Please run a Discovery Scan first to extract individual Page IDs, then run Ad Spy on the imported pages.`,
           ineligibleCount,
+          requiresDiscovery: true,
         },
         { status: 400 }
       );

@@ -265,30 +265,22 @@ async function runWorker() {
         const urlMeta = extractUrlMetadata(trackedPage.url);
         const effectivePageId = trackedPage.pageId || urlMeta.pageId;
 
-        if (!effectivePageId) {
+        if (
+          !effectivePageId ||
+          trackedPage.searchType === "keyword_exact_phrase" ||
+          trackedPage.searchType === "keyword_unordered"
+        ) {
           console.warn(
-            `[Creative Guard] Page ID unresolved for target "${targetDisplayName}". Running initial count scan first to resolve Page ID...`
+            `[Creative Guard] Target "${targetDisplayName}" is a keyword/domain search URL matching multiple Facebook Pages. Skipping Ad Spy and recommending Discovery scan...`
           );
-          const countOutcome = await scanMetaAdPage(page, trackedPage.url);
-          if (countOutcome.status === "success" || countOutcome.status === "unclear") {
-            await markJobCompleted(
-              queueJob.id,
-              trackedPage.id,
-              countOutcome.results,
-              countOutcome.status
-            );
-            await recordSuccessfulScan();
-            await handleSuccess();
-          } else {
-            await markCreativeJobFailed(
-              queueJob.id,
-              creativeScan.id,
-              "unverified_page",
-              "Page count scan failed prior to creative scan"
-            );
-            await handleFailure();
-            continue;
-          }
+          await markCreativeJobFailed(
+            queueJob.id,
+            creativeScan.id,
+            "requires_discovery",
+            `Target "${targetDisplayName}" is a keyword search URL matching 2+ Facebook Pages. Please run a Discovery Scan to extract and track individual Page IDs before running Ad Spy.`
+          );
+          await handleFailure();
+          continue;
         } else if (!trackedPage.pageId && effectivePageId) {
           // Backfill pageId into trackedPages DB record if extracted from URL
           await db
