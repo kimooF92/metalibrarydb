@@ -244,27 +244,43 @@ export async function scanAdCreatives(
         const extractFilterPages = (o: any) => {
           if (!o || typeof o !== "object") return;
           if (o.dynamic_filter_options?.pages && Array.isArray(o.dynamic_filter_options.pages)) {
-            const allCandidates: Array<{ pageId: string; displayName: string }> = [];
+            const allCandidates: Array<{ pageId: string; displayName: string; count: number }> = [];
 
             for (const pOpt of o.dynamic_filter_options.pages) {
               const pageId = String(pOpt.key || pOpt.page_id || "");
               const displayName = String(pOpt.display_name || pOpt.name || "");
+              const count = typeof pOpt.count === "number" ? pOpt.count : 0;
               if (pageId && pageId !== "0") {
-                allCandidates.push({ pageId, displayName });
+                allCandidates.push({ pageId, displayName, count });
               }
             }
 
-            // If we have domain segments to match against, filter candidates
             let matched = allCandidates;
             if (queryDomainSegments.length > 0) {
-              const domainBase = queryDomainSegments[0]; // primary segment e.g. "oslo"
-              const filtered = allCandidates.filter(({ displayName }) => {
+              const domainBase = queryDomainSegments[0]; // primary segment e.g. "avino", "oslo"
+
+              const brandMatches = allCandidates.filter(({ displayName }) => {
                 const norm = displayName.toLowerCase().replace(/[^a-z0-9]/g, "");
-                return norm.startsWith(domainBase);
+                return (
+                  norm.includes(domainBase) ||
+                  domainBase.includes(norm) ||
+                  (norm.length >= 3 && domainBase.length >= 3 && norm.slice(0, 3) === domainBase.slice(0, 3))
+                );
               });
-              // Only use filtered list if we found at least one match
-              if (filtered.length > 0) {
-                matched = filtered;
+
+              if (brandMatches.length > 0) {
+                // Sort by exact match priority and active ad count
+                brandMatches.sort((a, b) => {
+                  const aNorm = a.displayName.toLowerCase().replace(/[^a-z0-9]/g, "");
+                  const bNorm = b.displayName.toLowerCase().replace(/[^a-z0-9]/g, "");
+                  const aExact = aNorm === domainBase || aNorm.startsWith(domainBase) ? 2 : 1;
+                  const bExact = bNorm === domainBase || bNorm.startsWith(domainBase) ? 2 : 1;
+                  if (aExact !== bExact) return bExact - aExact;
+                  return b.count - a.count;
+                });
+
+                // Pick top primary match for canonical resolution
+                matched = [brandMatches[0]];
               }
             }
 
