@@ -372,33 +372,35 @@ export async function runDiscoveryScan(
       console.warn("[Discovery Scanner] Rate limit 429 detected during deep scroll.");
     }
 
-    // 3. Extract DOM links for extra coverage
-    try {
-      const domPageLinks = await page.evaluate(() => {
-        const links = Array.from(document.querySelectorAll('a[href*="view_all_page_id="]'));
-        return links.map((link) => {
-          const href = (link as HTMLAnchorElement).href;
-          const match = href.match(/view_all_page_id=(\d+)/);
-          const pageId = match ? match[1] : null;
-          const pageName = link.textContent?.trim() || null;
-          return { pageId, pageName };
-        });
-      });
-
-      for (const item of domPageLinks) {
-        if (item.pageId && !collectedPages.has(item.pageId)) {
-          collectedPages.set(item.pageId, {
-            pageId: item.pageId,
-            displayName: item.pageName,
-            matchingAdCount: 1,
-            sampleAdArchiveIds: new Set(),
-            sampleCtas: new Set(["Shop Now"]),
-            sampleUrls: new Set(),
+    // 3. Fallback: Extract DOM links ONLY if GraphQL payload capture was blocked and zero pages were collected
+    if (collectedPages.size === 0) {
+      try {
+        const domPageLinks = await page.evaluate(() => {
+          const links = Array.from(document.querySelectorAll('a[href*="view_all_page_id="]'));
+          return links.map((link) => {
+            const href = (link as HTMLAnchorElement).href;
+            const match = href.match(/view_all_page_id=(\d+)/);
+            const pageId = match ? match[1] : null;
+            const pageName = link.textContent?.trim() || null;
+            return { pageId, pageName };
           });
+        });
+
+        for (const item of domPageLinks) {
+          if (item.pageId && !collectedPages.has(item.pageId)) {
+            collectedPages.set(item.pageId, {
+              pageId: item.pageId,
+              displayName: item.pageName,
+              matchingAdCount: 1,
+              sampleAdArchiveIds: new Set(),
+              sampleCtas: new Set(["Shop Now"]),
+              sampleUrls: new Set(),
+            });
+          }
         }
+      } catch {
+        // DOM link extraction fallback error ignore
       }
-    } catch {
-      // DOM link extraction fallback error ignore
     }
 
     // 4. Save Discovered Pages to Database (Cross-Scan Memory: check tracked & previously ignored pages)
