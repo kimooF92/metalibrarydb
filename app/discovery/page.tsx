@@ -66,10 +66,10 @@ export default function DiscoveryPage() {
   const [isLoadingPages, setIsLoadingPages] = useState(false);
   const [isLaunchingScan, setIsLaunchingScan] = useState(false);
 
-  // Filter Form State (Defaulting to Tunisia TN & Last 7 Days)
+  // Filter Form State (Defaulting to Tunisia TN, Zero-Joiner query, Arabic language, Facebook + Instagram)
   const [country, setCountry] = useState("TN");
   const [mediaType, setMediaType] = useState("video");
-  const [queryText, setQueryText] = useState("");
+  const [queryText, setQueryText] = useState("\u200D");
 
   const getSevenDaysAgoStr = () => {
     const d = new Date();

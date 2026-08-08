@@ -325,6 +325,14 @@ export async function runDiscoveryScan(
       timeout: RESPONSE_TIMEOUT_MS,
     });
 
+    // Page Auto-Refresh Guard: If zero-joiner/broad query initially returns 0 ad payloads, reload the page to break Meta cache glitch
+    await page.waitForTimeout(3000);
+    if (scannedAdIds.size === 0) {
+      console.log(`[Discovery Scanner] 0 ads captured on initial load. Refreshing page to bypass potential Meta empty response glitch...`);
+      await page.reload({ waitUntil: "networkidle", timeout: RESPONSE_TIMEOUT_MS }).catch(() => {});
+      await page.waitForTimeout(3000);
+    }
+
     // Check for CAPTCHA
     const isRealCaptcha = await page.evaluate(() => {
       const bodyText = document.body?.innerText || "";
@@ -402,6 +410,12 @@ export async function runDiscoveryScan(
       const currentAdCount = scannedAdIds.size;
       if (currentAdCount === lastAdCount) {
         noProgressCount++;
+        // If we are at early scrolls and still have 0 ads, refresh page once
+        if (currentAdCount === 0 && noProgressCount === 3) {
+          console.log(`[Discovery Scanner] Still 0 ads after ${noProgressCount} scrolls. Refreshing page...`);
+          await page.reload({ waitUntil: "networkidle", timeout: RESPONSE_TIMEOUT_MS }).catch(() => {});
+          await page.waitForTimeout(3000);
+        }
         if (noProgressCount >= NO_PROGRESS_CAP) {
           console.log(`[Discovery Scanner] No new ads for ${noProgressCount} consecutive scrolls. Reached feed end.`);
           break;
