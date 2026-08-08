@@ -380,6 +380,22 @@ export async function runDiscoveryScan(
 
     console.log(`[Discovery Scanner] Initial stream wait complete. Captured ${scannedAdIds.size} ads so far.`);
 
+    // Auto-Refresh Guard: If 0 ads were captured or "No ads match your search criteria" empty state was rendered, refresh page once to bypass false-positive empty state
+    if (scannedAdIds.size === 0) {
+      const hasEmptyState = await page.evaluate(() => {
+        const text = document.body?.innerText || "";
+        return /no ads match|aucun résultat|ningún anuncio|keine anzeigen/i.test(text);
+      });
+
+      if (hasEmptyState || scannedAdIds.size === 0) {
+        console.log(`[Discovery Scanner] 0 ads / Empty state detected on initial load. Reloading page once to force Meta query engine re-evaluation...`);
+        await page.reload({ waitUntil: "networkidle", timeout: RESPONSE_TIMEOUT_MS }).catch(() => {});
+        await page.waitForTimeout(5000);
+        await scanInlineScripts();
+        console.log(`[Discovery Scanner] Post-reload stream wait complete. Captured ${scannedAdIds.size} ads so far.`);
+      }
+    }
+
     // Check for CAPTCHA
     const isRealCaptcha = await page.evaluate(() => {
       const bodyText = document.body?.innerText || "";

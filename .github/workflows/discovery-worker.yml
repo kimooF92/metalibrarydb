@@ -67,7 +67,7 @@ jobs:
         run: |
           if [ -n "${{ inputs.country }}" ] && [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "Running direct discovery scan for country ${{ inputs.country }}..."
-            npm run worker -- --discovery-url "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${{ inputs.country }}&is_targeted_country=false&media_type=video&publisher_platforms[0]=facebook&publisher_platforms[1]=instagram&q=${{ inputs.query || '%E2%80%8D' }}&search_type=keyword_unordered&sort_data[mode]=relevancy_monthly_grouped&sort_data[direction]=desc"
+            npm run worker -- --discovery-url "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&content_languages[0]=ar&country=${{ inputs.country }}&is_targeted_country=false&media_type=video&publisher_platforms[0]=facebook&publisher_platforms[1]=instagram&q=${{ inputs.query || '%E2%80%8D' }}&search_type=keyword_unordered&sort_data[mode]=relevancy_monthly_grouped&sort_data[direction]=desc"
           else
             echo "Processing pending discovery scan jobs from database..."
             npm run worker
