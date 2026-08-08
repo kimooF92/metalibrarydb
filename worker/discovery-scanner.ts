@@ -100,16 +100,17 @@ function parseDiscoveryGraphQLNode(
   canonicalPageIds: Set<string>
 ) {
   try {
+    const targetNode = node.node || node;
     const adArchiveId = String(
-      node.adArchiveID || node.ad_archive_id || node.id || node.adArchiveId || ""
+      targetNode.adArchiveID || targetNode.ad_archive_id || targetNode.id || targetNode.adArchiveId || ""
     );
     if (!adArchiveId || scannedAdIds.has(adArchiveId)) return;
     scannedAdIds.add(adArchiveId);
 
-    const snapshot = node.snapshot || node;
+    const snapshot = targetNode.snapshot || targetNode;
     const rawPageId = String(
-      node.pageID ||
-      node.page_id ||
+      targetNode.pageID ||
+      targetNode.page_id ||
       snapshot.page_id ||
       snapshot.pageID ||
       snapshot.publisher_page_id ||
@@ -118,11 +119,11 @@ function parseDiscoveryGraphQLNode(
     if (!rawPageId || rawPageId === "0") return;
 
     const pageName =
-      node.pageName ||
-      node.page_name ||
+      targetNode.pageName ||
+      targetNode.page_name ||
       snapshot.pageName ||
       snapshot.page_name ||
-      node.publisherPlatformPageName ||
+      targetNode.publisherPlatformPageName ||
       null;
 
     const ctaType = snapshot.cta_type || snapshot.cta_text || null;
