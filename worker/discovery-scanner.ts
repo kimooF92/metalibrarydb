@@ -178,7 +178,7 @@ function parseDiscoveryGraphQLNode(
 }
 
 /**
- * Traverses JSON object recursively to find ad array nodes
+ * Traverses JSON object recursively to find ad array nodes and page filter options
  */
 function extractDiscoveryFromJSON(
   obj: any,
@@ -216,13 +216,19 @@ function extractDiscoveryFromJSON(
     }
   }
 
+  // Check if current object itself is an ad node
+  const targetNode = obj.node || obj;
+  if (
+    targetNode &&
+    typeof targetNode === "object" &&
+    (targetNode.adArchiveID || targetNode.ad_archive_id || targetNode.id || targetNode.snapshot)
+  ) {
+    parseDiscoveryGraphQLNode(targetNode, collectedPages, scannedAdIds, canonicalPageIds);
+  }
+
   if (Array.isArray(obj)) {
     for (const item of obj) {
-      if (item && typeof item === "object" && (item.adArchiveID || item.ad_archive_id || item.snapshot)) {
-        parseDiscoveryGraphQLNode(item, collectedPages, scannedAdIds, canonicalPageIds);
-      } else {
-        extractDiscoveryFromJSON(item, collectedPages, scannedAdIds, canonicalPageIds);
-      }
+      extractDiscoveryFromJSON(item, collectedPages, scannedAdIds, canonicalPageIds);
     }
     return;
   }
@@ -231,8 +237,7 @@ function extractDiscoveryFromJSON(
     const list = obj.ad_archive_nodes || obj.results || obj.edges || obj.ads;
     if (Array.isArray(list)) {
       for (const item of list) {
-        const targetNode = item.node || item;
-        parseDiscoveryGraphQLNode(targetNode, collectedPages, scannedAdIds, canonicalPageIds);
+        extractDiscoveryFromJSON(item, collectedPages, scannedAdIds, canonicalPageIds);
       }
     }
   }
@@ -333,11 +338,46 @@ export async function runDiscoveryScan(
     });
 
     // 15-second Initial Rendering Pause: Meta zero-width joiner & multi-filter search queries take 10-15s for backend response streaming
-    console.log(`[Discovery Scanner] Waiting 15s for Meta's complex search query engine to stream initial GraphQL ad feed...`);
+    console.log(`[Discovery Scanner] Waiting for Meta's search query engine to stream GraphQL ad feed & inline HTML payloads...`);
     const initialWaitStart = Date.now();
+
+    // Helper to scan inline script tags embedded in the HTML document
+    const scanInlineScripts = async () => {
+      try {
+        const rawScriptContents = await page.evaluate(() => {
+          const scripts = Array.from(document.querySelectorAll('script[type="application/json"], script'));
+          return scripts
+            .map((s) => s.textContent || "")
+            .filter((t) => (t.includes("adArchiveID") || t.includes("ad_archive_id") || t.includes("dynamic_filter_options")) && t.length < 500000);
+        });
+
+        for (const content of rawScriptContents) {
+          try {
+            const parsed = JSON.parse(content);
+            extractDiscoveryFromJSON(parsed, collectedPages, scannedAdIds, canonicalPageIds);
+          } catch {
+            // Regex JSON snippet fallback for multi-line scripts
+            const jsonMatches = content.match(/\{"adArchiveID":.*?\}/g) || content.match(/\{"ad_archive_id":.*?\}/g);
+            if (jsonMatches) {
+              for (const jm of jsonMatches) {
+                try {
+                  const parsed = JSON.parse(jm);
+                  extractDiscoveryFromJSON(parsed, collectedPages, scannedAdIds, canonicalPageIds);
+                } catch {}
+              }
+            }
+          }
+        }
+      } catch {}
+    };
+
     while (scannedAdIds.size === 0 && Date.now() - initialWaitStart < 15000) {
+      await scanInlineScripts();
+      if (scannedAdIds.size > 0) break;
       await page.waitForTimeout(1000);
     }
+    await scanInlineScripts();
+
     console.log(`[Discovery Scanner] Initial stream wait complete. Captured ${scannedAdIds.size} ads so far.`);
 
     // Check for CAPTCHA
@@ -416,6 +456,11 @@ export async function runDiscoveryScan(
       const waitStart = Date.now();
       while (!graphqlResponseReceived && Date.now() - waitStart < SCROLL_WAIT_MS) {
         await page.waitForTimeout(300);
+      }
+
+      // Interleaved inline DOM script tag payload scan every 3 scroll iterations
+      if (i % 3 === 2) {
+        await scanInlineScripts();
       }
 
       // Check progress
