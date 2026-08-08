@@ -440,6 +440,62 @@ export async function runDiscoveryScan(
       console.warn("[Discovery Scanner] Rate limit 429 detected during deep scroll.");
     }
 
+    // DOM Diagnostic Report when 0 ads are captured
+    if (scannedAdIds.size === 0) {
+      try {
+        const domDiagnostic = await page.evaluate(() => {
+          const title = document.title || "";
+          const url = document.location.href || "";
+          const bodyText = (document.body?.innerText || "").slice(0, 1500);
+
+          const headings = Array.from(document.querySelectorAll("h1, h2, h3, div[role='heading']"))
+            .map((h) => h.textContent?.trim())
+            .filter(Boolean)
+            .slice(0, 10);
+
+          const feedElement = !!document.querySelector('div[role="feed"]');
+          const adLinksCount = document.querySelectorAll('a[href*="id="], a[href*="view_all_page_id="]').length;
+          const filterPills = Array.from(document.querySelectorAll('div[role="button"], span, button'))
+            .map((el) => el.textContent?.trim())
+            .filter(
+              (t) =>
+                t &&
+                (t.includes("Language") ||
+                  t.includes("Platform") ||
+                  t.includes("Country") ||
+                  t.includes("Media") ||
+                  t.includes("Arabic") ||
+                  t.includes("Tunisia") ||
+                  t.includes("Video"))
+            )
+            .slice(0, 10);
+
+          return {
+            title,
+            url,
+            feedElement,
+            adLinksCount,
+            headings,
+            filterPills,
+            bodySnippet: bodyText.replace(/\s+/g, " ").slice(0, 500),
+          };
+        });
+
+        console.log("==================================================");
+        console.log("[DOM DIAGNOSTIC REPORT] 0 Ads Captured. DOM Snapshot:");
+        console.log(` - Page Title: ${domDiagnostic.title}`);
+        console.log(` - Current URL: ${domDiagnostic.url}`);
+        console.log(` - Feed Container Found: ${domDiagnostic.feedElement}`);
+        console.log(` - Ad / Page Links Count: ${domDiagnostic.adLinksCount}`);
+        console.log(` - Visible Headings: ${JSON.stringify(domDiagnostic.headings)}`);
+        console.log(` - Filter Pills Rendered: ${JSON.stringify(domDiagnostic.filterPills)}`);
+        console.log(` - Body Text Snippet: "${domDiagnostic.bodySnippet}"`);
+        console.log("==================================================");
+      } catch (domDiagErr) {
+        console.warn("[DOM DIAGNOSTIC] Failed to extract DOM report:", domDiagErr);
+      }
+    }
+
     // 3. Fallback: Extract DOM links ONLY if GraphQL payload capture was blocked and zero pages were collected
     if (collectedPages.size === 0) {
       try {
