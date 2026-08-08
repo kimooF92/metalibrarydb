@@ -454,67 +454,209 @@ export async function runDiscoveryScan(
 
       graphqlResponseReceived = false;
 
-      const prevScrollMetrics = await page.evaluate(() => ({
-        scrollY: window.scrollY || document.documentElement.scrollTop || 0,
-        scrollHeight: document.body?.scrollHeight || document.documentElement?.scrollHeight || 0,
-      })).catch(() => ({ scrollY: 0, scrollHeight: 0 }));
+      // 1. Resolve Inner Scroll Container Metrics & Bounding Box
+      const containerInfo = await page
+        .evaluate(() => {
+          // Strategy A: Ad Card Parent Chain
+          const adElement = document.querySelector(
+            'a[href*="id="], a[href*="view_all_page_id="], div[class*="x1yztbdb"]'
+          );
+          let resolvedContainer: Element | null = null;
+          let containerType = "WindowRoot";
 
-      // Triple-Scroll Guarantee:
-      // 1. Move mouse below sticky headers & wheel scroll
-      // 2. Native keyboard PageDown press to fire document scroll listeners
-      // 3. Fallback evaluate scroll & scroll event dispatch
-      try {
-        await page.mouse.move(960, 600);
-        await page.mouse.wheel(0, 2500);
-        await page.keyboard.press("PageDown");
-        await page.keyboard.press("PageDown");
-      } catch {}
+          if (adElement) {
+            let parent = adElement.parentElement;
+            while (parent && parent !== document.body) {
+              const style = window.getComputedStyle(parent);
+              if (
+                (style.overflowY === "auto" ||
+                  style.overflowY === "scroll" ||
+                  style.overflow === "auto" ||
+                  style.overflow === "scroll") &&
+                parent.scrollHeight > parent.clientHeight
+              ) {
+                resolvedContainer = parent;
+                containerType = "AdCardParentContainer";
+                break;
+              }
+              parent = parent.parentElement;
+            }
+          }
 
-      await page.evaluate(() => {
-        const feedContainer =
-          document.querySelector('div[role="feed"]') ||
-          Array.from(document.querySelectorAll("div")).find((div) => {
-            const style = window.getComputedStyle(div);
-            return (
-              (style.overflowY === "auto" || style.overflowY === "scroll") &&
-              div.scrollHeight > div.clientHeight + 200
-            );
-          });
+          // Strategy B: role="feed"
+          if (!resolvedContainer) {
+            const roleFeed = document.querySelector('div[role="feed"]');
+            if (roleFeed) {
+              resolvedContainer = roleFeed;
+              containerType = "RoleFeedContainer";
+            }
+          }
 
-        if (feedContainer) {
-          feedContainer.scrollBy(0, 2500);
-          feedContainer.dispatchEvent(new Event("scroll", { bubbles: true }));
-        }
+          // Strategy C: Any scrollable div with overflowY
+          if (!resolvedContainer) {
+            const scrollableDivs = Array.from(document.querySelectorAll("div")).filter((div) => {
+              const style = window.getComputedStyle(div);
+              return (
+                (style.overflowY === "auto" || style.overflowY === "scroll") &&
+                div.scrollHeight > div.clientHeight + 100
+              );
+            });
+            if (scrollableDivs.length > 0) {
+              resolvedContainer = scrollableDivs[0];
+              containerType = "OverflowDivContainer";
+            }
+          }
 
-        window.scrollBy(0, 2500);
-        if (document.scrollingElement) {
-          document.scrollingElement.scrollBy(0, 2500);
-        }
-        window.dispatchEvent(new Event("scroll", { bubbles: true }));
-      });
+          const target =
+            resolvedContainer || document.scrollingElement || document.documentElement || document.body;
+          const rect = target.getBoundingClientRect();
 
-      // Adaptive response wait
+          return {
+            containerType,
+            scrollTop: target.scrollTop || window.scrollY || 0,
+            scrollHeight: target.scrollHeight || document.body?.scrollHeight || 0,
+            clientHeight: target.clientHeight || window.innerHeight || 0,
+            box: {
+              x: rect.x + rect.width / 2,
+              y: rect.y + rect.height / 2,
+              width: rect.width,
+              height: rect.height,
+            },
+          };
+        })
+        .catch(() => null);
+
+      // 2. Position Playwright mouse over inner container & execute wheel + keypress
+      if (containerInfo && containerInfo.box && containerInfo.box.width > 0 && containerInfo.box.height > 0) {
+        try {
+          const targetX = Math.max(50, Math.min(containerInfo.box.x, 1800));
+          const targetY = Math.max(50, Math.min(containerInfo.box.y, 900));
+          await page.mouse.move(targetX, targetY);
+          await page.mouse.wheel(0, 2500);
+          await page.keyboard.press("PageDown");
+          await page.keyboard.press("PageDown");
+        } catch {}
+      } else {
+        try {
+          await page.mouse.move(960, 600);
+          await page.mouse.wheel(0, 2500);
+          await page.keyboard.press("PageDown");
+          await page.keyboard.press("PageDown");
+        } catch {}
+      }
+
+      // 3. Fallback evaluate scroll & dispatch scroll events directly on inner container & window
+      await page
+        .evaluate(() => {
+          const adElement = document.querySelector(
+            'a[href*="id="], a[href*="view_all_page_id="], div[class*="x1yztbdb"]'
+          );
+          let target: Element | null = null;
+
+          if (adElement) {
+            let parent = adElement.parentElement;
+            while (parent && parent !== document.body) {
+              const style = window.getComputedStyle(parent);
+              if (
+                (style.overflowY === "auto" ||
+                  style.overflowY === "scroll" ||
+                  style.overflow === "auto" ||
+                  style.overflow === "scroll") &&
+                parent.scrollHeight > parent.clientHeight
+              ) {
+                target = parent;
+                break;
+              }
+              parent = parent.parentElement;
+            }
+          }
+
+          if (!target) {
+            target =
+              document.querySelector('div[role="feed"]') ||
+              Array.from(document.querySelectorAll("div")).find((div) => {
+                const style = window.getComputedStyle(div);
+                return (
+                  (style.overflowY === "auto" || style.overflowY === "scroll") &&
+                  div.scrollHeight > div.clientHeight + 100
+                );
+              }) ||
+              null;
+          }
+
+          if (target) {
+            target.scrollTop += 2500;
+            target.dispatchEvent(new Event("scroll", { bubbles: true }));
+          }
+
+          window.scrollBy(0, 2500);
+          if (document.scrollingElement) {
+            document.scrollingElement.scrollBy(0, 2500);
+          }
+          window.dispatchEvent(new Event("scroll", { bubbles: true }));
+        })
+        .catch(() => {});
+
+      // 4. Adaptive response wait
       const waitStart = Date.now();
       while (!graphqlResponseReceived && Date.now() - waitStart < SCROLL_WAIT_MS) {
         await page.waitForTimeout(300);
       }
 
-      // Inline DOM script tag payload scan on EVERY scroll iteration
+      // 5. Inline DOM script tag payload scan on EVERY scroll iteration
       await scanInlineScripts();
 
-      const currentScrollMetrics = await page.evaluate(() => ({
-        scrollY: window.scrollY || document.documentElement.scrollTop || 0,
-        scrollHeight: document.body?.scrollHeight || document.documentElement?.scrollHeight || 0,
-      })).catch(() => ({ scrollY: 0, scrollHeight: 0 }));
+      // 6. Measure post-scroll metrics & log detailed container scroll diagnostics
+      const postContainerInfo = await page
+        .evaluate(() => {
+          const adElement = document.querySelector(
+            'a[href*="id="], a[href*="view_all_page_id="], div[class*="x1yztbdb"]'
+          );
+          let target: Element | null = null;
+          if (adElement) {
+            let parent = adElement.parentElement;
+            while (parent && parent !== document.body) {
+              const style = window.getComputedStyle(parent);
+              if (
+                (style.overflowY === "auto" || style.overflowY === "scroll") &&
+                parent.scrollHeight > parent.clientHeight
+              ) {
+                target = parent;
+                break;
+              }
+              parent = parent.parentElement;
+            }
+          }
+          if (!target) {
+            target =
+              document.querySelector('div[role="feed"]') ||
+              Array.from(document.querySelectorAll("div")).find((div) => {
+                const style = window.getComputedStyle(div);
+                return (
+                  (style.overflowY === "auto" || style.overflowY === "scroll") &&
+                  div.scrollHeight > div.clientHeight + 100
+                );
+              }) ||
+              null;
+          }
+          const el = target || document.scrollingElement || document.documentElement || document.body;
+          return {
+            scrollTop: el.scrollTop || window.scrollY || 0,
+            scrollHeight: el.scrollHeight || document.body?.scrollHeight || 0,
+          };
+        })
+        .catch(() => null);
 
-      const scrollMoved = currentScrollMetrics.scrollY - prevScrollMetrics.scrollY;
-      const heightGrew = currentScrollMetrics.scrollHeight - prevScrollMetrics.scrollHeight;
+      const scrollMoved = (postContainerInfo?.scrollTop || 0) - (containerInfo?.scrollTop || 0);
+      const heightGrew = (postContainerInfo?.scrollHeight || 0) - (containerInfo?.scrollHeight || 0);
 
-      if (i % 3 === 0 || scrollMoved > 0 || heightGrew > 0) {
-        console.log(
-          `[Scroll Diagnostic #${i + 1}] ScrollMoved: +${scrollMoved}px (Y: ${currentScrollMetrics.scrollY}px | DocHeight: ${currentScrollMetrics.scrollHeight}px [+${heightGrew}px]) | Ads Scanned: ${scannedAdIds.size}`
-        );
-      }
+      console.log(
+        `[Scroll Diagnostic #${i + 1}] ContainerType: ${
+          containerInfo?.containerType || "Unknown"
+        } | Moved: +${scrollMoved}px (ScrollTop: ${postContainerInfo?.scrollTop || 0}px | ContainerHeight: ${
+          postContainerInfo?.scrollHeight || 0
+        }px [+${heightGrew}px]) | GraphQL: ${graphqlResponseReceived} | Ads Scanned: ${scannedAdIds.size}`
+      );
 
       // Check progress
       const currentAdCount = scannedAdIds.size;
