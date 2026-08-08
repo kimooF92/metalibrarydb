@@ -184,9 +184,18 @@ function extractDiscoveryFromJSON(
   obj: any,
   collectedPages: Map<string, DiscoveredPageData>,
   scannedAdIds: Set<string>,
-  canonicalPageIds: Set<string>
+  canonicalPageIds: Set<string>,
+  feedEndedRef?: { ended: boolean }
 ) {
   if (!obj || typeof obj !== "object") return;
+
+  // Check for explicit end-of-feed marker from Meta's GraphQL page_info
+  if (obj.page_info && obj.page_info.has_next_page === false) {
+    if (feedEndedRef) feedEndedRef.ended = true;
+  }
+  if (obj.paging && obj.paging.has_next_page === false) {
+    if (feedEndedRef) feedEndedRef.ended = true;
+  }
 
   // Parse authoritative Canonical Page IDs from Meta's dynamic filter options first
   if (obj.dynamic_filter_options?.pages && Array.isArray(obj.dynamic_filter_options.pages)) {
@@ -228,7 +237,7 @@ function extractDiscoveryFromJSON(
 
   if (Array.isArray(obj)) {
     for (const item of obj) {
-      extractDiscoveryFromJSON(item, collectedPages, scannedAdIds, canonicalPageIds);
+      extractDiscoveryFromJSON(item, collectedPages, scannedAdIds, canonicalPageIds, feedEndedRef);
     }
     return;
   }
@@ -237,14 +246,14 @@ function extractDiscoveryFromJSON(
     const list = obj.ad_archive_nodes || obj.results || obj.edges || obj.ads;
     if (Array.isArray(list)) {
       for (const item of list) {
-        extractDiscoveryFromJSON(item, collectedPages, scannedAdIds, canonicalPageIds);
+        extractDiscoveryFromJSON(item, collectedPages, scannedAdIds, canonicalPageIds, feedEndedRef);
       }
     }
   }
 
   for (const key of Object.keys(obj)) {
     if (typeof obj[key] === "object") {
-      extractDiscoveryFromJSON(obj[key], collectedPages, scannedAdIds, canonicalPageIds);
+      extractDiscoveryFromJSON(obj[key], collectedPages, scannedAdIds, canonicalPageIds, feedEndedRef);
     }
   }
 }
@@ -261,6 +270,7 @@ export async function runDiscoveryScan(
   const collectedPages = new Map<string, DiscoveredPageData>();
   const canonicalPageIds = new Set<string>();
   const scannedAdIds = new Set<string>();
+  const feedEndedRef = { ended: false };
   let hasCaptchaOrBlock = false;
   let isRateLimited = false;
   let graphqlResponseReceived = false;
@@ -289,7 +299,7 @@ export async function runDiscoveryScan(
             return;
           }
         }
-        extractDiscoveryFromJSON(jsonObj, collectedPages, scannedAdIds, canonicalPageIds);
+        extractDiscoveryFromJSON(jsonObj, collectedPages, scannedAdIds, canonicalPageIds, feedEndedRef);
         graphqlResponseReceived = true;
       };
 
@@ -354,7 +364,7 @@ export async function runDiscoveryScan(
         for (const content of rawScriptContents) {
           try {
             const parsed = JSON.parse(content);
-            extractDiscoveryFromJSON(parsed, collectedPages, scannedAdIds, canonicalPageIds);
+            extractDiscoveryFromJSON(parsed, collectedPages, scannedAdIds, canonicalPageIds, feedEndedRef);
           } catch {
             // Regex JSON snippet fallback for multi-line scripts
             const jsonMatches = content.match(/\{"adArchiveID":.*?\}/g) || content.match(/\{"ad_archive_id":.*?\}/g);
@@ -362,7 +372,7 @@ export async function runDiscoveryScan(
               for (const jm of jsonMatches) {
                 try {
                   const parsed = JSON.parse(jm);
-                  extractDiscoveryFromJSON(parsed, collectedPages, scannedAdIds, canonicalPageIds);
+                  extractDiscoveryFromJSON(parsed, collectedPages, scannedAdIds, canonicalPageIds, feedEndedRef);
                 } catch {}
               }
             }
@@ -658,12 +668,32 @@ export async function runDiscoveryScan(
         }px [+${heightGrew}px]) | GraphQL: ${graphqlResponseReceived} | Ads Scanned: ${scannedAdIds.size}`
       );
 
-      // Check progress
+      // Bounce Nudge: If scroll position was pinned at bottom and height didn't grow, scroll up 500px & back down to trigger IntersectionObserver
+      if (scrollMoved <= 0 && heightGrew <= 0) {
+        try {
+          await page.evaluate(() => {
+            window.scrollBy(0, -500);
+          });
+          await page.waitForTimeout(300);
+          await page.evaluate(() => {
+            window.scrollTo(0, document.body.scrollHeight);
+            window.dispatchEvent(new Event("scroll", { bubbles: true }));
+          });
+        } catch {}
+      }
+
+      // Check for explicit GraphQL feed completion (page_info.has_next_page === false)
+      if (feedEndedRef.ended) {
+        console.log(`[Discovery Scanner] Meta GraphQL feed explicitly confirmed end of feed (has_next_page: false). Ending scan.`);
+        break;
+      }
+
+      // Check progress: reset progress counter if ad count increased OR container height grew
       const currentAdCount = scannedAdIds.size;
-      if (currentAdCount === lastAdCount) {
+      if (currentAdCount === lastAdCount && heightGrew <= 0) {
         noProgressCount++;
         if (noProgressCount >= NO_PROGRESS_CAP) {
-          console.log(`[Discovery Scanner] No new ads for ${noProgressCount} consecutive scrolls. Reached feed end.`);
+          console.log(`[Discovery Scanner] No new ads and no container growth for ${noProgressCount} consecutive scrolls. Reached feed end.`);
           break;
         }
       } else {
