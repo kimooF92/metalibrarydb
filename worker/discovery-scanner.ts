@@ -26,8 +26,8 @@ const TARGET_MAX_ADS = parseInt(process.env.DISCOVERY_MAX_ADS || "2500", 10);
 const MAX_SCROLL_ATTEMPTS = parseInt(process.env.DISCOVERY_MAX_SCROLL_ATTEMPTS || "150", 10);
 const STAGE_SCROLL_COUNT = 40;
 const STAGE_COOLDOWN_MS = 12000;
-const NO_PROGRESS_CAP = parseInt(process.env.DISCOVERY_NO_PROGRESS_CAP || "8", 10);
-const SCROLL_WAIT_MS = parseInt(process.env.DISCOVERY_SCROLL_WAIT_MS || "3000", 10);
+const NO_PROGRESS_CAP = parseInt(process.env.DISCOVERY_NO_PROGRESS_CAP || "12", 10);
+const SCROLL_WAIT_MS = parseInt(process.env.DISCOVERY_SCROLL_WAIT_MS || "6000", 10);
 const RESPONSE_TIMEOUT_MS = parseInt(process.env.PAGE_TIMEOUT || "45000", 10);
 
 // CTA Match Lists
