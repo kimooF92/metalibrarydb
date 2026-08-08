@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { discoveryRuns } from "@/db/schema";
-import { desc } from "drizzle-orm";
+import { desc, gte, or, eq } from "drizzle-orm";
 import { triggerGitHubWorkflow } from "@/lib/github";
 
 export async function GET() {
   try {
     const runs = await db.query.discoveryRuns.findMany({
+      where: or(
+        gte(discoveryRuns.totalPagesDiscovered, 1),
+        eq(discoveryRuns.status, "running"),
+        eq(discoveryRuns.status, "pending")
+      ),
       orderBy: [desc(discoveryRuns.createdAt)],
-      limit: 20,
     });
     return NextResponse.json({ success: true, runs });
   } catch (error: any) {

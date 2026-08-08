@@ -644,28 +644,26 @@ export default function DiscoveryPage() {
       {/* Discovery Runs Selector */}
       {runs.length > 0 && (
         <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3 space-y-2.5 shadow-sm">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
               <Layers className="w-3.5 h-3.5 text-indigo-500" />
-              <span>Recent Discovery Scan Runs ({runs.length})</span>
+              <span>Discovery Scan Runs ({runs.length})</span>
             </div>
             
-            {runs.length > 4 && (
-              <div className="flex items-center space-x-2">
-                <label className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Select Run:</label>
-                <select
-                  value={selectedRunId || ""}
-                  onChange={(e) => setSelectedRunId(e.target.value)}
-                  className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-semibold rounded-lg px-2.5 py-1 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
-                >
-                  {runs.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.country} — {r.totalPagesDiscovered} pages, {r.totalAdsScanned} ads ({new Date(r.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })} {new Date(r.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <div className="flex items-center space-x-2">
+              <label className="text-[11px] text-slate-500 dark:text-slate-400 font-bold shrink-0">Select Run:</label>
+              <select
+                value={selectedRunId || ""}
+                onChange={(e) => setSelectedRunId(e.target.value)}
+                className="w-full sm:w-auto bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold rounded-lg px-3 py-1.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-sm"
+              >
+                {runs.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.country} — {r.totalPagesDiscovered} pages, {r.totalAdsScanned} ads ({new Date(r.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })} {new Date(r.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
