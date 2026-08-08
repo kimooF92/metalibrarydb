@@ -396,6 +396,18 @@ export async function runDiscoveryScan(
       }
     }
 
+    // Initial Trigger Scroll & 10s Pause: Trigger Meta's infinite scroll listener to wake up backend pagination stream
+    console.log(`[Discovery Scanner] Executing initial deep trigger scroll & 10s pause to wake up Meta pagination feed...`);
+    try {
+      await page.mouse.move(960, 600);
+      await page.mouse.wheel(0, 3000);
+      await page.keyboard.press("PageDown");
+      await page.keyboard.press("PageDown");
+    } catch {}
+    await page.waitForTimeout(10000);
+    await scanInlineScripts();
+    console.log(`[Discovery Scanner] Post-trigger scroll check. Captured ${scannedAdIds.size} ads so far.`);
+
     // Check for CAPTCHA
     const isRealCaptcha = await page.evaluate(() => {
       const bodyText = document.body?.innerText || "";
@@ -442,12 +454,17 @@ export async function runDiscoveryScan(
 
       graphqlResponseReceived = false;
 
-      // Use Playwright's native scroll APIs to trigger real browser scroll events
-      // (page.evaluate scrollTop doesn't fire scroll events that Meta's React virtualizer listens to)
-      await page.mouse.move(960, 540);
-      await page.mouse.wheel(0, 1800);
+      // Triple-Scroll Guarantee:
+      // 1. Move mouse below sticky headers & wheel scroll
+      // 2. Native keyboard PageDown press to fire document scroll listeners
+      // 3. Fallback evaluate scroll & scroll event dispatch
+      try {
+        await page.mouse.move(960, 600);
+        await page.mouse.wheel(0, 2500);
+        await page.keyboard.press("PageDown");
+        await page.keyboard.press("PageDown");
+      } catch {}
 
-      // Also dispatch scroll via evaluate as a fallback for overflow containers
       await page.evaluate(() => {
         const feedContainer =
           document.querySelector('div[role="feed"]') ||
@@ -460,11 +477,14 @@ export async function runDiscoveryScan(
           });
 
         if (feedContainer) {
-          feedContainer.scrollBy(0, 1800);
+          feedContainer.scrollBy(0, 2500);
           feedContainer.dispatchEvent(new Event("scroll", { bubbles: true }));
         }
 
-        window.scrollBy(0, 1800);
+        window.scrollBy(0, 2500);
+        if (document.scrollingElement) {
+          document.scrollingElement.scrollBy(0, 2500);
+        }
         window.dispatchEvent(new Event("scroll", { bubbles: true }));
       });
 
@@ -474,10 +494,8 @@ export async function runDiscoveryScan(
         await page.waitForTimeout(300);
       }
 
-      // Interleaved inline DOM script tag payload scan every 3 scroll iterations
-      if (i % 3 === 2) {
-        await scanInlineScripts();
-      }
+      // Inline DOM script tag payload scan on EVERY scroll iteration
+      await scanInlineScripts();
 
       // Check progress
       const currentAdCount = scannedAdIds.size;
