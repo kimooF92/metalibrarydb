@@ -454,6 +454,11 @@ export async function runDiscoveryScan(
 
       graphqlResponseReceived = false;
 
+      const prevScrollMetrics = await page.evaluate(() => ({
+        scrollY: window.scrollY || document.documentElement.scrollTop || 0,
+        scrollHeight: document.body?.scrollHeight || document.documentElement?.scrollHeight || 0,
+      })).catch(() => ({ scrollY: 0, scrollHeight: 0 }));
+
       // Triple-Scroll Guarantee:
       // 1. Move mouse below sticky headers & wheel scroll
       // 2. Native keyboard PageDown press to fire document scroll listeners
@@ -496,6 +501,20 @@ export async function runDiscoveryScan(
 
       // Inline DOM script tag payload scan on EVERY scroll iteration
       await scanInlineScripts();
+
+      const currentScrollMetrics = await page.evaluate(() => ({
+        scrollY: window.scrollY || document.documentElement.scrollTop || 0,
+        scrollHeight: document.body?.scrollHeight || document.documentElement?.scrollHeight || 0,
+      })).catch(() => ({ scrollY: 0, scrollHeight: 0 }));
+
+      const scrollMoved = currentScrollMetrics.scrollY - prevScrollMetrics.scrollY;
+      const heightGrew = currentScrollMetrics.scrollHeight - prevScrollMetrics.scrollHeight;
+
+      if (i % 3 === 0 || scrollMoved > 0 || heightGrew > 0) {
+        console.log(
+          `[Scroll Diagnostic #${i + 1}] ScrollMoved: +${scrollMoved}px (Y: ${currentScrollMetrics.scrollY}px | DocHeight: ${currentScrollMetrics.scrollHeight}px [+${heightGrew}px]) | Ads Scanned: ${scannedAdIds.size}`
+        );
+      }
 
       // Check progress
       const currentAdCount = scannedAdIds.size;
