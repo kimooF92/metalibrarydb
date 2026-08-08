@@ -36,11 +36,11 @@ export async function POST(req: Request) {
     const startDateMin = new Date(minDateStr);
     const startDateMax = new Date(maxDateStr);
 
-    // Build canonical Meta Ad Library country search URL with exact requested filters (zero-joiner query, Arabic language, Facebook & Instagram, most recent / relevancy_monthly_grouped)
+    // Build canonical Meta Ad Library country search URL with exact requested filters (zero-joiner query, Arabic language, Facebook & Instagram, most recent / relevancy_monthly_grouped, dynamic date range)
     const searchUrl =
       `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&content_languages[0]=ar&country=${country}&is_targeted_country=false&media_type=${mediaType}&publisher_platforms[0]=facebook&publisher_platforms[1]=instagram&q=${encodeURIComponent(
         query
-      )}&search_type=keyword_unordered&sort_data[mode]=relevancy_monthly_grouped&sort_data[direction]=desc`;
+      )}&search_type=keyword_unordered&sort_data[mode]=relevancy_monthly_grouped&sort_data[direction]=desc&start_date[min]=${minDateStr}&start_date[max]=${maxDateStr}`;
 
     const [newRun] = await db
       .insert(discoveryRuns)
