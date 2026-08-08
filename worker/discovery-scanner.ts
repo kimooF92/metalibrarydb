@@ -318,9 +318,15 @@ export async function runDiscoveryScan(
       .set({ status: "running", startedAt: now })
       .where(eq(discoveryRuns.id, runId));
 
-    console.log(`[Discovery Scanner] Navigating to broad search URL: ${targetUrl}`);
+    let cleanTargetUrl = targetUrl;
+    try {
+      // Prevent double encoding of zero-width joiner query parameter
+      cleanTargetUrl = targetUrl.replace(/q=%E2%80%8D/gi, "q=" + encodeURIComponent("\u200D"));
+    } catch {}
 
-    await page.goto(targetUrl, {
+    console.log(`[Discovery Scanner] Navigating to broad search URL: ${cleanTargetUrl}`);
+
+    await page.goto(cleanTargetUrl, {
       waitUntil: "networkidle",
       timeout: RESPONSE_TIMEOUT_MS,
     });
@@ -532,9 +538,9 @@ export async function runDiscoveryScan(
     }
 
     const finalStatus =
-      scannedAdIds.size === 0
+      savedPagesCount === 0 && scannedAdIds.size === 0
         ? "failed"
-        : scannedAdIds.size >= TARGET_MAX_ADS || noProgressCount >= NO_PROGRESS_CAP
+        : scannedAdIds.size >= TARGET_MAX_ADS || noProgressCount >= NO_PROGRESS_CAP || savedPagesCount > 0
         ? "completed"
         : "partial";
 
