@@ -203,13 +203,20 @@ function extractAdsFromJSON(obj: any, collectedMap: Map<string, ExtractedAdData>
   }
 
   // Check specific keys
-  if (obj.ad_archive_nodes || obj.results || obj.edges || obj.ads) {
-    const list = obj.ad_archive_nodes || obj.results || obj.edges || obj.ads;
+  if (obj.ad_archive_nodes || obj.results || obj.edges || obj.ads || obj.collated_results) {
+    const list = obj.ad_archive_nodes || obj.results || obj.edges || obj.ads || obj.collated_results;
     if (Array.isArray(list)) {
       for (const item of list) {
         const targetNode = item.node || item;
-        const parsed = parseAdGraphQLNode(targetNode);
-        if (parsed) collectedMap.set(parsed.adArchiveId, parsed);
+        if (targetNode && typeof targetNode === "object" && Array.isArray(targetNode.collated_results)) {
+          for (const subItem of targetNode.collated_results) {
+            const parsed = parseAdGraphQLNode(subItem);
+            if (parsed) collectedMap.set(parsed.adArchiveId, parsed);
+          }
+        } else {
+          const parsed = parseAdGraphQLNode(targetNode);
+          if (parsed) collectedMap.set(parsed.adArchiveId, parsed);
+        }
       }
     }
   }

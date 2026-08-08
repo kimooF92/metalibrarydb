@@ -100,7 +100,26 @@ function parseDiscoveryGraphQLNode(
   canonicalPageIds: Set<string>
 ) {
   try {
+    if (!node || typeof node !== "object") return;
+
+    // Recurse into collated_results array if present inside node
+    if (Array.isArray(node.collated_results)) {
+      for (const item of node.collated_results) {
+        parseDiscoveryGraphQLNode(item, collectedPages, scannedAdIds, canonicalPageIds);
+      }
+      return;
+    }
+
     const targetNode = node.node || node;
+
+    // Recurse into targetNode.collated_results if present
+    if (targetNode !== node && Array.isArray(targetNode.collated_results)) {
+      for (const item of targetNode.collated_results) {
+        parseDiscoveryGraphQLNode(item, collectedPages, scannedAdIds, canonicalPageIds);
+      }
+      return;
+    }
+
     const adArchiveId = String(
       targetNode.adArchiveID || targetNode.ad_archive_id || targetNode.id || targetNode.adArchiveId || ""
     );
@@ -230,7 +249,7 @@ function extractDiscoveryFromJSON(
   if (
     targetNode &&
     typeof targetNode === "object" &&
-    (targetNode.adArchiveID || targetNode.ad_archive_id || targetNode.id || targetNode.snapshot)
+    (targetNode.adArchiveID || targetNode.ad_archive_id || targetNode.id || targetNode.snapshot || targetNode.collated_results)
   ) {
     parseDiscoveryGraphQLNode(targetNode, collectedPages, scannedAdIds, canonicalPageIds);
   }
@@ -242,8 +261,8 @@ function extractDiscoveryFromJSON(
     return;
   }
 
-  if (obj.ad_archive_nodes || obj.results || obj.edges || obj.ads) {
-    const list = obj.ad_archive_nodes || obj.results || obj.edges || obj.ads;
+  if (obj.ad_archive_nodes || obj.results || obj.edges || obj.ads || obj.collated_results) {
+    const list = obj.ad_archive_nodes || obj.results || obj.edges || obj.ads || obj.collated_results;
     if (Array.isArray(list)) {
       for (const item of list) {
         extractDiscoveryFromJSON(item, collectedPages, scannedAdIds, canonicalPageIds, feedEndedRef);
