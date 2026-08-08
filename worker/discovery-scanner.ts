@@ -386,7 +386,12 @@ export async function runDiscoveryScan(
 
       graphqlResponseReceived = false;
 
-      // Scroll container + window
+      // Use Playwright's native scroll APIs to trigger real browser scroll events
+      // (page.evaluate scrollTop doesn't fire scroll events that Meta's React virtualizer listens to)
+      await page.mouse.move(960, 540);
+      await page.mouse.wheel(0, 1800);
+
+      // Also dispatch scroll via evaluate as a fallback for overflow containers
       await page.evaluate(() => {
         const feedContainer =
           document.querySelector('div[role="feed"]') ||
@@ -400,11 +405,11 @@ export async function runDiscoveryScan(
 
         if (feedContainer) {
           feedContainer.scrollBy(0, 1800);
-          feedContainer.scrollTop = feedContainer.scrollHeight;
+          feedContainer.dispatchEvent(new Event("scroll", { bubbles: true }));
         }
 
         window.scrollBy(0, 1800);
-        window.scrollTo(0, document.body.scrollHeight);
+        window.dispatchEvent(new Event("scroll", { bubbles: true }));
       });
 
       // Adaptive response wait

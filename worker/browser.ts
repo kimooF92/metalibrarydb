@@ -14,18 +14,26 @@ export async function getBrowserSession(): Promise<{ context: BrowserContext; pa
 
   const options = {
     headless: isHeadless,
-    viewport: { width: 1280, height: 800 },
+    viewport: { width: 1920, height: 1080 },
     userAgent:
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     locale: "en-US",
     extraHTTPHeaders: {
-      "Accept-Language": "en-US,en;q=0.9",
+      "Accept-Language": "en-US,en;q=0.9,ar;q=0.8",
     },
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
       "--disable-blink-features=AutomationControlled",
+      "--window-size=1920,1080",
+      "--start-maximized",
+      "--disable-gpu-sandbox",
+      "--disable-software-rasterizer",
+      "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-renderer-backgrounding",
+      "--force-device-scale-factor=1",
     ],
   };
 
