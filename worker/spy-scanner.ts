@@ -570,9 +570,37 @@ export async function scanAdCreatives(
       extractedPageIdsSet.add(pageId);
     }
 
+    const now = new Date();
     const extractedPageIds = Array.from(extractedPageIdsSet);
 
     if (collectedAds.size === 0) {
+      // Check if DOM explicitly loaded and indicates a verified zero state (e.g. "0 results" or "no active ads")
+      const isVerifiedZeroState = await page.evaluate(() => {
+        const text = document.body?.innerText || "";
+        return (
+          /0 results|no ads match|no active ads|0 total ads/i.test(text) &&
+          !/security check|confirm it'?s you/i.test(text)
+        );
+      });
+
+      if (isVerifiedZeroState) {
+        console.log(`[Spy Scanner] 🟢 Verified ZERO active ads for tracked page ${trackedPageId}. Running reconciliation...`);
+        const { reconcileArchivedAds } = await import("../lib/ad-reconciliation");
+        await reconcileArchivedAds(trackedPageId, creativeScanId, new Set(), now);
+
+        await db
+          .update(trackedPages)
+          .set({ lastCreativeScan: now, updatedAt: now })
+          .where(eq(trackedPages.id, trackedPageId));
+
+        return {
+          status: "completed",
+          extractedCount: 0,
+          extractedPageIds,
+          outcomeDetails: "Verified 0 active ads on page. Completed full scan and archival reconciliation.",
+        };
+      }
+
       if (extractedPageIds.length > 0) {
         const names = extractedPageIds.map(id => canonicalPageIdsFromFilter.get(id) || id).join(", ");
         console.log(`[Spy Scanner] 0 ad payloads but resolved ${extractedPageIds.length} canonical Page ID(s) from dynamic filter: ${names}`);
@@ -587,7 +615,6 @@ export async function scanAdCreatives(
     }
 
     // 4. Save extracted ads and observations transactionally
-    const now = new Date();
     let savedCount = 0;
 
     for (const adData of collectedAds.values()) {
@@ -632,6 +659,8 @@ export async function scanAdCreatives(
             thumbnailStoragePath: storagePath || ads.thumbnailStoragePath,
             lastSeenAt: now,
             updatedAt: now,
+            isArchived: false,
+            archivedAt: null,
           },
         })
         .returning();
@@ -654,11 +683,12 @@ export async function scanAdCreatives(
     const finalStatus: "completed" | "partial" =
       noProgressCount >= NO_PROGRESS_CAP ? "completed" : "partial";
 
-    // Reconcile missing ads ONLY on completed full scans to prevent partial scan data corruption
+    // Reconcile missing ads ONLY on completed full page scans to prevent partial scan data corruption
     if (savedCount > 0 && finalStatus === "completed") {
       const currentlyObservedArchiveIds = new Set(
         Array.from(collectedAds.values()).map((a) => a.adArchiveId)
       );
+      const { reconcileArchivedAds } = await import("../lib/ad-reconciliation");
       await reconcileArchivedAds(trackedPageId, creativeScanId, currentlyObservedArchiveIds, now);
     }
 
@@ -689,39 +719,3 @@ export async function scanAdCreatives(
   }
 }
 
-/**
- * Standalone archival reconciliation: Marks previously observed ads missing from full scan as isArchived = true
- */
-export async function reconcileArchivedAds(
-  trackedPageId: string,
-  creativeScanId: string,
-  currentlyObservedAdArchiveIds: Set<string>,
-  now: Date = new Date()
-) {
-  const previousObservations = await db.query.adObservations.findMany({
-    where: eq(adObservations.trackedPageId, trackedPageId),
-    columns: { adId: true },
-  });
-  const previousAdIds = Array.from(new Set(previousObservations.map((o) => o.adId)));
-
-  for (const prevAdId of previousAdIds) {
-    const existingAd = await db.query.ads.findFirst({
-      where: eq(ads.id, prevAdId),
-    });
-    if (existingAd && !currentlyObservedAdArchiveIds.has(existingAd.adArchiveId)) {
-      await db
-        .update(ads)
-        .set({ isArchived: true, archivedAt: now, updatedAt: now })
-        .where(eq(ads.id, prevAdId));
-
-      await db.insert(adObservations).values({
-        creativeScanId,
-        adId: prevAdId,
-        trackedPageId,
-        isActive: false,
-        duplicationCount: 0,
-        observedAt: now,
-      });
-    }
-  }
-}

@@ -248,6 +248,8 @@ export async function ingestApifyDatasetItems(
           thumbnailUrl: sql`COALESCE(EXCLUDED.thumbnail_url, ${ads.thumbnailUrl})`,
           lastSeenAt: now,
           updatedAt: now,
+          isArchived: false,
+          archivedAt: null,
         },
       })
       .returning();
@@ -266,7 +268,7 @@ export async function ingestApifyDatasetItems(
         if (duplicationCount > existingObservation.duplicationCount) {
           await db
             .update(adObservations)
-            .set({ duplicationCount })
+            .set({ duplicationCount, isActive: true })
             .where(eq(adObservations.id, existingObservation.id));
         }
       } else {
@@ -285,6 +287,28 @@ export async function ingestApifyDatasetItems(
     }
   }
 
+  // Determine if this scan is an explicit Full Page Scan (ONLY full page scans run archival reconciliation)
+  let config: any = {};
+  try {
+    config = JSON.parse(scanRecord.configSnapshot || "{}");
+  } catch {}
+
+  const isFullScan = Boolean(config.isFullScan === true);
+
+  // Require non-empty items OR explicit zero-state flag to prevent actor errors/empty payloads from wiping active ads
+  if (isFullScan && (items.length > 0 || config.isVerifiedZeroState === true)) {
+    const currentlyObservedArchiveIds = new Set<string>();
+    for (const item of items) {
+      const archiveId = extractAdArchiveId(item);
+      if (archiveId && archiveId !== "0") {
+        currentlyObservedArchiveIds.add(archiveId);
+      }
+    }
+
+    const { reconcileArchivedAds } = await import("@/lib/ad-reconciliation");
+    await reconcileArchivedAds(trackedPageId, creativeScanId, currentlyObservedArchiveIds, now);
+  }
+
   // Update creative scan record
   await db
     .update(creativeScans)
@@ -292,7 +316,7 @@ export async function ingestApifyDatasetItems(
       status: "completed",
       extractedCount,
       finishedAt: now,
-      outcomeDetails: `Successfully extracted ${extractedCount} ad(s) via Apify Delta Cloud`,
+      outcomeDetails: `Successfully extracted ${extractedCount} ad(s) via Apify Cloud${isFullScan ? " (Full Page Scan & Reconciliation Completed)" : ""}`,
     })
     .where(eq(creativeScans.id, creativeScanId));
 
