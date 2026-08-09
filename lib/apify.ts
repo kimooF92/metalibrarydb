@@ -123,12 +123,17 @@ export async function startApifyDeltaScan(params: {
 
   const actorInput = {
     startUrls: [{ url: targetUrl }],
+    urls: [{ url: targetUrl }],
     searchUrl: targetUrl,
     maxResults,
     limitPerSource: maxResults,
     count: maxResults,
     extractCards: true,
     includeRawSnapshot: true,
+    scrapeAdDetails: false,
+    "scrapePageAds.activeStatus": "all",
+    "scrapePageAds.countryCode": "ALL",
+    "scrapePageAds.sortBy": "most_recent",
   };
 
   const webhooks = params.webhookBaseUrl
