@@ -7,7 +7,33 @@ import { eq, sql } from "drizzle-orm";
 export const dynamic = "force-dynamic";
 
 /**
- * Extracts and normalizes media URLs from Meta Ad Library JSON items (including Dynamic Creatives & Carousels)
+ * Robustly extracts adArchiveId from multiple candidate fields & URL parameters.
+ */
+function extractAdArchiveId(item: any): string {
+  const direct = String(
+    item.adArchiveId ||
+    item.ad_archive_id ||
+    item.archiveId ||
+    item.id ||
+    item.ad_id ||
+    item.snapshot?.ad_archive_id ||
+    ""
+  ).trim();
+
+  if (direct && direct !== "0") return direct;
+
+  // Extract from ad_library_url (e.g. https://www.facebook.com/ads/library/?id=1497424319087029)
+  const urlToParse = item.ad_library_url || item.url || "";
+  const match = urlToParse.match(/[?&]id=(\d+)/);
+  if (match && match[1]) {
+    return match[1];
+  }
+
+  return "";
+}
+
+/**
+ * Extracts and normalizes media URLs from Meta Ad Library JSON items (including Dynamic Creatives, Carousels & Video previews)
  */
 function extractMedia(item: any): {
   mediaType: "image" | "video" | "carousel" | "unknown";
@@ -15,6 +41,7 @@ function extractMedia(item: any): {
   thumbnailUrl: string | null;
 } {
   const urls: string[] = [];
+  let preferredThumbnail: string | null = null;
 
   // 1. Check top-level direct fields
   const topMedia = item.media_url || item.image_url || item.display_url || item.imageUrl;
@@ -44,7 +71,11 @@ function extractMedia(item: any): {
   const images = item.snapshot?.images || item.images || [];
   if (Array.isArray(images)) {
     for (const img of images) {
-      const imgUrl = img.original_image_url || img.resized_image_url || img.url;
+      const imgUrl =
+        img.original_image_url ||
+        img.resized_image_url ||
+        img.url ||
+        img.watermarked_resized_image_url;
       if (imgUrl && typeof imgUrl === "string" && !urls.includes(imgUrl)) {
         urls.push(imgUrl);
       }
@@ -53,10 +84,15 @@ function extractMedia(item: any): {
 
   // 4. Check snapshot videos array
   const videos = item.snapshot?.videos || item.videos || [];
-  let hasVideoSource = topVideo || false;
+  let hasVideoSource = Boolean(topVideo);
   if (Array.isArray(videos)) {
     for (const vid of videos) {
-      const vidUrl = vid.video_hd_url || vid.video_sd_url || vid.video_preview_image_url;
+      const previewImg = vid.video_preview_image_url;
+      if (previewImg && typeof previewImg === "string" && !preferredThumbnail) {
+        preferredThumbnail = previewImg;
+      }
+
+      const vidUrl = vid.video_hd_url || vid.video_sd_url || previewImg;
       if (vidUrl && typeof vidUrl === "string") {
         hasVideoSource = true;
         if (!urls.includes(vidUrl)) urls.push(vidUrl);
@@ -76,6 +112,7 @@ function extractMedia(item: any): {
 
   // Thumbnail fallback
   const thumbnailUrl =
+    preferredThumbnail ||
     urls[0] ||
     item.snapshot?.page_profile_picture_url ||
     item.pageProfilePictureUrl ||
@@ -140,9 +177,7 @@ export async function POST(req: NextRequest) {
     let extractedCount = 0;
 
     for (const item of items) {
-      const adArchiveId = String(
-        item.adArchiveId || item.ad_archive_id || item.archiveId || item.id || ""
-      ).trim();
+      const adArchiveId = extractAdArchiveId(item);
 
       if (!adArchiveId || adArchiveId === "0") continue;
 
@@ -179,8 +214,8 @@ export async function POST(req: NextRequest) {
         null;
 
       let startedRunningOn: Date | null = null;
-      if (item.startedRunningOn || item.startDate || item.start_date || item.snapshot?.creation_time) {
-        const rawDate = item.startedRunningOn || item.startDate || item.start_date || item.snapshot?.creation_time;
+      if (item.startedRunningOn || item.startDate || item.start_date || item.start_date_formatted || item.snapshot?.creation_time) {
+        const rawDate = item.startedRunningOn || item.startDate || item.start_date || item.start_date_formatted || item.snapshot?.creation_time;
         const parsed = new Date(rawDate);
         if (!isNaN(parsed.getTime())) startedRunningOn = parsed;
       }
