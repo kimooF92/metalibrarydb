@@ -4,6 +4,8 @@ import { ads, adObservations, trackedPages } from "@/db/schema";
 import { eq, ilike, gte, lte, and, sql, desc, asc, or } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 
+import { syncApifyRuns } from "@/lib/apify-sync";
+
 export async function GET(req: NextRequest) {
   const authError = validateApiSecret(req);
   if (authError) return authError;
@@ -25,6 +27,13 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "24", 10)));
     const offset = (page - 1) * limit;
+
+    // Synchronize any completed active Apify runs on first page load
+    if (page === 1) {
+      await syncApifyRuns().catch((err) => {
+        console.error("[Ad Feed] Apify sync error during feed query:", err);
+      });
+    }
 
     // Build conditions array
     const conditions = [];

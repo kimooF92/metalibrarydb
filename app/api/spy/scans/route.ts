@@ -98,12 +98,34 @@ export async function POST(req: NextRequest) {
 
         try {
           const { startApifyDeltaScan } = await import("@/lib/apify");
+          const { pollApifyRunUntilDone } = await import("@/lib/apify-sync");
+
           const runRes = await startApifyDeltaScan({
             pageUrl: page.url,
             delta,
             creativeScanId: newScan.id,
             webhookBaseUrl,
           });
+
+          // Update scan record with apifyRunId and defaultDatasetId
+          if (runRes?.id) {
+            await db
+              .update(creativeScans)
+              .set({
+                configSnapshot: JSON.stringify({
+                  runner: "apify",
+                  delta,
+                  maxResults: delta + Math.max(3, Math.ceil(delta * 0.2)),
+                  apifyRunId: runRes.id,
+                  defaultDatasetId: runRes.defaultDatasetId,
+                }),
+                outcomeDetails: `Apify Delta Cloud run launched (Run ID: ${runRes.id}, Dataset ID: ${runRes.defaultDatasetId})`,
+              })
+              .where(eq(creativeScans.id, newScan.id));
+
+            // Launch background polling for dataset ingestion (handles local dev & webhook fallbacks)
+            pollApifyRunUntilDone(newScan.id, runRes.id, runRes.defaultDatasetId);
+          }
 
           enqueuedCount++;
           pageStatuses.push({

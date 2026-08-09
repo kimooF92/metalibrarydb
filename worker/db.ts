@@ -590,6 +590,26 @@ export async function tryAutoTriggerApifyDeltaScan(pageId: string, difference: n
       webhookBaseUrl: baseUrl,
     });
 
+    if (runRes?.id) {
+      await db
+        .update(creativeScans)
+        .set({
+          configSnapshot: JSON.stringify({
+            runner: "apify",
+            autoTriggered: true,
+            delta: difference,
+            maxResults,
+            apifyRunId: runRes.id,
+            defaultDatasetId: runRes.defaultDatasetId,
+          }),
+          outcomeDetails: `Auto-triggered Apify Delta Cloud run for +${difference} new ad(s) (Run ID: ${runRes.id})`,
+        })
+        .where(eq(creativeScans.id, newScan.id));
+
+      const { pollApifyRunUntilDone } = await import("../lib/apify-sync");
+      pollApifyRunUntilDone(newScan.id, runRes.id, runRes.defaultDatasetId);
+    }
+
     console.log(
       `[Apify Auto-Trigger] ⚡ Launched Apify Delta Cloud scan for "${page.displayName || pageId}" (+${difference} new ads | limit ${maxResults} ads). Run ID: ${runRes?.id}`
     );
