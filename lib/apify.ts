@@ -75,6 +75,30 @@ export async function getApifyAccountBalance(): Promise<ApifyBalanceInfo | null>
 }
 
 /**
+ * Helper to ensure Meta Ad Library URL explicitly uses Most Recent feed sorting.
+ * Parameter: &sort_data[mode]=relevancy_monthly_grouped&sort_data[direction]=desc
+ */
+export function ensureMostRecentSortingUrl(rawUrl: string): string {
+  try {
+    let url = rawUrl.trim();
+    if (url.includes("sort_data[mode]=total_impressions")) {
+      url = url.replace("sort_data[mode]=total_impressions", "sort_data[mode]=relevancy_monthly_grouped");
+    } else if (!url.includes("sort_data[mode]=")) {
+      const separator = url.includes("?") ? "&" : "?";
+      url += `${separator}sort_data[mode]=relevancy_monthly_grouped`;
+    }
+
+    if (!url.includes("sort_data[direction]=")) {
+      url += "&sort_data[direction]=desc";
+    }
+
+    return url;
+  } catch {
+    return rawUrl;
+  }
+}
+
+/**
  * Starts an Apify Actor run for Meta Ad Library extraction with delta limit & webhook configuration.
  */
 export async function startApifyDeltaScan(params: {
@@ -94,9 +118,12 @@ export async function startApifyDeltaScan(params: {
 
   const maxResults = calculateDeltaLimit(params.delta);
 
+  // Enforce explicit Most Recent sorting URL parameters
+  const targetUrl = ensureMostRecentSortingUrl(params.pageUrl);
+
   const actorInput = {
-    startUrls: [{ url: params.pageUrl }],
-    searchUrl: params.pageUrl,
+    startUrls: [{ url: targetUrl }],
+    searchUrl: targetUrl,
     maxResults,
     extractCards: true,
     includeRawSnapshot: true,
