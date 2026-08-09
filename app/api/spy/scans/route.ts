@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { creativeScans, queue, trackedPages } from "@/db/schema";
-import { inArray, eq, and } from "drizzle-orm";
+import { creativeScans, queue, trackedPages, scanHistory } from "@/db/schema";
+import { inArray, eq, and, sql } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 
 import { extractUrlMetadata } from "@/lib/url-parser";
@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { trackedPageIds } = body;
+    const { trackedPageIds, runner = "local" } = body;
 
     if (!Array.isArray(trackedPageIds) || trackedPageIds.length === 0) {
       return NextResponse.json(
@@ -43,6 +43,10 @@ export async function POST(req: NextRequest) {
     let skippedCount = 0;
     const pageStatuses: any[] = [];
 
+    const host = req.headers.get("host") || "localhost:3000";
+    const protocol = req.headers.get("x-forwarded-proto") || (host.startsWith("localhost") ? "http" : "https");
+    const webhookBaseUrl = `${protocol}://${host}`;
+
     for (const page of eligiblePages) {
       const lastScanDate = page.lastCreativeScan ? new Date(page.lastCreativeScan) : null;
       const isScannedToday = Boolean(
@@ -71,13 +75,75 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // Create creative_scans record
+      if (runner === "apify") {
+        // Fetch latest scan history to get positive count delta
+        const latestHistory = await db.query.scanHistory.findFirst({
+          where: eq(scanHistory.trackedPageId, page.id),
+          orderBy: [sql`${scanHistory.checkedAt} desc`],
+        });
+
+        const delta = Math.max(1, latestHistory?.difference || page.currentResults || 10);
+
+        // Create creative_scans record for Apify
+        const [newScan] = await db
+          .insert(creativeScans)
+          .values({
+            trackedPageId: page.id,
+            status: "running",
+            startedAt: new Date(),
+            configSnapshot: JSON.stringify({ runner: "apify", delta, maxResults: delta + Math.max(3, Math.ceil(delta * 0.2)) }),
+            outcomeDetails: `Apify Delta Cloud run launched for ${delta} new ad(s)`,
+          })
+          .returning();
+
+        try {
+          const { startApifyDeltaScan } = await import("@/lib/apify");
+          const runRes = await startApifyDeltaScan({
+            pageUrl: page.url,
+            delta,
+            creativeScanId: newScan.id,
+            webhookBaseUrl,
+          });
+
+          enqueuedCount++;
+          pageStatuses.push({
+            id: page.id,
+            displayName: page.displayName || page.pageId || page.id,
+            status: "apify_launched",
+            isScannedToday,
+            lastCreativeScan: page.lastCreativeScan,
+            message: `Launched ⚡ Apify Delta Cloud scan for "${page.displayName || page.pageId || page.id}" (${delta} ads limit).`,
+            runId: runRes?.id,
+          });
+        } catch (apifyErr: any) {
+          await db
+            .update(creativeScans)
+            .set({
+              status: "failed",
+              failureReason: "apify_launch_failed",
+              outcomeDetails: apifyErr?.message || "Apify launch failed",
+              finishedAt: new Date(),
+            })
+            .where(eq(creativeScans.id, newScan.id));
+
+          pageStatuses.push({
+            id: page.id,
+            displayName: page.displayName || page.pageId || page.id,
+            status: "failed",
+            message: `Failed to launch Apify scan: ${apifyErr?.message}`,
+          });
+        }
+
+        continue;
+      }
+
+      // Default: Local Playwright worker enqueue
       const [newScan] = await db
         .insert(creativeScans)
         .values({
           trackedPageId: page.id,
           status: "pending",
-          configSnapshot: JSON.stringify({ maxScrolls: 15, timeoutMs: 25000 }),
+          configSnapshot: JSON.stringify({ runner: "local", maxScrolls: 15, timeoutMs: 25000 }),
         })
         .returning();
 
@@ -95,23 +161,6 @@ export async function POST(req: NextRequest) {
         .set({ status: "pending", updatedAt: new Date() })
         .where(eq(trackedPages.id, page.id));
 
-      // Enqueue standard count scan refresh if not already pending/running
-      const existingCountJob = await db.query.queue.findFirst({
-        where: and(
-          eq(queue.trackedPageId, page.id),
-          eq(queue.jobType, "count"),
-          inArray(queue.status, ["pending", "running"])
-        ),
-      });
-
-      if (!existingCountJob) {
-        await db.insert(queue).values({
-          trackedPageId: page.id,
-          jobType: "count",
-          status: "pending",
-        });
-      }
-
       enqueuedCount++;
       pageStatuses.push({
         id: page.id,
@@ -120,8 +169,8 @@ export async function POST(req: NextRequest) {
         isScannedToday,
         lastCreativeScan: page.lastCreativeScan,
         message: isScannedToday
-          ? `Queued creative scan for "${page.displayName || page.pageId || page.id}". (Note: Brand was already scanned earlier today).`
-          : `Queued creative scan for "${page.displayName || page.pageId || page.id}".`,
+          ? `Queued Local Playwright scan for "${page.displayName || page.pageId || page.id}".`
+          : `Queued Local Playwright scan for "${page.displayName || page.pageId || page.id}".`,
       });
     }
 
@@ -134,7 +183,7 @@ export async function POST(req: NextRequest) {
       message:
         pageStatuses.length === 1
           ? pageStatuses[0].message
-          : `Enqueued ${enqueuedCount} creative scan job(s). ${skippedCount} already in queue.`,
+          : `Enqueued ${enqueuedCount} scan job(s). ${skippedCount} already in queue.`,
     });
   } catch (err: any) {
     return NextResponse.json(

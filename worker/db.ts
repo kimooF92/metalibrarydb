@@ -512,6 +512,90 @@ export async function markJobCompleted(
       finishedAt: now,
     })
     .where(eq(queue.id, queueId));
+
+  // 5. Automatic Apify Delta Trigger: If new ads detected (difference >= 1), launch Apify Cloud scan in background
+  if (status === "success" && difference !== null && difference >= 1) {
+    tryAutoTriggerApifyDeltaScan(pageId, difference).catch((err) => {
+      console.error("[Apify Auto-Trigger] Error launching background delta scan:", err);
+    });
+  }
+}
+
+/**
+ * Automatically triggers an Apify Delta Cloud scan when a positive ad count difference is detected.
+ * Uses formula: Limit = Delta + max(3, ceil(Delta * 0.2)) and respects 24h cooldown per page.
+ */
+export async function tryAutoTriggerApifyDeltaScan(pageId: string, difference: number) {
+  if (difference < 1) return;
+
+  const page = await db.query.trackedPages.findFirst({
+    where: eq(trackedPages.id, pageId),
+  });
+
+  if (!page || !page.url) return;
+
+  // Enforce 24-hour cooldown window to prevent redundant credit usage
+  const cooldownCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  if (page.lastCreativeScan && page.lastCreativeScan > cooldownCutoff) {
+    console.log(
+      `[Apify Auto-Trigger] Skipping "${page.displayName || pageId}": creative scan performed within 24h cooldown.`
+    );
+    return;
+  }
+
+  // Check if a creative scan is already pending/running
+  const existingJob = await db.query.creativeScans.findFirst({
+    where: (cs, { and, eq, inArray }) =>
+      and(
+        eq(cs.trackedPageId, pageId),
+        inArray(cs.status, ["pending", "running"])
+      ),
+  });
+
+  if (existingJob) {
+    console.log(
+      `[Apify Auto-Trigger] Skipping "${page.displayName || pageId}": creative scan already in progress.`
+    );
+    return;
+  }
+
+  try {
+    const { startApifyDeltaScan, calculateDeltaLimit } = await import("../lib/apify");
+    const maxResults = calculateDeltaLimit(difference);
+
+    const [newScan] = await db
+      .insert(creativeScans)
+      .values({
+        trackedPageId: pageId,
+        status: "running",
+        startedAt: new Date(),
+        configSnapshot: JSON.stringify({
+          runner: "apify",
+          autoTriggered: true,
+          delta: difference,
+          maxResults,
+        }),
+        outcomeDetails: `Auto-triggered Apify Delta Cloud run for +${difference} new ad(s) (Limit: ${maxResults})`,
+      })
+      .returning();
+
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+
+    const runRes = await startApifyDeltaScan({
+      pageUrl: page.url,
+      delta: difference,
+      creativeScanId: newScan.id,
+      webhookBaseUrl: baseUrl,
+    });
+
+    console.log(
+      `[Apify Auto-Trigger] ⚡ Launched Apify Delta Cloud scan for "${page.displayName || pageId}" (+${difference} new ads | limit ${maxResults} ads). Run ID: ${runRes?.id}`
+    );
+  } catch (err: any) {
+    console.error(`[Apify Auto-Trigger] Failed to auto-launch Apify scan for "${page.displayName || pageId}":`, err);
+  }
 }
 
 export async function markCreativeJobCompleted(

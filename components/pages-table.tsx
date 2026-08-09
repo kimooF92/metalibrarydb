@@ -5,6 +5,7 @@ import { TrackedPage } from "@/types";
 import { HistoryModal } from "./history-modal";
 import { DeleteConfirmModal } from "./delete-confirm-modal";
 import { PageAdLibraryDrawer } from "./spy/page-ad-library-drawer";
+import { ScanRunnerModal } from "./scan-runner-modal";
 import {
   Search,
   Filter,
@@ -192,6 +193,62 @@ export function PagesTable({
 
   const [selectedDrawerPage, setSelectedDrawerPage] = useState<TrackedPage | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const [runnerModalPages, setRunnerModalPages] = useState<TrackedPage[]>([]);
+  const [runnerModalOpen, setRunnerModalOpen] = useState(false);
+
+  const handleLaunchScan = async (runner: "local" | "apify") => {
+    if (runnerModalPages.length === 0) return;
+    const targetIds = runnerModalPages.map((p) => p.id);
+
+    try {
+      const res = await fetch("/api/spy/scans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackedPageIds: targetIds, runner }),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        if (targetIds.length === 1) {
+          const statusItem = data.pageStatuses?.[0];
+          const brandName = runnerModalPages[0].displayName || runnerModalPages[0].pageId || runnerModalPages[0].id;
+
+          if (statusItem?.status === "apify_launched") {
+            triggerToast(
+              "success",
+              "⚡ Apify Scan Launched",
+              `Launched Apify Delta Cloud scan for "${brandName}" (${statusItem.message})`
+            );
+          } else if (statusItem?.status === "already_queued") {
+            triggerToast(
+              "warning",
+              "Already Queued",
+              `Creative scan for "${brandName}" is already pending/running in queue.`
+            );
+          } else {
+            triggerToast(
+              "success",
+              "Local Scan Queued",
+              `Local Playwright creative scan queued for "${brandName}".`
+            );
+          }
+        } else {
+          triggerToast(
+            "success",
+            "Bulk Creative Scans Started",
+            `Started ${data.enqueuedCount || 0} scan job(s) via ${runner === "apify" ? "Apify Cloud" : "Local Worker"}.`
+          );
+        }
+        onWatchlistToggle?.();
+        setSelectedIds([]);
+      } else {
+        triggerToast("error", "Scan Failed", data.error || "Could not launch creative scan");
+      }
+    } catch {
+      triggerToast("error", "Network Error", "Failed to launch creative scan");
+    }
+  };
 
   const [pageToDelete, setPageToDelete] = useState<TrackedPage | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -436,28 +493,10 @@ export function PagesTable({
             </button>
 
             <button
-              onClick={async () => {
-                try {
-                  const res = await fetch("/api/spy/scans", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ trackedPageIds: selectedIds }),
-                  });
-                  const data = await res.json();
-                  if (res.ok) {
-                    triggerToast(
-                      "success",
-                      "Bulk Spy Scans Queued",
-                      `Queued ${data.enqueuedCount || 0} Ad Spy creative scan(s). ${data.skippedCount || 0} already in queue.`
-                    );
-                    onWatchlistToggle?.();
-                    setSelectedIds([]);
-                  } else {
-                    triggerToast("error", "Bulk Scan Failed", data.error || "Could not queue creative scans");
-                  }
-                } catch {
-                  triggerToast("error", "Network Error", "Failed to queue bulk creative scans");
-                }
+              onClick={() => {
+                const targetPages = pages.filter((p) => selectedIds.includes(p.id));
+                setRunnerModalPages(targetPages);
+                setRunnerModalOpen(true);
               }}
               className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-semibold shadow-md shadow-purple-600/30 transition-all cursor-pointer"
             >
@@ -809,44 +848,9 @@ export function PagesTable({
 
                           {/* Ad Spy Actions */}
                           <button
-                            onClick={async () => {
-                              try {
-                                const res = await fetch("/api/spy/scans", {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ trackedPageIds: [p.id] }),
-                                });
-                                const data = await res.json();
-                                if (res.ok) {
-                                  const statusItem = data.pageStatuses?.[0];
-                                  const brandName = p.displayName || p.pageId || p.id;
-                                  if (statusItem?.status === "already_queued") {
-                                    triggerToast(
-                                      "warning",
-                                      "Already Queued",
-                                      `Creative scan for "${brandName}" is already pending/running in queue.`
-                                    );
-                                  } else if (statusItem?.isScannedToday) {
-                                    const timeStr = statusItem.lastCreativeScan ? new Date(statusItem.lastCreativeScan).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
-                                    triggerToast(
-                                      "info",
-                                      "Queued (Scanned Earlier)",
-                                      `Creative scan added for "${brandName}". (Note: Brand was already scanned earlier today at ${timeStr}).`
-                                    );
-                                  } else {
-                                    triggerToast(
-                                      "success",
-                                      "Creative Scan Queued",
-                                      `Creative extraction scan queued for "${brandName}". Start worker to process.`
-                                    );
-                                  }
-                                  onWatchlistToggle?.();
-                                } else {
-                                  triggerToast("error", "Scan Failed", data.error || "Could not queue creative scan");
-                                }
-                              } catch (err) {
-                                triggerToast("error", "Network Error", "Failed to queue creative scan");
-                              }
+                            onClick={() => {
+                              setRunnerModalPages([p]);
+                              setRunnerModalOpen(true);
                             }}
                             className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-300 hover:bg-purple-500/10 transition-all cursor-pointer"
                             title={
@@ -1104,6 +1108,17 @@ export function PagesTable({
           </button>
         </div>
       )}
+
+      {/* Scan Runner Engine Selection Modal */}
+      <ScanRunnerModal
+        isOpen={runnerModalOpen}
+        onClose={() => {
+          setRunnerModalOpen(false);
+          setRunnerModalPages([]);
+        }}
+        trackedPages={runnerModalPages}
+        onConfirm={handleLaunchScan}
+      />
     </div>
   );
 }

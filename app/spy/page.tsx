@@ -5,6 +5,7 @@ import { useAdFeed, useAdStats } from "@/hooks/use-spy";
 import { AdCard } from "@/components/spy/ad-card";
 import { AdRow } from "@/components/spy/ad-row";
 import { SpyFilters } from "@/components/spy/spy-filters";
+import { ApifyCreditBadge } from "@/components/apify-credit-badge";
 import { Layers, Calendar, Video, Image as ImageIcon, RefreshCw, ChevronLeft, ChevronRight, Eye } from "lucide-react";
 
 export default function AdSpyPage() {
@@ -70,13 +71,16 @@ export default function AdSpyPage() {
           </span>
         </div>
 
-        <button
-          onClick={() => refetch()}
-          className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shrink-0"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoading || isFetchingMore ? "animate-spin text-indigo-500" : ""}`} />
-          <span>Refresh Feed</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <ApifyCreditBadge />
+          <button
+            onClick={() => refetch()}
+            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shrink-0"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading || isFetchingMore ? "animate-spin text-indigo-500" : ""}`} />
+            <span>Refresh Feed</span>
+          </button>
+        </div>
       </div>
 
       {/* Summary Metrics Banner */}
