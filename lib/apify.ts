@@ -34,19 +34,21 @@ export interface ApifyActorRunResponse {
 export function getApifyTokens(): string[] {
   const tokens: string[] = [];
 
-  // 1. Check APIFY_API_TOKENS (comma separated)
-  if (process.env.APIFY_API_TOKENS) {
-    const split = process.env.APIFY_API_TOKENS.split(",")
-      .map((t) => t.trim())
-      .filter(Boolean);
-    tokens.push(...split);
-  }
+  const rawValues = [
+    process.env.APIFY_API_TOKENS,
+    process.env.APIFY_API_TOKEN,
+    process.env.APIFY_API_TOKEN_1,
+    process.env.APIFY_API_TOKEN_2,
+    process.env.APIFY_API_TOKEN_3,
+  ];
 
-  // 2. Check individual token environment variables
-  for (const key of ["APIFY_API_TOKEN", "APIFY_API_TOKEN_1", "APIFY_API_TOKEN_2", "APIFY_API_TOKEN_3"]) {
-    const val = process.env[key]?.trim();
-    if (val && !tokens.includes(val)) {
-      tokens.push(val);
+  for (const raw of rawValues) {
+    if (!raw) continue;
+    const split = raw.split(",").map((t) => t.trim()).filter(Boolean);
+    for (const t of split) {
+      if (t && !tokens.includes(t)) {
+        tokens.push(t);
+      }
     }
   }
 
