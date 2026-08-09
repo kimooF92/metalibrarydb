@@ -1,17 +1,21 @@
 /**
  * Apify Service Module
  * Handles API interactions with Apify REST API, actor runs, dataset fetching, and credit balance monitoring.
+ * Supports Multi-Token Failover: Automatically switches to secondary tokens when Primary token runs out of credits.
  */
 
 const APIFY_BASE_URL = "https://api.apify.com/v2";
 
 export interface ApifyBalanceInfo {
+  token: string;
   maxMonthlyUsageUsd: number;
   monthlyUsageUsd: number;
   remainingUsd: number;
   usagePercent: number;
   cycleStartAt: string;
   cycleEndAt: string;
+  activeTokenIndex: number;
+  totalTokensCount: number;
 }
 
 export interface ApifyActorRunResponse {
@@ -20,59 +24,45 @@ export interface ApifyActorRunResponse {
   defaultDatasetId: string;
   status: string;
   startedAt: string;
+  usedToken: string;
+}
+
+/**
+ * Retrieves all configured Apify API tokens from environment variables.
+ * Supports APIFY_API_TOKENS (comma separated) or APIFY_API_TOKEN, APIFY_API_TOKEN_1, APIFY_API_TOKEN_2.
+ */
+export function getApifyTokens(): string[] {
+  const tokens: string[] = [];
+
+  // 1. Check APIFY_API_TOKENS (comma separated)
+  if (process.env.APIFY_API_TOKENS) {
+    const split = process.env.APIFY_API_TOKENS.split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    tokens.push(...split);
+  }
+
+  // 2. Check individual token environment variables
+  for (const key of ["APIFY_API_TOKEN", "APIFY_API_TOKEN_1", "APIFY_API_TOKEN_2", "APIFY_API_TOKEN_3"]) {
+    const val = process.env[key]?.trim();
+    if (val && !tokens.includes(val)) {
+      tokens.push(val);
+    }
+  }
+
+  return tokens;
 }
 
 /**
  * Calculates the safety-buffered ad extraction limit based on a positive count delta.
  * Formula: Limit = Delta + max(3, ceil(Delta * 0.2))
+ * Optional maxCap parameter to prevent credit drain on huge deltas (default: 100).
  */
 export function calculateDeltaLimit(delta: number, maxCap: number = 100): number {
   const safeDelta = Math.max(1, delta);
   const buffer = Math.max(3, Math.ceil(safeDelta * 0.2));
   const calculated = safeDelta + buffer;
   return Math.min(calculated, maxCap);
-}
-
-/**
- * Fetches the user's current Apify credit usage and remaining monthly limit.
- */
-export async function getApifyAccountBalance(): Promise<ApifyBalanceInfo | null> {
-  const token = process.env.APIFY_API_TOKEN;
-  if (!token) {
-    console.warn("[Apify] APIFY_API_TOKEN environment variable is not configured.");
-    return null;
-  }
-
-  try {
-    const res = await fetch(`${APIFY_BASE_URL}/users/me/limits?token=${token}`, {
-      cache: "no-store",
-    });
-
-    if (!res.ok) {
-      console.error(`[Apify] Failed to fetch user limits. HTTP ${res.status}`);
-      return null;
-    }
-
-    const json = await res.json();
-    const data = json.data;
-
-    const maxMonthlyUsageUsd = Number(data?.limits?.maxMonthlyUsageUsd || 5);
-    const monthlyUsageUsd = Number(data?.current?.monthlyUsageUsd || 0);
-    const remainingUsd = Math.max(0, maxMonthlyUsageUsd - monthlyUsageUsd);
-    const usagePercent = Math.min(100, Math.round((monthlyUsageUsd / maxMonthlyUsageUsd) * 100));
-
-    return {
-      maxMonthlyUsageUsd,
-      monthlyUsageUsd,
-      remainingUsd,
-      usagePercent,
-      cycleStartAt: data?.monthlyUsageCycle?.startAt || "",
-      cycleEndAt: data?.monthlyUsageCycle?.endAt || "",
-    };
-  } catch (error) {
-    console.error("[Apify] Error querying account balance:", error);
-    return null;
-  }
 }
 
 /**
@@ -100,7 +90,60 @@ export function ensureMostRecentSortingUrl(rawUrl: string): string {
 }
 
 /**
- * Starts an Apify Actor run for Meta Ad Library extraction with delta limit & webhook configuration.
+ * Fetches current credit balance across configured tokens.
+ * Automatically selects the first active token with remaining credit.
+ */
+export async function getApifyAccountBalance(): Promise<ApifyBalanceInfo | null> {
+  const tokens = getApifyTokens();
+  if (tokens.length === 0) {
+    console.warn("[Apify] No APIFY_API_TOKEN environment variable configured.");
+    return null;
+  }
+
+  for (let idx = 0; idx < tokens.length; idx++) {
+    const token = tokens[idx];
+    try {
+      const res = await fetch(`${APIFY_BASE_URL}/users/me/limits?token=${token}`, {
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        console.warn(`[Apify] Token #${idx + 1} balance check failed (HTTP ${res.status}). Trying next token...`);
+        continue;
+      }
+
+      const json = await res.json();
+      const data = json.data;
+
+      const maxMonthlyUsageUsd = Number(data?.limits?.maxMonthlyUsageUsd || 5);
+      const monthlyUsageUsd = Number(data?.current?.monthlyUsageUsd || 0);
+      const remainingUsd = Math.max(0, maxMonthlyUsageUsd - monthlyUsageUsd);
+      const usagePercent = Math.min(100, Math.round((monthlyUsageUsd / maxMonthlyUsageUsd) * 100));
+
+      // If this token still has remaining budget or is the last available token, return it
+      if (remainingUsd > 0.05 || idx === tokens.length - 1) {
+        return {
+          token: token.substring(0, 10) + "...",
+          maxMonthlyUsageUsd,
+          monthlyUsageUsd,
+          remainingUsd,
+          usagePercent,
+          cycleStartAt: data?.monthlyUsageCycle?.startAt || "",
+          cycleEndAt: data?.monthlyUsageCycle?.endAt || "",
+          activeTokenIndex: idx + 1,
+          totalTokensCount: tokens.length,
+        };
+      }
+    } catch (error) {
+      console.error(`[Apify] Error checking balance for token #${idx + 1}:`, error);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Starts an Apify Actor run for Meta Ad Library extraction with automatic Multi-Token Failover.
  */
 export async function startApifyDeltaScan(params: {
   pageUrl: string;
@@ -109,19 +152,16 @@ export async function startApifyDeltaScan(params: {
   webhookBaseUrl?: string;
   maxCap?: number;
 }): Promise<ApifyActorRunResponse | null> {
-  const token = process.env.APIFY_API_TOKEN;
-  if (!token) {
-    throw new Error("APIFY_API_TOKEN is missing in environment variables.");
+  const tokens = getApifyTokens();
+  if (tokens.length === 0) {
+    throw new Error("No APIFY_API_TOKEN configured in environment variables.");
   }
 
   const rawActorId = process.env.APIFY_ACTOR_ID || "curious_coder/facebook-ads-library-scraper";
-  // Convert actor ID slash to tilde for API URL path if needed (e.g. curious_coder~facebook-ads-library-scraper)
   const actorIdPath = rawActorId.includes("/") ? rawActorId.replace("/", "~") : rawActorId;
 
   // Calculate safety-buffered limit (delta + buffer), capped at maxCap (default: 100)
   const maxResults = calculateDeltaLimit(params.delta, params.maxCap ?? 100);
-
-  // Enforce explicit Most Recent sorting URL parameters
   const targetUrl = ensureMostRecentSortingUrl(params.pageUrl);
 
   const actorInput = {
@@ -149,58 +189,81 @@ export async function startApifyDeltaScan(params: {
       ]
     : undefined;
 
-  const runUrl = `${APIFY_BASE_URL}/acts/${actorIdPath}/runs?token=${token}`;
+  let lastError: string | null = null;
 
-  try {
-    const res = await fetch(runUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        ...actorInput,
-        webhooks,
-      }),
-    });
+  // Iterate over available tokens to launch actor run with automatic failover
+  for (let idx = 0; idx < tokens.length; idx++) {
+    const token = tokens[idx];
+    const runUrl = `${APIFY_BASE_URL}/acts/${actorIdPath}/runs?token=${token}`;
 
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error(`[Apify] Failed to start actor run. HTTP ${res.status}: ${errorText}`);
-      throw new Error(`Apify Actor launch failed (HTTP ${res.status}): ${errorText}`);
+    try {
+      console.log(`[Apify] Attempting actor launch using Token #${idx + 1} of ${tokens.length}...`);
+
+      const res = await fetch(runUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...actorInput,
+          webhooks,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.warn(`[Apify] Token #${idx + 1} failed (HTTP ${res.status}): ${errorText}`);
+
+        // If credit limit / payment required (HTTP 402, 403, 429) or invalid token, try next token
+        if (res.status === 402 || res.status === 403 || res.status === 429 || errorText.toLowerCase().includes("limit") || errorText.toLowerCase().includes("credit")) {
+          console.warn(`⚠️ [Apify Failover] Token #${idx + 1} exhausted / limited. Failing over to Token #${idx + 2}...`);
+          lastError = `Token #${idx + 1} HTTP ${res.status}: ${errorText}`;
+          continue;
+        }
+
+        lastError = `Apify launch failed (HTTP ${res.status}): ${errorText}`;
+        continue;
+      }
+
+      const json = await res.json();
+      const runData = json.data;
+
+      console.log(`✅ [Apify Success] Actor run initiated using Token #${idx + 1}! Run ID: ${runData.id}`);
+
+      return {
+        id: runData.id,
+        actId: runData.actId,
+        defaultDatasetId: runData.defaultDatasetId,
+        status: runData.status,
+        startedAt: runData.startedAt,
+        usedToken: token.substring(0, 10) + "...",
+      };
+    } catch (error: any) {
+      console.error(`[Apify] Exception with Token #${idx + 1}:`, error.message || error);
+      lastError = error.message || String(error);
     }
-
-    const json = await res.json();
-    const runData = json.data;
-
-    return {
-      id: runData.id,
-      actId: runData.actId,
-      defaultDatasetId: runData.defaultDatasetId,
-      status: runData.status,
-      startedAt: runData.startedAt,
-    };
-  } catch (error) {
-    console.error("[Apify] Error initiating actor run:", error);
-    throw error;
   }
+
+  throw new Error(`All Apify API Tokens failed/exhausted. Last Error: ${lastError}`);
 }
 
 /**
- * Fetches dataset items from a completed Apify run.
+ * Fetches dataset items from a completed Apify run (tries all configured tokens).
  */
 export async function fetchApifyDatasetItems(datasetId: string): Promise<any[]> {
-  const token = process.env.APIFY_API_TOKEN;
-  const url = `${APIFY_BASE_URL}/datasets/${datasetId}/items?token=${token}&format=json`;
+  const tokens = getApifyTokens();
+  if (tokens.length === 0) return [];
 
-  try {
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) {
-      console.error(`[Apify] Failed to fetch dataset ${datasetId}. HTTP ${res.status}`);
-      return [];
+  for (const token of tokens) {
+    const url = `${APIFY_BASE_URL}/datasets/${datasetId}/items?token=${token}&format=json`;
+
+    try {
+      const res = await fetch(url, { cache: "no-store" });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (error) {
+      console.error(`[Apify] Error fetching dataset ${datasetId} with token:`, error);
     }
-    return await res.json();
-  } catch (error) {
-    console.error(`[Apify] Error fetching dataset items for ${datasetId}:`, error);
-    return [];
   }
+
+  return [];
 }
