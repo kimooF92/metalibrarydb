@@ -130,7 +130,6 @@ export async function startApifyDeltaScan(params: {
     searchUrl: targetUrl,
     maxResults,
     limitPerSource: maxResults,
-    count: maxResults,
     extractCards: true,
     includeRawSnapshot: true,
     scrapeAdDetails: false,
