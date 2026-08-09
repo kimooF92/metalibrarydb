@@ -121,6 +121,32 @@ function extractMedia(item: any): {
   return { mediaType, mediaUrls: urls, thumbnailUrl };
 }
 
+/**
+ * Parses ad launch date safely, handling Unix timestamps in seconds vs milliseconds.
+ */
+function parseAdStartDate(item: any): Date | null {
+  const raw =
+    item.startedRunningOn ||
+    item.startDate ||
+    item.start_date ||
+    item.start_date_formatted ||
+    item.snapshot?.creation_time;
+
+  if (!raw) return null;
+
+  if (typeof raw === "number" || (/^\d+$/.test(String(raw).trim()))) {
+    const num = Number(raw);
+    if (!isNaN(num)) {
+      const ms = num < 10000000000 ? num * 1000 : num;
+      const d = new Date(ms);
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+
+  const d = new Date(raw);
+  return !isNaN(d.getTime()) ? d : null;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -213,12 +239,7 @@ export async function POST(req: NextRequest) {
         item.snapshot?.link_url ||
         null;
 
-      let startedRunningOn: Date | null = null;
-      if (item.startedRunningOn || item.startDate || item.start_date || item.start_date_formatted || item.snapshot?.creation_time) {
-        const rawDate = item.startedRunningOn || item.startDate || item.start_date || item.start_date_formatted || item.snapshot?.creation_time;
-        const parsed = new Date(rawDate);
-        if (!isNaN(parsed.getTime())) startedRunningOn = parsed;
-      }
+      const startedRunningOn = parseAdStartDate(item);
 
       const { mediaType, mediaUrls, thumbnailUrl } = extractMedia(item);
 
