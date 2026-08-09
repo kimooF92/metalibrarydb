@@ -125,6 +125,8 @@ export async function startApifyDeltaScan(params: {
     startUrls: [{ url: targetUrl }],
     searchUrl: targetUrl,
     maxResults,
+    limitPerSource: maxResults,
+    count: maxResults,
     extractCards: true,
     includeRawSnapshot: true,
   };
