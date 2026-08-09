@@ -26,10 +26,11 @@ export interface ApifyActorRunResponse {
  * Calculates the safety-buffered ad extraction limit based on a positive count delta.
  * Formula: Limit = Delta + max(3, ceil(Delta * 0.2))
  */
-export function calculateDeltaLimit(delta: number): number {
+export function calculateDeltaLimit(delta: number, maxCap: number = 100): number {
   const safeDelta = Math.max(1, delta);
   const buffer = Math.max(3, Math.ceil(safeDelta * 0.2));
-  return safeDelta + buffer;
+  const calculated = safeDelta + buffer;
+  return Math.min(calculated, maxCap);
 }
 
 /**
@@ -106,6 +107,7 @@ export async function startApifyDeltaScan(params: {
   delta: number;
   creativeScanId: string;
   webhookBaseUrl?: string;
+  maxCap?: number;
 }): Promise<ApifyActorRunResponse | null> {
   const token = process.env.APIFY_API_TOKEN;
   if (!token) {
@@ -116,7 +118,8 @@ export async function startApifyDeltaScan(params: {
   // Convert actor ID slash to tilde for API URL path if needed (e.g. curious_coder~facebook-ads-library-scraper)
   const actorIdPath = rawActorId.includes("/") ? rawActorId.replace("/", "~") : rawActorId;
 
-  const maxResults = calculateDeltaLimit(params.delta);
+  // Calculate safety-buffered limit (delta + buffer), capped at maxCap (default: 100)
+  const maxResults = calculateDeltaLimit(params.delta, params.maxCap ?? 100);
 
   // Enforce explicit Most Recent sorting URL parameters
   const targetUrl = ensureMostRecentSortingUrl(params.pageUrl);
