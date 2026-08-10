@@ -138,7 +138,7 @@ export default function DiscoveryPage() {
 
   // Table Filter, Sorting & Selection State
   const [searchFilter, setSearchFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "discovered" | "verifying" | "imported" | "ignored">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "discovered" | "verified" | "verifying" | "imported" | "ignored">("all");
   const [sortBy, setSortBy] = useState<string>("matchingAdCount");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [selectedPageIds, setSelectedPageIds] = useState<Set<string>>(new Set());
@@ -437,6 +437,7 @@ export default function DiscoveryPage() {
   const activeRun = runs.find((r) => r.id === selectedRunId);
   const untrackedCount = pages.filter((p) => !p.isTracked && p.status !== "ignored").length;
   const newDiscoveredCount = pages.filter((p) => !p.isTracked && p.status === "discovered").length;
+  const verifiedCount = pages.filter((p) => p.verifiedAdCount !== null && p.status !== "ignored").length;
   const ignoredCount = pages.filter((p) => p.status === "ignored").length;
   const dismissableRemainingCount = pages.filter((p) => !p.isTracked && p.status !== "imported" && p.status !== "ignored").length;
 
@@ -503,6 +504,7 @@ export default function DiscoveryPage() {
   const filteredPages = sortedPages.filter((p) => {
     if (statusFilter === "all") return true;
     if (statusFilter === "discovered") return !p.isTracked && p.status !== "imported" && p.status !== "ignored";
+    if (statusFilter === "verified") return p.verifiedAdCount !== null && p.status !== "ignored";
     if (statusFilter === "verifying") return p.status === "verifying";
     if (statusFilter === "imported") return (p.isTracked || p.status === "imported") && p.status !== "ignored";
     if (statusFilter === "ignored") return p.status === "ignored";
@@ -976,7 +978,7 @@ export default function DiscoveryPage() {
               </div>
               {/* Status filter tabs */}
               <div className="flex items-center gap-1 shrink-0 flex-wrap">
-                {(["all", "discovered", "verifying", "imported", "ignored"] as const).map((f) => (
+                {(["all", "discovered", "verified", "verifying", "imported", "ignored"] as const).map((f) => (
                   <button
                     key={f}
                     onClick={() => setStatusFilter(f)}
@@ -988,6 +990,7 @@ export default function DiscoveryPage() {
                   >
                     {f === "all" ? `All (${pages.length})` :
                      f === "discovered" ? `New (${newDiscoveredCount})` :
+                     f === "verified" ? `Verified (${verifiedCount})` :
                      f === "verifying" ? `Verifying` :
                      f === "imported" ? `Merged` :
                      `Ignored (${ignoredCount})`}
