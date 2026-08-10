@@ -586,7 +586,7 @@ export async function scanAdCreatives(
       if (isVerifiedZeroState) {
         console.log(`[Spy Scanner] 🟢 Verified ZERO active ads for tracked page ${trackedPageId}. Running reconciliation...`);
         const { reconcileArchivedAds } = await import("../lib/ad-reconciliation");
-        await reconcileArchivedAds(trackedPageId, creativeScanId, new Set(), now);
+        await reconcileArchivedAds(trackedPageId, creativeScanId, new Set(), now, { isVerifiedZeroState: true });
 
         await db
           .update(trackedPages)

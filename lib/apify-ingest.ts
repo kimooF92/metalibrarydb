@@ -306,7 +306,9 @@ export async function ingestApifyDatasetItems(
     }
 
     const { reconcileArchivedAds } = await import("@/lib/ad-reconciliation");
-    await reconcileArchivedAds(trackedPageId, creativeScanId, currentlyObservedArchiveIds, now);
+    await reconcileArchivedAds(trackedPageId, creativeScanId, currentlyObservedArchiveIds, now, {
+      isVerifiedZeroState: Boolean(config.isVerifiedZeroState === true),
+    });
   }
 
   // Update creative scan record
