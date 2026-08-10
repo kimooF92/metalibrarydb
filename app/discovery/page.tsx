@@ -31,6 +31,7 @@ interface DiscoveryRun {
   id: string;
   country: string;
   searchUrl: string;
+  query?: string;
   status: "pending" | "running" | "completed" | "partial" | "failed";
   totalAdsScanned: number;
   totalPagesDiscovered: number;
@@ -58,6 +59,36 @@ interface DiscoveredPage {
   createdAt: string;
 }
 
+const KEYWORD_GROUPS = [
+  {
+    groupName: "Popular",
+    options: [
+      { label: "U+200D named ZWJ (current keyword)", value: "\u200D" },
+      { label: '"توصيل"', value: "توصيل" },
+      { label: '"عرض خاص"', value: "عرض خاص" },
+      { label: '"تخفيض"', value: "تخفيض" },
+      { label: '"الدفع عند الاستلام"', value: "الدفع عند الاستلام" },
+    ],
+  },
+  {
+    groupName: "Problem Solving",
+    options: [
+      { label: '"بدون تعب"', value: "بدون تعب" },
+      { label: '"يحمي"', value: "يحمي" },
+      { label: '"في دقائق"', value: "في دقائق" },
+      { label: '"حل مشكلة"', value: "حل مشكلة" },
+    ],
+  },
+  {
+    groupName: "Transformation",
+    options: [
+      { label: '"شوف الفرق"', value: "شوف الفرق" },
+      { label: '"النتيجة من أول استعمال"', value: "النتيجة من أول استعمال" },
+      { label: '"النتيجة"', value: "النتيجة" },
+    ],
+  },
+];
+
 export default function DiscoveryPage() {
   const [runs, setRuns] = useState<DiscoveryRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
@@ -66,10 +97,12 @@ export default function DiscoveryPage() {
   const [isLoadingPages, setIsLoadingPages] = useState(false);
   const [isLaunchingScan, setIsLaunchingScan] = useState(false);
 
-  // Filter Form State (Defaulting to Tunisia TN, Zero-Joiner query, Arabic language, Facebook + Instagram)
+  // Filter Form State
   const [country, setCountry] = useState("TN");
   const [mediaType, setMediaType] = useState("video");
-  const [queryText, setQueryText] = useState("\u200D");
+  const [selectedKeyword, setSelectedKeyword] = useState("\u200D");
+  const [isCustomKeyword, setIsCustomKeyword] = useState(false);
+  const [customKeywordText, setCustomKeywordText] = useState("");
 
   const getSevenDaysAgoStr = () => {
     const d = new Date();
@@ -177,18 +210,31 @@ export default function DiscoveryPage() {
     }
   }, [selectedRunId, searchFilter, sortBy, sortOrder]);
 
+  // Helper to compute final formatted query for launch
+  const computeFinalQuery = () => {
+    if (isCustomKeyword) {
+      const trimmed = customKeywordText.trim();
+      if (!trimmed) return "\u200D";
+      if (trimmed.startsWith('"') && trimmed.endsWith('"')) return trimmed;
+      return `"${trimmed}"`;
+    }
+    if (selectedKeyword === "\u200D") return "\u200D";
+    return `"${selectedKeyword}"`;
+  };
+
   // Handle Launching New Country Discovery Scan
   const handleLaunchScan = async () => {
     try {
       setIsLaunchingScan(true);
       setActionMessage(null);
+      const finalQuery = computeFinalQuery();
       const res = await fetch("/api/discovery/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           country,
           mediaType,
-          query: queryText || "\u200D",
+          query: finalQuery,
           startDateMin,
           startDateMax,
         }),
@@ -196,7 +242,7 @@ export default function DiscoveryPage() {
       const data = await res.json();
       if (data.success && data.runId) {
         setSelectedRunId(data.runId);
-        setActionMessage("Country discovery scan launched! Worker is harvesting pages...");
+        setActionMessage(`Country discovery scan launched with keyword ${finalQuery === "\u200D" ? "ZWJ (Broad Search)" : finalQuery}! Worker is harvesting pages...`);
         await fetchRuns();
       } else {
         setActionMessage(`Error launching scan: ${data.error || "Unknown error"}`);
@@ -544,7 +590,7 @@ export default function DiscoveryPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5 text-xs">
           {/* Country Selection */}
           <div className="space-y-1">
             <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
@@ -565,6 +611,61 @@ export default function DiscoveryPage() {
               <option value="DZ">DZ — Algeria 🇩🇿</option>
               <option value="EG">EG — Egypt 🇪🇬</option>
             </select>
+          </div>
+
+          {/* Keyword Selection */}
+          <div className="space-y-1">
+            <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <Search className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
+              Target Keyword
+            </label>
+            {isCustomKeyword ? (
+              <div className="flex items-center space-x-1">
+                <input
+                  type="text"
+                  placeholder='e.g. "شحن مجاني"'
+                  value={customKeywordText}
+                  onChange={(e) => setCustomKeywordText(e.target.value)}
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:border-indigo-500 text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCustomKeyword(false);
+                    setSelectedKeyword("\u200D");
+                  }}
+                  title="Back to Presets"
+                  className="px-2 py-1.5 text-[10px] font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shrink-0 cursor-pointer"
+                >
+                  Presets
+                </button>
+              </div>
+            ) : (
+              <select
+                value={selectedKeyword}
+                onChange={(e) => {
+                  if (e.target.value === "__CUSTOM__") {
+                    setIsCustomKeyword(true);
+                  } else {
+                    setSelectedKeyword(e.target.value);
+                  }
+                }}
+                className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-2 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:border-indigo-500 transition cursor-pointer text-xs"
+              >
+                {KEYWORD_GROUPS.map((group) => (
+                  <optgroup key={group.groupName} label={`— ${group.groupName} —`}>
+                    {group.options.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+                <optgroup label="— Custom —">
+                  <option value="__CUSTOM__">✏️ Custom Keyword...</option>
+                </optgroup>
+              </select>
+            )}
           </div>
 
           {/* Start Date Min */}
@@ -659,7 +760,7 @@ export default function DiscoveryPage() {
               >
                 {runs.map((r) => (
                   <option key={r.id} value={r.id}>
-                    {r.country} — {r.totalPagesDiscovered} pages, {r.totalAdsScanned} ads ({new Date(r.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })} {new Date(r.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})
+                    {r.country} — {r.query === "\u200D" || !r.query ? "ZWJ (Broad)" : r.query} — {r.totalPagesDiscovered} pages, {r.totalAdsScanned} ads ({new Date(r.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })} {new Date(r.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})
                   </option>
                 ))}
               </select>
@@ -697,7 +798,7 @@ export default function DiscoveryPage() {
                         )}
                       </div>
                       <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-                        {run.totalPagesDiscovered} pages · {run.totalAdsScanned} ads
+                        {run.query === "\u200D" || !run.query ? "ZWJ (Broad)" : run.query} · {run.totalPagesDiscovered} p · {run.totalAdsScanned} ads
                       </div>
                     </div>
                   </div>
