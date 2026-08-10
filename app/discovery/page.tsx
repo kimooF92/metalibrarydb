@@ -89,6 +89,24 @@ const KEYWORD_GROUPS = [
   },
 ];
 
+function getRunKeywordDisplay(run: DiscoveryRun): string {
+  let q = run.query;
+  if (!q || q.startsWith("http://") || q.startsWith("https://")) {
+    const target = q || run.searchUrl || "";
+    try {
+      const urlObj = new URL(target);
+      q = urlObj.searchParams.get("q") || "";
+    } catch {
+      const match = target.match(/[?&]q=([^&]+)/);
+      q = match ? decodeURIComponent(match[1]) : "";
+    }
+  }
+  if (!q || q === "\u200D" || q === "%E2%80%8D") {
+    return "ZWJ (Broad Search)";
+  }
+  return q;
+}
+
 export default function DiscoveryPage() {
   const [runs, setRuns] = useState<DiscoveryRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
@@ -744,81 +762,87 @@ export default function DiscoveryPage() {
 
       {/* Discovery Runs Selector */}
       {runs.length > 0 && (
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3 space-y-2.5 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-indigo-500" />
-              <span>Discovery Scan Runs ({runs.length})</span>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <label className="text-[11px] text-slate-500 dark:text-slate-400 font-bold shrink-0">Select Run:</label>
-              <select
-                value={selectedRunId || ""}
-                onChange={(e) => setSelectedRunId(e.target.value)}
-                className="w-full sm:w-auto bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold rounded-lg px-3 py-1.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-sm"
-              >
-                {runs.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.country} — {r.query === "\u200D" || !r.query ? "ZWJ (Broad)" : r.query} — {r.totalPagesDiscovered} pages, {r.totalAdsScanned} ads ({new Date(r.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })} {new Date(r.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-            {runs.slice(0, 4).map((run) => {
-              const isSelected = run.id === selectedRunId;
-              const isRunning = run.status === "running" || run.status === "pending";
-
+    <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3 space-y-2.5 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+          <Layers className="w-3.5 h-3.5 text-indigo-500" />
+          <span>Discovery Scan Runs ({runs.length})</span>
+        </div>
+        
+        <div className="flex items-center space-x-2">
+          <label className="text-[11px] text-slate-500 dark:text-slate-400 font-bold shrink-0">Select Run:</label>
+          <select
+            value={selectedRunId || ""}
+            onChange={(e) => setSelectedRunId(e.target.value)}
+            className="w-full sm:w-auto bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold rounded-lg px-3 py-1.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-sm"
+          >
+            {runs.map((r) => {
+              const kw = getRunKeywordDisplay(r);
+              const dateStr = new Date(r.createdAt).toLocaleDateString([], { month: "short", day: "numeric" });
+              const timeStr = new Date(r.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
               return (
-                <button
-                  key={run.id}
-                  onClick={() => setSelectedRunId(run.id)}
-                  className={`flex items-center justify-between p-2.5 rounded-lg border text-left transition cursor-pointer ${
-                    isSelected
-                      ? "bg-indigo-50/80 dark:bg-indigo-950/70 border-indigo-500 text-slate-900 dark:text-white shadow-sm ring-1 ring-indigo-500/30"
-                      : "bg-slate-50/50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800/80 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-slate-900 dark:hover:text-slate-200"
-                  }`}
-                >
-                  <div className="flex items-center space-x-2 min-w-0">
-                    {isRunning ? (
-                      <Loader2 className="w-3.5 h-3.5 text-indigo-500 animate-spin shrink-0" />
-                    ) : run.status === "completed" ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                    ) : (
-                      <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                    )}
-                    <div className="min-w-0">
-                      <div className="font-bold text-xs flex items-center gap-1.5">
-                        <span>Country: {run.country}</span>
-                        {isSelected && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400 shrink-0" />
-                        )}
-                      </div>
-                      <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-                        {run.query === "\u200D" || !run.query ? "ZWJ (Broad)" : run.query} · {run.totalPagesDiscovered} p · {run.totalAdsScanned} ads
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-[9px] text-slate-400 dark:text-slate-500 text-right shrink-0 pl-1.5">
-                    <div>
-                      {new Date(run.createdAt).toLocaleDateString([], {
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </div>
-                    <div>
-                      {new Date(run.createdAt).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </div>
-                  </div>
-                </button>
+                <option key={r.id} value={r.id}>
+                  {r.country} — Keyword: {kw} ({r.totalPagesDiscovered} pages, {r.totalAdsScanned} ads) — {dateStr} {timeStr}
+                </option>
               );
             })}
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+        {runs.slice(0, 4).map((run) => {
+          const isSelected = run.id === selectedRunId;
+          const isRunning = run.status === "running" || run.status === "pending";
+          const kw = getRunKeywordDisplay(run);
+
+          return (
+            <button
+              key={run.id}
+              onClick={() => setSelectedRunId(run.id)}
+              className={`flex items-center justify-between p-2.5 rounded-lg border text-left transition cursor-pointer ${
+                isSelected
+                  ? "bg-indigo-50/80 dark:bg-indigo-950/70 border-indigo-500 text-slate-900 dark:text-white shadow-sm ring-1 ring-indigo-500/30"
+                  : "bg-slate-50/50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800/80 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-slate-900 dark:hover:text-slate-200"
+              }`}
+            >
+              <div className="flex items-center space-x-2 min-w-0">
+                {isRunning ? (
+                  <Loader2 className="w-3.5 h-3.5 text-indigo-500 animate-spin shrink-0" />
+                ) : run.status === "completed" ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <div className="font-bold text-xs flex items-center gap-1.5">
+                    <span>Country: {run.country}</span>
+                    {isSelected && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400 shrink-0" />
+                    )}
+                  </div>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate" title={`Keyword: ${kw}`}>
+                    KW: {kw} · {run.totalPagesDiscovered} p · {run.totalAdsScanned} ads
+                  </div>
+                </div>
+              </div>
+              <div className="text-[9px] text-slate-400 dark:text-slate-500 text-right shrink-0 pl-1.5">
+                <div>
+                  {new Date(run.createdAt).toLocaleDateString([], {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </div>
+                <div>
+                  {new Date(run.createdAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </div>
+              </div>
+            </button>
+          );
+        })}
           </div>
         </div>
       )}
