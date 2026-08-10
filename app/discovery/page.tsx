@@ -63,7 +63,7 @@ const KEYWORD_GROUPS = [
   {
     groupName: "Popular",
     options: [
-      { label: "U+200D named ZWJ (current keyword)", value: "\u200D" },
+      { label: "Zero Width Joiner", value: "\u200D" },
       { label: '"توصيل"', value: "توصيل" },
       { label: '"عرض خاص"', value: "عرض خاص" },
       { label: '"تخفيض"', value: "تخفيض" },
@@ -203,9 +203,8 @@ export default function DiscoveryPage() {
   const fetchPages = async (runId: string) => {
     try {
       setIsLoadingPages(true);
-      const url = `/api/discovery/pages?runId=${runId}&sortBy=${sortBy}&sortOrder=${sortOrder}${
-        searchFilter ? `&q=${encodeURIComponent(searchFilter)}` : ""
-      }`;
+      const url = `/api/discovery/pages?runId=${runId}&sortBy=${sortBy}&sortOrder=${sortOrder}${searchFilter ? `&q=${encodeURIComponent(searchFilter)}` : ""
+        }`;
       const res = await fetch(url);
       const data = await res.json();
       if (data.success && Array.isArray(data.pages)) {
@@ -447,9 +446,8 @@ export default function DiscoveryPage() {
       <th className={`p-3 whitespace-nowrap ${className}`}>
         <button
           onClick={() => handleSortChange(col)}
-          className={`flex items-center space-x-1.5 uppercase font-bold text-[10px] tracking-wider transition-colors cursor-pointer ${
-            active ? "text-indigo-600 dark:text-indigo-400 font-extrabold" : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-          }`}
+          className={`flex items-center space-x-1.5 uppercase font-bold text-[10px] tracking-wider transition-colors cursor-pointer ${active ? "text-indigo-600 dark:text-indigo-400 font-extrabold" : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+            }`}
         >
           <span>{label}</span>
           <span className="shrink-0">
@@ -572,33 +570,30 @@ export default function DiscoveryPage() {
             <button
               type="button"
               onClick={() => applyDatePreset("today")}
-              className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition cursor-pointer ${
-                activeDatePreset === "today"
+              className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition cursor-pointer ${activeDatePreset === "today"
                   ? "bg-indigo-600 text-white border-indigo-600"
                   : "bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-200 dark:hover:bg-slate-800"
-              }`}
+                }`}
             >
               Today
             </button>
             <button
               type="button"
               onClick={() => applyDatePreset("last7")}
-              className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition cursor-pointer ${
-                activeDatePreset === "last7"
+              className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition cursor-pointer ${activeDatePreset === "last7"
                   ? "bg-indigo-600 text-white border-indigo-600"
                   : "bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-200 dark:hover:bg-slate-800"
-              }`}
+                }`}
             >
               Last 7 Days
             </button>
             <button
               type="button"
               onClick={() => applyDatePreset("last30")}
-              className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition cursor-pointer ${
-                activeDatePreset === "last30"
+              className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition cursor-pointer ${activeDatePreset === "last30"
                   ? "bg-indigo-600 text-white border-indigo-600"
                   : "bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-200 dark:hover:bg-slate-800"
-              }`}
+                }`}
             >
               Last 30 Days
             </button>
@@ -764,87 +759,86 @@ export default function DiscoveryPage() {
 
       {/* Discovery Runs Selector */}
       {runs.length > 0 && (
-    <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3 space-y-2.5 shadow-sm">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-          <Layers className="w-3.5 h-3.5 text-indigo-500" />
-          <span>Discovery Scan Runs ({runs.length})</span>
-        </div>
-        
-        <div className="flex items-center space-x-2">
-          <label className="text-[11px] text-slate-500 dark:text-slate-400 font-bold shrink-0">Select Run:</label>
-          <select
-            value={selectedRunId || ""}
-            onChange={(e) => setSelectedRunId(e.target.value)}
-            className="w-full sm:w-auto bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold rounded-lg px-3 py-1.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-sm"
-          >
-            {runs.map((r) => {
-              const kw = getRunKeywordDisplay(r);
-              const dateStr = new Date(r.createdAt).toLocaleDateString([], { month: "short", day: "numeric" });
-              const timeStr = new Date(r.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3 space-y-2.5 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Discovery Scan Runs ({runs.length})</span>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <label className="text-[11px] text-slate-500 dark:text-slate-400 font-bold shrink-0">Select Run:</label>
+              <select
+                value={selectedRunId || ""}
+                onChange={(e) => setSelectedRunId(e.target.value)}
+                className="w-full sm:w-auto bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold rounded-lg px-3 py-1.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-sm"
+              >
+                {runs.map((r) => {
+                  const kw = getRunKeywordDisplay(r);
+                  const dateStr = new Date(r.createdAt).toLocaleDateString([], { month: "short", day: "numeric" });
+                  const timeStr = new Date(r.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                  return (
+                    <option key={r.id} value={r.id}>
+                      {r.country} — Keyword: {kw} ({r.totalPagesDiscovered} pages, {r.totalAdsScanned} ads) — {dateStr} {timeStr}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+            {runs.slice(0, 4).map((run) => {
+              const isSelected = run.id === selectedRunId;
+              const isRunning = run.status === "running" || run.status === "pending";
+              const kw = getRunKeywordDisplay(run);
+
               return (
-                <option key={r.id} value={r.id}>
-                  {r.country} — Keyword: {kw} ({r.totalPagesDiscovered} pages, {r.totalAdsScanned} ads) — {dateStr} {timeStr}
-                </option>
+                <button
+                  key={run.id}
+                  onClick={() => setSelectedRunId(run.id)}
+                  className={`flex items-center justify-between p-2.5 rounded-lg border text-left transition cursor-pointer ${isSelected
+                      ? "bg-indigo-50/80 dark:bg-indigo-950/70 border-indigo-500 text-slate-900 dark:text-white shadow-sm ring-1 ring-indigo-500/30"
+                      : "bg-slate-50/50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800/80 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-slate-900 dark:hover:text-slate-200"
+                    }`}
+                >
+                  <div className="flex items-center space-x-2 min-w-0">
+                    {isRunning ? (
+                      <Loader2 className="w-3.5 h-3.5 text-indigo-500 animate-spin shrink-0" />
+                    ) : run.status === "completed" ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <div className="font-bold text-xs flex items-center gap-1.5">
+                        <span>Country: {run.country}</span>
+                        {isSelected && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400 shrink-0" />
+                        )}
+                      </div>
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate" title={`Keyword: ${kw}`}>
+                        KW: {kw} · {run.totalPagesDiscovered} p · {run.totalAdsScanned} ads
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-[9px] text-slate-400 dark:text-slate-500 text-right shrink-0 pl-1.5">
+                    <div>
+                      {new Date(run.createdAt).toLocaleDateString([], {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </div>
+                    <div>
+                      {new Date(run.createdAt).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
+                  </div>
+                </button>
               );
             })}
-          </select>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-        {runs.slice(0, 4).map((run) => {
-          const isSelected = run.id === selectedRunId;
-          const isRunning = run.status === "running" || run.status === "pending";
-          const kw = getRunKeywordDisplay(run);
-
-          return (
-            <button
-              key={run.id}
-              onClick={() => setSelectedRunId(run.id)}
-              className={`flex items-center justify-between p-2.5 rounded-lg border text-left transition cursor-pointer ${
-                isSelected
-                  ? "bg-indigo-50/80 dark:bg-indigo-950/70 border-indigo-500 text-slate-900 dark:text-white shadow-sm ring-1 ring-indigo-500/30"
-                  : "bg-slate-50/50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800/80 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-slate-900 dark:hover:text-slate-200"
-              }`}
-            >
-              <div className="flex items-center space-x-2 min-w-0">
-                {isRunning ? (
-                  <Loader2 className="w-3.5 h-3.5 text-indigo-500 animate-spin shrink-0" />
-                ) : run.status === "completed" ? (
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                ) : (
-                  <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                )}
-                <div className="min-w-0">
-                  <div className="font-bold text-xs flex items-center gap-1.5">
-                    <span>Country: {run.country}</span>
-                    {isSelected && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400 shrink-0" />
-                    )}
-                  </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate" title={`Keyword: ${kw}`}>
-                    KW: {kw} · {run.totalPagesDiscovered} p · {run.totalAdsScanned} ads
-                  </div>
-                </div>
-              </div>
-              <div className="text-[9px] text-slate-400 dark:text-slate-500 text-right shrink-0 pl-1.5">
-                <div>
-                  {new Date(run.createdAt).toLocaleDateString([], {
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </div>
-                <div>
-                  {new Date(run.createdAt).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </div>
-              </div>
-            </button>
-          );
-        })}
           </div>
         </div>
       )}
@@ -982,18 +976,17 @@ export default function DiscoveryPage() {
                   <button
                     key={f}
                     onClick={() => setStatusFilter(f)}
-                    className={`px-2 py-1 rounded text-[10px] font-bold border transition cursor-pointer capitalize ${
-                      statusFilter === f
+                    className={`px-2 py-1 rounded text-[10px] font-bold border transition cursor-pointer capitalize ${statusFilter === f
                         ? "bg-indigo-600 text-white border-indigo-600"
                         : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
-                    }`}
+                      }`}
                   >
                     {f === "all" ? `All (${pages.length})` :
-                     f === "discovered" ? `New (${newDiscoveredCount})` :
-                     f === "verified" ? `Verified (${verifiedCount})` :
-                     f === "verifying" ? `Verifying` :
-                     f === "imported" ? `Merged` :
-                     `Ignored (${ignoredCount})`}
+                      f === "discovered" ? `New (${newDiscoveredCount})` :
+                        f === "verified" ? `Verified (${verifiedCount})` :
+                          f === "verifying" ? `Verifying` :
+                            f === "imported" ? `Merged` :
+                              `Ignored (${ignoredCount})`}
                   </button>
                 ))}
               </div>
@@ -1047,9 +1040,8 @@ export default function DiscoveryPage() {
                     return (
                       <tr
                         key={page.id}
-                        className={`hover:bg-slate-50 dark:hover:bg-slate-900/50 transition ${
-                          isSelected ? "bg-indigo-50/70 dark:bg-indigo-950/40" : ""
-                        }`}
+                        className={`hover:bg-slate-50 dark:hover:bg-slate-900/50 transition ${isSelected ? "bg-indigo-50/70 dark:bg-indigo-950/40" : ""
+                          }`}
                       >
                         <td className="p-3 text-center">
                           <input
