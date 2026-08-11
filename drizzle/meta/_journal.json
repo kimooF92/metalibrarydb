@@ -43,6 +43,13 @@
       "when": 1786103635350,
       "tag": "0005_icy_ted_forrester",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786478780000,
+      "tag": "0006_enable_rls_discovery",
+      "breakpoints": true
     }
   ]
 }
