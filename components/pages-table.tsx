@@ -56,6 +56,71 @@ function formatRelativeTime(dateInput: string | Date | null | undefined): string
   });
 }
 
+function InlineSparkline({
+  points,
+  difference,
+}: {
+  points?: number[] | null;
+  difference?: number | null;
+}) {
+  if (!points || points.length < 2) {
+    return (
+      <div className="w-14 h-4 flex items-center justify-center opacity-40">
+        <div className="w-6 h-[1.5px] bg-slate-300 dark:bg-slate-700 rounded-full" />
+      </div>
+    );
+  }
+
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = max - min || 1;
+
+  const width = 56;
+  const height = 18;
+  const padding = 2;
+
+  const coords = points.map((v, i) => {
+    const x = padding + (i / (points.length - 1)) * (width - padding * 2);
+    const y = padding + (1 - (v - min) / range) * (height - padding * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+
+  const polylineStr = coords.join(" ");
+  const areaStr = `${padding},${height - padding} ${polylineStr} ${width - padding},${height - padding}`;
+
+  const isUp = (difference ?? 0) > 0;
+  const isDown = (difference ?? 0) < 0;
+
+  const strokeColor = isUp ? "#10b981" : isDown ? "#f43f5e" : "#818cf8";
+  const fillColor = isUp
+    ? "rgba(16, 185, 129, 0.15)"
+    : isDown
+      ? "rgba(244, 63, 94, 0.15)"
+      : "rgba(129, 140, 248, 0.15)";
+
+  const lastPoint = coords[coords.length - 1].split(",");
+
+  return (
+    <div className="flex items-center" title={`Trend (last ${points.length} scans): ${points.join(" → ")} ads`}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="w-14 h-4.5 overflow-visible select-none shrink-0"
+      >
+        <polygon points={areaStr} fill={fillColor} />
+        <polyline
+          points={polylineStr}
+          fill="none"
+          stroke={strokeColor}
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <circle cx={lastPoint[0]} cy={lastPoint[1]} r="2" fill={strokeColor} />
+      </svg>
+    </div>
+  );
+}
+
 interface PagesTableProps {
   pages: TrackedPage[];
   loading: boolean;
@@ -584,22 +649,40 @@ export function PagesTable({
                 pages.map((p) => {
                   const diff = p.difference;
                   let diffBadge = (
-                    <span className="inline-flex items-center text-slate-500 dark:text-slate-400">
-                      <Minus className="w-3 h-3 mr-1" /> 0
+                    <span className="inline-flex items-center text-xs text-slate-500 dark:text-slate-400 font-medium px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
+                      <Minus className="w-3 h-3 mr-1 text-slate-400" /> 0
                     </span>
                   );
 
                   if (diff !== null && diff !== undefined && diff !== 0) {
-                    if (diff > 0) {
+                    if (diff >= 20) {
                       diffBadge = (
-                        <span className="inline-flex items-center font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                          <ArrowUpRight className="w-3.5 h-3.5 mr-0.5" /> +{diff}
+                        <span className="inline-flex items-center gap-1 font-extrabold text-xs text-amber-700 dark:text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-md shadow-sm shadow-amber-500/10" title="Rapidly Scaling (+20 or more ads)">
+                          <Flame className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 fill-amber-500/20 animate-pulse shrink-0" />
+                          <span>+{diff}</span>
+                          <span className="text-[9px] uppercase tracking-wide font-black px-1 py-0.2 bg-amber-500/25 rounded text-amber-800 dark:text-amber-200">Scaling</span>
+                        </span>
+                      );
+                    } else if (diff > 0) {
+                      diffBadge = (
+                        <span className="inline-flex items-center gap-0.5 font-bold text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-500/12 border border-emerald-500/25 px-2 py-0.5 rounded-md shadow-sm">
+                          <ArrowUpRight className="w-3.5 h-3.5 text-emerald-500 stroke-[2.5]" />
+                          <span>+{diff}</span>
+                        </span>
+                      );
+                    } else if (diff <= -20) {
+                      diffBadge = (
+                        <span className="inline-flex items-center gap-1 font-extrabold text-xs text-rose-800 dark:text-rose-200 bg-rose-500/20 border border-rose-500/40 px-2 py-0.5 rounded-md shadow-sm" title="Heavy Descaling (-20 or more ads)">
+                          <ArrowDownRight className="w-3.5 h-3.5 text-rose-500 stroke-[3]" />
+                          <span>{diff}</span>
+                          <span className="text-[9px] uppercase tracking-wide font-black px-1 py-0.2 bg-rose-500/30 rounded text-rose-300">Dropped</span>
                         </span>
                       );
                     } else {
                       diffBadge = (
-                        <span className="inline-flex items-center font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
-                          <ArrowDownRight className="w-3.5 h-3.5 mr-0.5" /> {diff}
+                        <span className="inline-flex items-center gap-0.5 font-bold text-xs text-rose-700 dark:text-rose-300 bg-rose-500/12 border border-rose-500/25 px-2 py-0.5 rounded-md shadow-sm">
+                          <ArrowDownRight className="w-3.5 h-3.5 text-rose-500 stroke-[2.5]" />
+                          <span>{diff}</span>
                         </span>
                       );
                     }
@@ -722,27 +805,29 @@ export function PagesTable({
                         )}
                       </td>
 
-
-
-                      {/* Current Results */}
+                      {/* Current Results & Inline Sparkline */}
                       <td className="px-3 py-1.5 text-sm">
-                        {p.currentResults !== null ? (
-                          p.currentResults >= 50 ? (
-                            <span
-                              className="inline-flex items-center space-x-1.5 font-extrabold text-amber-700 dark:text-amber-300 bg-amber-500/10 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 px-2.5 py-1 rounded-lg shadow-sm shadow-amber-500/5 dark:shadow-amber-500/10 text-xs"
-                              title="High Volume Competitor (50+ active ads)"
-                            >
-                              <Flame className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 fill-amber-500/20 dark:fill-amber-400/40 animate-pulse shrink-0" />
-                              <span>{p.currentResults.toLocaleString()}</span>
-                            </span>
-                          ) : p.currentResults === 0 ? (
-                            <span className="font-semibold text-slate-400 dark:text-slate-500">0</span>
+                        <div className="flex items-center gap-2.5">
+                          {p.currentResults !== null ? (
+                            p.currentResults >= 50 ? (
+                              <span
+                                className="inline-flex items-center space-x-1 font-extrabold text-amber-700 dark:text-amber-300 bg-amber-500/10 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 px-2 py-0.5 rounded-md shadow-sm text-xs shrink-0"
+                                title="High Volume Brand (50+ active ads)"
+                              >
+                                <Flame className="w-3 h-3 text-amber-500 dark:text-amber-400 fill-amber-500/20 animate-pulse shrink-0" />
+                                <span>{p.currentResults.toLocaleString()}</span>
+                              </span>
+                            ) : p.currentResults === 0 ? (
+                              <span className="font-semibold text-slate-400 dark:text-slate-500 text-xs shrink-0">0 ads</span>
+                            ) : (
+                              <span className="font-bold text-slate-900 dark:text-slate-100 text-xs shrink-0">{p.currentResults.toLocaleString()}</span>
+                            )
                           ) : (
-                            <span className="font-bold text-slate-900 dark:text-slate-100">{p.currentResults.toLocaleString()}</span>
-                          )
-                        ) : (
-                          <span className="text-slate-400 dark:text-slate-600">—</span>
-                        )}
+                            <span className="text-slate-400 dark:text-slate-600 text-xs shrink-0">—</span>
+                          )}
+
+                          <InlineSparkline points={p.historyPoints} difference={p.difference} />
+                        </div>
                       </td>
 
                       {/* Previous Results */}

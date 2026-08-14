@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { trackedPages, scanHistory, queue } from "@/db/schema";
 import { addSingleUrl } from "@/actions/add-url";
 import { singleUrlSchema } from "@/lib/validators";
-import { eq, ilike, or, and, sql, desc, asc, inArray, gte } from "drizzle-orm";
+import { eq, ilike, or, and, sql, desc, asc, inArray, gte, lte } from "drizzle-orm";
 
 export async function GET(request: Request) {
   try {
@@ -96,13 +96,12 @@ export async function GET(request: Request) {
       offset,
     });
 
-    // Fetch previous scan results for these pages
+    // Fetch previous scan results & recent history points for these pages
     const pageIds = pages.map((p) => p.id);
     let prevResultsMap: Record<string, number | null> = {};
+    let historyPointsMap: Record<string, number[]> = {};
 
     if (pageIds.length > 0) {
-      // Rank only the rows for the currently visible pages. The former query
-      // ranked the entire scan_history table before applying this page filter.
       const rankedScans = db
         .select({
           trackedPageId: scanHistory.trackedPageId,
@@ -113,17 +112,31 @@ export async function GET(request: Request) {
         .where(inArray(scanHistory.trackedPageId, pageIds))
         .as("ranked_scans");
 
-      const prevScans = await db
+      const recentScans = await db
         .select({
           trackedPageId: rankedScans.trackedPageId,
           results: rankedScans.results,
+          rank: rankedScans.rank,
         })
         .from(rankedScans)
-        .where(eq(rankedScans.rank, 2));
+        .where(lte(rankedScans.rank, 8));
 
-      prevResultsMap = Object.fromEntries(
-        prevScans.map((s) => [s.trackedPageId, s.results])
-      );
+      for (const s of recentScans) {
+        if (s.rank === 2) {
+          prevResultsMap[s.trackedPageId] = s.results;
+        }
+        if (s.results !== null) {
+          if (!historyPointsMap[s.trackedPageId]) {
+            historyPointsMap[s.trackedPageId] = [];
+          }
+          historyPointsMap[s.trackedPageId].push(s.results);
+        }
+      }
+
+      // Reverse to chronological order (oldest -> newest) for sparklines
+      for (const pId in historyPointsMap) {
+        historyPointsMap[pId].reverse();
+      }
     }
 
     // Fetch latest queue entry per page for failureReason + attempts
@@ -176,6 +189,7 @@ export async function GET(request: Request) {
       const difference =
         p.currentResults !== null && prev !== null ? p.currentResults - prev : null;
       const queueEntry = queueMap[p.id];
+      const historyPoints = historyPointsMap[p.id] || (p.currentResults !== null ? [p.currentResults] : []);
 
       return {
         ...p,
@@ -186,6 +200,7 @@ export async function GET(request: Request) {
         notes: p.notes ?? null,
         isWatchlisted: p.isWatchlisted ?? false,
         isCreativeQueued: Boolean(activeCreativeJobMap[p.id]),
+        historyPoints,
       };
     });
 

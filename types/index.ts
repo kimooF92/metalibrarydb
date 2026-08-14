@@ -19,6 +19,7 @@ export interface TrackedPage {
   isWatchlisted?: boolean;
   lastCreativeScan?: string | null;
   isCreativeQueued?: boolean;
+  historyPoints?: number[];
 }
 
 export interface ScanHistoryEntry {
