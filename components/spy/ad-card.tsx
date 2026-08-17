@@ -21,6 +21,7 @@ import {
   Archive,
   ArchiveRestore,
   Clock,
+  RotateCw,
 } from "lucide-react";
 
 interface AdCardProps {
@@ -33,9 +34,11 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
   const [isProxied, setIsProxied] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [videoError, setVideoError] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isArchived, setIsArchived] = useState(Boolean(ad.isArchived));
   const [isArchiving, setIsArchiving] = useState(false);
+  const [isRefreshingMedia, setIsRefreshingMedia] = useState(false);
 
   const initialDisplayImage = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.[0];
   const activeImageSrc = isProxied && initialDisplayImage
@@ -72,6 +75,22 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
     }
   };
 
+  const handleRefreshMedia = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsRefreshingMedia(true);
+    try {
+      const res = await fetch(`/api/spy/ads/${ad.id}/refresh`, { method: "POST" });
+      const data = await res.json();
+      if (data.success && data.ad) {
+        window.location.reload();
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsRefreshingMedia(false);
+    }
+  };
+
   // Format launch date
   const formatLaunchDate = (dateStr: string | null, firstSeenStr?: string | null) => {
     const isFirstSeen = !dateStr;
@@ -79,7 +98,7 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
     if (!targetStr) return "Unknown launch date";
     const date = new Date(targetStr);
     if (isNaN(date.getTime())) return "Unknown launch date";
-    
+
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const launchDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -188,37 +207,71 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
 
         {/* Media Container */}
         <div className="relative w-full h-[280px] sm:h-[320px] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800/80 bg-slate-900/95 dark:bg-slate-950 mb-3 flex items-center justify-center">
-          {isPlayingVideo && firstVideoUrl ? (
+          {isPlayingVideo && firstVideoUrl && !videoError ? (
             <video
               src={firstVideoUrl}
               controls
               autoPlay
+              {...({ referrerPolicy: "no-referrer" } as any)}
+              onError={() => setVideoError(true)}
               className="w-full h-full object-contain bg-black rounded-xl"
             />
-          ) : activeImageSrc && !imgError ? (
-            <div className="relative w-full h-full group/media cursor-pointer flex items-center justify-center" onClick={() => setIsPreviewOpen(true)}>
-              {/* Ambient Blurred Background Canvas */}
-              <NextImage
-                src={activeImageSrc}
-                alt=""
-                fill
-                unoptimized
-                referrerPolicy="no-referrer"
-                className="object-cover blur-2xl opacity-40 dark:opacity-30 scale-125 select-none pointer-events-none"
-              />
-
-              {/* Main Crisp Uncropped Image */}
-              <div className="relative w-full h-full p-2 flex items-center justify-center z-10">
-                <NextImage
-                  src={activeImageSrc}
-                  alt={ad.title || "Ad creative"}
-                  fill
-                  unoptimized
-                  referrerPolicy="no-referrer"
-                  className="object-contain transition-transform duration-300 group-hover/media:scale-[1.02] drop-shadow-md"
-                  onError={handleImageError}
-                />
+          ) : isPlayingVideo && videoError ? (
+            <div className="flex flex-col items-center justify-center p-6 text-center bg-slate-950 text-slate-200 w-full h-full gap-3">
+              <Play className="w-10 h-10 text-indigo-400 opacity-60" />
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-white">Direct CDN stream expired</span>
+                <span className="text-[11px] text-slate-400">Meta CDN links expire after 24–72 hours</span>
               </div>
+              <a
+                href={`https://www.facebook.com/ads/library/?id=${ad.adArchiveId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium shadow-md transition-all"
+              >
+                Watch on Meta Ad Library
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          ) : (
+            <div className="relative w-full h-full group/media cursor-pointer flex items-center justify-center" onClick={() => setIsPreviewOpen(true)}>
+              {activeImageSrc && !imgError ? (
+                <>
+                  {/* Ambient Blurred Background Canvas */}
+                  <NextImage
+                    src={activeImageSrc}
+                    alt=""
+                    fill
+                    unoptimized
+                    referrerPolicy="no-referrer"
+                    className="object-cover blur-2xl opacity-40 dark:opacity-30 scale-125 select-none pointer-events-none"
+                  />
+
+                  {/* Main Crisp Uncropped Image */}
+                  <div className="relative w-full h-full p-2 flex items-center justify-center z-10">
+                    <NextImage
+                      src={activeImageSrc}
+                      alt={ad.title || "Ad creative"}
+                      fill
+                      unoptimized
+                      referrerPolicy="no-referrer"
+                      className="object-contain transition-transform duration-300 group-hover/media:scale-[1.02] drop-shadow-md"
+                      onError={handleImageError}
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center gap-2 text-slate-400 font-medium">
+                  {ad.mediaType === "video" ? (
+                    <Play className="w-8 h-8 text-indigo-400 opacity-70" />
+                  ) : (
+                    <ImageIcon className="w-8 h-8 opacity-60" />
+                  )}
+                  <span className="text-[11px] text-slate-400">
+                    {ad.mediaType === "video" ? "Video Creative" : "Image Creative"}
+                  </span>
+                </div>
+              )}
 
               {/* Hover Zoom Overlay */}
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center gap-2 text-white z-20">
@@ -233,23 +286,12 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
                     e.stopPropagation();
                     setIsPlayingVideo(true);
                   }}
-                  className="absolute inset-0 m-auto w-11 h-11 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-lg hover:bg-indigo-500 hover:scale-110 transition-all cursor-pointer z-30"
-                  title="Play Video"
+                  className="absolute inset-0 m-auto w-12 h-12 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-xl hover:bg-indigo-500 hover:scale-110 transition-all cursor-pointer z-30"
+                  title="Play Video Creative"
                 >
-                  <Play className="w-5 h-5 fill-current ml-0.5" />
+                  <Play className="w-6 h-6 fill-current ml-0.5" />
                 </button>
               )}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-1.5 text-slate-400 font-medium">
-              {ad.mediaType === "video" ? (
-                <Play className="w-7 h-7 opacity-60" />
-              ) : (
-                <ImageIcon className="w-7 h-7 opacity-60" />
-              )}
-              <span className="text-[11px]">
-                {imgError ? "Preview unavailable" : "No media preview"}
-              </span>
             </div>
           )}
         </div>
@@ -283,7 +325,7 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
         )}
       </div>
 
-      {/* Footer Actions: Direct Brand Store CTA Link */}
+      {/* Footer Actions */}
       <div className="pt-2.5 border-t border-slate-200 dark:border-slate-800/60 flex items-center justify-between gap-2 mt-auto text-xs">
         {destinationUrl ? (
           <a
@@ -305,6 +347,15 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
 
         <div className="flex items-center gap-1.5 shrink-0">
           <button
+            onClick={handleRefreshMedia}
+            disabled={isRefreshingMedia}
+            className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors cursor-pointer"
+            title="Refresh Single Ad Media Links"
+          >
+            <RotateCw className={`w-3.5 h-3.5 ${isRefreshingMedia ? "animate-spin text-indigo-500" : ""}`} />
+          </button>
+
+          <button
             onClick={toggleArchive}
             disabled={isArchiving}
             className={`p-1.5 rounded-md transition-colors cursor-pointer ${
@@ -321,7 +372,7 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
             <button
               onClick={() => setIsPreviewOpen(true)}
               className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors cursor-pointer"
-              title="Preview Image Ad"
+              title="Preview Creative"
             >
               <ZoomIn className="w-3.5 h-3.5" />
             </button>

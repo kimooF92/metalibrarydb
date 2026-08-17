@@ -111,29 +111,55 @@ export function AdRow({ ad, onArchiveToggle }: AdRowProps) {
 
   const previewImages = ad.mediaUrls && ad.mediaUrls.length > 0 ? ad.mediaUrls : displayImage ? [displayImage] : [];
 
+  const [videoError, setVideoError] = useState(false);
+
   return (
     <div className="group relative flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3.5 shadow-sm hover:border-slate-300 dark:hover:border-slate-700/80 hover:shadow-md transition-all">
       {/* Left: Thumbnail & Brand Details */}
       <div className="flex items-center gap-3.5 min-w-0 flex-1">
         {/* Media Thumbnail */}
         <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 shrink-0 flex items-center justify-center">
-          {isPlayingVideo && firstVideoUrl ? (
+          {isPlayingVideo && firstVideoUrl && !videoError ? (
             <video
               src={firstVideoUrl}
               controls
               autoPlay
+              {...({ referrerPolicy: "no-referrer" } as any)}
+              onError={() => setVideoError(true)}
               className="w-full h-full object-contain bg-black"
             />
-          ) : activeImageSrc && !imgError ? (
+          ) : isPlayingVideo && videoError ? (
+            <a
+              href={`https://www.facebook.com/ads/library/?id=${ad.adArchiveId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-col items-center justify-center p-2 text-center bg-slate-950 text-indigo-300 w-full h-full gap-1 hover:text-indigo-200"
+              title="Watch on Meta Ad Library"
+            >
+              <Play className="w-5 h-5 text-indigo-400" />
+              <span className="text-[9px] font-semibold">Meta Library</span>
+            </a>
+          ) : (
             <div className="relative w-full h-full group/media cursor-pointer flex items-center justify-center bg-slate-900 overflow-hidden" onClick={() => setIsPreviewOpen(true)}>
-              {/* eslint-disable-next-html-shortcut */}
-              <img
-                src={activeImageSrc}
-                alt={ad.title || "Ad creative"}
-                referrerPolicy="no-referrer"
-                className="w-full h-full object-contain transition-transform duration-300 group-hover/media:scale-105"
-                onError={handleImageError}
-              />
+              {activeImageSrc && !imgError ? (
+                /* eslint-disable-next-html-shortcut */
+                <img
+                  src={activeImageSrc}
+                  alt={ad.title || "Ad creative"}
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-contain transition-transform duration-300 group-hover/media:scale-105"
+                  onError={handleImageError}
+                />
+              ) : (
+                <div className="flex flex-col items-center gap-1 text-slate-400">
+                  {ad.mediaType === "video" ? (
+                    <Play className="w-6 h-6 text-indigo-400 opacity-70" />
+                  ) : (
+                    <ImageIcon className="w-6 h-6 opacity-50" />
+                  )}
+                </div>
+              )}
+
               {/* Hover Zoom Overlay */}
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center text-white">
                 <ZoomIn className="w-5 h-5 text-indigo-300 drop-shadow-md" />
@@ -152,8 +178,6 @@ export function AdRow({ ad, onArchiveToggle }: AdRowProps) {
                 </button>
               )}
             </div>
-          ) : (
-            <ImageIcon className="w-6 h-6 text-slate-400 opacity-50" />
           )}
         </div>
 

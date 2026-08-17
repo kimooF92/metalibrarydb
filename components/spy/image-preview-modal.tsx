@@ -152,21 +152,31 @@ export function ImagePreviewModal({
           </button>
         )}
 
-        {/* Image Container */}
+        {/* Media Container (Image or Video) */}
         <div className="relative max-h-[75vh] max-w-full rounded-xl overflow-hidden shadow-2xl border border-zinc-800/80 bg-zinc-950 flex items-center justify-center">
-          {/* eslint-disable-next-html-shortcut */}
-          <img
-            src={currentImage}
-            alt={title || pageName || "Ad preview"}
-            referrerPolicy="no-referrer"
-            className="max-h-[75vh] max-w-full object-contain rounded-xl select-none"
-            onError={(e) => {
-              const target = e.currentTarget;
-              if (currentImage && !target.src.includes("/api/spy/image-proxy")) {
-                target.src = `/api/spy/image-proxy?url=${encodeURIComponent(currentImage)}`;
-              }
-            }}
-          />
+          {currentImage && (currentImage.includes(".mp4") || currentImage.includes("video")) ? (
+            <video
+              src={currentImage}
+              controls
+              autoPlay
+              {...({ referrerPolicy: "no-referrer" } as any)}
+              className="max-h-[75vh] max-w-full object-contain rounded-xl"
+            />
+          ) : (
+            /* eslint-disable-next-html-shortcut */
+            <img
+              src={currentImage}
+              alt={title || pageName || "Ad preview"}
+              referrerPolicy="no-referrer"
+              className="max-h-[75vh] max-w-full object-contain rounded-xl select-none"
+              onError={(e) => {
+                const target = e.currentTarget;
+                if (currentImage && !target.src.includes("/api/spy/image-proxy")) {
+                  target.src = `/api/spy/image-proxy?url=${encodeURIComponent(currentImage)}`;
+                }
+              }}
+            />
+          )}
         </div>
 
         {/* Next Button */}

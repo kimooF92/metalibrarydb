@@ -201,7 +201,9 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
 
           if (videoEl) {
             mediaType = "video";
-            if (videoEl.src) mediaUrls.push(videoEl.src);
+            if (videoEl.src && !videoEl.src.startsWith("blob:")) {
+              mediaUrls.push(videoEl.src);
+            }
             if (videoEl.poster) {
               const isLogo = /_s60x60|_s50x50|_s100x100|_p60x60|_p50x50|s60x60|p60x60|s50x50|s100x100/i.test(videoEl.poster) || videoEl.poster.includes("profile") || videoEl.poster.includes("avatar");
               if (!isLogo) thumbnailUrl = videoEl.poster;

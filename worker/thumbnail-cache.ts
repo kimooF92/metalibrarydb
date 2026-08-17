@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
+import { uploadMediaFromUrlToB2, isB2Configured } from "../lib/b2-storage";
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -25,6 +26,14 @@ export async function cacheThumbnail(
   mediaUrl: string | null | undefined
 ): Promise<{ storagePath: string | null; publicUrl: string | null }> {
   if (!mediaUrl) return { storagePath: null, publicUrl: null };
+
+  // Prioritize Backblaze B2 if configured (0$ egress & 10GB free storage, no Supabase storage used)
+  if (isB2Configured()) {
+    const b2Url = await uploadMediaFromUrlToB2(mediaUrl, "thumbnails", adArchiveId);
+    if (b2Url) {
+      return { storagePath: `b2/thumbnails/${adArchiveId}.jpg`, publicUrl: b2Url };
+    }
+  }
 
   const client = getSupabase();
   if (!client) {
@@ -63,7 +72,7 @@ export async function cacheThumbnail(
     const buffer = Buffer.from(arrayBuffer);
     const contentType = response.headers.get("content-type") || "image/jpeg";
 
-    // 2. Upload to Supabase storage
+    // 2. Upload to Supabase storage fallback
     const { error } = await client.storage
       .from(BUCKET_NAME)
       .upload(storagePath, buffer, {
@@ -72,11 +81,10 @@ export async function cacheThumbnail(
       });
 
     if (error) {
-      // Bucket might not exist or permissions issue - soft fail
       return { storagePath: null, publicUrl: null };
     }
 
-    // 3. Get public/signed URL
+    // 3. Get public URL
     const { data: publicUrlData } = client.storage
       .from(BUCKET_NAME)
       .getPublicUrl(storagePath);
@@ -86,7 +94,6 @@ export async function cacheThumbnail(
       publicUrl: publicUrlData?.publicUrl || null,
     };
   } catch {
-    // Best-effort thumbnail caching — never throw or break scan
     return { storagePath: null, publicUrl: null };
   }
 }

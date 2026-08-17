@@ -4,6 +4,7 @@ import { ads, adObservations, creativeScans, trackedPages, scanHistory } from ".
 import { eq, sql } from "drizzle-orm";
 import { cacheThumbnail } from "./thumbnail-cache";
 import { extractAdsFromDOM, extractPageIdsFromPage } from "./dom-scanner";
+import { uploadMediaFromUrlToB2, isB2Configured } from "../lib/b2-storage";
 import { parseResultCountFromText } from "./scanner";
 import { resolveDestinationUrl } from "../lib/utils";
 
@@ -618,11 +619,24 @@ export async function scanAdCreatives(
     let savedCount = 0;
 
     for (const adData of collectedAds.values()) {
-      // Best-effort thumbnail caching
+      // Best-effort thumbnail caching (prioritizes B2)
       const { storagePath, publicUrl } = await cacheThumbnail(
         adData.adArchiveId,
         adData.thumbnailUrl
       );
+
+      // Best-effort B2 video caching if configured
+      let finalMediaUrls = adData.mediaUrls || [];
+      if (isB2Configured() && adData.mediaType === "video" && finalMediaUrls.length > 0) {
+        const b2VideoUrls = await Promise.all(
+          finalMediaUrls.map(async (url, idx) => {
+            if (url.includes("backblazeb2.com") || url.includes("/api/spy/b2-media")) return url;
+            const b2Url = await uploadMediaFromUrlToB2(url, "videos", `${adData.adArchiveId}_${idx}`);
+            return b2Url || url;
+          })
+        );
+        finalMediaUrls = b2VideoUrls;
+      }
 
       // Upsert canonical ad record
       const [upsertedAd] = await db
@@ -637,7 +651,7 @@ export async function scanAdCreatives(
           ctaText: adData.ctaText,
           linkUrl: adData.linkUrl,
           mediaType: adData.mediaType,
-          mediaUrls: adData.mediaUrls,
+          mediaUrls: finalMediaUrls,
           thumbnailUrl: publicUrl || adData.thumbnailUrl,
           thumbnailStoragePath: storagePath,
           firstSeenAt: now,
@@ -654,7 +668,7 @@ export async function scanAdCreatives(
             ctaText: adData.ctaText,
             linkUrl: adData.linkUrl,
             mediaType: adData.mediaType,
-            mediaUrls: adData.mediaUrls,
+            mediaUrls: finalMediaUrls,
             thumbnailUrl: publicUrl || adData.thumbnailUrl,
             thumbnailStoragePath: storagePath || ads.thumbnailStoragePath,
             lastSeenAt: now,
