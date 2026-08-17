@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { trackedPages, scanHistory, queue } from "@/db/schema";
 import { addSingleUrl } from "@/actions/add-url";
 import { singleUrlSchema } from "@/lib/validators";
-import { eq, ilike, or, and, sql, desc, asc, inArray, gte, lte } from "drizzle-orm";
+import { eq, ilike, or, and, sql, desc, asc, inArray, gte, lte, isNotNull } from "drizzle-orm";
 
 export async function GET(request: Request) {
   try {
@@ -109,7 +109,7 @@ export async function GET(request: Request) {
           rank: sql<number>`row_number() over (partition by ${scanHistory.trackedPageId} order by ${scanHistory.checkedAt} desc)`.as("rank"),
         })
         .from(scanHistory)
-        .where(inArray(scanHistory.trackedPageId, pageIds))
+        .where(and(inArray(scanHistory.trackedPageId, pageIds), isNotNull(scanHistory.results)))
         .as("ranked_scans");
 
       const recentScans = await db
@@ -122,7 +122,7 @@ export async function GET(request: Request) {
         .where(lte(rankedScans.rank, 8));
 
       for (const s of recentScans) {
-        if (s.rank === 2) {
+        if (Number(s.rank) === 2) {
           prevResultsMap[s.trackedPageId] = s.results;
         }
         if (s.results !== null) {

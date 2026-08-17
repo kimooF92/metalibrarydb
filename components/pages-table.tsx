@@ -649,12 +649,16 @@ export function PagesTable({
                 pages.map((p) => {
                   const diff = p.difference;
                   let diffBadge = (
-                    <span className="inline-flex items-center text-xs text-slate-500 dark:text-slate-400 font-medium px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
-                      <Minus className="w-3 h-3 mr-1 text-slate-400" /> 0
-                    </span>
+                    <span className="text-slate-400 dark:text-slate-600 font-medium text-xs">—</span>
                   );
 
-                  if (diff !== null && diff !== undefined && diff !== 0) {
+                  if (diff === 0) {
+                    diffBadge = (
+                      <span className="inline-flex items-center text-xs text-slate-500 dark:text-slate-400 font-medium px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
+                        <Minus className="w-3 h-3 mr-1 text-slate-400" /> 0
+                      </span>
+                    );
+                  } else if (diff !== null && diff !== undefined) {
                     if (diff >= 20) {
                       diffBadge = (
                         <span className="inline-flex items-center gap-1 font-extrabold text-xs text-amber-700 dark:text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-md shadow-sm shadow-amber-500/10" title="Rapidly Scaling (+20 or more ads)">
