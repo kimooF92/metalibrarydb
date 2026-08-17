@@ -69,7 +69,7 @@ export function ImagePreviewModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-black/90 backdrop-blur-md p-4 sm:p-6 animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-black/90 p-4 sm:p-6 animate-in fade-in duration-150"
       onClick={onClose}
     >
       {/* Top Bar */}

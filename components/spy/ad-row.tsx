@@ -16,7 +16,6 @@ import {
   HelpCircle,
   Flame,
   Globe,
-  ZoomIn,
   Archive,
   ArchiveRestore,
   Clock,
@@ -200,11 +199,6 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
                 </div>
               )}
 
-              {/* Hover Zoom Overlay */}
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center text-white">
-                <ZoomIn className="w-5 h-5 text-indigo-300 drop-shadow-md" />
-              </div>
-
               {firstVideoUrl && (
                 <button
                   onClick={(e) => {
@@ -364,16 +358,6 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
           >
             {isArchived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
           </button>
-
-          {(firstVideoUrl || displayImage) && (
-            <button
-              onClick={() => setIsPreviewOpen(true)}
-              className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors cursor-pointer"
-              title="Preview Image Ad"
-            >
-              <ZoomIn className="w-3.5 h-3.5" />
-            </button>
-          )}
 
           {(firstVideoUrl || displayImage) && (
             <a

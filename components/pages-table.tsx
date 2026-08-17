@@ -677,7 +677,7 @@ export function PagesTable({
       <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 flex-1 min-h-[400px] md:min-h-0 flex flex-col overflow-hidden">
         <div className="overflow-auto flex-1 min-h-0 relative">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-md sticky top-0 z-20 text-[11px] font-semibold text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800/80 uppercase tracking-wider select-none shadow-sm">
+            <thead className="bg-slate-50 dark:bg-slate-900 sticky top-0 z-20 text-[11px] font-semibold text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800/80 uppercase tracking-wider select-none shadow-sm">
               <tr>
                 <th className="px-3 py-1.5 w-8">
                   <input
@@ -1305,7 +1305,7 @@ export function PagesTable({
 
       {/* Animated Toast Notification Popup */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-start gap-3 p-4 rounded-xl shadow-2xl border backdrop-blur-md max-w-sm animate-in slide-in-from-bottom-5 duration-200 bg-slate-900/95 text-slate-100 border-slate-800">
+        <div className="fixed bottom-6 right-6 z-50 flex items-start gap-3 p-4 rounded-xl shadow-2xl border max-w-sm animate-in slide-in-from-bottom-5 duration-200 bg-slate-900 text-slate-100 border-slate-800">
           {toast.type === "warning" && <Clock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />}
           {toast.type === "info" && <Sparkles className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />}
           {toast.type === "success" && <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />}

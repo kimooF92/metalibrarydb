@@ -328,7 +328,7 @@ export default function DashboardPage() {
       {/* Toast Alert Banner */}
       {toast && (
         <div
-          className={`fixed top-20 right-6 z-50 flex items-center space-x-3 px-4 py-3 rounded-xl shadow-2xl border text-xs font-semibold backdrop-blur-md animate-in slide-in-from-top-5 duration-200 ${
+          className={`fixed top-20 right-6 z-50 flex items-center space-x-3 px-4 py-3 rounded-xl shadow-2xl border text-xs font-semibold animate-in slide-in-from-top-5 duration-200 ${
             toast.type === "success"
               ? "bg-emerald-50 dark:bg-emerald-950/95 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/40"
               : toast.type === "error"
@@ -430,7 +430,7 @@ export default function DashboardPage() {
 
       {/* Track URL / Bulk File Import Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4">
           <div className="bg-slate-950 border border-slate-800/80 p-5 sm:p-6 rounded-2xl max-w-2xl w-full shadow-2xl relative animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => {
