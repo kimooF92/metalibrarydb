@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Ad } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
 import { ImagePreviewModal } from "./image-preview-modal";
@@ -21,6 +21,9 @@ import {
   Clock,
   Ban,
   RotateCw,
+  X,
+  VolumeX,
+  Volume2,
 } from "lucide-react";
 
 interface AdRowProps {
@@ -41,12 +44,23 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
   const [isArchived, setIsArchived] = useState(Boolean(ad.isArchived));
   const [isArchiving, setIsArchiving] = useState(false);
   const [isRefreshingMedia, setIsRefreshingMedia] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Sync when prop updates
   useEffect(() => {
     setCurrentAd(ad);
     setIsArchived(Boolean(ad.isArchived));
   }, [ad]);
+
+  // Clean up hover timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const initialDisplayImage = currentAd.signedThumbnailUrl || currentAd.thumbnailUrl || currentAd.mediaUrls?.[0];
   const activeImageSrc = isProxied && initialDisplayImage
@@ -152,21 +166,53 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
 
   const previewImages = currentAd.mediaUrls && currentAd.mediaUrls.length > 0 ? currentAd.mediaUrls : displayImage ? [displayImage] : [];
 
+  const handleMouseEnter = () => {
+    if (!firstVideoUrl || isPlayingVideo || videoError) return;
+    hoverTimeoutRef.current = setTimeout(() => {
+      setIsHovered(true);
+    }, 150);
+  };
+
+  const handleMouseLeave = () => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    setIsHovered(false);
+  };
+
   return (
     <div className="group relative flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3.5 shadow-sm hover:border-slate-300 dark:hover:border-slate-700/80 hover:shadow-md transition-all">
       {/* Left: Thumbnail & Brand Details */}
       <div className="flex items-center gap-3.5 min-w-0 flex-1">
         {/* Media Thumbnail */}
-        <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 shrink-0 flex items-center justify-center">
+        <div
+          className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 shrink-0 flex items-center justify-center"
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        >
           {isPlayingVideo && firstVideoUrl && !videoError ? (
-            <video
-              src={firstVideoUrl}
-              controls
-              autoPlay
-              {...({ referrerPolicy: "no-referrer" } as any)}
-              onError={() => setVideoError(true)}
-              className="w-full h-full object-contain bg-black"
-            />
+            <div className="relative w-full h-full bg-black flex items-center justify-center">
+              <video
+                src={firstVideoUrl}
+                controls
+                autoPlay
+                {...({ referrerPolicy: "no-referrer" } as any)}
+                onError={() => setVideoError(true)}
+                className="w-full h-full object-contain bg-black"
+              />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPlayingVideo(false);
+                }}
+                className="absolute top-1 right-1 p-1 rounded-full bg-black/80 hover:bg-black text-white hover:text-rose-400 transition-all cursor-pointer z-30 shadow-md border border-white/20"
+                title="Close Video"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
           ) : isPlayingVideo && videoError ? (
             <a
               href={`https://www.facebook.com/ads/library/?id=${currentAd.adArchiveId}`}
@@ -178,6 +224,30 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
               <Play className="w-5 h-5 text-indigo-400" />
               <span className="text-[9px] font-semibold">Meta Library</span>
             </a>
+          ) : isHovered && firstVideoUrl && !videoError ? (
+            <div
+              className="relative w-full h-full bg-black flex items-center justify-center cursor-pointer group/hovervid"
+              onClick={() => setIsPlayingVideo(true)}
+            >
+              <video
+                src={firstVideoUrl}
+                muted
+                loop
+                playsInline
+                autoPlay
+                preload="metadata"
+                {...({ referrerPolicy: "no-referrer" } as any)}
+                onError={() => {
+                  setIsHovered(false);
+                  setVideoError(true);
+                }}
+                className="w-full h-full object-contain bg-black select-none"
+              />
+              <div className="absolute top-1 left-1 z-20 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-black/80 border border-white/15 text-[9px] font-semibold text-white pointer-events-none shadow-sm">
+                <VolumeX className="w-2.5 h-2.5 text-indigo-400" />
+                <span>Muted</span>
+              </div>
+            </div>
           ) : (
             <div className="relative w-full h-full group/media cursor-pointer flex items-center justify-center bg-slate-900 overflow-hidden" onClick={() => setIsPreviewOpen(true)}>
               {activeImageSrc && !imgError ? (

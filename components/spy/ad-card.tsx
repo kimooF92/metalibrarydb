@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import NextImage from "next/image";
 import { Ad } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
@@ -22,6 +22,9 @@ import {
   Clock,
   RotateCw,
   Ban,
+  X,
+  VolumeX,
+  Volume2,
 } from "lucide-react";
 
 interface AdCardProps {
@@ -42,12 +45,23 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
   const [isArchived, setIsArchived] = useState(Boolean(ad.isArchived));
   const [isArchiving, setIsArchiving] = useState(false);
   const [isRefreshingMedia, setIsRefreshingMedia] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Sync when prop updates
   useEffect(() => {
     setCurrentAd(ad);
     setIsArchived(Boolean(ad.isArchived));
   }, [ad]);
+
+  // Clean up hover timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const initialDisplayImage = currentAd.signedThumbnailUrl || currentAd.thumbnailUrl || currentAd.mediaUrls?.[0];
   const activeImageSrc = isProxied && initialDisplayImage
@@ -160,6 +174,21 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
 
   const previewImages = currentAd.mediaUrls && currentAd.mediaUrls.length > 0 ? currentAd.mediaUrls : displayImage ? [displayImage] : [];
 
+  const handleMouseEnter = () => {
+    if (!firstVideoUrl || isPlayingVideo || videoError) return;
+    hoverTimeoutRef.current = setTimeout(() => {
+      setIsHovered(true);
+    }, 150);
+  };
+
+  const handleMouseLeave = () => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    setIsHovered(false);
+  };
+
   return (
     <div className="group relative flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-4 shadow-sm transition-all hover:border-slate-300 dark:hover:border-slate-700/80 hover:shadow-md">
       {/* Top Section */}
@@ -240,16 +269,33 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
         </div>
 
         {/* Media Container */}
-        <div className="relative w-full h-[280px] sm:h-[320px] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800/80 bg-slate-900/95 dark:bg-slate-950 mb-3 flex items-center justify-center">
+        <div
+          className="relative w-full h-[280px] sm:h-[320px] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800/80 bg-slate-900/95 dark:bg-slate-950 mb-3 flex items-center justify-center"
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        >
           {isPlayingVideo && firstVideoUrl && !videoError ? (
-            <video
-              src={firstVideoUrl}
-              controls
-              autoPlay
-              {...({ referrerPolicy: "no-referrer" } as any)}
-              onError={() => setVideoError(true)}
-              className="w-full h-full object-contain bg-black rounded-xl"
-            />
+            <div className="relative w-full h-full bg-black rounded-xl overflow-hidden flex items-center justify-center">
+              <video
+                src={firstVideoUrl}
+                controls
+                autoPlay
+                {...({ referrerPolicy: "no-referrer" } as any)}
+                onError={() => setVideoError(true)}
+                className="w-full h-full object-contain bg-black rounded-xl"
+              />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPlayingVideo(false);
+                }}
+                className="absolute top-2.5 right-2.5 p-1.5 rounded-full bg-black/80 hover:bg-black text-white hover:text-rose-400 transition-all cursor-pointer z-30 shadow-lg border border-white/20"
+                title="Close Video (Back to Poster)"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
           ) : isPlayingVideo && videoError ? (
             <div className="flex flex-col items-center justify-center p-6 text-center bg-slate-950 text-slate-200 w-full h-full gap-3">
               <Play className="w-10 h-10 text-indigo-400 opacity-60" />
@@ -266,6 +312,37 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
                 Watch on Meta Ad Library
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
+            </div>
+          ) : isHovered && firstVideoUrl && !videoError ? (
+            <div
+              className="relative w-full h-full bg-black rounded-xl overflow-hidden flex items-center justify-center cursor-pointer group/hovervid"
+              onClick={() => setIsPlayingVideo(true)}
+            >
+              <video
+                src={firstVideoUrl}
+                muted
+                loop
+                playsInline
+                autoPlay
+                preload="metadata"
+                {...({ referrerPolicy: "no-referrer" } as any)}
+                onError={() => {
+                  setIsHovered(false);
+                  setVideoError(true);
+                }}
+                className="w-full h-full object-contain bg-black rounded-xl select-none"
+              />
+              {/* Subtle Muted Preview Badge */}
+              <div className="absolute top-2 left-2 z-20 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/80 border border-white/15 text-[10px] font-semibold text-white pointer-events-none shadow-md">
+                <VolumeX className="w-3 h-3 text-indigo-400" />
+                <span>Preview</span>
+              </div>
+
+              {/* Click to Play with Sound Indicator */}
+              <div className="absolute bottom-2 right-2 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-600/90 text-white text-[11px] font-bold shadow-lg hover:bg-indigo-500 transition-all">
+                <Play className="w-3 h-3 fill-current" />
+                <span>Play Sound</span>
+              </div>
             </div>
           ) : (
             <div className="relative w-full h-full group/media cursor-pointer flex items-center justify-center" onClick={() => setIsPreviewOpen(true)}>
