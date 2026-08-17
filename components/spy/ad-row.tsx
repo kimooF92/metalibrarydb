@@ -20,14 +20,16 @@ import {
   Archive,
   ArchiveRestore,
   Clock,
+  Ban,
 } from "lucide-react";
 
 interface AdRowProps {
   ad: Ad;
   onArchiveToggle?: () => void;
+  onExcludeBrand?: (pageId: string) => void;
 }
 
-export function AdRow({ ad, onArchiveToggle }: AdRowProps) {
+export function AdRow({ ad, onArchiveToggle, onExcludeBrand }: AdRowProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
   const [isProxied, setIsProxied] = useState(false);
@@ -185,9 +187,21 @@ export function AdRow({ ad, onArchiveToggle }: AdRowProps) {
         <div className="flex flex-col min-w-0 flex-1 gap-1">
           {/* Header Row: Page Name & Status */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
-              {ad.pageName || `Page ${ad.pageId}`}
-            </span>
+            <div className="flex items-center gap-1 min-w-0">
+              <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+                {ad.pageName || `Page ${ad.pageId}`}
+              </span>
+              {onExcludeBrand && (
+                <button
+                  type="button"
+                  onClick={() => onExcludeBrand(ad.pageId)}
+                  title={`Hide "${ad.pageName || ad.pageId}" from feed`}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded shrink-0 cursor-pointer"
+                >
+                  <Ban className="w-2.5 h-2.5" />
+                </button>
+              )}
+            </div>
             <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
               ID: {ad.adArchiveId}
             </span>

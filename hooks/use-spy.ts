@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Ad, AdSpyStats, AdFilterParams, PaginationMeta } from "@/types";
+import { Ad, AdSpyStats, AdFilterParams, PaginationMeta, BrandOption } from "@/types";
 
 export function useAdFeed(initialParams?: AdFilterParams) {
   const [params, setParams] = useState<AdFilterParams>(
@@ -29,7 +29,8 @@ export function useAdFeed(initialParams?: AdFilterParams) {
           prev.mediaType !== initialParams.mediaType ||
           prev.ctaText !== initialParams.ctaText ||
           prev.isWatchlisted !== initialParams.isWatchlisted ||
-          prev.smartPreset !== initialParams.smartPreset;
+          prev.smartPreset !== initialParams.smartPreset ||
+          JSON.stringify(prev.excludePageIds) !== JSON.stringify(initialParams.excludePageIds);
 
         if (hasChanged) {
           return {
@@ -51,6 +52,7 @@ export function useAdFeed(initialParams?: AdFilterParams) {
     initialParams?.ctaText,
     initialParams?.isWatchlisted,
     initialParams?.smartPreset,
+    initialParams?.excludePageIds,
   ]);
 
   const [ads, setAds] = useState<Ad[]>([]);
@@ -96,6 +98,9 @@ export function useAdFeed(initialParams?: AdFilterParams) {
       if (params.status && params.status !== "all") query.set("status", params.status);
       if (params.ctaText && params.ctaText !== "all") query.set("ctaText", params.ctaText);
       if (params.isWatchlisted) query.set("isWatchlisted", "true");
+      if (params.excludePageIds && params.excludePageIds.length > 0) {
+        query.set("excludePageIds", params.excludePageIds.join(","));
+      }
       if (params.smartPreset && params.smartPreset !== "all") query.set("smartPreset", params.smartPreset);
       if (params.sortBy) query.set("sortBy", params.sortBy);
       if (params.sortOrder) query.set("sortOrder", params.sortOrder);
@@ -212,3 +217,33 @@ export function useEnqueueScan() {
 
   return { enqueueScan, isEnqueueing };
 }
+
+export function useSpyBrands() {
+  const [brands, setBrands] = useState<BrandOption[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchBrands = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/spy/brands");
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to fetch brands");
+      }
+      setBrands(data.brands || []);
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch brands");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchBrands();
+  }, [fetchBrands]);
+
+  return { brands, isLoading, error, refetch: fetchBrands };
+}
+

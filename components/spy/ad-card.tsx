@@ -22,14 +22,16 @@ import {
   ArchiveRestore,
   Clock,
   RotateCw,
+  Ban,
 } from "lucide-react";
 
 interface AdCardProps {
   ad: Ad;
   onArchiveToggle?: () => void;
+  onExcludeBrand?: (pageId: string) => void;
 }
 
-export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
+export function AdCard({ ad, onArchiveToggle, onExcludeBrand }: AdCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
   const [isProxied, setIsProxied] = useState(false);
@@ -156,9 +158,21 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
         {/* Brand Name & Status Badges */}
         <div className="flex items-start justify-between gap-2 mb-2.5">
           <div className="flex flex-col min-w-0">
-            <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
-              {ad.pageName || `Page ${ad.pageId}`}
-            </span>
+            <div className="flex items-center gap-1 min-w-0">
+              <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+                {ad.pageName || `Page ${ad.pageId}`}
+              </span>
+              {onExcludeBrand && (
+                <button
+                  type="button"
+                  onClick={() => onExcludeBrand(ad.pageId)}
+                  title={`Hide "${ad.pageName || ad.pageId}" from feed`}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded shrink-0 cursor-pointer"
+                >
+                  <Ban className="w-3 h-3" />
+                </button>
+              )}
+            </div>
             <span className="text-[10px] text-slate-600 dark:text-slate-400 font-mono">
               ID: {ad.adArchiveId}
             </span>

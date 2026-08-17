@@ -141,6 +141,14 @@ export interface AdSpyStats {
   };
 }
 
+export interface BrandOption {
+  id: string;
+  pageId: string;
+  displayName: string;
+  adCount?: number;
+  isWatchlisted?: boolean;
+}
+
 export interface AdFilterParams {
   trackedPageId?: string;
   search?: string;
@@ -152,6 +160,7 @@ export interface AdFilterParams {
   status?: "all" | "active" | "inactive" | "archived" | "unknown";
   ctaText?: string;
   isWatchlisted?: boolean;
+  excludePageIds?: string[];
   smartPreset?: string;
   sortBy?: "started_running_on" | "duplication_count" | "first_seen_at" | "oldest" | "recently_observed";
   sortOrder?: "asc" | "desc";
@@ -159,5 +168,6 @@ export interface AdFilterParams {
   limit?: number;
   enabled?: boolean;
 }
+
 
 

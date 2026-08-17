@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ads, adObservations, trackedPages } from "@/db/schema";
-import { eq, ilike, gte, lte, and, sql, desc, asc, or } from "drizzle-orm";
+import { eq, ilike, gte, lte, and, sql, desc, asc, or, not, inArray } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 
 import { syncApifyRuns } from "@/lib/apify-sync";
@@ -23,6 +23,10 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get("status");
     const ctaText = searchParams.get("ctaText");
     const isWatchlisted = searchParams.get("isWatchlisted") === "true";
+    const excludePageIdsParam = searchParams.get("excludePageIds");
+    const excludePageIds = excludePageIdsParam
+      ? excludePageIdsParam.split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
     const smartPreset = searchParams.get("smartPreset");
     let sortBy = searchParams.get("sortBy") || "started_running_on";
     const sortOrder = searchParams.get("sortOrder") || "desc";
@@ -83,6 +87,15 @@ export async function GET(req: NextRequest) {
 
     if (isWatchlisted && smartPreset !== "watchlist") {
       conditions.push(eq(trackedPages.isWatchlisted, true));
+    }
+
+    if (excludePageIds.length > 0) {
+      conditions.push(
+        and(
+          not(inArray(ads.pageId, excludePageIds)),
+          not(inArray(adObservations.trackedPageId, excludePageIds))
+        )
+      );
     }
 
     if (ctaText && ctaText !== "all" && smartPreset !== "ecom_sales") {

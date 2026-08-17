@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { AdFilterParams } from "@/types";
+import { useState, useEffect, useRef } from "react";
+import { AdFilterParams, BrandOption } from "@/types";
+import { useSpyBrands } from "@/hooks/use-spy";
 import {
   Search,
   Filter,
@@ -19,6 +20,9 @@ import {
   Star,
   Zap,
   Tag,
+  Ban,
+  X,
+  Check,
 } from "lucide-react";
 
 interface SpyFiltersProps {
@@ -95,9 +99,28 @@ const SMART_PILLS: SmartPill[] = [
 ];
 
 export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange, onReset }: SpyFiltersProps) {
+  const { brands } = useSpyBrands();
   const [showCustomDates, setShowCustomDates] = useState(Boolean(filters.dateFrom || filters.dateTo));
   const [datePreset, setDatePreset] = useState<string>("all");
   const [searchValue, setSearchValue] = useState<string>(filters.search || "");
+  const [showBrandModal, setShowBrandModal] = useState(false);
+  const [brandSearch, setBrandSearch] = useState("");
+  const brandModalRef = useRef<HTMLDivElement | null>(null);
+
+  const excludedIds = filters.excludePageIds || [];
+
+  // Close brand dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (brandModalRef.current && !brandModalRef.current.contains(e.target as Node)) {
+        setShowBrandModal(false);
+      }
+    }
+    if (showBrandModal) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [showBrandModal]);
 
   // Sync search input with 350ms debounce
   useEffect(() => {
@@ -117,7 +140,6 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
 
   const handlePillClick = (pillId: string) => {
     if (pillId === "all" || pillId === activePreset) {
-      // Toggle off / Reset to normal all
       onFilterChange({
         smartPreset: undefined,
         status: filters.status === "archived" ? "archived" : "all",
@@ -125,12 +147,27 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
       return;
     }
 
-    // Activate specific preset
     onFilterChange({
       smartPreset: pillId,
-      status: "all", // Ensure we exit archive vault when applying smart feed preset
+      status: "all",
     });
   };
+
+  const handleToggleExcludeBrand = (pageId: string) => {
+    const next = excludedIds.includes(pageId)
+      ? excludedIds.filter((id) => id !== pageId)
+      : [...excludedIds, pageId];
+    onFilterChange({ excludePageIds: next });
+  };
+
+  const handleClearAllExcluded = () => {
+    onFilterChange({ excludePageIds: [] });
+  };
+
+  const filteredBrandList = brands.filter((b) =>
+    b.displayName.toLowerCase().includes(brandSearch.toLowerCase()) ||
+    b.pageId.toLowerCase().includes(brandSearch.toLowerCase())
+  );
 
   const handleDatePreset = (preset: string) => {
     setDatePreset(preset);
@@ -187,7 +224,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
               const newStatus = filters.status === "archived" ? "all" : "archived";
               onFilterChange({
                 status: newStatus,
-                smartPreset: undefined, // Clear smart preset if entering archive vault
+                smartPreset: undefined,
               });
             }}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
@@ -288,7 +325,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
 
       {/* 3. Detailed Filter Options Row */}
       <div className="flex flex-wrap items-center gap-2.5 pt-2.5 border-t border-slate-200 dark:border-slate-800/40 text-[11px]">
-        {/* Running For (List of Days) Filter */}
+        {/* Running For Filter */}
         <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
           <Clock className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
           <span className="text-slate-600 dark:text-slate-400 font-semibold">Running For:</span>
@@ -388,6 +425,112 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
           </select>
         </div>
 
+        {/* Negative Brand Exclude Button & Popover */}
+        <div className="relative" ref={brandModalRef}>
+          <button
+            type="button"
+            onClick={() => setShowBrandModal((prev) => !prev)}
+            className={`inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer font-semibold ${
+              excludedIds.length > 0
+                ? "bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border-rose-300 dark:border-rose-800 shadow-sm"
+                : "bg-white dark:bg-slate-950/80 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-rose-300 dark:hover:border-rose-800"
+            }`}
+          >
+            <Ban className="w-3 h-3 text-rose-500" />
+            <span>
+              {excludedIds.length > 0 ? `Excluded (${excludedIds.length})` : "Exclude Brands"}
+            </span>
+          </button>
+
+          {/* Floating Exclusion Popover */}
+          {showBrandModal && (
+            <div className="absolute left-0 top-full mt-1.5 w-72 sm:w-80 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 p-3 z-50 animate-in fade-in zoom-in-95 duration-100">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-1.5">
+                  <Ban className="w-3.5 h-3.5 text-rose-500" />
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">
+                    Exclude Brands from Feed
+                  </span>
+                </div>
+                {excludedIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearAllExcluded}
+                    className="text-[10px] font-semibold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
+                  >
+                    Clear All
+                  </button>
+                )}
+              </div>
+
+              {/* Search input in modal */}
+              <div className="relative my-2">
+                <Search className="w-3 h-3 absolute left-2.5 top-2.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search tracked brands..."
+                  value={brandSearch}
+                  onChange={(e) => setBrandSearch(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 text-xs rounded-lg pl-7 pr-3 py-1.5 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-rose-500 text-slate-900 dark:text-slate-100"
+                />
+              </div>
+
+              {/* Scrollable brand list */}
+              <div className="max-h-56 overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
+                {filteredBrandList.length === 0 ? (
+                  <div className="py-4 text-center text-xs text-slate-400">
+                    No matching brands found
+                  </div>
+                ) : (
+                  filteredBrandList.map((brand) => {
+                    const isExcluded = excludedIds.includes(brand.pageId);
+                    return (
+                      <button
+                        key={brand.id}
+                        type="button"
+                        onClick={() => handleToggleExcludeBrand(brand.pageId)}
+                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left text-xs transition-colors cursor-pointer ${
+                          isExcluded
+                            ? "bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 font-bold"
+                            : "hover:bg-slate-100 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 truncate pr-2">
+                          <div
+                            className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
+                              isExcluded
+                                ? "bg-rose-600 border-rose-600 text-white"
+                                : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                            }`}
+                          >
+                            {isExcluded && <Check className="w-3 h-3 stroke-[3]" />}
+                          </div>
+                          <span className="truncate">{brand.displayName}</span>
+                        </div>
+                        {brand.adCount !== undefined && (
+                          <span className="text-[10px] text-slate-400 shrink-0 font-medium">
+                            {brand.adCount} ads
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="pt-2 mt-2 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowBrandModal(false)}
+                  className="px-3 py-1 text-xs font-semibold rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 cursor-pointer hover:opacity-90"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Active Status Filter */}
         <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
           <span className="text-slate-600 dark:text-slate-400 font-semibold">Status:</span>
@@ -414,13 +557,49 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
             setSearchValue("");
             onReset();
           }}
-          className="ml-auto text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors cursor-pointer"
+          className="ml-auto text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors cursor-pointer font-semibold"
         >
           <RefreshCw className="w-3 h-3" /> Reset Filters
         </button>
       </div>
 
-      {/* 4. Custom Date Range Pickers (Rendered when Custom Range option is selected) */}
+      {/* 4. Active Excluded Brand Chips Bar */}
+      {excludedIds.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-200/80 dark:border-slate-800/60 text-xs">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 shrink-0 mr-1 flex items-center gap-1">
+            <Ban className="w-3 h-3" /> Excluded ({excludedIds.length}):
+          </span>
+          {excludedIds.map((pageId) => {
+            const brand = brands.find((b) => b.pageId === pageId);
+            const label = brand ? brand.displayName : `Page ${pageId}`;
+            return (
+              <span
+                key={pageId}
+                className="inline-flex items-center gap-1 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300 px-2 py-0.5 rounded-full text-[11px] font-medium"
+              >
+                <span>{label}</span>
+                <button
+                  type="button"
+                  onClick={() => handleToggleExcludeBrand(pageId)}
+                  className="hover:bg-rose-200 dark:hover:bg-rose-800/80 rounded-full p-0.5 transition-colors cursor-pointer"
+                  title="Remove exclusion"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            );
+          })}
+          <button
+            type="button"
+            onClick={handleClearAllExcluded}
+            className="text-[10px] text-rose-600 dark:text-rose-400 hover:underline font-semibold ml-1 cursor-pointer"
+          >
+            Clear All
+          </button>
+        </div>
+      )}
+
+      {/* 5. Custom Date Range Pickers */}
       {showCustomDates && (
         <div className="flex flex-wrap items-center gap-3 pt-2.5 border-t border-slate-200 dark:border-slate-800/40 text-xs">
           <span className="text-slate-600 dark:text-slate-400 font-semibold">Select Date Range:</span>
