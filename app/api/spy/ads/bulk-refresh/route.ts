@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
           trackedPageId: page.id,
           status: "running",
           startedAt: new Date(),
-          configSnapshot: JSON.stringify({ runner: "apify", mode: "drawer_bulk_refresh" }),
+          configSnapshot: JSON.stringify({ runner: "apify", mode: "drawer_bulk_refresh", isFullScan: true }),
           outcomeDetails: `Bulk brand ad refresh triggered from drawer for "${page.displayName || page.pageId}"`,
         })
         .returning();
@@ -100,6 +100,7 @@ export async function POST(req: NextRequest) {
           configSnapshot: JSON.stringify({
             runner: "apify",
             mode: "drawer_bulk_refresh",
+            isFullScan: true,
             apifyRunId: runRes.id,
             defaultDatasetId: runRes.defaultDatasetId,
           }),

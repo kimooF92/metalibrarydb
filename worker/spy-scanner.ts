@@ -703,7 +703,9 @@ export async function scanAdCreatives(
         Array.from(collectedAds.values()).map((a) => a.adArchiveId)
       );
       const { reconcileArchivedAds } = await import("../lib/ad-reconciliation");
-      await reconcileArchivedAds(trackedPageId, creativeScanId, currentlyObservedArchiveIds, now);
+      await reconcileArchivedAds(trackedPageId, creativeScanId, currentlyObservedArchiveIds, now, {
+        isFullScan: true,
+      });
     }
 
     // Update tracked page last_creative_scan

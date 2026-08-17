@@ -4,6 +4,7 @@ import { eq, and, inArray } from "drizzle-orm";
 
 export interface ReconciliationOptions {
   isVerifiedZeroState?: boolean;
+  isFullScan?: boolean;
 }
 
 /**
@@ -26,7 +27,7 @@ export async function reconcileArchivedAds(
     // 0. Safeguard: Only run auto-archival for official Meta Page ID targets (searchType === 'page')
     const trackedPage = await db.query.trackedPages.findFirst({
       where: eq(trackedPages.id, trackedPageId),
-      columns: { id: true, searchType: true, pageId: true, displayName: true },
+      columns: { id: true, searchType: true, pageId: true, displayName: true, currentResults: true },
     });
 
     if (!trackedPage || trackedPage.searchType !== "page") {
@@ -72,12 +73,13 @@ export async function reconcileArchivedAds(
         );
         return { archivedCount: 0 };
       }
-    } else {
-      // If current scan captured < 70% of previously active ads, treat as incomplete/truncated scan and skip archival
-      const threshold = previousActiveCount * 0.7;
-      if (observedCount < threshold) {
+    } else if (!options.isFullScan) {
+      // For automated background scans that are not verified full scans, check drop-rate
+      const expectedCount = trackedPage.currentResults || previousActiveCount;
+      const threshold = Math.min(previousActiveCount, expectedCount) * 0.7;
+      if (observedCount < threshold && observedCount < 5) {
         console.warn(
-          `[Ad Reconciliation] ⚠️ Skipped archival: Scan captured ${observedCount} ads, which is below the 70% threshold of previously active count (${previousActiveCount}). Scan appears incomplete.`
+          `[Ad Reconciliation] ⚠️ Skipped archival: Scan captured ${observedCount} ads, which is below the threshold (${threshold}). Scan appears incomplete.`
         );
         return { archivedCount: 0 };
       }

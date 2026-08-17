@@ -316,7 +316,7 @@ export async function ingestApifyDatasetItems(
     config = JSON.parse(scanRecord.configSnapshot || "{}");
   } catch {}
 
-  const isFullScan = Boolean(config.isFullScan === true);
+  const isFullScan = Boolean(config.isFullScan === true || config.mode === "drawer_bulk_refresh");
 
   // Require non-empty items OR explicit zero-state flag to prevent actor errors/empty payloads from wiping active ads
   if (isFullScan && (items.length > 0 || config.isVerifiedZeroState === true)) {
@@ -331,6 +331,7 @@ export async function ingestApifyDatasetItems(
     const { reconcileArchivedAds } = await import("@/lib/ad-reconciliation");
     await reconcileArchivedAds(trackedPageId, creativeScanId, currentlyObservedArchiveIds, now, {
       isVerifiedZeroState: Boolean(config.isVerifiedZeroState === true),
+      isFullScan: true,
     });
   }
 
