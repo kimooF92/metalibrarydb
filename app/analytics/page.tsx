@@ -331,10 +331,6 @@ export default function AnalyticsPage() {
     return filteredTablePages.slice(start, start + pageSize);
   }, [filteredTablePages, tablePage, pageSize]);
 
-  const scalingPct = pages.length > 0 ? (analytics.scalingPages.length / pages.length) * 100 : 0;
-  const descalingPct = pages.length > 0 ? (analytics.descalingPages.length / pages.length) * 100 : 0;
-  const stablePct = Math.max(0, 100 - scalingPct - descalingPct);
-
   return (
     <div className="h-full overflow-y-auto space-y-5 pb-12 pr-1 text-slate-900 dark:text-slate-100">
       {/* Page Header */}
@@ -374,43 +370,6 @@ export default function AnalyticsPage() {
         </div>
       ) : (
         <>
-          {/* Market Momentum Visual Proportion Bar */}
-          <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3.5 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-semibold mb-2.5">
-              <span className="text-slate-700 dark:text-slate-300 font-bold flex items-center gap-1.5">
-                <Activity className="w-3.5 h-3.5 text-indigo-500" /> Market Momentum Distribution
-              </span>
-              <div className="flex items-center gap-3 text-[11px] flex-wrap">
-                <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" /> Scaling {scalingPct.toFixed(1)}% ({analytics.scalingPages.length})
-                </span>
-                <span className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                  <span className="w-2 h-2 rounded-full bg-slate-400 dark:bg-slate-600" /> Stable {stablePct.toFixed(1)}% ({analytics.stablePages.length})
-                </span>
-                <span className="flex items-center gap-1 text-rose-600 dark:text-rose-400">
-                  <span className="w-2 h-2 rounded-full bg-rose-500" /> Descaling {descalingPct.toFixed(1)}% ({analytics.descalingPages.length})
-                </span>
-              </div>
-            </div>
-            <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden flex">
-              <div
-                style={{ width: `${scalingPct}%` }}
-                className="bg-emerald-500 h-full transition-all duration-500"
-                title={`Scaling: ${analytics.scalingPages.length} pages (${scalingPct.toFixed(1)}%)`}
-              />
-              <div
-                style={{ width: `${stablePct}%` }}
-                className="bg-slate-300 dark:bg-slate-700 h-full transition-all duration-500"
-                title={`Stable: ${analytics.stablePages.length} pages (${stablePct.toFixed(1)}%)`}
-              />
-              <div
-                style={{ width: `${descalingPct}%` }}
-                className="bg-rose-500 h-full transition-all duration-500"
-                title={`Descaling: ${analytics.descalingPages.length} pages (${descalingPct.toFixed(1)}%)`}
-              />
-            </div>
-          </div>
-
           {/* Consolidated 5 Key High-Signal Metrics */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             {/* 1. Pages Scaling */}

@@ -4,8 +4,9 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { TrackedPage, DashboardStats } from "@/types";
 import { StatsCards } from "@/components/stats-cards";
 import { AddUrlForm } from "@/components/add-url-form";
+import { ImportDropzone } from "@/components/import-dropzone";
 import { PagesTable } from "@/components/pages-table";
-import { RefreshCw, X, Plus } from "lucide-react";
+import { RefreshCw, X, Plus, UploadCloud } from "lucide-react";
 
 function getInitialDashboardState() {
   const defaults = {
@@ -98,6 +99,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [addModalTab, setAddModalTab] = useState<"single" | "bulk">("single");
 
   const [pages, setPages] = useState<TrackedPage[]>([]);
   const [pagesLoading, setPagesLoading] = useState(true);
@@ -426,21 +428,61 @@ export default function DashboardPage() {
         onResetFilters={handleResetFilters}
       />
 
-      {/* Track URL Modal */}
+      {/* Track URL / Bulk File Import Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-950 border border-slate-800/80 p-6 rounded-2xl max-w-md w-full shadow-2xl relative animate-in zoom-in-95 duration-150">
+          <div className="bg-slate-950 border border-slate-800/80 p-5 sm:p-6 rounded-2xl max-w-2xl w-full shadow-2xl relative animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <button
-              onClick={() => setShowAddModal(false)}
+              onClick={() => {
+                setShowAddModal(false);
+                setAddModalTab("single");
+              }}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-200 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
-            <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-wider">Track New Ad Library URL</h3>
-            <AddUrlForm onSuccess={() => {
-              setShowAddModal(false);
-              loadData();
-            }} />
+
+            {/* Modal Switcher Tabs */}
+            <div className="flex items-center space-x-2 mb-4 pb-2.5 border-b border-slate-800/80">
+              <button
+                type="button"
+                onClick={() => setAddModalTab("single")}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  addModalTab === "single"
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                }`}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Single URL / Domain</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAddModalTab("bulk")}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  addModalTab === "bulk"
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                }`}
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span>Bulk File Import (CSV / XLSX)</span>
+              </button>
+            </div>
+
+            {addModalTab === "single" ? (
+              <AddUrlForm
+                onSuccess={() => {
+                  setShowAddModal(false);
+                  loadData();
+                }}
+              />
+            ) : (
+              <div className="space-y-4">
+                <ImportDropzone />
+              </div>
+            )}
           </div>
         </div>
       )}
