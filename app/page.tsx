@@ -8,13 +8,19 @@ import { ImportDropzone } from "@/components/import-dropzone";
 import { PagesTable } from "@/components/pages-table";
 import { RefreshCw, X, Plus, UploadCloud } from "lucide-react";
 
+const VALID_STATUSES = ["all", "success", "pending", "scanning", "failed", "unclear"] as const;
+const VALID_SEARCH_TYPES = ["all", "page", "keyword_exact_phrase", "keyword_unordered"] as const;
+const VALID_TABS = ["all", "watchlist", "high_volume", "attention", "zero_ads", "needs_review"] as const;
+const VALID_SORT_COLS = ["createdAt", "displayName", "currentResults", "lastChecked", "status", "difference"] as const;
+const VALID_PAGE_SIZES = [25, 50, 100] as const;
+
 function getInitialDashboardState() {
   const defaults = {
     search: "",
-    statusFilter: "all",
-    searchTypeFilter: "all",
-    activeTab: "all",
-    sortBy: "createdAt",
+    statusFilter: "all" as (typeof VALID_STATUSES)[number],
+    searchTypeFilter: "all" as (typeof VALID_SEARCH_TYPES)[number],
+    activeTab: "all" as (typeof VALID_TABS)[number],
+    sortBy: "createdAt" as (typeof VALID_SORT_COLS)[number],
     sortOrder: "desc" as "asc" | "desc",
     page: 1,
     pageSize: 25,
@@ -35,21 +41,59 @@ function getInitialDashboardState() {
       } catch {}
     }
 
+    // Validate saved fields against whitelist
+    if (saved.statusFilter && !VALID_STATUSES.includes(saved.statusFilter as any)) {
+      saved.statusFilter = "all";
+    }
+    if (saved.searchTypeFilter && !VALID_SEARCH_TYPES.includes(saved.searchTypeFilter as any)) {
+      saved.searchTypeFilter = "all";
+    }
+    if (saved.activeTab && !VALID_TABS.includes(saved.activeTab as any)) {
+      saved.activeTab = "all";
+    }
+    if (saved.sortBy && !VALID_SORT_COLS.includes(saved.sortBy as any)) {
+      saved.sortBy = "createdAt";
+    }
+    if (saved.sortOrder && saved.sortOrder !== "asc" && saved.sortOrder !== "desc") {
+      saved.sortOrder = "desc";
+    }
+    if (saved.pageSize && !VALID_PAGE_SIZES.includes(saved.pageSize as any)) {
+      saved.pageSize = 25;
+    }
+
     const state = {
       ...defaults,
       ...saved,
     };
 
-    // 2. Overlay individual URL query parameters if present
+    // 2. Overlay individual URL query parameters if present (with strict validation)
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has("search")) state.search = urlParams.get("search") || "";
-    if (urlParams.has("status")) state.statusFilter = urlParams.get("status") || "all";
-    if (urlParams.has("searchType")) state.searchTypeFilter = urlParams.get("searchType") || "all";
-    if (urlParams.has("tab")) state.activeTab = urlParams.get("tab") || "all";
-    if (urlParams.has("sortBy")) state.sortBy = urlParams.get("sortBy") || "createdAt";
-    if (urlParams.has("sortOrder")) state.sortOrder = (urlParams.get("sortOrder") as "asc" | "desc") || "desc";
-    if (urlParams.has("page")) state.page = Number(urlParams.get("page")) || 1;
-    if (urlParams.has("limit")) state.pageSize = Number(urlParams.get("limit")) || 25;
+    if (urlParams.has("status")) {
+      const s = urlParams.get("status");
+      state.statusFilter = s && VALID_STATUSES.includes(s as any) ? (s as any) : "all";
+    }
+    if (urlParams.has("searchType")) {
+      const st = urlParams.get("searchType");
+      state.searchTypeFilter = st && VALID_SEARCH_TYPES.includes(st as any) ? (st as any) : "all";
+    }
+    if (urlParams.has("tab")) {
+      const t = urlParams.get("tab");
+      state.activeTab = t && VALID_TABS.includes(t as any) ? (t as any) : "all";
+    }
+    if (urlParams.has("sortBy")) {
+      const sb = urlParams.get("sortBy");
+      state.sortBy = sb && VALID_SORT_COLS.includes(sb as any) ? (sb as any) : "createdAt";
+    }
+    if (urlParams.has("sortOrder")) {
+      const so = urlParams.get("sortOrder");
+      state.sortOrder = so === "asc" ? "asc" : "desc";
+    }
+    if (urlParams.has("page")) state.page = Math.max(1, Number(urlParams.get("page")) || 1);
+    if (urlParams.has("limit")) {
+      const l = Number(urlParams.get("limit"));
+      state.pageSize = VALID_PAGE_SIZES.includes(l as any) ? l : 25;
+    }
 
     return state;
   } catch (e) {
@@ -73,10 +117,18 @@ function syncDashboardStateToUrl(state: {
   try {
     const query = new URLSearchParams();
     if (state.search) query.set("search", state.search);
-    if (state.statusFilter && state.statusFilter !== "all") query.set("status", state.statusFilter);
-    if (state.searchTypeFilter && state.searchTypeFilter !== "all") query.set("searchType", state.searchTypeFilter);
-    if (state.activeTab && state.activeTab !== "all") query.set("tab", state.activeTab);
-    if (state.sortBy && state.sortBy !== "createdAt") query.set("sortBy", state.sortBy);
+    if (state.statusFilter && state.statusFilter !== "all" && VALID_STATUSES.includes(state.statusFilter as any)) {
+      query.set("status", state.statusFilter);
+    }
+    if (state.searchTypeFilter && state.searchTypeFilter !== "all" && VALID_SEARCH_TYPES.includes(state.searchTypeFilter as any)) {
+      query.set("searchType", state.searchTypeFilter);
+    }
+    if (state.activeTab && state.activeTab !== "all" && VALID_TABS.includes(state.activeTab as any)) {
+      query.set("tab", state.activeTab);
+    }
+    if (state.sortBy && state.sortBy !== "createdAt" && VALID_SORT_COLS.includes(state.sortBy as any)) {
+      query.set("sortBy", state.sortBy);
+    }
     if (state.sortOrder && state.sortOrder !== "desc") query.set("sortOrder", state.sortOrder);
     if (state.page && state.page > 1) query.set("page", String(state.page));
     if (state.pageSize && state.pageSize !== 25) query.set("limit", String(state.pageSize));
@@ -232,8 +284,11 @@ export default function DashboardPage() {
     setPage(1);
     try {
       sessionStorage.removeItem("dashboard_filters");
+      localStorage.removeItem("dashboard_filters");
       window.history.replaceState(null, "", window.location.pathname);
-    } catch {}
+    } catch (e) {
+      console.error("Error clearing dashboard filter storage:", e);
+    }
   }, []);
 
   // Initial load on mount and when filters/pagination change

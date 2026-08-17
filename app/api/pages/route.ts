@@ -33,11 +33,13 @@ export async function GET(request: Request) {
       );
     }
 
-    if (statusFilter && statusFilter !== "all") {
+    const VALID_STATUSES = ["success", "pending", "scanning", "failed", "unclear"];
+    if (statusFilter && statusFilter !== "all" && VALID_STATUSES.includes(statusFilter)) {
       conditions.push(eq(trackedPages.status, statusFilter));
     }
 
-    if (searchTypeFilter && searchTypeFilter !== "all") {
+    const VALID_SEARCH_TYPES = ["page", "keyword_exact_phrase", "keyword_unordered"];
+    if (searchTypeFilter && searchTypeFilter !== "all" && VALID_SEARCH_TYPES.includes(searchTypeFilter)) {
       conditions.push(eq(trackedPages.searchType, searchTypeFilter));
     }
 

@@ -3,6 +3,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { Ad, AdSpyStats, AdFilterParams, PaginationMeta, BrandOption } from "@/types";
 
+const VALID_SPY_STATUSES = ["all", "active", "inactive", "archived", "unknown"] as const;
+const VALID_SPY_MEDIA = ["all", "video", "image", "carousel"] as const;
+const VALID_SPY_SORTS = ["started_running_on", "duplication_count", "first_seen", "last_seen", "page_name"] as const;
+
 function getInitialSpyParams(initialParams?: AdFilterParams): AdFilterParams {
   const defaults: AdFilterParams = {
     page: 1,
@@ -32,6 +36,19 @@ function getInitialSpyParams(initialParams?: AdFilterParams): AdFilterParams {
       } catch {}
     }
 
+    if (saved.status && !VALID_SPY_STATUSES.includes(saved.status as any)) {
+      saved.status = "all";
+    }
+    if (saved.mediaType && !VALID_SPY_MEDIA.includes(saved.mediaType as any)) {
+      saved.mediaType = "all";
+    }
+    if (saved.sortBy && !VALID_SPY_SORTS.includes(saved.sortBy as any)) {
+      saved.sortBy = "started_running_on";
+    }
+    if (saved.sortOrder && saved.sortOrder !== "asc" && saved.sortOrder !== "desc") {
+      saved.sortOrder = "desc";
+    }
+
     // Check dedicated brand exclusions storage for robust cross-tab persistence
     const savedExcluded = localStorage.getItem("spy_excluded_brands");
     if (savedExcluded) {
@@ -54,14 +71,26 @@ function getInitialSpyParams(initialParams?: AdFilterParams): AdFilterParams {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has("search")) state.search = urlParams.get("search") || "";
     if (urlParams.has("smartPreset")) state.smartPreset = urlParams.get("smartPreset") || undefined;
-    if (urlParams.has("mediaType")) state.mediaType = (urlParams.get("mediaType") as any) || "all";
-    if (urlParams.has("status")) state.status = (urlParams.get("status") as any) || "all";
+    if (urlParams.has("mediaType")) {
+      const mt = urlParams.get("mediaType");
+      state.mediaType = mt && VALID_SPY_MEDIA.includes(mt as any) ? (mt as any) : "all";
+    }
+    if (urlParams.has("status")) {
+      const s = urlParams.get("status");
+      state.status = s && VALID_SPY_STATUSES.includes(s as any) ? (s as any) : "all";
+    }
     if (urlParams.has("ctaText")) state.ctaText = urlParams.get("ctaText") || undefined;
     if (urlParams.has("minDaysRunning")) state.minDaysRunning = Number(urlParams.get("minDaysRunning")) || 0;
     if (urlParams.has("minDuplications")) state.minDuplications = Number(urlParams.get("minDuplications")) || 1;
     if (urlParams.has("isWatchlisted")) state.isWatchlisted = urlParams.get("isWatchlisted") === "true";
-    if (urlParams.has("sortBy")) state.sortBy = (urlParams.get("sortBy") as any) || "started_running_on";
-    if (urlParams.has("sortOrder")) state.sortOrder = (urlParams.get("sortOrder") as any) || "desc";
+    if (urlParams.has("sortBy")) {
+      const sb = urlParams.get("sortBy");
+      state.sortBy = sb && VALID_SPY_SORTS.includes(sb as any) ? (sb as any) : "started_running_on";
+    }
+    if (urlParams.has("sortOrder")) {
+      const so = urlParams.get("sortOrder");
+      state.sortOrder = so === "asc" ? "asc" : "desc";
+    }
     if (urlParams.has("dateFrom")) state.dateFrom = urlParams.get("dateFrom") || undefined;
     if (urlParams.has("dateTo")) state.dateTo = urlParams.get("dateTo") || undefined;
     if (urlParams.has("excludePageIds")) {
@@ -71,7 +100,7 @@ function getInitialSpyParams(initialParams?: AdFilterParams): AdFilterParams {
         .map((s) => s.trim())
         .filter(Boolean);
     }
-    if (urlParams.has("page")) state.page = Number(urlParams.get("page")) || 1;
+    if (urlParams.has("page")) state.page = Math.max(1, Number(urlParams.get("page")) || 1);
 
     return state;
   } catch (e) {

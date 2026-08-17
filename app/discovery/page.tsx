@@ -107,13 +107,16 @@ function getRunKeywordDisplay(run: DiscoveryRun): string {
   return q;
 }
 
+const VALID_DISCOVERY_STATUSES = ["all", "discovered", "verified", "verifying", "imported", "ignored"] as const;
+const VALID_DISCOVERY_MEDIA = ["all", "video", "image"] as const;
+
 function getInitialDiscoveryState() {
   const defaults = {
     selectedRunId: null as string | null,
     country: "TN",
-    mediaType: "video",
+    mediaType: "video" as (typeof VALID_DISCOVERY_MEDIA)[number],
     searchFilter: "",
-    statusFilter: "all" as "all" | "discovered" | "verified" | "verifying" | "imported" | "ignored",
+    statusFilter: "all" as (typeof VALID_DISCOVERY_STATUSES)[number],
   };
 
   if (typeof window === "undefined") return defaults;
@@ -131,6 +134,13 @@ function getInitialDiscoveryState() {
       } catch {}
     }
 
+    if (saved.statusFilter && !VALID_DISCOVERY_STATUSES.includes(saved.statusFilter as any)) {
+      saved.statusFilter = "all";
+    }
+    if (saved.mediaType && !VALID_DISCOVERY_MEDIA.includes(saved.mediaType as any)) {
+      saved.mediaType = "video";
+    }
+
     const state = {
       ...defaults,
       ...saved,
@@ -140,9 +150,15 @@ function getInitialDiscoveryState() {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has("runId")) state.selectedRunId = urlParams.get("runId") || null;
     if (urlParams.has("country")) state.country = urlParams.get("country") || "TN";
-    if (urlParams.has("mediaType")) state.mediaType = urlParams.get("mediaType") || "video";
+    if (urlParams.has("mediaType")) {
+      const mt = urlParams.get("mediaType");
+      state.mediaType = mt && VALID_DISCOVERY_MEDIA.includes(mt as any) ? (mt as any) : "video";
+    }
     if (urlParams.has("search")) state.searchFilter = urlParams.get("search") || "";
-    if (urlParams.has("status")) state.statusFilter = (urlParams.get("status") as any) || "all";
+    if (urlParams.has("status")) {
+      const s = urlParams.get("status");
+      state.statusFilter = s && VALID_DISCOVERY_STATUSES.includes(s as any) ? (s as any) : "all";
+    }
 
     return state;
   } catch (e) {
