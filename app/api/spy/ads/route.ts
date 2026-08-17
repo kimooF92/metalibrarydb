@@ -74,15 +74,26 @@ export async function GET(req: NextRequest) {
       conditions.push(eq(adObservations.isActive, true));
     }
 
+    const isUuid = (str: string) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
     if (trackedPageId) {
-      // trackedPageId can be the UUID PK of tracked_pages or pageId string — filter flexibly
-      conditions.push(
-        or(
-          eq(adObservations.trackedPageId, trackedPageId),
-          eq(trackedPages.pageId, trackedPageId),
-          eq(ads.pageId, trackedPageId)
-        )
-      );
+      if (isUuid(trackedPageId)) {
+        conditions.push(
+          or(
+            eq(adObservations.trackedPageId, trackedPageId),
+            eq(trackedPages.id, trackedPageId),
+            eq(ads.pageId, trackedPageId)
+          )
+        );
+      } else {
+        conditions.push(
+          or(
+            eq(trackedPages.pageId, trackedPageId),
+            eq(ads.pageId, trackedPageId)
+          )
+        );
+      }
     }
 
     if (isWatchlisted && smartPreset !== "watchlist") {
@@ -90,12 +101,23 @@ export async function GET(req: NextRequest) {
     }
 
     if (excludePageIds.length > 0) {
-      conditions.push(
-        and(
-          not(inArray(ads.pageId, excludePageIds)),
-          not(inArray(adObservations.trackedPageId, excludePageIds))
-        )
-      );
+      const uuidExcludes = excludePageIds.filter((id) => isUuid(id));
+      const textExcludes = excludePageIds.filter((id) => !isUuid(id));
+
+      if (textExcludes.length > 0) {
+        conditions.push(not(inArray(ads.pageId, textExcludes)));
+        conditions.push(
+          or(
+            sql`${trackedPages.pageId} IS NULL`,
+            not(inArray(trackedPages.pageId, textExcludes))
+          )
+        );
+      }
+
+      if (uuidExcludes.length > 0) {
+        conditions.push(not(inArray(adObservations.trackedPageId, uuidExcludes)));
+        conditions.push(not(inArray(trackedPages.id, uuidExcludes)));
+      }
     }
 
     if (ctaText && ctaText !== "all" && smartPreset !== "ecom_sales") {
