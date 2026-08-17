@@ -80,6 +80,13 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
     setIsRefreshingMedia(true);
     try {
       const res = await fetch(`/api/spy/ads/${ad.id}/refresh`, { method: "POST" });
+      const contentType = res.headers.get("content-type") || "";
+
+      if (!contentType.includes("application/json")) {
+        alert("Server temporary error (" + res.status + "). Click 'Watch on Meta Ad Library' to view.");
+        return;
+      }
+
       const data = await res.json();
       if (data.success && data.ad) {
         setVideoError(false);
