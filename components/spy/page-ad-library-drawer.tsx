@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAdFeed } from "@/hooks/use-spy";
 import { AdCard } from "./ad-card";
-import { X, RefreshCw, Eye, Info, Layers } from "lucide-react";
+import { X, RefreshCw, Eye, Info, Layers, Sparkles, CheckCircle2 } from "lucide-react";
 
 interface PageAdLibraryDrawerProps {
   isOpen: boolean;
@@ -21,6 +21,8 @@ export function PageAdLibraryDrawer({
   currentResults,
 }: PageAdLibraryDrawerProps) {
   const [activeTab, setActiveTab] = useState<"active" | "archived" | "all">("active");
+  const [isBulkRefreshing, setIsBulkRefreshing] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<{ text: string; type: "info" | "success" } | null>(null);
 
   const { ads, isLoading, error, refetch } = useAdFeed({
     trackedPageId: trackedPageId || undefined,
@@ -32,6 +34,36 @@ export function PageAdLibraryDrawer({
   if (!isOpen || !trackedPageId) return null;
 
   const totalCopies = ads.reduce((acc, ad) => acc + (ad.duplicationCount || 1), 0);
+
+  const handleBulkRefreshMedia = async () => {
+    if (!trackedPageId || isBulkRefreshing) return;
+    setIsBulkRefreshing(true);
+    setStatusMessage({ text: "Scraping & refreshing fresh brand creatives via Apify Cloud...", type: "info" });
+    try {
+      const res = await fetch("/api/spy/ads/bulk-refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackedPageId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStatusMessage({
+          text: data.message || `Successfully refreshed brand ads!`,
+          type: "success",
+        });
+        refetch();
+        setTimeout(() => setStatusMessage(null), 6000);
+      } else {
+        alert(data.message || "Could not refresh ads at this time.");
+        setStatusMessage(null);
+      }
+    } catch (err: any) {
+      alert("Failed to refresh brand ads: " + (err.message || "Network error"));
+      setStatusMessage(null);
+    } finally {
+      setIsBulkRefreshing(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm transition-opacity">
@@ -49,12 +81,23 @@ export function PageAdLibraryDrawer({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Bulk Refresh Brand Media Button */}
+            <button
+              onClick={handleBulkRefreshMedia}
+              disabled={isBulkRefreshing}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white transition-all cursor-pointer shadow-sm shadow-indigo-600/20"
+              title="Scrape and refresh all media links for this brand via Apify cloud"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isBulkRefreshing ? "animate-spin" : ""}`} />
+              <span>{isBulkRefreshing ? "Refreshing..." : "Refresh Brand Media"}</span>
+            </button>
+
             <button
               onClick={() => refetch()}
               className="p-2 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
-              title="Refresh Ads"
+              title="Reload Feed"
             >
-              <RefreshCw className="w-4 h-4" />
+              <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin text-indigo-400" : ""}`} />
             </button>
             <button
               onClick={onClose}
@@ -64,6 +107,24 @@ export function PageAdLibraryDrawer({
             </button>
           </div>
         </div>
+
+        {/* Status Toast Banner if bulk refresh is running or just completed */}
+        {statusMessage && (
+          <div
+            className={`px-6 py-2.5 text-xs flex items-center gap-2 border-b ${
+              statusMessage.type === "success"
+                ? "bg-emerald-950/60 border-emerald-800/80 text-emerald-300"
+                : "bg-indigo-950/60 border-indigo-800/80 text-indigo-300 animate-pulse"
+            }`}
+          >
+            {statusMessage.type === "success" ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            ) : (
+              <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
+            )}
+            <span>{statusMessage.text}</span>
+          </div>
+        )}
 
         {/* Tab Selection */}
         <div className="flex items-center gap-2 px-6 py-2.5 bg-zinc-900/80 border-b border-zinc-800 text-xs">
@@ -139,7 +200,7 @@ export function PageAdLibraryDrawer({
               </span>
               <p className="text-xs text-zinc-500 max-w-sm mb-4">
                 {currentResults ? `Meta lists ${currentResults} active ads for this page. ` : ""}
-                Click &quot;Extract Ad Spy&quot; in the main table to queue a Playwright extraction run for this brand.
+                Click &quot;Refresh Brand Media&quot; above to scrape all ads for this brand with Apify in the cloud.
               </p>
             </div>
           ) : (
