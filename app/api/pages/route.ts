@@ -46,6 +46,8 @@ export async function GET(request: Request) {
       conditions.push(eq(trackedPages.isWatchlisted, true));
     } else if (tab === "high_volume") {
       conditions.push(gte(trackedPages.currentResults, 50));
+    } else if (tab === "attention") {
+      conditions.push(or(eq(trackedPages.currentResults, 0), inArray(trackedPages.status, ["unclear", "failed"])));
     } else if (tab === "zero_ads") {
       conditions.push(eq(trackedPages.currentResults, 0));
     } else if (tab === "needs_review") {

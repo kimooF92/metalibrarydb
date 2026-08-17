@@ -180,16 +180,16 @@ export default function AdSpyPage() {
         <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-2.5 sm:p-3 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Media Breakdown
+              Media Formats
             </span>
             <Video className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
           </div>
-          <div className="flex items-center gap-2.5 mt-1 text-xs font-semibold">
-            <span className="inline-flex items-center gap-1 text-slate-700 dark:text-slate-300">
-              <ImageIcon className="w-3 h-3 text-indigo-500 dark:text-indigo-400" /> {stats.mediaDistribution.image}
+          <div className="flex items-center gap-1.5 mt-1.5 text-xs font-semibold flex-wrap">
+            <span className="inline-flex items-center gap-1 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-800 text-[11px]">
+              <ImageIcon className="w-3 h-3 text-indigo-500 dark:text-indigo-400" /> {stats.mediaDistribution.image} img
             </span>
-            <span className="inline-flex items-center gap-1 text-slate-700 dark:text-slate-300">
-              <Video className="w-3 h-3 text-purple-500 dark:text-purple-400" /> {stats.mediaDistribution.video}
+            <span className="inline-flex items-center gap-1 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-800 text-[11px]">
+              <Video className="w-3 h-3 text-purple-500 dark:text-purple-400" /> {stats.mediaDistribution.video} vid
             </span>
           </div>
         </div>

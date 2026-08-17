@@ -47,7 +47,7 @@ function MiniBar({ value, max, colorClass = "bg-indigo-500" }: { value: number; 
 function getInitialAnalyticsState() {
   const defaults = {
     searchQuery: "",
-    activeTab: "scaling" as "scaling" | "descaling" | "top" | "watchlist" | "zero",
+    activeTab: "scaling" as "scaling" | "descaling" | "top" | "watchlist" | "attention" | "zero",
     tablePage: 1,
   };
 
@@ -76,7 +76,7 @@ function getInitialAnalyticsState() {
     if (urlParams.has("search")) state.searchQuery = urlParams.get("search") || "";
     if (urlParams.has("tab")) {
       const tab = urlParams.get("tab");
-      const validTabs = ["scaling", "descaling", "top", "watchlist", "zero"];
+      const validTabs = ["scaling", "descaling", "top", "watchlist", "attention", "zero"];
       if (validTabs.includes(tab || "")) state.activeTab = tab as any;
     }
     if (urlParams.has("page")) state.tablePage = Number(urlParams.get("page")) || 1;
@@ -121,7 +121,7 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [searchQuery, setSearchQuery] = useState(initialLoaded.searchQuery);
-  const [activeTab, setActiveTab] = useState<"scaling" | "descaling" | "top" | "watchlist" | "zero">(initialLoaded.activeTab);
+  const [activeTab, setActiveTab] = useState<"scaling" | "descaling" | "top" | "watchlist" | "attention" | "zero">(initialLoaded.activeTab);
   const [tablePage, setTablePage] = useState(initialLoaded.tablePage);
   const [pageSize, setPageSize] = useState(15);
   const [updatingWatchlistId, setUpdatingWatchlistId] = useState<string | null>(null);
@@ -310,8 +310,13 @@ export default function AnalyticsPage() {
       source = [...analytics.withResults].sort((a, b) => (b.currentResults ?? 0) - (a.currentResults ?? 0));
     } else if (activeTab === "watchlist") {
       source = analytics.watchlistedPages;
-    } else if (activeTab === "zero") {
-      source = analytics.zeroAds;
+    } else if (activeTab === "zero" || activeTab === "attention") {
+      const ids = new Set<string>();
+      source = [...analytics.zeroAds, ...analytics.failed, ...analytics.unclear].filter((p) => {
+        if (ids.has(p.id)) return false;
+        ids.add(p.id);
+        return true;
+      });
     }
 
     if (!searchQuery.trim()) return source;
@@ -672,15 +677,15 @@ export default function AnalyticsPage() {
                 </button>
 
                 <button
-                  onClick={() => { setActiveTab("zero"); setTablePage(1); }}
+                  onClick={() => { setActiveTab("attention"); setTablePage(1); }}
                   className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                    activeTab === "zero"
-                      ? "bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30"
+                    activeTab === "attention" || activeTab === "zero"
+                      ? "bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30"
                       : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 border border-transparent"
                   }`}
                 >
-                  <AlertCircle className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Zero Ads ({analytics.zeroAds.length})</span>
+                  <AlertCircle className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
+                  <span>Attention ({analytics.zeroAds.length + analytics.failed.length + analytics.unclear.length})</span>
                 </button>
               </div>
 

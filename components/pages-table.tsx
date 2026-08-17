@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { TrackedPage, DashboardStats } from "@/types";
 import { HistoryModal } from "./history-modal";
 import { DeleteConfirmModal } from "./delete-confirm-modal";
@@ -9,6 +9,7 @@ import { ScanRunnerModal } from "./scan-runner-modal";
 import {
   Search,
   Filter,
+  SlidersHorizontal,
   RefreshCw,
   History,
   RotateCcw,
@@ -194,6 +195,21 @@ export function PagesTable({
   };
 
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [showFilterPopover, setShowFilterPopover] = useState(false);
+  const filterPopoverRef = useRef<HTMLDivElement | null>(null);
+
+  // Close filter popover on click outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (filterPopoverRef.current && !filterPopoverRef.current.contains(e.target as Node)) {
+        setShowFilterPopover(false);
+      }
+    }
+    if (showFilterPopover) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [showFilterPopover]);
 
   useEffect(() => {
     setWatchlisted(Object.fromEntries(pages.map((p) => [p.id, p.isWatchlisted ?? false])));
@@ -444,11 +460,10 @@ export function PagesTable({
             { id: "all", label: "All Pages", icon: null },
             { id: "watchlist", label: "Watchlist", icon: Star, iconColor: "text-yellow-500 dark:text-yellow-400 fill-yellow-500/10 dark:fill-yellow-400/20" },
             { id: "high_volume", label: "High Volume", icon: Flame, iconColor: "text-amber-500 dark:text-amber-400 fill-amber-500/10 dark:fill-amber-400/20" },
-            { id: "zero_ads", label: "Zero Ads", icon: Minus, iconColor: "text-slate-500 dark:text-slate-400" },
-            { id: "needs_review", label: "Needs Review", icon: ShieldAlert, iconColor: "text-rose-500 dark:text-rose-400" },
+            { id: "attention", label: "Attention", icon: ShieldAlert, iconColor: "text-rose-500 dark:text-rose-400" },
           ].map((tab) => {
             const Icon = tab.icon;
-            const active = activeTab === tab.id;
+            const active = activeTab === tab.id || (tab.id === "attention" && (activeTab === "zero_ads" || activeTab === "needs_review"));
             return (
               <button
                 key={tab.id}
@@ -465,7 +480,7 @@ export function PagesTable({
           })}
         </div>
 
-        {/* Right Side: Search & Filter Dropdowns */}
+        {/* Right Side: Search & Filter Popover */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           {/* Global Search Bar */}
           <div className="relative w-full sm:w-56 md:w-64">
@@ -479,51 +494,98 @@ export function PagesTable({
             />
           </div>
 
-          {/* Status Filter */}
-          <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-950/80 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-[11px]">
-            <Filter className="w-3 h-3 text-slate-500 dark:text-slate-400" />
-            <select
-              value={statusFilter}
-              onChange={(e) => onStatusFilterChange(e.target.value)}
-              className="bg-transparent text-slate-800 dark:text-slate-200 font-medium focus:outline-none cursor-pointer"
+          {/* Consolidated ⚙ Filters Popover */}
+          <div className="relative" ref={filterPopoverRef}>
+            <button
+              type="button"
+              onClick={() => setShowFilterPopover((prev) => !prev)}
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                statusFilter !== "all" || searchTypeFilter !== "all"
+                  ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800 shadow-sm"
+                  : "bg-white dark:bg-slate-950/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
+              }`}
+              title="Table filters & options"
             >
-              <option value="all" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All Statuses</option>
-              <option value="success" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Success</option>
-              <option value="pending" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Pending</option>
-              <option value="scanning" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Scanning</option>
-              <option value="failed" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Failed</option>
-              <option value="unclear" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Unclear</option>
-            </select>
+              <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Filters</span>
+              {(statusFilter !== "all" || searchTypeFilter !== "all") && (
+                <span className="bg-indigo-600 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                  {(statusFilter !== "all" ? 1 : 0) + (searchTypeFilter !== "all" ? 1 : 0)}
+                </span>
+              )}
+              {showFilterPopover ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
+            </button>
+
+            {showFilterPopover && (
+              <div className="absolute right-0 top-full mt-2 w-72 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 p-3.5 z-50 animate-in fade-in zoom-in-95 duration-100 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800 text-xs font-bold text-slate-900 dark:text-white">
+                  <div className="flex items-center gap-1.5">
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>Table Filters</span>
+                  </div>
+                  {(statusFilter !== "all" || searchTypeFilter !== "all") && (
+                    <button
+                      onClick={() => {
+                        onStatusFilterChange("all");
+                        onSearchTypeFilterChange("all");
+                      }}
+                      className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-semibold cursor-pointer"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+
+                {/* Status Filter */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Scan Status</label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => onStatusFilterChange(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs font-medium rounded-lg px-2.5 py-1.5 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="success">Success</option>
+                    <option value="pending">Pending</option>
+                    <option value="scanning">Scanning</option>
+                    <option value="failed">Failed</option>
+                    <option value="unclear">Unclear</option>
+                  </select>
+                </div>
+
+                {/* Search Type Filter */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Search Type</label>
+                  <select
+                    value={searchTypeFilter}
+                    onChange={(e) => onSearchTypeFilterChange(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs font-medium rounded-lg px-2.5 py-1.5 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                  >
+                    <option value="all">All Types</option>
+                    <option value="page">Page ID</option>
+                    <option value="keyword_exact_phrase">Exact Phrase</option>
+                    <option value="keyword_unordered">Unordered Keyword</option>
+                  </select>
+                </div>
+
+                {/* Rows Limit Select Menu */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Rows per Page</label>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => onPageSizeChange(Number(e.target.value))}
+                    className="w-full bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs font-medium rounded-lg px-2.5 py-1.5 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                    aria-label="Select rows per page"
+                  >
+                    <option value={25}>25 rows</option>
+                    <option value={50}>50 rows</option>
+                    <option value={100}>100 rows</option>
+                  </select>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Search Type Filter */}
-          <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-950/80 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-[11px]">
-            <select
-              value={searchTypeFilter}
-              onChange={(e) => onSearchTypeFilterChange(e.target.value)}
-              className="bg-transparent text-slate-800 dark:text-slate-200 font-medium focus:outline-none cursor-pointer"
-            >
-              <option value="all" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All Types</option>
-              <option value="page" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Page ID</option>
-              <option value="keyword_exact_phrase" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Exact Phrase</option>
-              <option value="keyword_unordered" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Unordered Keyword</option>
-            </select>
-          </div>
-
-          {/* Rows Limit Select Menu */}
-          <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-950/80 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-[11px]">
-            <span className="text-slate-500 dark:text-slate-400 font-medium">Rows:</span>
-            <select
-              value={pageSize}
-              onChange={(e) => onPageSizeChange(Number(e.target.value))}
-              className="bg-transparent text-slate-800 dark:text-slate-200 font-medium focus:outline-none cursor-pointer"
-              aria-label="Select rows per page"
-            >
-              <option value={25} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">25 rows</option>
-              <option value={50} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">50 rows</option>
-              <option value={100} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">100 rows</option>
-            </select>
-          </div>
           {/* Reset Filters Toolbar Button */}
           {(search !== "" || statusFilter !== "all" || searchTypeFilter !== "all" || activeTab !== "all" || page > 1) && onResetFilters && (
             <button

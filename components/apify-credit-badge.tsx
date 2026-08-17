@@ -37,7 +37,10 @@ export function ApifyCreditBadge() {
   const percent = balance ? balance.usagePercent : 0;
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 dark:border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs font-medium shrink-0">
+    <div
+      title={`Apify Monthly Credit Balance: $${remaining} remaining out of $${max} limit (${percent}% used). Used for Meta Ad Library scraper scans.`}
+      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 dark:border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs font-medium shrink-0 cursor-help"
+    >
       <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500/20 shrink-0" />
       
       {isLoading ? (
