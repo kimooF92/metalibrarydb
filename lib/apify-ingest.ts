@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { ads, adObservations, creativeScans, trackedPages } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
+import { uploadMediaFromUrlToB2, isB2Configured } from "@/lib/b2-storage";
 
 /**
  * Robustly extracts adArchiveId from multiple candidate fields & URL parameters.
@@ -215,8 +216,30 @@ export async function ingestApifyDatasetItems(
       null;
 
     const startedRunningOn = parseAdStartDate(item);
-    const { mediaType, mediaUrls, thumbnailUrl } = extractMedia(item);
+    const { mediaType, mediaUrls: rawMediaUrls, thumbnailUrl: rawThumbnailUrl } = extractMedia(item);
     const duplicationCount = Math.max(1, Number(item.duplicationCount || item.collatedCount || 1));
+
+    // Best-effort Backblaze B2 media backup
+    let mediaUrls = rawMediaUrls;
+    let thumbnailUrl = rawThumbnailUrl;
+
+    if (isB2Configured()) {
+      if (mediaType === "video" && rawMediaUrls.length > 0) {
+        const b2VideoUrls = await Promise.all(
+          rawMediaUrls.map(async (url, idx) => {
+            if (url.includes("backblazeb2.com") || url.includes("/api/spy/b2-media")) return url;
+            const b2Url = await uploadMediaFromUrlToB2(url, "videos", `${adArchiveId}_${idx}`);
+            return b2Url || url;
+          })
+        );
+        mediaUrls = b2VideoUrls;
+      }
+
+      if (rawThumbnailUrl && !rawThumbnailUrl.includes("backblazeb2.com") && !rawThumbnailUrl.includes("/api/spy/b2-media")) {
+        const b2Thumb = await uploadMediaFromUrlToB2(rawThumbnailUrl, "thumbnails", adArchiveId);
+        if (b2Thumb) thumbnailUrl = b2Thumb;
+      }
+    }
 
     // 1. Strict Ad De-duplication: Upsert canonical ad record by adArchiveId
     const [upsertedAd] = await db
