@@ -82,10 +82,14 @@ export function AdCard({ ad, onArchiveToggle }: AdCardProps) {
       const res = await fetch(`/api/spy/ads/${ad.id}/refresh`, { method: "POST" });
       const data = await res.json();
       if (data.success && data.ad) {
+        setVideoError(false);
+        setImgError(false);
         window.location.reload();
+      } else {
+        alert(data.message || "Could not extract fresh media right now. Use 'Watch on Meta Ad Library' link.");
       }
-    } catch {
-      // ignore
+    } catch (err: any) {
+      alert("Failed to refresh media: " + (err.message || "Network error"));
     } finally {
       setIsRefreshingMedia(false);
     }
