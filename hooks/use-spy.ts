@@ -13,58 +13,67 @@ function getInitialSpyParams(initialParams?: AdFilterParams): AdFilterParams {
     sortBy: "started_running_on",
     sortOrder: "desc",
     enabled: true,
+    excludePageIds: [],
     ...initialParams,
   };
 
   if (typeof window === "undefined") return defaults;
 
   try {
+    // 1. Load saved state from localStorage / sessionStorage
+    let saved: Partial<AdFilterParams> = {};
+    const rawSaved =
+      localStorage.getItem("spy_feed_filters") ||
+      sessionStorage.getItem("spy_feed_filters");
+
+    if (rawSaved) {
+      try {
+        saved = JSON.parse(rawSaved);
+      } catch {}
+    }
+
+    // Check dedicated brand exclusions storage for robust cross-tab persistence
+    const savedExcluded = localStorage.getItem("spy_excluded_brands");
+    if (savedExcluded) {
+      try {
+        const parsed = JSON.parse(savedExcluded);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          saved.excludePageIds = parsed;
+        }
+      } catch {}
+    }
+
+    // Merge defaults + saved
+    const state: AdFilterParams = {
+      ...defaults,
+      ...saved,
+      ...initialParams,
+    };
+
+    // 2. Overlay individual URL query parameters if present
     const urlParams = new URLSearchParams(window.location.search);
-    const hasAnyUrlParam =
-      urlParams.has("search") ||
-      urlParams.has("smartPreset") ||
-      urlParams.has("mediaType") ||
-      urlParams.has("status") ||
-      urlParams.has("ctaText") ||
-      urlParams.has("minDaysRunning") ||
-      urlParams.has("minDuplications") ||
-      urlParams.has("isWatchlisted") ||
-      urlParams.has("sortBy") ||
-      urlParams.has("sortOrder") ||
-      urlParams.has("dateFrom") ||
-      urlParams.has("dateTo") ||
-      urlParams.has("excludePageIds") ||
-      urlParams.has("page");
-
-    if (hasAnyUrlParam) {
-      return {
-        ...defaults,
-        search: urlParams.get("search") || defaults.search || "",
-        smartPreset: urlParams.get("smartPreset") || defaults.smartPreset,
-        mediaType: (urlParams.get("mediaType") as any) || defaults.mediaType,
-        status: (urlParams.get("status") as any) || defaults.status,
-        ctaText: urlParams.get("ctaText") || defaults.ctaText,
-        minDaysRunning: urlParams.has("minDaysRunning") ? Number(urlParams.get("minDaysRunning")) : defaults.minDaysRunning,
-        minDuplications: urlParams.has("minDuplications") ? Number(urlParams.get("minDuplications")) : defaults.minDuplications,
-        isWatchlisted: urlParams.get("isWatchlisted") === "true",
-        sortBy: (urlParams.get("sortBy") as any) || defaults.sortBy,
-        sortOrder: (urlParams.get("sortOrder") as any) || defaults.sortOrder,
-        dateFrom: urlParams.get("dateFrom") || defaults.dateFrom,
-        dateTo: urlParams.get("dateTo") || defaults.dateTo,
-        excludePageIds: urlParams.get("excludePageIds") ? urlParams.get("excludePageIds")!.split(",").filter(Boolean) : defaults.excludePageIds,
-        page: urlParams.has("page") ? Number(urlParams.get("page")) : defaults.page,
-      };
+    if (urlParams.has("search")) state.search = urlParams.get("search") || "";
+    if (urlParams.has("smartPreset")) state.smartPreset = urlParams.get("smartPreset") || undefined;
+    if (urlParams.has("mediaType")) state.mediaType = (urlParams.get("mediaType") as any) || "all";
+    if (urlParams.has("status")) state.status = (urlParams.get("status") as any) || "all";
+    if (urlParams.has("ctaText")) state.ctaText = urlParams.get("ctaText") || undefined;
+    if (urlParams.has("minDaysRunning")) state.minDaysRunning = Number(urlParams.get("minDaysRunning")) || 0;
+    if (urlParams.has("minDuplications")) state.minDuplications = Number(urlParams.get("minDuplications")) || 1;
+    if (urlParams.has("isWatchlisted")) state.isWatchlisted = urlParams.get("isWatchlisted") === "true";
+    if (urlParams.has("sortBy")) state.sortBy = (urlParams.get("sortBy") as any) || "started_running_on";
+    if (urlParams.has("sortOrder")) state.sortOrder = (urlParams.get("sortOrder") as any) || "desc";
+    if (urlParams.has("dateFrom")) state.dateFrom = urlParams.get("dateFrom") || undefined;
+    if (urlParams.has("dateTo")) state.dateTo = urlParams.get("dateTo") || undefined;
+    if (urlParams.has("excludePageIds")) {
+      state.excludePageIds = urlParams
+        .get("excludePageIds")!
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
     }
+    if (urlParams.has("page")) state.page = Number(urlParams.get("page")) || 1;
 
-    const saved = sessionStorage.getItem("spy_feed_filters");
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return {
-        ...defaults,
-        ...parsed,
-        page: parsed.page || defaults.page,
-      };
-    }
+    return state;
   } catch (e) {
     console.error("Error reading initial spy params:", e);
   }
@@ -95,7 +104,7 @@ function syncSpyParamsToUrlAndStorage(params: AdFilterParams) {
     const newUrl = queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname;
     window.history.replaceState(null, "", newUrl);
 
-    sessionStorage.setItem("spy_feed_filters", JSON.stringify({
+    const payload = JSON.stringify({
       search: params.search,
       smartPreset: params.smartPreset,
       mediaType: params.mediaType,
@@ -106,11 +115,17 @@ function syncSpyParamsToUrlAndStorage(params: AdFilterParams) {
       isWatchlisted: params.isWatchlisted,
       dateFrom: params.dateFrom,
       dateTo: params.dateTo,
-      excludePageIds: params.excludePageIds,
+      excludePageIds: params.excludePageIds || [],
       sortBy: params.sortBy,
       sortOrder: params.sortOrder,
       page: params.page,
-    }));
+    });
+
+    sessionStorage.setItem("spy_feed_filters", payload);
+    localStorage.setItem("spy_feed_filters", payload);
+
+    // Save dedicated excluded brands list into localStorage
+    localStorage.setItem("spy_excluded_brands", JSON.stringify(params.excludePageIds || []));
   } catch (e) {
     console.error("Error syncing spy params:", e);
   }

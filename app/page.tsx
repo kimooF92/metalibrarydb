@@ -22,38 +22,35 @@ function getInitialDashboardState() {
   if (typeof window === "undefined") return defaults;
 
   try {
+    // 1. Load saved state from localStorage or sessionStorage
+    let saved: Partial<typeof defaults> = {};
+    const rawSaved =
+      localStorage.getItem("dashboard_filters") ||
+      sessionStorage.getItem("dashboard_filters");
+
+    if (rawSaved) {
+      try {
+        saved = JSON.parse(rawSaved);
+      } catch {}
+    }
+
+    const state = {
+      ...defaults,
+      ...saved,
+    };
+
+    // 2. Overlay individual URL query parameters if present
     const urlParams = new URLSearchParams(window.location.search);
-    const hasUrlParams =
-      urlParams.has("search") ||
-      urlParams.has("status") ||
-      urlParams.has("searchType") ||
-      urlParams.has("tab") ||
-      urlParams.has("sortBy") ||
-      urlParams.has("sortOrder") ||
-      urlParams.has("page") ||
-      urlParams.has("limit");
+    if (urlParams.has("search")) state.search = urlParams.get("search") || "";
+    if (urlParams.has("status")) state.statusFilter = urlParams.get("status") || "all";
+    if (urlParams.has("searchType")) state.searchTypeFilter = urlParams.get("searchType") || "all";
+    if (urlParams.has("tab")) state.activeTab = urlParams.get("tab") || "all";
+    if (urlParams.has("sortBy")) state.sortBy = urlParams.get("sortBy") || "createdAt";
+    if (urlParams.has("sortOrder")) state.sortOrder = (urlParams.get("sortOrder") as "asc" | "desc") || "desc";
+    if (urlParams.has("page")) state.page = Number(urlParams.get("page")) || 1;
+    if (urlParams.has("limit")) state.pageSize = Number(urlParams.get("limit")) || 25;
 
-    if (hasUrlParams) {
-      return {
-        search: urlParams.get("search") || "",
-        statusFilter: urlParams.get("status") || "all",
-        searchTypeFilter: urlParams.get("searchType") || "all",
-        activeTab: urlParams.get("tab") || "all",
-        sortBy: urlParams.get("sortBy") || "createdAt",
-        sortOrder: (urlParams.get("sortOrder") as "asc" | "desc") || "desc",
-        page: urlParams.has("page") ? Number(urlParams.get("page")) : 1,
-        pageSize: urlParams.has("limit") ? Number(urlParams.get("limit")) : 25,
-      };
-    }
-
-    const saved = sessionStorage.getItem("dashboard_filters");
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return {
-        ...defaults,
-        ...parsed,
-      };
-    }
+    return state;
   } catch (e) {
     console.error("Error reading dashboard params:", e);
   }
@@ -87,7 +84,9 @@ function syncDashboardStateToUrl(state: {
     const newUrl = queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname;
     window.history.replaceState(null, "", newUrl);
 
-    sessionStorage.setItem("dashboard_filters", JSON.stringify(state));
+    const payload = JSON.stringify(state);
+    sessionStorage.setItem("dashboard_filters", payload);
+    localStorage.setItem("dashboard_filters", payload);
   } catch (e) {
     console.error("Error syncing dashboard state:", e);
   }

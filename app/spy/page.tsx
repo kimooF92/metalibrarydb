@@ -38,6 +38,8 @@ export default function AdSpyPage() {
   const handleResetFilters = () => {
     try {
       sessionStorage.removeItem("spy_feed_filters");
+      localStorage.removeItem("spy_feed_filters");
+      localStorage.removeItem("spy_excluded_brands");
       if (typeof window !== "undefined") {
         window.history.replaceState(null, "", window.location.pathname);
       }

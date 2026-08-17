@@ -54,26 +54,34 @@ function getInitialAnalyticsState() {
   if (typeof window === "undefined") return defaults;
 
   try {
-    const urlParams = new URLSearchParams(window.location.search);
-    const hasParams = urlParams.has("tab") || urlParams.has("search") || urlParams.has("page");
-    if (hasParams) {
-      const tab = urlParams.get("tab");
-      const validTabs = ["scaling", "descaling", "top", "watchlist", "zero"];
-      return {
-        searchQuery: urlParams.get("search") || "",
-        activeTab: (validTabs.includes(tab || "") ? tab : "scaling") as any,
-        tablePage: urlParams.has("page") ? Number(urlParams.get("page")) : 1,
-      };
+    // 1. Load saved state from localStorage or sessionStorage
+    let saved: Partial<typeof defaults> = {};
+    const rawSaved =
+      localStorage.getItem("analytics_filters") ||
+      sessionStorage.getItem("analytics_filters");
+
+    if (rawSaved) {
+      try {
+        saved = JSON.parse(rawSaved);
+      } catch {}
     }
 
-    const saved = sessionStorage.getItem("analytics_filters");
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return {
-        ...defaults,
-        ...parsed,
-      };
+    const state = {
+      ...defaults,
+      ...saved,
+    };
+
+    // 2. Overlay individual URL query parameters if present
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has("search")) state.searchQuery = urlParams.get("search") || "";
+    if (urlParams.has("tab")) {
+      const tab = urlParams.get("tab");
+      const validTabs = ["scaling", "descaling", "top", "watchlist", "zero"];
+      if (validTabs.includes(tab || "")) state.activeTab = tab as any;
     }
+    if (urlParams.has("page")) state.tablePage = Number(urlParams.get("page")) || 1;
+
+    return state;
   } catch (e) {
     console.error("Error reading analytics params:", e);
   }
@@ -97,7 +105,9 @@ function syncAnalyticsStateToUrl(state: {
     const newUrl = queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname;
     window.history.replaceState(null, "", newUrl);
 
-    sessionStorage.setItem("analytics_filters", JSON.stringify(state));
+    const payload = JSON.stringify(state);
+    sessionStorage.setItem("analytics_filters", payload);
+    localStorage.setItem("analytics_filters", payload);
   } catch (e) {
     console.error("Error syncing analytics state:", e);
   }

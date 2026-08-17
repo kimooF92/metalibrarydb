@@ -119,26 +119,32 @@ function getInitialDiscoveryState() {
   if (typeof window === "undefined") return defaults;
 
   try {
-    const urlParams = new URLSearchParams(window.location.search);
-    const hasParams = urlParams.has("runId") || urlParams.has("country") || urlParams.has("mediaType") || urlParams.has("status") || urlParams.has("search");
-    if (hasParams) {
-      return {
-        selectedRunId: urlParams.get("runId") || null,
-        country: urlParams.get("country") || "TN",
-        mediaType: urlParams.get("mediaType") || "video",
-        searchFilter: urlParams.get("search") || "",
-        statusFilter: (urlParams.get("status") as any) || "all",
-      };
+    // 1. Load saved state from localStorage or sessionStorage
+    let saved: Partial<typeof defaults> = {};
+    const rawSaved =
+      localStorage.getItem("discovery_filters") ||
+      sessionStorage.getItem("discovery_filters");
+
+    if (rawSaved) {
+      try {
+        saved = JSON.parse(rawSaved);
+      } catch {}
     }
 
-    const saved = sessionStorage.getItem("discovery_filters");
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return {
-        ...defaults,
-        ...parsed,
-      };
-    }
+    const state = {
+      ...defaults,
+      ...saved,
+    };
+
+    // 2. Overlay individual URL query parameters if present
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has("runId")) state.selectedRunId = urlParams.get("runId") || null;
+    if (urlParams.has("country")) state.country = urlParams.get("country") || "TN";
+    if (urlParams.has("mediaType")) state.mediaType = urlParams.get("mediaType") || "video";
+    if (urlParams.has("search")) state.searchFilter = urlParams.get("search") || "";
+    if (urlParams.has("status")) state.statusFilter = (urlParams.get("status") as any) || "all";
+
+    return state;
   } catch (e) {
     console.error("Error reading discovery params:", e);
   }
@@ -166,7 +172,9 @@ function syncDiscoveryStateToUrl(state: {
     const newUrl = queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname;
     window.history.replaceState(null, "", newUrl);
 
-    sessionStorage.setItem("discovery_filters", JSON.stringify(state));
+    const payload = JSON.stringify(state);
+    sessionStorage.setItem("discovery_filters", payload);
+    localStorage.setItem("discovery_filters", payload);
   } catch (e) {
     console.error("Error syncing discovery state:", e);
   }
