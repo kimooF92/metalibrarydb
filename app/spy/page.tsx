@@ -6,13 +6,25 @@ import { AdCard } from "@/components/spy/ad-card";
 import { AdRow } from "@/components/spy/ad-row";
 import { SpyFilters } from "@/components/spy/spy-filters";
 import { ApifyCreditBadge } from "@/components/apify-credit-badge";
-import { Layers, Calendar, Video, Image as ImageIcon, RefreshCw, ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import { Layers, Calendar, Video, Image as ImageIcon, RefreshCw, Eye, ArrowUp } from "lucide-react";
 
 export default function AdSpyPage() {
   const { ads, pagination, isLoading, isFetchingMore, error, params, updateFilters, updateAdInFeed, refetch } = useAdFeed();
   const { stats } = useAdStats();
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // Scroll listener for back to top button
+  useEffect(() => {
+    const container = document.querySelector("main") || window;
+    const handleScroll = () => {
+      const scrollPos = window.scrollY || document.documentElement.scrollTop;
+      setShowBackToTop(scrollPos > 300);
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   // Load viewMode preference from localStorage on mount
   useEffect(() => {
@@ -128,51 +140,51 @@ export default function AdSpyPage() {
       </div>
 
       {/* Summary Metrics Banner */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3.5 shadow-sm">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-2.5 sm:p-3 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Total Captured
             </span>
-            <Layers className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
+            <Layers className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
           </div>
-          <p className="text-xl font-black text-slate-900 dark:text-slate-100 mt-1.5">
+          <p className="text-lg sm:text-xl font-black text-slate-900 dark:text-slate-100 mt-1">
             {stats.totalAdsCaptured}
           </p>
         </div>
 
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3.5 shadow-sm">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-2.5 sm:p-3 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Launched (7 Days)
             </span>
-            <Calendar className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
+            <Calendar className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
           </div>
-          <p className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1.5">
+          <p className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
             {stats.launchedLast7Days}
           </p>
         </div>
 
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3.5 shadow-sm">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-2.5 sm:p-3 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Scaled Ads (5+)
             </span>
-            <Layers className="w-4 h-4 text-amber-500 dark:text-amber-400" />
+            <Layers className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
           </div>
-          <p className="text-xl font-black text-amber-600 dark:text-amber-400 mt-1.5">
+          <p className="text-lg sm:text-xl font-black text-amber-600 dark:text-amber-400 mt-1">
             {stats.scaledAdsCount}
           </p>
         </div>
 
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3.5 shadow-sm">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-2.5 sm:p-3 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Media Breakdown
             </span>
-            <Video className="w-4 h-4 text-purple-500 dark:text-purple-400" />
+            <Video className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
           </div>
-          <div className="flex items-center gap-3 mt-2 text-xs font-semibold">
+          <div className="flex items-center gap-2.5 mt-1 text-xs font-semibold">
             <span className="inline-flex items-center gap-1 text-slate-700 dark:text-slate-300">
               <ImageIcon className="w-3 h-3 text-indigo-500 dark:text-indigo-400" /> {stats.mediaDistribution.image}
             </span>
@@ -256,33 +268,32 @@ export default function AdSpyPage() {
             </div>
           )}
 
-          {/* Pagination Controls / Summary Footer */}
-          {pagination.totalPages > 1 && (
-            <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800/60 pb-4">
-              <span className="text-xs text-slate-500 dark:text-slate-400">
-                Loaded <strong className="text-slate-900 dark:text-slate-100">{ads.length}</strong> of{" "}
-                <strong className="text-slate-900 dark:text-slate-100">{pagination.total}</strong> total ads (Page {pagination.page} of {pagination.totalPages})
-              </span>
+          {/* Clean Streamlined Feed Summary Footer */}
+          <div className="flex items-center justify-between pt-4 pb-8 border-t border-slate-200 dark:border-slate-800/60 text-xs text-slate-500 dark:text-slate-400">
+            <span>
+              Showing <strong className="text-slate-900 dark:text-slate-100">{ads.length}</strong> of{" "}
+              <strong className="text-slate-900 dark:text-slate-100">{pagination.total}</strong> total ads
+            </span>
 
-              <div className="flex items-center gap-2">
-                <button
-                  disabled={pagination.page <= 1 || isFetchingMore}
-                  onClick={() => updateFilters({ page: pagination.page - 1 })}
-                  className="flex items-center space-x-1 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 disabled:opacity-40 text-slate-700 dark:text-slate-300 transition-all cursor-pointer disabled:cursor-not-allowed"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" /> Previous
-                </button>
-                <button
-                  disabled={pagination.page >= pagination.totalPages || isFetchingMore}
-                  onClick={() => updateFilters({ page: pagination.page + 1 })}
-                  className="flex items-center space-x-1 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 disabled:opacity-40 text-slate-700 dark:text-slate-300 transition-all cursor-pointer disabled:cursor-not-allowed"
-                >
-                  Next <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          )}
+            {ads.length >= pagination.total && pagination.total > 0 && (
+              <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-900 px-2.5 py-0.5 rounded-full">
+                All captured ads loaded
+              </span>
+            )}
+          </div>
         </>
+      )}
+
+      {/* Floating Back-to-Top Button */}
+      {showBackToTop && (
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          aria-label="Back to top"
+          title="Scroll to top"
+          className="fixed bottom-6 right-6 z-40 p-2.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white shadow-xl shadow-indigo-600/30 transition-all hover:scale-110 active:scale-95 animate-in fade-in zoom-in-95 cursor-pointer"
+        >
+          <ArrowUp className="w-4 h-4" />
+        </button>
       )}
     </div>
   );

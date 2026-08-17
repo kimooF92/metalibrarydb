@@ -119,6 +119,7 @@ export default function AnalyticsPage() {
   const [pages, setPages] = useState<TrackedPage[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [searchQuery, setSearchQuery] = useState(initialLoaded.searchQuery);
   const [activeTab, setActiveTab] = useState<"scaling" | "descaling" | "top" | "watchlist" | "zero">(initialLoaded.activeTab);
   const [tablePage, setTablePage] = useState(initialLoaded.tablePage);
@@ -163,6 +164,7 @@ export default function AnalyticsPage() {
         const data = await statsRes.json();
         setStats(data);
       }
+      setLastRefreshed(new Date());
     } catch (err) {
       console.error("Failed to fetch analytics data", err);
     } finally {
@@ -329,28 +331,35 @@ export default function AnalyticsPage() {
     return filteredTablePages.slice(start, start + pageSize);
   }, [filteredTablePages, tablePage, pageSize]);
 
+  const scalingPct = pages.length > 0 ? (analytics.scalingPages.length / pages.length) * 100 : 0;
+  const descalingPct = pages.length > 0 ? (analytics.descalingPages.length / pages.length) * 100 : 0;
+  const stablePct = Math.max(0, 100 - scalingPct - descalingPct);
+
   return (
-    <div className="h-full overflow-y-auto space-y-6 pb-12 pr-1 text-slate-900 dark:text-slate-100">
-      {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-200 dark:border-slate-800/80">
-        <div>
+    <div className="h-full overflow-y-auto space-y-5 pb-12 pr-1 text-slate-900 dark:text-slate-100">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800/40">
+        <div className="flex items-center flex-wrap gap-2">
           <div className="flex items-center space-x-2">
-            <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-              Page Scaling & Velocity Analytics
+            <BarChart3 className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
+            <h1 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight">
+              Scaling & Velocity Analytics
             </h1>
-            <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-bold px-2.5 py-0.5 rounded-full border border-indigo-500/20">
-              Live Comparative Intelligence
-            </span>
           </div>
-          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-            Real-time breakdown of page scaling up, page descaling down, market net velocity, and active ad distribution across {pages.length} monitored pages.
-          </p>
+          <span className="text-[10px] bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full font-medium hidden md:inline-block">
+            {pages.length} monitored • {analytics.scalingPages.length} scaling • {analytics.descalingPages.length} descaling
+          </span>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-3 shrink-0">
+          {lastRefreshed && (
+            <span className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:inline-block">
+              Updated {lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
           <button
             onClick={fetchAll}
-            className="flex items-center space-x-2 text-xs font-semibold px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 shadow-sm transition-all cursor-pointer"
+            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-indigo-500 ${loading ? "animate-spin" : ""}`} />
             <span>Refresh Analytics</span>
@@ -365,14 +374,51 @@ export default function AnalyticsPage() {
         </div>
       ) : (
         <>
-          {/* Main Key Metrics Overview Row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3.5">
+          {/* Market Momentum Visual Proportion Bar */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3.5 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-semibold mb-2.5">
+              <span className="text-slate-700 dark:text-slate-300 font-bold flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-indigo-500" /> Market Momentum Distribution
+              </span>
+              <div className="flex items-center gap-3 text-[11px] flex-wrap">
+                <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" /> Scaling {scalingPct.toFixed(1)}% ({analytics.scalingPages.length})
+                </span>
+                <span className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
+                  <span className="w-2 h-2 rounded-full bg-slate-400 dark:bg-slate-600" /> Stable {stablePct.toFixed(1)}% ({analytics.stablePages.length})
+                </span>
+                <span className="flex items-center gap-1 text-rose-600 dark:text-rose-400">
+                  <span className="w-2 h-2 rounded-full bg-rose-500" /> Descaling {descalingPct.toFixed(1)}% ({analytics.descalingPages.length})
+                </span>
+              </div>
+            </div>
+            <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden flex">
+              <div
+                style={{ width: `${scalingPct}%` }}
+                className="bg-emerald-500 h-full transition-all duration-500"
+                title={`Scaling: ${analytics.scalingPages.length} pages (${scalingPct.toFixed(1)}%)`}
+              />
+              <div
+                style={{ width: `${stablePct}%` }}
+                className="bg-slate-300 dark:bg-slate-700 h-full transition-all duration-500"
+                title={`Stable: ${analytics.stablePages.length} pages (${stablePct.toFixed(1)}%)`}
+              />
+              <div
+                style={{ width: `${descalingPct}%` }}
+                className="bg-rose-500 h-full transition-all duration-500"
+                title={`Descaling: ${analytics.descalingPages.length} pages (${descalingPct.toFixed(1)}%)`}
+              />
+            </div>
+          </div>
+
+          {/* Consolidated 5 Key High-Signal Metrics */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             {/* 1. Pages Scaling */}
-            <div className="glass-card rounded-2xl p-4 flex flex-col justify-between border border-emerald-500/20 bg-emerald-500/5 transition-all hover:-translate-y-0.5">
+            <div className="glass-card rounded-xl p-3.5 flex flex-col justify-between border border-emerald-500/20 bg-emerald-500/5 transition-all hover:-translate-y-0.5 shadow-sm">
               <div>
-                <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center justify-between mb-1">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                    <TrendingUp className="w-3.5 h-3.5" /> Pages Scaling
+                    <TrendingUp className="w-3.5 h-3.5" /> Scaling Pages
                   </span>
                   <span className="text-[10px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold px-1.5 py-0.5 rounded">
                     +{analytics.totalAdsScaled} ads
@@ -382,17 +428,17 @@ export default function AnalyticsPage() {
                   {analytics.scalingPages.length}
                 </div>
               </div>
-              <div className="text-[11px] font-medium text-emerald-600/80 dark:text-emerald-400/80 mt-2 truncate">
+              <div className="text-[11px] font-medium text-emerald-600/80 dark:text-emerald-400/80 mt-1.5 truncate">
                 Avg: +{analytics.avgScalingDelta} ads/page
               </div>
             </div>
 
             {/* 2. Pages Descaling */}
-            <div className="glass-card rounded-2xl p-4 flex flex-col justify-between border border-rose-500/20 bg-rose-500/5 transition-all hover:-translate-y-0.5">
+            <div className="glass-card rounded-xl p-3.5 flex flex-col justify-between border border-rose-500/20 bg-rose-500/5 transition-all hover:-translate-y-0.5 shadow-sm">
               <div>
-                <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center justify-between mb-1">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1">
-                    <TrendingDown className="w-3.5 h-3.5" /> Pages Descaling
+                    <TrendingDown className="w-3.5 h-3.5" /> Descaling Pages
                   </span>
                   <span className="text-[10px] bg-rose-500/20 text-rose-700 dark:text-rose-300 font-bold px-1.5 py-0.5 rounded">
                     -{analytics.totalAdsDescaled} ads
@@ -402,15 +448,15 @@ export default function AnalyticsPage() {
                   {analytics.descalingPages.length}
                 </div>
               </div>
-              <div className="text-[11px] font-medium text-rose-600/80 dark:text-rose-400/80 mt-2 truncate">
+              <div className="text-[11px] font-medium text-rose-600/80 dark:text-rose-400/80 mt-1.5 truncate">
                 Avg: -{analytics.avgDescalingDelta} ads/page
               </div>
             </div>
 
-            {/* 3. Net Ad Delta Velocity */}
-            <div className="glass-card rounded-2xl p-4 flex flex-col justify-between border border-indigo-500/20 bg-indigo-500/5 transition-all hover:-translate-y-0.5">
+            {/* 3. Net Velocity */}
+            <div className="glass-card rounded-xl p-3.5 flex flex-col justify-between border border-indigo-500/20 bg-indigo-500/5 transition-all hover:-translate-y-0.5 shadow-sm">
               <div>
-                <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center justify-between mb-1">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
                     <Activity className="w-3.5 h-3.5" /> Net Velocity
                   </span>
@@ -419,66 +465,32 @@ export default function AnalyticsPage() {
                   {analytics.netAdsDelta >= 0 ? `+${analytics.netAdsDelta}` : analytics.netAdsDelta}
                 </div>
               </div>
-              <div className="text-[11px] font-medium text-slate-600 dark:text-slate-400 mt-2 truncate">
+              <div className="text-[11px] font-medium text-slate-600 dark:text-slate-400 mt-1.5 truncate">
                 {analytics.netAdsDelta >= 0 ? "Bullish Market Growth" : "Net Ad Reduction"}
               </div>
             </div>
 
-            {/* 4. Stable Pages */}
-            <div className="glass-card rounded-2xl p-4 flex flex-col justify-between transition-all hover:-translate-y-0.5">
+            {/* 4. Total Active Ads */}
+            <div className="glass-card rounded-xl p-3.5 flex flex-col justify-between transition-all hover:-translate-y-0.5 shadow-sm">
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-1">
-                    <Minus className="w-3.5 h-3.5" /> Unchanged (Stable)
-                  </span>
-                </div>
-                <div className="text-2xl font-black text-slate-800 dark:text-slate-100">
-                  {analytics.stablePages.length}
-                </div>
-              </div>
-              <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-2 truncate">
-                0 ad count change
-              </div>
-            </div>
-
-            {/* 5. High Volume Powerhouses (50+ Ads) */}
-            <div className="glass-card rounded-2xl p-4 flex flex-col justify-between transition-all hover:-translate-y-0.5">
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                    <Flame className="w-3.5 h-3.5" /> High Volume (50+)
-                  </span>
-                </div>
-                <div className="text-2xl font-black text-amber-600 dark:text-amber-400">
-                  {analytics.megaVolume.length + analytics.highVolume.length}
-                </div>
-              </div>
-              <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-2 truncate">
-                {pages.length > 0 ? Math.round(((analytics.megaVolume.length + analytics.highVolume.length) / pages.length) * 100) : 0}% of all pages
-              </div>
-            </div>
-
-            {/* 6. Total Tracked Ads */}
-            <div className="glass-card rounded-2xl p-4 flex flex-col justify-between transition-all hover:-translate-y-0.5">
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center justify-between mb-1">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1">
-                    <Layers className="w-3.5 h-3.5" /> Active Ad Count
+                    <Layers className="w-3.5 h-3.5" /> Total Active Ads
                   </span>
                 </div>
                 <div className="text-2xl font-black text-purple-600 dark:text-purple-400">
                   {analytics.totalAds.toLocaleString()}
                 </div>
               </div>
-              <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-2 truncate">
-                Across {analytics.withResults.length} active pages
+              <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-1.5 truncate">
+                {analytics.megaVolume.length + analytics.highVolume.length} heavy brands (50+)
               </div>
             </div>
 
-            {/* 7. Watchlist Momentum */}
-            <div className="glass-card rounded-2xl p-4 flex flex-col justify-between transition-all hover:-translate-y-0.5">
+            {/* 5. Watchlist Trajectory */}
+            <div className="glass-card rounded-xl p-3.5 flex flex-col justify-between transition-all hover:-translate-y-0.5 shadow-sm col-span-2 sm:col-span-1">
               <div>
-                <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center justify-between mb-1">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-1">
                     <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" /> Watchlist
                   </span>
@@ -487,25 +499,8 @@ export default function AnalyticsPage() {
                   {analytics.watchlistedPages.length}
                 </div>
               </div>
-              <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold mt-2 truncate">
-                +{analytics.watchlistedScaling.length} scaling / -{analytics.watchlistedDescaling.length} descaling
-              </div>
-            </div>
-
-            {/* 8. Success Rate */}
-            <div className="glass-card rounded-2xl p-4 flex flex-col justify-between transition-all hover:-translate-y-0.5">
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Success Rate
-                  </span>
-                </div>
-                <div className="text-2xl font-black text-slate-800 dark:text-slate-100">
-                  {pages.length > 0 ? Math.round((analytics.completed.length / pages.length) * 100) : 0}%
-                </div>
-              </div>
-              <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-2 truncate">
-                {analytics.completed.length} of {pages.length} successful
+              <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold mt-1.5 truncate">
+                +{analytics.watchlistedScaling.length} up / -{analytics.watchlistedDescaling.length} down
               </div>
             </div>
           </div>

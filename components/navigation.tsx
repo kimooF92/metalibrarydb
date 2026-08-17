@@ -95,9 +95,8 @@ export function Navigation() {
           <nav className="flex flex-col space-y-1.5">
             {[
               { href: "/", label: "Dashboard", icon: LayoutDashboard },
-              { href: "/discovery", label: "Country Discovery", icon: Globe },
+              { href: "/discovery", label: "Discover Pages", icon: Globe },
               { href: "/spy", label: "Ad Spy Feed", icon: Eye },
-              { href: "/import", label: "Bulk Import", icon: UploadCloud },
               { href: "/analytics", label: "Analytics", icon: BarChart3 },
             ].map((item) => {
               const Icon = item.icon;
@@ -244,9 +243,8 @@ export function Navigation() {
           <nav className="flex flex-col space-y-2">
             {[
               { href: "/", label: "Dashboard", icon: LayoutDashboard },
-              { href: "/discovery", label: "Country Discovery", icon: Globe },
+              { href: "/discovery", label: "Discover Pages", icon: Globe },
               { href: "/spy", label: "Ad Spy Feed", icon: Eye },
-              { href: "/import", label: "Bulk Import", icon: UploadCloud },
               { href: "/analytics", label: "Analytics", icon: BarChart3 },
             ].map((item) => {
               const Icon = item.icon;

@@ -23,6 +23,8 @@ import {
   Ban,
   X,
   Check,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 interface SpyFiltersProps {
@@ -106,8 +108,28 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
   const [showBrandModal, setShowBrandModal] = useState(false);
   const [brandSearch, setBrandSearch] = useState("");
   const brandModalRef = useRef<HTMLDivElement | null>(null);
-
   const excludedIds = filters.excludePageIds || [];
+
+  const activeAdvancedCount =
+    (filters.minDaysRunning && filters.minDaysRunning > 0 ? 1 : 0) +
+    (filters.minDuplications && filters.minDuplications > 1 ? 1 : 0) +
+    (filters.mediaType && filters.mediaType !== "all" ? 1 : 0) +
+    (filters.ctaText && filters.ctaText !== "all" ? 1 : 0) +
+    (filters.dateFrom || filters.dateTo || (datePreset && datePreset !== "all") ? 1 : 0) +
+    (excludedIds.length > 0 ? 1 : 0) +
+    (filters.status && filters.status !== "all" && filters.status !== "archived" ? 1 : 0);
+
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(
+    Boolean(
+      filters.minDaysRunning ||
+      (filters.minDuplications && filters.minDuplications > 1) ||
+      (filters.mediaType && filters.mediaType !== "all") ||
+      (filters.ctaText && filters.ctaText !== "all") ||
+      filters.dateFrom ||
+      filters.dateTo ||
+      excludedIds.length > 0
+    )
+  );
 
   // Close brand dropdown on click outside
   useEffect(() => {
@@ -320,12 +342,37 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
               </button>
             );
           })}
+
+          {/* More Filters Toggle Button */}
+          <div className="ml-auto pl-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowAdvancedFilters((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
+                showAdvancedFilters || activeAdvancedCount > 0
+                  ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800 shadow-sm"
+                  : "bg-white dark:bg-slate-900/80 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"
+              }`}
+            >
+              <SlidersHorizontal className="w-3 h-3 text-indigo-500" />
+              <span>More Filters</span>
+              {activeAdvancedCount > 0 && (
+                <span className="bg-indigo-600 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                  {activeAdvancedCount}
+                </span>
+              )}
+              {showAdvancedFilters ? <ChevronUp className="w-3 h-3 text-slate-400" /> : <ChevronDown className="w-3 h-3 text-slate-400" />}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* 3. Detailed Filter Options Row */}
-      <div className="flex flex-wrap items-center gap-2.5 pt-2.5 border-t border-slate-200 dark:border-slate-800/40 text-[11px]">
-        {/* Running For Filter */}
+      {/* Collapsible Advanced Filters Section */}
+      {showAdvancedFilters && (
+        <div className="flex flex-col gap-3 animate-in fade-in slide-in-from-top-1 duration-150">
+          {/* 3. Detailed Filter Options Row */}
+          <div className="flex flex-wrap items-center gap-2.5 pt-2.5 border-t border-slate-200 dark:border-slate-800/40 text-[11px]">
+            {/* Running For Filter */}
         <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
           <Clock className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
           <span className="text-slate-600 dark:text-slate-400 font-semibold">Running For:</span>
@@ -642,6 +689,8 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
               Clear Range
             </button>
           )}
+        </div>
+      )}
         </div>
       )}
     </div>

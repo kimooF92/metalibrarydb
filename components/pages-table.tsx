@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { TrackedPage } from "@/types";
+import { TrackedPage, DashboardStats } from "@/types";
 import { HistoryModal } from "./history-modal";
 import { DeleteConfirmModal } from "./delete-confirm-modal";
 import { PageAdLibraryDrawer } from "./spy/page-ad-library-drawer";
@@ -147,6 +147,7 @@ interface PagesTableProps {
   onBulkDelete?: (ids: string[]) => void;
   onWatchlistToggle?: () => void;
   onResetFilters?: () => void;
+  stats?: DashboardStats | null;
 }
 
 export function PagesTable({
@@ -175,6 +176,7 @@ export function PagesTable({
   onSortChange,
   onWatchlistToggle,
   onResetFilters,
+  stats,
 }: PagesTableProps) {
   const [watchlisted, setWatchlisted] = useState<Record<string, boolean>>(
     Object.fromEntries(pages.map((p) => [p.id, p.isWatchlisted ?? false]))
@@ -534,15 +536,17 @@ export function PagesTable({
             </button>
           )}
 
-          {/* Retry Failed */}
-          <button
-            onClick={() => onRetry()}
-            className="flex items-center space-x-1 text-[11px] font-semibold px-2.5 py-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 transition-all cursor-pointer whitespace-nowrap shrink-0"
-            title="Retry all failed scan jobs"
-          >
-            <RotateCcw className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-            <span>Retry Failed</span>
-          </button>
+          {/* Retry Failed - conditionally rendered if failed jobs exist */}
+          {((stats?.failed ?? 0) > 0 || pages.some((p) => p.status === "failed")) && (
+            <button
+              onClick={() => onRetry()}
+              className="flex items-center space-x-1 text-[11px] font-semibold px-2.5 py-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 transition-all cursor-pointer whitespace-nowrap shrink-0 animate-in fade-in"
+              title="Retry failed scan jobs"
+            >
+              <RotateCcw className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+              <span>Retry Failed {stats?.failed ? `(${stats.failed})` : ""}</span>
+            </button>
+          )}
         </div>
       </div>
 

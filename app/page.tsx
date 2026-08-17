@@ -5,7 +5,7 @@ import { TrackedPage, DashboardStats } from "@/types";
 import { StatsCards } from "@/components/stats-cards";
 import { AddUrlForm } from "@/components/add-url-form";
 import { PagesTable } from "@/components/pages-table";
-import { RefreshCw, X, Plus, BarChart3 } from "lucide-react";
+import { RefreshCw, X, Plus } from "lucide-react";
 
 function getInitialDashboardState() {
   const defaults = {
@@ -97,7 +97,6 @@ export default function DashboardPage() {
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
-  const [showStatsModal, setShowStatsModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
 
   const [pages, setPages] = useState<TrackedPage[]>([]);
@@ -361,14 +360,6 @@ export default function DashboardPage() {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowStatsModal(true)}
-            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 transition-all cursor-pointer"
-          >
-            <BarChart3 className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
-            <span>Show Stats</span>
-          </button>
-
-          <button
             onClick={() => setShowAddModal(true)}
             className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
           >
@@ -387,10 +378,14 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Inline Dashboard Key Stats */}
+      <StatsCards stats={stats} loading={statsLoading} />
+
       {/* Main Tracked Pages Table */}
       <PagesTable
         pages={pages}
         loading={pagesLoading}
+        stats={stats}
         onRefresh={handleRefresh}
         onRetry={handleRetry}
         onDelete={handleDelete}
@@ -430,22 +425,6 @@ export default function DashboardPage() {
         onWatchlistToggle={() => loadData(true)}
         onResetFilters={handleResetFilters}
       />
-
-      {/* Stats Modal */}
-      {showStatsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-950 border border-slate-800/80 p-6 rounded-2xl max-w-4xl w-full shadow-2xl relative animate-in zoom-in-95 duration-150">
-            <button
-              onClick={() => setShowStatsModal(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-200 cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-            <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-wider">System Overview Stats</h3>
-            <StatsCards stats={stats} loading={statsLoading} />
-          </div>
-        </div>
-      )}
 
       {/* Track URL Modal */}
       {showAddModal && (
