@@ -269,3 +269,67 @@ export async function fetchApifyDatasetItems(datasetId: string): Promise<any[]> 
 
   return [];
 }
+
+/**
+ * Scrapes a single ad via Apify actor with automatic wait-for-finish (30s) and token failover.
+ */
+export async function scrapeSingleAdViaApify(adArchiveId: string): Promise<any | null> {
+  const tokens = getApifyTokens();
+  if (tokens.length === 0) {
+    throw new Error("No APIFY_API_TOKEN configured in environment variables.");
+  }
+
+  const rawActorId = process.env.APIFY_ACTOR_ID || "curious_coder/facebook-ads-library-scraper";
+  const actorIdPath = rawActorId.includes("/") ? rawActorId.replace("/", "~") : rawActorId;
+
+  const targetUrl = `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&is_targeted_country=false&media_type=all&q=${encodeURIComponent(
+    adArchiveId
+  )}&search_type=keyword_unordered&sort_data[direction]=desc&sort_data[mode]=relevancy_monthly_grouped`;
+
+  const actorInput = {
+    startUrls: [{ url: targetUrl }],
+    urls: [{ url: targetUrl }],
+    searchUrl: targetUrl,
+    maxResults: 1,
+    limitPerSource: 1,
+    extractCards: true,
+    includeRawSnapshot: true,
+    scrapeAdDetails: false,
+    "scrapePageAds.activeStatus": "all",
+    "scrapePageAds.countryCode": "ALL",
+    "scrapePageAds.sortBy": "most_recent",
+  };
+
+  for (let idx = 0; idx < tokens.length; idx++) {
+    const token = tokens[idx];
+    const runUrl = `${APIFY_BASE_URL}/acts/${actorIdPath}/runs?token=${token}&waitForFinish=30`;
+
+    try {
+      console.log(`[Apify Single Ad] Refreshing ad ${adArchiveId} using Token #${idx + 1}...`);
+      const res = await fetch(runUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(actorInput),
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.warn(`[Apify Single Ad] Token #${idx + 1} failed: ${errorText}`);
+        continue;
+      }
+
+      const json = await res.json();
+      const runData = json.data;
+      if (runData?.defaultDatasetId) {
+        const items = await fetchApifyDatasetItems(runData.defaultDatasetId);
+        if (items && items.length > 0) {
+          return items[0];
+        }
+      }
+    } catch (err: any) {
+      console.error(`[Apify Single Ad] Error with token #${idx + 1}:`, err.message || err);
+    }
+  }
+
+  return null;
+}
