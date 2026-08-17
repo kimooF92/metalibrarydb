@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Ad } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
 import { ImagePreviewModal } from "./image-preview-modal";
@@ -21,24 +21,35 @@ import {
   ArchiveRestore,
   Clock,
   Ban,
+  RotateCw,
 } from "lucide-react";
 
 interface AdRowProps {
   ad: Ad;
   onArchiveToggle?: () => void;
   onExcludeBrand?: (pageId: string) => void;
+  onMediaRefreshed?: (newAd: Ad) => void;
 }
 
-export function AdRow({ ad, onArchiveToggle, onExcludeBrand }: AdRowProps) {
+export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }: AdRowProps) {
+  const [currentAd, setCurrentAd] = useState<Ad>(ad);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
   const [isProxied, setIsProxied] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [videoError, setVideoError] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isArchived, setIsArchived] = useState(Boolean(ad.isArchived));
   const [isArchiving, setIsArchiving] = useState(false);
+  const [isRefreshingMedia, setIsRefreshingMedia] = useState(false);
 
-  const initialDisplayImage = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.[0];
+  // Sync when prop updates
+  useEffect(() => {
+    setCurrentAd(ad);
+    setIsArchived(Boolean(ad.isArchived));
+  }, [ad]);
+
+  const initialDisplayImage = currentAd.signedThumbnailUrl || currentAd.thumbnailUrl || currentAd.mediaUrls?.[0];
   const activeImageSrc = isProxied && initialDisplayImage
     ? `/api/spy/image-proxy?url=${encodeURIComponent(initialDisplayImage)}`
     : initialDisplayImage;
@@ -56,7 +67,7 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand }: AdRowProps) {
     const nextState = !isArchived;
     setIsArchived(nextState);
     try {
-      const res = await fetch(`/api/spy/ads/${ad.id}`, {
+      const res = await fetch(`/api/spy/ads/${currentAd.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isArchived: nextState }),
@@ -70,6 +81,35 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand }: AdRowProps) {
       setIsArchived(!nextState);
     } finally {
       setIsArchiving(false);
+    }
+  };
+
+  const handleRefreshMedia = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsRefreshingMedia(true);
+    try {
+      const res = await fetch(`/api/spy/ads/${currentAd.id}/refresh`, { method: "POST" });
+      const contentType = res.headers.get("content-type") || "";
+
+      if (!contentType.includes("application/json")) {
+        alert("Server temporary error (" + res.status + "). Click 'Watch on Meta Ad Library' to view.");
+        return;
+      }
+
+      const data = await res.json();
+      if (data.success && data.ad) {
+        setCurrentAd(data.ad);
+        setVideoError(false);
+        setImgError(false);
+        setIsProxied(false);
+        onMediaRefreshed?.(data.ad);
+      } else {
+        alert(data.message || "Could not extract fresh media right now. Use 'Watch on Meta Ad Library' link.");
+      }
+    } catch (err: any) {
+      alert("Failed to refresh media: " + (err.message || "Network error"));
+    } finally {
+      setIsRefreshingMedia(false);
     }
   };
 
@@ -100,20 +140,18 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand }: AdRowProps) {
     return `Verified ${diffDays}d ago`;
   };
 
-  const duplicationCount = ad.duplicationCount || 1;
+  const duplicationCount = currentAd.duplicationCount || 1;
   const isScaled = duplicationCount >= 5;
-  const freshnessLabel = formatFreshnessDate(ad.lastSeenAt);
+  const freshnessLabel = formatFreshnessDate(currentAd.lastSeenAt);
 
-  const firstVideoUrl = ad.mediaUrls?.find(
-    (url: string) => url.includes(".mp4") || url.includes("video") || ad.mediaType === "video"
+  const firstVideoUrl = currentAd.mediaUrls?.find(
+    (url: string) => url.includes(".mp4") || url.includes("video") || currentAd.mediaType === "video"
   );
-  const displayImage = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.[0];
-  const destinationUrl = resolveDestinationUrl(ad.linkUrl);
-  const targetDomain = getCleanDomain(ad.linkUrl);
+  const displayImage = currentAd.signedThumbnailUrl || currentAd.thumbnailUrl || currentAd.mediaUrls?.[0];
+  const destinationUrl = resolveDestinationUrl(currentAd.linkUrl);
+  const targetDomain = getCleanDomain(currentAd.linkUrl);
 
-  const previewImages = ad.mediaUrls && ad.mediaUrls.length > 0 ? ad.mediaUrls : displayImage ? [displayImage] : [];
-
-  const [videoError, setVideoError] = useState(false);
+  const previewImages = currentAd.mediaUrls && currentAd.mediaUrls.length > 0 ? currentAd.mediaUrls : displayImage ? [displayImage] : [];
 
   return (
     <div className="group relative flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3.5 shadow-sm hover:border-slate-300 dark:hover:border-slate-700/80 hover:shadow-md transition-all">
@@ -132,7 +170,7 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand }: AdRowProps) {
             />
           ) : isPlayingVideo && videoError ? (
             <a
-              href={`https://www.facebook.com/ads/library/?id=${ad.adArchiveId}`}
+              href={`https://www.facebook.com/ads/library/?id=${currentAd.adArchiveId}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex flex-col items-center justify-center p-2 text-center bg-slate-950 text-indigo-300 w-full h-full gap-1 hover:text-indigo-200"
@@ -147,14 +185,14 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand }: AdRowProps) {
                 /* eslint-disable-next-html-shortcut */
                 <img
                   src={activeImageSrc}
-                  alt={ad.title || "Ad creative"}
+                  alt={currentAd.title || "Ad creative"}
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-contain transition-transform duration-300 group-hover/media:scale-105"
                   onError={handleImageError}
                 />
               ) : (
                 <div className="flex flex-col items-center gap-1 text-slate-400">
-                  {ad.mediaType === "video" ? (
+                  {currentAd.mediaType === "video" ? (
                     <Play className="w-6 h-6 text-indigo-400 opacity-70" />
                   ) : (
                     <ImageIcon className="w-6 h-6 opacity-50" />
@@ -189,13 +227,13 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand }: AdRowProps) {
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1 min-w-0">
               <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
-                {ad.pageName || `Page ${ad.pageId}`}
+                {currentAd.pageName || `Page ${currentAd.pageId}`}
               </span>
               {onExcludeBrand && (
                 <button
                   type="button"
-                  onClick={() => onExcludeBrand(ad.pageId)}
-                  title={`Hide "${ad.pageName || ad.pageId}" from feed`}
+                  onClick={() => onExcludeBrand(currentAd.pageId)}
+                  title={`Hide "${currentAd.pageName || currentAd.pageId}" from feed`}
                   className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded shrink-0 cursor-pointer"
                 >
                   <Ban className="w-2.5 h-2.5" />
@@ -203,18 +241,18 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand }: AdRowProps) {
               )}
             </div>
             <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-              ID: {ad.adArchiveId}
+              ID: {currentAd.adArchiveId}
             </span>
 
             {isArchived ? (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-600 dark:text-purple-400 bg-purple-500/10 border border-purple-500/20 px-2 py-0.2 rounded-full">
                 <Archive className="w-2.5 h-2.5" /> Archived
               </span>
-            ) : ad.isActive === true ? (
+            ) : currentAd.isActive === true ? (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.2 rounded-full">
                 <CheckCircle2 className="w-2.5 h-2.5" /> Active
               </span>
-            ) : ad.isActive === false ? (
+            ) : currentAd.isActive === false ? (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-2 py-0.2 rounded-full">
                 <XCircle className="w-2.5 h-2.5" /> Inactive
               </span>
@@ -229,7 +267,7 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand }: AdRowProps) {
           <div className="flex items-center gap-2 flex-wrap my-0.5">
             <span className="inline-flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-900 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-800 font-medium">
               <Calendar className="w-3 h-3 text-indigo-500 dark:text-indigo-400" />
-              {formatLaunchDate(ad.startedRunningOn)}
+              {formatLaunchDate(currentAd.startedRunningOn)}
             </span>
 
             <span
@@ -257,21 +295,21 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand }: AdRowProps) {
           </div>
 
           {/* Ad Title & Copy Text */}
-          {ad.title && (
+          {currentAd.title && (
             <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
-              {ad.title}
+              {currentAd.title}
             </h4>
           )}
-          {ad.caption && (
+          {currentAd.caption && (
             <div>
               <p
                 className={`text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed ${
                   isExpanded ? "" : "line-clamp-2"
                 }`}
               >
-                {ad.caption}
+                {currentAd.caption}
               </p>
-              {ad.caption.length > 100 && (
+              {currentAd.caption.length > 100 && (
                 <button
                   onClick={() => setIsExpanded(!isExpanded)}
                   className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer mt-0.5"
@@ -296,7 +334,7 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand }: AdRowProps) {
           >
             <Globe className="w-3.5 h-3.5 text-indigo-200 shrink-0" />
             <span className="truncate">
-              {ad.ctaText || "Visit Store"} {targetDomain ? `• ${targetDomain}` : ""}
+              {currentAd.ctaText || "Visit Store"} {targetDomain ? `• ${targetDomain}` : ""}
             </span>
             <ExternalLink className="w-3 h-3 text-indigo-200 shrink-0 ml-0.5" />
           </a>
@@ -305,6 +343,15 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand }: AdRowProps) {
         )}
 
         <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={handleRefreshMedia}
+            disabled={isRefreshingMedia}
+            className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors cursor-pointer"
+            title="Refresh Single Ad Media Links"
+          >
+            <RotateCw className={`w-3.5 h-3.5 ${isRefreshingMedia ? "animate-spin text-indigo-500" : ""}`} />
+          </button>
+
           <button
             onClick={toggleArchive}
             disabled={isArchiving}
@@ -342,7 +389,7 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand }: AdRowProps) {
           )}
 
           <a
-            href={`https://www.facebook.com/ads/library/?id=${ad.adArchiveId}`}
+            href={`https://www.facebook.com/ads/library/?id=${currentAd.adArchiveId}`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline inline-flex items-center gap-1 p-1 rounded-md"
@@ -359,11 +406,11 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand }: AdRowProps) {
         isOpen={isPreviewOpen}
         onClose={() => setIsPreviewOpen(false)}
         imageUrls={previewImages}
-        title={ad.title}
-        pageName={ad.pageName || `Page ${ad.pageId}`}
-        caption={ad.caption}
+        title={currentAd.title}
+        pageName={currentAd.pageName || `Page ${currentAd.pageId}`}
+        caption={currentAd.caption}
         destinationUrl={destinationUrl}
-        adArchiveId={ad.adArchiveId}
+        adArchiveId={currentAd.adArchiveId}
       />
     </div>
   );

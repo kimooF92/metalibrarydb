@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import NextImage from "next/image";
 import { Ad } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
@@ -29,9 +29,11 @@ interface AdCardProps {
   ad: Ad;
   onArchiveToggle?: () => void;
   onExcludeBrand?: (pageId: string) => void;
+  onMediaRefreshed?: (newAd: Ad) => void;
 }
 
-export function AdCard({ ad, onArchiveToggle, onExcludeBrand }: AdCardProps) {
+export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }: AdCardProps) {
+  const [currentAd, setCurrentAd] = useState<Ad>(ad);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
   const [isProxied, setIsProxied] = useState(false);
@@ -42,7 +44,13 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand }: AdCardProps) {
   const [isArchiving, setIsArchiving] = useState(false);
   const [isRefreshingMedia, setIsRefreshingMedia] = useState(false);
 
-  const initialDisplayImage = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.[0];
+  // Sync when prop updates
+  useEffect(() => {
+    setCurrentAd(ad);
+    setIsArchived(Boolean(ad.isArchived));
+  }, [ad]);
+
+  const initialDisplayImage = currentAd.signedThumbnailUrl || currentAd.thumbnailUrl || currentAd.mediaUrls?.[0];
   const activeImageSrc = isProxied && initialDisplayImage
     ? `/api/spy/image-proxy?url=${encodeURIComponent(initialDisplayImage)}`
     : initialDisplayImage;
@@ -60,7 +68,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand }: AdCardProps) {
     const nextState = !isArchived;
     setIsArchived(nextState);
     try {
-      const res = await fetch(`/api/spy/ads/${ad.id}`, {
+      const res = await fetch(`/api/spy/ads/${currentAd.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isArchived: nextState }),
@@ -81,7 +89,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand }: AdCardProps) {
     e.stopPropagation();
     setIsRefreshingMedia(true);
     try {
-      const res = await fetch(`/api/spy/ads/${ad.id}/refresh`, { method: "POST" });
+      const res = await fetch(`/api/spy/ads/${currentAd.id}/refresh`, { method: "POST" });
       const contentType = res.headers.get("content-type") || "";
 
       if (!contentType.includes("application/json")) {
@@ -91,9 +99,11 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand }: AdCardProps) {
 
       const data = await res.json();
       if (data.success && data.ad) {
+        setCurrentAd(data.ad);
         setVideoError(false);
         setImgError(false);
-        window.location.reload();
+        setIsProxied(false);
+        onMediaRefreshed?.(data.ad);
       } else {
         alert(data.message || "Could not extract fresh media right now. Use 'Watch on Meta Ad Library' link.");
       }
@@ -138,18 +148,18 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand }: AdCardProps) {
     return `Verified ${diffDays}d ago`;
   };
 
-  const duplicationCount = ad.duplicationCount || 1;
+  const duplicationCount = currentAd.duplicationCount || 1;
   const isScaled = duplicationCount >= 5;
-  const freshnessLabel = formatFreshnessDate(ad.lastSeenAt);
+  const freshnessLabel = formatFreshnessDate(currentAd.lastSeenAt);
 
-  const firstVideoUrl = ad.mediaUrls?.find(
-    (url) => url.includes(".mp4") || url.includes("video") || ad.mediaType === "video"
+  const firstVideoUrl = currentAd.mediaUrls?.find(
+    (url) => url.includes(".mp4") || url.includes("video") || currentAd.mediaType === "video"
   );
-  const displayImage = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.[0];
-  const destinationUrl = resolveDestinationUrl(ad.linkUrl);
-  const targetDomain = getCleanDomain(ad.linkUrl);
+  const displayImage = currentAd.signedThumbnailUrl || currentAd.thumbnailUrl || currentAd.mediaUrls?.[0];
+  const destinationUrl = resolveDestinationUrl(currentAd.linkUrl);
+  const targetDomain = getCleanDomain(currentAd.linkUrl);
 
-  const previewImages = ad.mediaUrls && ad.mediaUrls.length > 0 ? ad.mediaUrls : displayImage ? [displayImage] : [];
+  const previewImages = currentAd.mediaUrls && currentAd.mediaUrls.length > 0 ? currentAd.mediaUrls : displayImage ? [displayImage] : [];
 
   return (
     <div className="group relative flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-4 shadow-sm transition-all hover:border-slate-300 dark:hover:border-slate-700/80 hover:shadow-md">
@@ -160,13 +170,13 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand }: AdCardProps) {
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-1 min-w-0">
               <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
-                {ad.pageName || `Page ${ad.pageId}`}
+                {currentAd.pageName || `Page ${currentAd.pageId}`}
               </span>
               {onExcludeBrand && (
                 <button
                   type="button"
-                  onClick={() => onExcludeBrand(ad.pageId)}
-                  title={`Hide "${ad.pageName || ad.pageId}" from feed`}
+                  onClick={() => onExcludeBrand(currentAd.pageId)}
+                  title={`Hide "${currentAd.pageName || currentAd.pageId}" from feed`}
                   className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded shrink-0 cursor-pointer"
                 >
                   <Ban className="w-3 h-3" />
@@ -174,7 +184,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand }: AdCardProps) {
               )}
             </div>
             <span className="text-[10px] text-slate-600 dark:text-slate-400 font-mono">
-              ID: {ad.adArchiveId}
+              ID: {currentAd.adArchiveId}
             </span>
           </div>
 
@@ -183,11 +193,11 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand }: AdCardProps) {
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-600 dark:text-purple-400 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full">
                 <Archive className="w-3 h-3" /> Archived
               </span>
-            ) : ad.isActive === true ? (
+            ) : currentAd.isActive === true ? (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
                 <CheckCircle2 className="w-3 h-3" /> Active
               </span>
-            ) : ad.isActive === false ? (
+            ) : currentAd.isActive === false ? (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-700 dark:text-slate-300 bg-slate-150 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 px-2 py-0.5 rounded-full">
                 <XCircle className="w-3 h-3 text-slate-600 dark:text-slate-400" /> Inactive
               </span>
@@ -203,7 +213,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand }: AdCardProps) {
         <div className="flex flex-wrap items-center gap-1.5 mb-3">
           <span className="inline-flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-900 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-800 font-medium">
             <Calendar className="w-3 h-3 text-indigo-500 dark:text-indigo-400" />
-            {formatLaunchDate(ad.startedRunningOn, ad.firstSeenAt)}
+            {formatLaunchDate(currentAd.startedRunningOn, currentAd.firstSeenAt)}
           </span>
 
           <span
@@ -249,7 +259,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand }: AdCardProps) {
                 <span className="text-[11px] text-slate-400">Meta CDN links expire after 24–72 hours</span>
               </div>
               <a
-                href={`https://www.facebook.com/ads/library/?id=${ad.adArchiveId}`}
+                href={`https://www.facebook.com/ads/library/?id=${currentAd.adArchiveId}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium shadow-md transition-all"
@@ -276,7 +286,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand }: AdCardProps) {
                   <div className="relative w-full h-full p-2 flex items-center justify-center z-10">
                     <NextImage
                       src={activeImageSrc}
-                      alt={ad.title || "Ad creative"}
+                      alt={currentAd.title || "Ad creative"}
                       fill
                       unoptimized
                       referrerPolicy="no-referrer"
@@ -287,13 +297,13 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand }: AdCardProps) {
                 </>
               ) : (
                 <div className="flex flex-col items-center gap-2 text-slate-400 font-medium">
-                  {ad.mediaType === "video" ? (
+                  {currentAd.mediaType === "video" ? (
                     <Play className="w-8 h-8 text-indigo-400 opacity-70" />
                   ) : (
                     <ImageIcon className="w-8 h-8 opacity-60" />
                   )}
                   <span className="text-[11px] text-slate-400">
-                    {ad.mediaType === "video" ? "Video Creative" : "Image Creative"}
+                    {currentAd.mediaType === "video" ? "Video Creative" : "Image Creative"}
                   </span>
                 </div>
               )}
@@ -322,23 +332,23 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand }: AdCardProps) {
         </div>
 
         {/* Title */}
-        {ad.title && (
+        {currentAd.title && (
           <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 mb-1 line-clamp-1">
-            {ad.title}
+            {currentAd.title}
           </h4>
         )}
 
         {/* Copy / Caption */}
-        {ad.caption && (
+        {currentAd.caption && (
           <div className="mb-3">
             <p
               className={`text-[11px] text-slate-600 dark:text-slate-400 whitespace-pre-line leading-relaxed ${
                 isExpanded ? "" : "line-clamp-3"
               }`}
             >
-              {ad.caption}
+              {currentAd.caption}
             </p>
-            {ad.caption.length > 120 && (
+            {currentAd.caption.length > 120 && (
               <button
                 onClick={() => setIsExpanded(!isExpanded)}
                 className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline mt-1 cursor-pointer"
@@ -362,7 +372,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand }: AdCardProps) {
           >
             <Globe className="w-3.5 h-3.5 text-indigo-200 shrink-0" />
             <span className="truncate">
-              {ad.ctaText || "Visit Store"} {targetDomain ? `• ${targetDomain}` : ""}
+              {currentAd.ctaText || "Visit Store"} {targetDomain ? `• ${targetDomain}` : ""}
             </span>
             <ExternalLink className="w-3 h-3 text-indigo-200 shrink-0 ml-0.5" />
           </a>
@@ -417,7 +427,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand }: AdCardProps) {
           )}
 
           <a
-            href={`https://www.facebook.com/ads/library/?id=${ad.adArchiveId}`}
+            href={`https://www.facebook.com/ads/library/?id=${currentAd.adArchiveId}`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-[11px] font-semibold text-slate-700 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline inline-flex items-center gap-1 p-1 rounded-md"
@@ -434,11 +444,11 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand }: AdCardProps) {
         isOpen={isPreviewOpen}
         onClose={() => setIsPreviewOpen(false)}
         imageUrls={previewImages}
-        title={ad.title}
-        pageName={ad.pageName || `Page ${ad.pageId}`}
-        caption={ad.caption}
+        title={currentAd.title}
+        pageName={currentAd.pageName || `Page ${currentAd.pageId}`}
+        caption={currentAd.caption}
         destinationUrl={destinationUrl}
-        adArchiveId={ad.adArchiveId}
+        adArchiveId={currentAd.adArchiveId}
       />
     </div>
   );

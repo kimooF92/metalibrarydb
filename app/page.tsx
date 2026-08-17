@@ -7,7 +7,95 @@ import { AddUrlForm } from "@/components/add-url-form";
 import { PagesTable } from "@/components/pages-table";
 import { RefreshCw, X, Plus, BarChart3 } from "lucide-react";
 
+function getInitialDashboardState() {
+  const defaults = {
+    search: "",
+    statusFilter: "all",
+    searchTypeFilter: "all",
+    activeTab: "all",
+    sortBy: "createdAt",
+    sortOrder: "desc" as "asc" | "desc",
+    page: 1,
+    pageSize: 25,
+  };
+
+  if (typeof window === "undefined") return defaults;
+
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasUrlParams =
+      urlParams.has("search") ||
+      urlParams.has("status") ||
+      urlParams.has("searchType") ||
+      urlParams.has("tab") ||
+      urlParams.has("sortBy") ||
+      urlParams.has("sortOrder") ||
+      urlParams.has("page") ||
+      urlParams.has("limit");
+
+    if (hasUrlParams) {
+      return {
+        search: urlParams.get("search") || "",
+        statusFilter: urlParams.get("status") || "all",
+        searchTypeFilter: urlParams.get("searchType") || "all",
+        activeTab: urlParams.get("tab") || "all",
+        sortBy: urlParams.get("sortBy") || "createdAt",
+        sortOrder: (urlParams.get("sortOrder") as "asc" | "desc") || "desc",
+        page: urlParams.has("page") ? Number(urlParams.get("page")) : 1,
+        pageSize: urlParams.has("limit") ? Number(urlParams.get("limit")) : 25,
+      };
+    }
+
+    const saved = sessionStorage.getItem("dashboard_filters");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return {
+        ...defaults,
+        ...parsed,
+      };
+    }
+  } catch (e) {
+    console.error("Error reading dashboard params:", e);
+  }
+
+  return defaults;
+}
+
+function syncDashboardStateToUrl(state: {
+  search: string;
+  statusFilter: string;
+  searchTypeFilter: string;
+  activeTab: string;
+  sortBy: string;
+  sortOrder: "asc" | "desc";
+  page: number;
+  pageSize: number;
+}) {
+  if (typeof window === "undefined") return;
+  try {
+    const query = new URLSearchParams();
+    if (state.search) query.set("search", state.search);
+    if (state.statusFilter && state.statusFilter !== "all") query.set("status", state.statusFilter);
+    if (state.searchTypeFilter && state.searchTypeFilter !== "all") query.set("searchType", state.searchTypeFilter);
+    if (state.activeTab && state.activeTab !== "all") query.set("tab", state.activeTab);
+    if (state.sortBy && state.sortBy !== "createdAt") query.set("sortBy", state.sortBy);
+    if (state.sortOrder && state.sortOrder !== "desc") query.set("sortOrder", state.sortOrder);
+    if (state.page && state.page > 1) query.set("page", String(state.page));
+    if (state.pageSize && state.pageSize !== 25) query.set("limit", String(state.pageSize));
+
+    const queryString = query.toString();
+    const newUrl = queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname;
+    window.history.replaceState(null, "", newUrl);
+
+    sessionStorage.setItem("dashboard_filters", JSON.stringify(state));
+  } catch (e) {
+    console.error("Error syncing dashboard state:", e);
+  }
+}
+
 export default function DashboardPage() {
+  const [initialLoaded] = useState(() => getInitialDashboardState());
+
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [showStatsModal, setShowStatsModal] = useState(false);
@@ -17,17 +105,48 @@ export default function DashboardPage() {
   const [pagesLoading, setPagesLoading] = useState(true);
   const isFetchingRef = useRef(false);
 
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [searchTypeFilter, setSearchTypeFilter] = useState("all");
-  const [activeTab, setActiveTab] = useState("all");
-  const [sortBy, setSortBy] = useState("createdAt");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [search, setSearch] = useState(initialLoaded.search);
+  const [statusFilter, setStatusFilter] = useState(initialLoaded.statusFilter);
+  const [searchTypeFilter, setSearchTypeFilter] = useState(initialLoaded.searchTypeFilter);
+  const [activeTab, setActiveTab] = useState(initialLoaded.activeTab);
+  const [sortBy, setSortBy] = useState(initialLoaded.sortBy);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">(initialLoaded.sortOrder);
 
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [page, setPage] = useState(initialLoaded.page);
+  const [pageSize, setPageSize] = useState(initialLoaded.pageSize);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+
+  // Sync state to URL and session storage
+  useEffect(() => {
+    syncDashboardStateToUrl({
+      search,
+      statusFilter,
+      searchTypeFilter,
+      activeTab,
+      sortBy,
+      sortOrder,
+      page,
+      pageSize,
+    });
+  }, [search, statusFilter, searchTypeFilter, activeTab, sortBy, sortOrder, page, pageSize]);
+
+  // Sync on browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const init = getInitialDashboardState();
+      setSearch(init.search);
+      setStatusFilter(init.statusFilter);
+      setSearchTypeFilter(init.searchTypeFilter);
+      setActiveTab(init.activeTab);
+      setSortBy(init.sortBy);
+      setSortOrder(init.sortOrder);
+      setPage(init.page);
+      setPageSize(init.pageSize);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   const [toast, setToast] = useState<{
     type: "success" | "error" | "info";

@@ -44,15 +44,97 @@ function MiniBar({ value, max, colorClass = "bg-indigo-500" }: { value: number; 
   );
 }
 
+function getInitialAnalyticsState() {
+  const defaults = {
+    searchQuery: "",
+    activeTab: "scaling" as "scaling" | "descaling" | "top" | "watchlist" | "zero",
+    tablePage: 1,
+  };
+
+  if (typeof window === "undefined") return defaults;
+
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasParams = urlParams.has("tab") || urlParams.has("search") || urlParams.has("page");
+    if (hasParams) {
+      const tab = urlParams.get("tab");
+      const validTabs = ["scaling", "descaling", "top", "watchlist", "zero"];
+      return {
+        searchQuery: urlParams.get("search") || "",
+        activeTab: (validTabs.includes(tab || "") ? tab : "scaling") as any,
+        tablePage: urlParams.has("page") ? Number(urlParams.get("page")) : 1,
+      };
+    }
+
+    const saved = sessionStorage.getItem("analytics_filters");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return {
+        ...defaults,
+        ...parsed,
+      };
+    }
+  } catch (e) {
+    console.error("Error reading analytics params:", e);
+  }
+
+  return defaults;
+}
+
+function syncAnalyticsStateToUrl(state: {
+  searchQuery: string;
+  activeTab: string;
+  tablePage: number;
+}) {
+  if (typeof window === "undefined") return;
+  try {
+    const query = new URLSearchParams();
+    if (state.searchQuery) query.set("search", state.searchQuery);
+    if (state.activeTab && state.activeTab !== "scaling") query.set("tab", state.activeTab);
+    if (state.tablePage && state.tablePage > 1) query.set("page", String(state.tablePage));
+
+    const queryString = query.toString();
+    const newUrl = queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname;
+    window.history.replaceState(null, "", newUrl);
+
+    sessionStorage.setItem("analytics_filters", JSON.stringify(state));
+  } catch (e) {
+    console.error("Error syncing analytics state:", e);
+  }
+}
+
 export default function AnalyticsPage() {
+  const [initialLoaded] = useState(() => getInitialAnalyticsState());
+
   const [pages, setPages] = useState<TrackedPage[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<"scaling" | "descaling" | "top" | "watchlist" | "zero">("scaling");
-  const [tablePage, setTablePage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState(initialLoaded.searchQuery);
+  const [activeTab, setActiveTab] = useState<"scaling" | "descaling" | "top" | "watchlist" | "zero">(initialLoaded.activeTab);
+  const [tablePage, setTablePage] = useState(initialLoaded.tablePage);
   const [pageSize, setPageSize] = useState(15);
   const [updatingWatchlistId, setUpdatingWatchlistId] = useState<string | null>(null);
+
+  // Sync state to URL and session storage
+  useEffect(() => {
+    syncAnalyticsStateToUrl({
+      searchQuery,
+      activeTab,
+      tablePage,
+    });
+  }, [searchQuery, activeTab, tablePage]);
+
+  // Sync on browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const init = getInitialAnalyticsState();
+      setSearchQuery(init.searchQuery);
+      setActiveTab(init.activeTab);
+      setTablePage(init.tablePage);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -806,7 +888,7 @@ export default function AnalyticsPage() {
               <div className="flex items-center gap-2">
                 <button
                   disabled={tablePage <= 1}
-                  onClick={() => setTablePage((prev) => Math.max(1, prev - 1))}
+                  onClick={() => setTablePage((prev: number) => Math.max(1, prev - 1))}
                   className="flex items-center space-x-1 px-3 py-1.5 text-xs font-semibold rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40 transition-all cursor-pointer disabled:cursor-not-allowed"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
@@ -819,7 +901,7 @@ export default function AnalyticsPage() {
 
                 <button
                   disabled={tablePage >= totalTablePages}
-                  onClick={() => setTablePage((prev) => Math.min(totalTablePages, prev + 1))}
+                  onClick={() => setTablePage((prev: number) => Math.min(totalTablePages, prev + 1))}
                   className="flex items-center space-x-1 px-3 py-1.5 text-xs font-semibold rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40 transition-all cursor-pointer disabled:cursor-not-allowed"
                 >
                   <span>Next</span>

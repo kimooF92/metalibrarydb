@@ -9,12 +9,42 @@ import { ApifyCreditBadge } from "@/components/apify-credit-badge";
 import { Layers, Calendar, Video, Image as ImageIcon, RefreshCw, ChevronLeft, ChevronRight, Eye } from "lucide-react";
 
 export default function AdSpyPage() {
-  const { ads, pagination, isLoading, isFetchingMore, error, params, updateFilters, refetch } = useAdFeed();
+  const { ads, pagination, isLoading, isFetchingMore, error, params, updateFilters, updateAdInFeed, refetch } = useAdFeed();
   const { stats } = useAdStats();
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
+  // Load viewMode preference from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedMode = localStorage.getItem("ad_spy_view_mode");
+      if (savedMode === "grid" || savedMode === "list") {
+        setViewMode(savedMode);
+      }
+    } catch (e) {
+      console.error("Error reading viewMode preference:", e);
+    }
+  }, []);
+
+  const handleViewModeChange = (mode: "grid" | "list") => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem("ad_spy_view_mode", mode);
+    } catch (e) {
+      console.error("Error saving viewMode preference:", e);
+    }
+  };
+
   const handleResetFilters = () => {
+    try {
+      sessionStorage.removeItem("spy_feed_filters");
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+    } catch (e) {
+      console.error("Error clearing spy filter storage:", e);
+    }
+
     updateFilters({
       search: "",
       dateFrom: undefined,
@@ -155,7 +185,7 @@ export default function AdSpyPage() {
       <SpyFilters
         filters={params}
         viewMode={viewMode}
-        onViewModeChange={setViewMode}
+        onViewModeChange={handleViewModeChange}
         onFilterChange={updateFilters}
         onReset={handleResetFilters}
       />
@@ -195,6 +225,7 @@ export default function AdSpyPage() {
                   ad={ad}
                   onArchiveToggle={() => refetch()}
                   onExcludeBrand={handleExcludeBrand}
+                  onMediaRefreshed={updateAdInFeed}
                 />
               ))}
             </div>
@@ -206,6 +237,7 @@ export default function AdSpyPage() {
                   ad={ad}
                   onArchiveToggle={() => refetch()}
                   onExcludeBrand={handleExcludeBrand}
+                  onMediaRefreshed={updateAdInFeed}
                 />
               ))}
             </div>

@@ -107,17 +107,84 @@ function getRunKeywordDisplay(run: DiscoveryRun): string {
   return q;
 }
 
+function getInitialDiscoveryState() {
+  const defaults = {
+    selectedRunId: null as string | null,
+    country: "TN",
+    mediaType: "video",
+    searchFilter: "",
+    statusFilter: "all" as "all" | "discovered" | "verified" | "verifying" | "imported" | "ignored",
+  };
+
+  if (typeof window === "undefined") return defaults;
+
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasParams = urlParams.has("runId") || urlParams.has("country") || urlParams.has("mediaType") || urlParams.has("status") || urlParams.has("search");
+    if (hasParams) {
+      return {
+        selectedRunId: urlParams.get("runId") || null,
+        country: urlParams.get("country") || "TN",
+        mediaType: urlParams.get("mediaType") || "video",
+        searchFilter: urlParams.get("search") || "",
+        statusFilter: (urlParams.get("status") as any) || "all",
+      };
+    }
+
+    const saved = sessionStorage.getItem("discovery_filters");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return {
+        ...defaults,
+        ...parsed,
+      };
+    }
+  } catch (e) {
+    console.error("Error reading discovery params:", e);
+  }
+
+  return defaults;
+}
+
+function syncDiscoveryStateToUrl(state: {
+  selectedRunId: string | null;
+  country: string;
+  mediaType: string;
+  searchFilter: string;
+  statusFilter: string;
+}) {
+  if (typeof window === "undefined") return;
+  try {
+    const query = new URLSearchParams();
+    if (state.selectedRunId) query.set("runId", state.selectedRunId);
+    if (state.country && state.country !== "TN") query.set("country", state.country);
+    if (state.mediaType && state.mediaType !== "video") query.set("mediaType", state.mediaType);
+    if (state.searchFilter) query.set("search", state.searchFilter);
+    if (state.statusFilter && state.statusFilter !== "all") query.set("status", state.statusFilter);
+
+    const queryString = query.toString();
+    const newUrl = queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname;
+    window.history.replaceState(null, "", newUrl);
+
+    sessionStorage.setItem("discovery_filters", JSON.stringify(state));
+  } catch (e) {
+    console.error("Error syncing discovery state:", e);
+  }
+}
+
 export default function DiscoveryPage() {
+  const [initialLoaded] = useState(() => getInitialDiscoveryState());
+
   const [runs, setRuns] = useState<DiscoveryRun[]>([]);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(initialLoaded.selectedRunId);
   const [pages, setPages] = useState<DiscoveredPage[]>([]);
   const [isLoadingRuns, setIsLoadingRuns] = useState(true);
   const [isLoadingPages, setIsLoadingPages] = useState(false);
   const [isLaunchingScan, setIsLaunchingScan] = useState(false);
 
   // Filter Form State
-  const [country, setCountry] = useState("TN");
-  const [mediaType, setMediaType] = useState("video");
+  const [country, setCountry] = useState(initialLoaded.country);
+  const [mediaType, setMediaType] = useState(initialLoaded.mediaType);
   const [selectedKeyword, setSelectedKeyword] = useState("\u200D");
   const [isCustomKeyword, setIsCustomKeyword] = useState(false);
   const [customKeywordText, setCustomKeywordText] = useState("");
@@ -137,8 +204,33 @@ export default function DiscoveryPage() {
   const [activeDatePreset, setActiveDatePreset] = useState<"last7" | "last30" | "today" | "custom">("last7");
 
   // Table Filter, Sorting & Selection State
-  const [searchFilter, setSearchFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "discovered" | "verified" | "verifying" | "imported" | "ignored">("all");
+  const [searchFilter, setSearchFilter] = useState(initialLoaded.searchFilter);
+  const [statusFilter, setStatusFilter] = useState<"all" | "discovered" | "verified" | "verifying" | "imported" | "ignored">(initialLoaded.statusFilter);
+
+  // Sync state to URL and session storage
+  useEffect(() => {
+    syncDiscoveryStateToUrl({
+      selectedRunId,
+      country,
+      mediaType,
+      searchFilter,
+      statusFilter,
+    });
+  }, [selectedRunId, country, mediaType, searchFilter, statusFilter]);
+
+  // Sync on browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const init = getInitialDiscoveryState();
+      setSelectedRunId(init.selectedRunId);
+      setCountry(init.country);
+      setMediaType(init.mediaType);
+      setSearchFilter(init.searchFilter);
+      setStatusFilter(init.statusFilter);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
   const [sortBy, setSortBy] = useState<string>("matchingAdCount");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [selectedPageIds, setSelectedPageIds] = useState<Set<string>>(new Set());
