@@ -35,10 +35,10 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "24", 10)));
     const offset = (page - 1) * limit;
 
-    // Synchronize any completed active Apify runs on first page load
+    // Asynchronously synchronize completed active Apify runs in background without blocking feed load
     if (page === 1) {
-      await syncApifyRuns().catch((err) => {
-        console.error("[Ad Feed] Apify sync error during feed query:", err);
+      syncApifyRuns().catch((err) => {
+        console.error("[Ad Feed] Apify sync error in background:", err);
       });
     }
 

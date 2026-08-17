@@ -14,6 +14,8 @@ interface ApifyRunDetails {
   exitCode?: number;
 }
 
+let isSyncing = false;
+
 /**
  * Queries Apify REST API for current status of a run ID using configured tokens.
  */
@@ -25,6 +27,7 @@ export async function getApifyRunStatus(runId: string): Promise<ApifyRunDetails 
     try {
       const res = await fetch(`${APIFY_BASE_URL}/actor-runs/${runId}?token=${token}`, {
         cache: "no-store",
+        signal: AbortSignal.timeout(5000),
       });
 
       if (res.ok) {
@@ -51,6 +54,11 @@ export async function getApifyRunStatus(runId: string): Promise<ApifyRunDetails 
  * If Apify actor run has completed, ingests dataset items into ads and ad_observations tables.
  */
 export async function syncApifyRuns(): Promise<{ syncedCount: number; checkedCount: number }> {
+  if (isSyncing) {
+    return { syncedCount: 0, checkedCount: 0 };
+  }
+
+  isSyncing = true;
   let syncedCount = 0;
 
   try {
@@ -119,6 +127,8 @@ export async function syncApifyRuns(): Promise<{ syncedCount: number; checkedCou
   } catch (error) {
     console.error("[Apify Sync] Ingestion sync error:", error);
     return { syncedCount, checkedCount: 0 };
+  } finally {
+    isSyncing = false;
   }
 }
 
