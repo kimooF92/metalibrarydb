@@ -66,7 +66,7 @@ async function runWorker() {
   if (shouldRefreshAll) {
     const cooldownHours = isForceRefresh
       ? 0
-      : parseInt(process.env.AUTO_REFRESH_COOLDOWN_HOURS || "6", 10);
+      : parseInt(process.env.AUTO_REFRESH_COOLDOWN_HOURS || "12", 10);
     console.log(
       `[Refresh Mode] Enqueuing eligible pages for auto-refresh (cooldown: ${cooldownHours}h)...`
     );

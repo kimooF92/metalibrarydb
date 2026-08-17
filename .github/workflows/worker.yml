@@ -50,4 +50,5 @@ jobs:
           PLAYWRIGHT_HEADLESS: "true"
           MAX_SCANS_PER_HOUR: "100"
           MAX_SCANS_PER_DAY: "0"
+          AUTO_REFRESH_COOLDOWN_HOURS: "12"
         run: npm run worker

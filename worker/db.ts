@@ -19,8 +19,11 @@ export async function resetStuckJobs() {
     .where(eq(discoveredPages.status, "verifying"));
 }
 
-export async function enqueueAllPagesForRefresh(cooldownHours: number = 6) {
-  const cutoff = new Date(Date.now() - cooldownHours * 60 * 60 * 1000);
+export async function enqueueAllPagesForRefresh(cooldownHours: number = 12) {
+  // Apply a 30-minute grace buffer so that 12-hour scheduled workflow runs (e.g. 8:00 & 20:00 UTC)
+  // match pages scanned in the previous workflow window without failing strict boundary checks
+  const effectiveCooldown = Math.max(0.5, cooldownHours > 1 ? cooldownHours - 0.5 : cooldownHours);
+  const cutoff = new Date(Date.now() - effectiveCooldown * 60 * 60 * 1000);
 
   // Find pages that either have never been checked, or were last checked before the cutoff time
   const pagesToRefresh = cooldownHours > 0
