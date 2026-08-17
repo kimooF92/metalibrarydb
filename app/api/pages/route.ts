@@ -86,14 +86,17 @@ export async function GET(request: Request) {
       countQuery = countQuery.where(whereClause) as typeof countQuery;
     }
     const countResult = await countQuery;
-    const count = countResult[0]?.count ?? 0;
+    const totalCount = Number(countResult[0]?.count ?? 0);
+    const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+    const effectivePage = page > totalPages ? 1 : page;
+    const effectiveOffset = (effectivePage - 1) * limit;
 
     // Fetch pages
     const pages = await db.query.trackedPages.findMany({
       ...(whereClause ? { where: whereClause } : {}),
       orderBy: [orderClause],
       limit,
-      offset,
+      offset: effectiveOffset,
     });
 
     // Fetch previous scan results & recent history points for these pages
@@ -207,10 +210,10 @@ export async function GET(request: Request) {
     return NextResponse.json({
       data: pagesWithPrev,
       pagination: {
-        page,
+        page: effectivePage,
         limit,
-        total: Number(count),
-        totalPages: Math.ceil(Number(count) / limit),
+        total: totalCount,
+        totalPages,
       },
     });
   } catch (error) {

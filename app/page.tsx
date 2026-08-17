@@ -222,6 +222,20 @@ export default function DashboardPage() {
     setPage(1);
   };
 
+  const handleResetFilters = useCallback(() => {
+    setSearch("");
+    setStatusFilter("all");
+    setSearchTypeFilter("all");
+    setActiveTab("all");
+    setSortBy("createdAt");
+    setSortOrder("desc");
+    setPage(1);
+    try {
+      sessionStorage.removeItem("dashboard_filters");
+      window.history.replaceState(null, "", window.location.pathname);
+    } catch {}
+  }, []);
+
   // Initial load on mount and when filters/pagination change
   useEffect(() => {
     loadData();
@@ -415,6 +429,7 @@ export default function DashboardPage() {
         sortOrder={sortOrder}
         onSortChange={handleSortChange}
         onWatchlistToggle={() => loadData(true)}
+        onResetFilters={handleResetFilters}
       />
 
       {/* Stats Modal */}
