@@ -60,6 +60,7 @@ export async function POST(
       const context = await browser.newContext({
         userAgent:
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        viewport: { width: 1280, height: 800 },
       });
       const page = await context.newPage();
 
@@ -74,14 +75,13 @@ export async function POST(
                 const json = JSON.parse(text);
                 findMediaInJSON(json, extracted);
               } catch {
-                // Regex fallback
-                const vidMatch = text.match(/"video_hd_url":"([^"]+)"/) || text.match(/"video_sd_url":"([^"]+)"/);
-                if (vidMatch && vidMatch[1] && !extracted.videoUrl) {
-                  extracted.videoUrl = vidMatch[1].replace(/\\/g, "");
+                const vMatch = text.match(/https:\\\/\\\/[^\s"]+?\.mp4[^\s"]*/g) || text.match(/https:\/\/[^\s"]+?\.mp4[^\s"]*/g);
+                if (vMatch && vMatch[0] && !extracted.videoUrl) {
+                  extracted.videoUrl = vMatch[0].replace(/\\/g, "");
                 }
-                const thumbMatch = text.match(/"video_preview_image_url":"([^"]+)"/) || text.match(/"resized_image_url":"([^"]+)"/);
-                if (thumbMatch && thumbMatch[1] && !extracted.thumbnailUrl) {
-                  extracted.thumbnailUrl = thumbMatch[1].replace(/\\/g, "");
+                const imgMatch = text.match(/https:\\\/\\\/scontent[^\s"]+?/g) || text.match(/https:\/\/scontent[^\s"]+?/g);
+                if (imgMatch && imgMatch[0] && !extracted.thumbnailUrl) {
+                  extracted.thumbnailUrl = imgMatch[0].replace(/\\/g, "");
                 }
               }
             }
@@ -89,21 +89,36 @@ export async function POST(
         }
       });
 
-      await page.goto(`https://www.facebook.com/ads/library/?id=${adRecord.adArchiveId}`, {
+      const targetUrl = `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&id=${adRecord.adArchiveId}`;
+      await page.goto(targetUrl, {
         waitUntil: "domcontentloaded",
         timeout: 15000,
       });
 
-      await page.waitForTimeout(3000);
+      await page.waitForTimeout(3500);
 
-      // DOM fallback if GraphQL yielded no video URL
-      if (!extracted.videoUrl) {
-        const vidEl = await page.$("video");
-        if (vidEl) {
-          const src = await vidEl.getAttribute("src");
-          if (src && !src.startsWith("blob:")) extracted.videoUrl = src;
-          const poster = await vidEl.getAttribute("poster");
-          if (poster && !extracted.thumbnailUrl) extracted.thumbnailUrl = poster;
+      // Iterate ALL <video> elements on page
+      const videoEls = await page.$$("video");
+      for (const vidEl of videoEls) {
+        const src = await vidEl.getAttribute("src");
+        if (src && !src.startsWith("blob:") && src.startsWith("http") && !extracted.videoUrl) {
+          extracted.videoUrl = src;
+        }
+        const poster = await vidEl.getAttribute("poster");
+        if (poster && poster.startsWith("http") && !extracted.thumbnailUrl) {
+          extracted.thumbnailUrl = poster;
+        }
+      }
+
+      // Iterate ALL <img> elements on page if thumbnail missing
+      if (!extracted.thumbnailUrl) {
+        const imgEls = await page.$$("img");
+        for (const img of imgEls) {
+          const src = await img.getAttribute("src");
+          if (src && src.includes("fbcdn.net") && src.startsWith("http")) {
+            extracted.thumbnailUrl = src;
+            break;
+          }
         }
       }
     } catch (err: any) {
@@ -116,10 +131,10 @@ export async function POST(
     const refreshedThumbnailUrl = extracted.thumbnailUrl || null;
 
     if (refreshedVideoUrl || refreshedThumbnailUrl) {
-      // Backup to Backblaze B2 (with Catbox fallback) if configured
       let finalVideoUrl = refreshedVideoUrl;
       let finalThumbnailUrl = refreshedThumbnailUrl;
 
+      // Backup to Backblaze B2 (with Catbox fallback) if configured
       if (isB2Configured()) {
         if (refreshedVideoUrl) {
           console.log(`[Ad Refresh] Uploading fresh video to storage: ${refreshedVideoUrl.substring(0, 60)}...`);
