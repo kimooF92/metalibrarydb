@@ -21,7 +21,10 @@ export async function GET(req: NextRequest) {
     const minDuplications = parseInt(searchParams.get("minDuplications") || "1", 10);
     const mediaType = searchParams.get("mediaType");
     const status = searchParams.get("status");
-    const sortBy = searchParams.get("sortBy") || "started_running_on";
+    const ctaText = searchParams.get("ctaText");
+    const isWatchlisted = searchParams.get("isWatchlisted") === "true";
+    const smartPreset = searchParams.get("smartPreset");
+    let sortBy = searchParams.get("sortBy") || "started_running_on";
     const sortOrder = searchParams.get("sortOrder") || "desc";
 
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
@@ -38,6 +41,35 @@ export async function GET(req: NextRequest) {
     // Build conditions array
     const conditions = [];
 
+    // Apply Smart Presets if designated
+    if (smartPreset === "fast_scalers") {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      conditions.push(gte(ads.startedRunningOn, sevenDaysAgo));
+      conditions.push(gte(adObservations.duplicationCount, 3));
+      conditions.push(eq(adObservations.isActive, true));
+      if (!searchParams.get("sortBy")) sortBy = "duplication_count";
+    } else if (smartPreset === "evergreen") {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      conditions.push(lte(ads.startedRunningOn, thirtyDaysAgo));
+      conditions.push(gte(adObservations.duplicationCount, 2));
+      conditions.push(eq(adObservations.isActive, true));
+    } else if (smartPreset === "viral_videos") {
+      conditions.push(eq(ads.mediaType, "video"));
+      conditions.push(gte(adObservations.duplicationCount, 3));
+      conditions.push(eq(adObservations.isActive, true));
+      if (!searchParams.get("sortBy")) sortBy = "duplication_count";
+    } else if (smartPreset === "watchlist") {
+      conditions.push(eq(trackedPages.isWatchlisted, true));
+      conditions.push(eq(adObservations.isActive, true));
+    } else if (smartPreset === "daily_radar") {
+      const twoDaysAgo = new Date();
+      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+      conditions.push(gte(ads.startedRunningOn, twoDaysAgo));
+      conditions.push(eq(adObservations.isActive, true));
+    }
+
     if (trackedPageId) {
       // trackedPageId can be the UUID PK of tracked_pages or pageId string — filter flexibly
       conditions.push(
@@ -49,6 +81,26 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    if (isWatchlisted && smartPreset !== "watchlist") {
+      conditions.push(eq(trackedPages.isWatchlisted, true));
+    }
+
+    if (ctaText && ctaText !== "all" && smartPreset !== "ecom_sales") {
+      if (ctaText === "ecom_any") {
+        conditions.push(
+          or(
+            ilike(ads.ctaText, "%Shop%"),
+            ilike(ads.ctaText, "%Order%"),
+            ilike(ads.ctaText, "%Buy%"),
+            ilike(ads.ctaText, "%Commander%"),
+            ilike(ads.ctaText, "%Acheter%")
+          )
+        );
+      } else {
+        conditions.push(ilike(ads.ctaText, `%${ctaText.trim()}%`));
+      }
+    }
+
     if (search && search.trim() !== "") {
       const term = `%${search.trim()}%`;
       conditions.push(
@@ -56,42 +108,43 @@ export async function GET(req: NextRequest) {
           ilike(ads.caption, term),
           ilike(ads.title, term),
           ilike(ads.pageName, term),
-          ilike(ads.adArchiveId, term)
+          ilike(ads.adArchiveId, term),
+          ilike(ads.linkUrl, term)
         )
       );
     }
 
-    if (dateFrom) {
+    if (dateFrom && !smartPreset) {
       const fromDate = new Date(dateFrom);
       if (!isNaN(fromDate.getTime())) {
         conditions.push(gte(ads.startedRunningOn, fromDate));
       }
     }
 
-    if (dateTo) {
+    if (dateTo && !smartPreset) {
       const toDate = new Date(dateTo);
       if (!isNaN(toDate.getTime())) {
         conditions.push(lte(ads.startedRunningOn, toDate));
       }
     }
 
-    if (minDaysRunning > 0) {
+    if (minDaysRunning > 0 && !smartPreset) {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - minDaysRunning);
       conditions.push(lte(ads.startedRunningOn, cutoffDate));
     }
 
-    if (minDuplications > 1) {
+    if (minDuplications > 1 && !smartPreset) {
       conditions.push(gte(adObservations.duplicationCount, minDuplications));
     }
 
-    if (mediaType && mediaType !== "all") {
+    if (mediaType && mediaType !== "all" && smartPreset !== "viral_videos") {
       conditions.push(eq(ads.mediaType, mediaType));
     }
 
     if (status === "archived") {
       conditions.push(eq(ads.isArchived, true));
-    } else {
+    } else if (!smartPreset) {
       // Hide archived ads from main feed states (all, active, inactive)
       conditions.push(or(eq(ads.isArchived, false), sql`${ads.isArchived} IS NULL`));
       if (status === "active") {
@@ -99,6 +152,8 @@ export async function GET(req: NextRequest) {
       } else if (status === "inactive") {
         conditions.push(eq(adObservations.isActive, false));
       }
+    } else {
+      conditions.push(or(eq(ads.isArchived, false), sql`${ads.isArchived} IS NULL`));
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

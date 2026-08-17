@@ -150,10 +150,14 @@ export interface AdFilterParams {
   minDuplications?: number;
   mediaType?: "all" | "image" | "video" | "carousel";
   status?: "all" | "active" | "inactive" | "archived" | "unknown";
-  sortBy?: "started_running_on" | "duplication_count" | "first_seen_at";
+  ctaText?: string;
+  isWatchlisted?: boolean;
+  smartPreset?: string;
+  sortBy?: "started_running_on" | "duplication_count" | "first_seen_at" | "oldest" | "recently_observed";
   sortOrder?: "asc" | "desc";
   page?: number;
   limit?: number;
   enabled?: boolean;
 }
+
 

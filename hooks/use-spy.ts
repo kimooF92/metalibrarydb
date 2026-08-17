@@ -26,7 +26,10 @@ export function useAdFeed(initialParams?: AdFilterParams) {
           prev.enabled !== initialParams.enabled ||
           prev.search !== initialParams.search ||
           prev.status !== initialParams.status ||
-          prev.mediaType !== initialParams.mediaType;
+          prev.mediaType !== initialParams.mediaType ||
+          prev.ctaText !== initialParams.ctaText ||
+          prev.isWatchlisted !== initialParams.isWatchlisted ||
+          prev.smartPreset !== initialParams.smartPreset;
 
         if (hasChanged) {
           return {
@@ -45,6 +48,9 @@ export function useAdFeed(initialParams?: AdFilterParams) {
     initialParams?.search,
     initialParams?.status,
     initialParams?.mediaType,
+    initialParams?.ctaText,
+    initialParams?.isWatchlisted,
+    initialParams?.smartPreset,
   ]);
 
   const [ads, setAds] = useState<Ad[]>([]);
@@ -88,6 +94,9 @@ export function useAdFeed(initialParams?: AdFilterParams) {
       }
       if (params.mediaType && params.mediaType !== "all") query.set("mediaType", params.mediaType);
       if (params.status && params.status !== "all") query.set("status", params.status);
+      if (params.ctaText && params.ctaText !== "all") query.set("ctaText", params.ctaText);
+      if (params.isWatchlisted) query.set("isWatchlisted", "true");
+      if (params.smartPreset && params.smartPreset !== "all") query.set("smartPreset", params.smartPreset);
       if (params.sortBy) query.set("sortBy", params.sortBy);
       if (params.sortOrder) query.set("sortOrder", params.sortOrder);
       query.set("page", currentPage.toString());

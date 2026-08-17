@@ -2,7 +2,24 @@
 
 import { useState, useEffect } from "react";
 import { AdFilterParams } from "@/types";
-import { Search, Filter, Calendar, Layers, SlidersHorizontal, RefreshCw, LayoutGrid, LayoutList, Clock, Archive } from "lucide-react";
+import {
+  Search,
+  Filter,
+  Calendar,
+  Layers,
+  SlidersHorizontal,
+  RefreshCw,
+  LayoutGrid,
+  LayoutList,
+  Clock,
+  Archive,
+  Flame,
+  Trophy,
+  Video,
+  Star,
+  Zap,
+  Tag,
+} from "lucide-react";
 
 interface SpyFiltersProps {
   filters: AdFilterParams;
@@ -11,6 +28,71 @@ interface SpyFiltersProps {
   onFilterChange: (newFilters: Partial<AdFilterParams>) => void;
   onReset: () => void;
 }
+
+interface SmartPill {
+  id: string;
+  label: string;
+  icon: any;
+  colorClass: string;
+  activeColorClass: string;
+  badge?: string;
+  description: string;
+}
+
+const SMART_PILLS: SmartPill[] = [
+  {
+    id: "all",
+    label: "All Ads",
+    icon: Layers,
+    colorClass: "hover:border-slate-400 dark:hover:border-slate-600",
+    activeColorClass: "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 border-slate-900 dark:border-slate-100 shadow-sm",
+    description: "Browse all captured ad creatives",
+  },
+  {
+    id: "fast_scalers",
+    label: "Fast Scalers",
+    icon: Flame,
+    colorClass: "hover:border-amber-400 dark:hover:border-amber-600 text-amber-600 dark:text-amber-400",
+    activeColorClass: "bg-gradient-to-r from-amber-500 to-orange-600 text-white border-amber-500 shadow-sm shadow-amber-500/25",
+    badge: "Hot",
+    description: "Launched in last 7 days with 3+ copies running",
+  },
+  {
+    id: "evergreen",
+    label: "Evergreen Winners",
+    icon: Trophy,
+    colorClass: "hover:border-emerald-400 dark:hover:border-emerald-600 text-emerald-600 dark:text-emerald-400",
+    activeColorClass: "bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-emerald-500 shadow-sm shadow-emerald-500/25",
+    badge: "30d+",
+    description: "Active profitable ads running 30+ days",
+  },
+  {
+    id: "viral_videos",
+    label: "Viral Videos",
+    icon: Video,
+    colorClass: "hover:border-purple-400 dark:hover:border-purple-600 text-purple-600 dark:text-purple-400",
+    activeColorClass: "bg-gradient-to-r from-purple-600 to-indigo-600 text-white border-purple-500 shadow-sm shadow-purple-500/25",
+    badge: "UGC",
+    description: "High-duplication video & UGC creatives",
+  },
+  {
+    id: "watchlist",
+    label: "Watchlist Only",
+    icon: Star,
+    colorClass: "hover:border-yellow-400 dark:hover:border-yellow-600 text-yellow-600 dark:text-yellow-400",
+    activeColorClass: "bg-gradient-to-r from-amber-500 to-yellow-600 text-white border-yellow-500 shadow-sm shadow-yellow-500/25",
+    description: "Ads from your starred competitor pages",
+  },
+  {
+    id: "daily_radar",
+    label: "Daily Radar",
+    icon: Zap,
+    colorClass: "hover:border-fuchsia-400 dark:hover:border-fuchsia-600 text-fuchsia-600 dark:text-fuchsia-400",
+    activeColorClass: "bg-gradient-to-r from-fuchsia-600 to-pink-600 text-white border-fuchsia-500 shadow-sm shadow-fuchsia-500/25",
+    badge: "New",
+    description: "Ads launched within the last 48 hours",
+  },
+];
 
 export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange, onReset }: SpyFiltersProps) {
   const [showCustomDates, setShowCustomDates] = useState(Boolean(filters.dateFrom || filters.dateTo));
@@ -30,6 +112,25 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
     }, 350);
     return () => clearTimeout(timer);
   }, [searchValue, filters.search, onFilterChange]);
+
+  const activePreset = filters.smartPreset || "all";
+
+  const handlePillClick = (pillId: string) => {
+    if (pillId === "all" || pillId === activePreset) {
+      // Toggle off / Reset to normal all
+      onFilterChange({
+        smartPreset: undefined,
+        status: filters.status === "archived" ? "archived" : "all",
+      });
+      return;
+    }
+
+    // Activate specific preset
+    onFilterChange({
+      smartPreset: pillId,
+      status: "all", // Ensure we exit archive vault when applying smart feed preset
+    });
+  };
 
   const handleDatePreset = (preset: string) => {
     setDatePreset(preset);
@@ -63,14 +164,14 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-4 mb-4">
-      {/* Top Bar: Search Input & Quick Controls */}
+      {/* 1. Top Bar: Search Input & Quick Controls */}
       <div className="flex flex-col sm:flex-row items-center gap-3 justify-between">
         {/* Keyword Search Bar */}
         <div className="relative w-full sm:w-80 md:w-96">
           <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-600 dark:text-slate-400" />
           <input
             type="text"
-            placeholder="Search ad copy, title, brand name, or ad ID..."
+            placeholder="Search copy, title, brand name, link URL, or ad ID..."
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
             className="w-full bg-white dark:bg-slate-950/80 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-400 rounded-lg pl-9 pr-3 py-2 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 transition-all"
@@ -82,7 +183,13 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
           {/* Quick Archive Vault Toggle Button */}
           <button
             type="button"
-            onClick={() => onFilterChange({ status: filters.status === "archived" ? "all" : "archived" })}
+            onClick={() => {
+              const newStatus = filters.status === "archived" ? "all" : "archived";
+              onFilterChange({
+                status: newStatus,
+                smartPreset: undefined, // Clear smart preset if entering archive vault
+              });
+            }}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
               filters.status === "archived"
                 ? "bg-purple-600 text-white border-purple-500 shadow-md shadow-purple-600/30"
@@ -103,7 +210,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
                   ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
               }`}
-              title="Grid View (4 Cards Per Row)"
+              title="Grid View (Cards Layout)"
             >
               <LayoutGrid className="w-3.5 h-3.5" />
             </button>
@@ -136,7 +243,50 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
         </div>
       </div>
 
-      {/* Filter Options Row */}
+      {/* 2. 1-Click Smart Filter Pills Bar */}
+      <div className="pt-2 border-t border-slate-200/80 dark:border-slate-800/60">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 shrink-0 mr-1 hidden sm:inline-block">
+            Quick Filters:
+          </span>
+          {SMART_PILLS.map((pill) => {
+            const Icon = pill.icon;
+            const isActive =
+              (pill.id === "all" && (!filters.smartPreset || filters.smartPreset === "all")) ||
+              filters.smartPreset === pill.id;
+
+            return (
+              <button
+                key={pill.id}
+                type="button"
+                onClick={() => handlePillClick(pill.id)}
+                title={pill.description}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all cursor-pointer shrink-0 ${
+                  isActive
+                    ? pill.activeColorClass
+                    : `bg-slate-50 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 ${pill.colorClass}`
+                }`}
+              >
+                <Icon className={`w-3.5 h-3.5 ${isActive ? "text-current" : ""}`} />
+                <span>{pill.label}</span>
+                {pill.badge && (
+                  <span
+                    className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider ${
+                      isActive
+                        ? "bg-white/20 text-white"
+                        : "bg-slate-200/80 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                    }`}
+                  >
+                    {pill.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 3. Detailed Filter Options Row */}
       <div className="flex flex-wrap items-center gap-2.5 pt-2.5 border-t border-slate-200 dark:border-slate-800/40 text-[11px]">
         {/* Running For (List of Days) Filter */}
         <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
@@ -144,7 +294,9 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
           <span className="text-slate-600 dark:text-slate-400 font-semibold">Running For:</span>
           <select
             value={filters.minDaysRunning || 0}
-            onChange={(e) => onFilterChange({ minDaysRunning: Number(e.target.value) })}
+            onChange={(e) =>
+              onFilterChange({ minDaysRunning: Number(e.target.value), smartPreset: undefined })
+            }
             className="bg-transparent text-slate-800 dark:text-slate-200 font-semibold focus:outline-none cursor-pointer"
           >
             <option value={0} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Any duration</option>
@@ -162,7 +314,10 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
           <span className="text-slate-600 dark:text-slate-400 font-semibold">Launched:</span>
           <select
             value={showCustomDates ? "custom" : datePreset}
-            onChange={(e) => handleDatePreset(e.target.value)}
+            onChange={(e) => {
+              onFilterChange({ smartPreset: undefined });
+              handleDatePreset(e.target.value);
+            }}
             className="bg-transparent text-slate-800 dark:text-slate-200 font-semibold focus:outline-none cursor-pointer"
           >
             <option value="all" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All Time</option>
@@ -180,7 +335,9 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
           <span className="text-slate-600 dark:text-slate-400 font-semibold">Scale:</span>
           <select
             value={filters.minDuplications || 1}
-            onChange={(e) => onFilterChange({ minDuplications: Number(e.target.value) })}
+            onChange={(e) =>
+              onFilterChange({ minDuplications: Number(e.target.value), smartPreset: undefined })
+            }
             className="bg-transparent text-slate-800 dark:text-slate-200 font-semibold focus:outline-none cursor-pointer"
           >
             <option value={1} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All ads (1+ copies)</option>
@@ -196,7 +353,9 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
           <span className="text-slate-600 dark:text-slate-400 font-semibold">Media:</span>
           <select
             value={filters.mediaType || "all"}
-            onChange={(e) => onFilterChange({ mediaType: e.target.value as any })}
+            onChange={(e) =>
+              onFilterChange({ mediaType: e.target.value as any, smartPreset: undefined })
+            }
             className="bg-transparent text-slate-800 dark:text-slate-200 font-semibold focus:outline-none cursor-pointer"
           >
             <option value="all" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All Media</option>
@@ -206,12 +365,37 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
           </select>
         </div>
 
+        {/* Call to Action (CTA) Filter */}
+        <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
+          <Tag className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+          <span className="text-slate-600 dark:text-slate-400 font-semibold">CTA:</span>
+          <select
+            value={filters.ctaText || "all"}
+            onChange={(e) =>
+              onFilterChange({ ctaText: e.target.value as any, smartPreset: undefined })
+            }
+            className="bg-transparent text-slate-800 dark:text-slate-200 font-semibold focus:outline-none cursor-pointer"
+          >
+            <option value="all" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All CTAs</option>
+            <option value="ecom_any" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">🛍️ Any Shop / Buy CTA</option>
+            <option value="Shop Now" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Shop Now</option>
+            <option value="Order Now" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Order Now / Commander</option>
+            <option value="Learn More" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Learn More</option>
+            <option value="Send Message" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Send Message / WhatsApp</option>
+            <option value="Get Offer" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Get Offer</option>
+            <option value="Sign Up" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Sign Up</option>
+            <option value="Contact Us" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Contact Us</option>
+          </select>
+        </div>
+
         {/* Active Status Filter */}
         <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
           <span className="text-slate-600 dark:text-slate-400 font-semibold">Status:</span>
           <select
             value={filters.status || "all"}
-            onChange={(e) => onFilterChange({ status: e.target.value as any })}
+            onChange={(e) =>
+              onFilterChange({ status: e.target.value as any, smartPreset: undefined })
+            }
             className="bg-transparent text-slate-800 dark:text-slate-200 font-semibold focus:outline-none cursor-pointer"
           >
             <option value="all" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All Statuses</option>
@@ -236,7 +420,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
         </button>
       </div>
 
-      {/* Custom Date Range Pickers (Rendered when Custom Range option is selected) */}
+      {/* 4. Custom Date Range Pickers (Rendered when Custom Range option is selected) */}
       {showCustomDates && (
         <div className="flex flex-wrap items-center gap-3 pt-2.5 border-t border-slate-200 dark:border-slate-800/40 text-xs">
           <span className="text-slate-600 dark:text-slate-400 font-semibold">Select Date Range:</span>
@@ -248,6 +432,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
               onChange={(e) =>
                 onFilterChange({
                   dateFrom: e.target.value ? new Date(e.target.value).toISOString() : undefined,
+                  smartPreset: undefined,
                 })
               }
               className="bg-white dark:bg-slate-950/80 text-slate-800 dark:text-slate-200 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-2.5 py-1 focus:outline-none focus:border-indigo-500 cursor-pointer"
@@ -262,6 +447,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
               onChange={(e) =>
                 onFilterChange({
                   dateTo: e.target.value ? new Date(e.target.value + "T23:59:59").toISOString() : undefined,
+                  smartPreset: undefined,
                 })
               }
               className="bg-white dark:bg-slate-950/80 text-slate-800 dark:text-slate-200 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-2.5 py-1 focus:outline-none focus:border-indigo-500 cursor-pointer"
@@ -271,7 +457,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
           {(filters.dateFrom || filters.dateTo) && (
             <button
               type="button"
-              onClick={() => onFilterChange({ dateFrom: undefined, dateTo: undefined })}
+              onClick={() => onFilterChange({ dateFrom: undefined, dateTo: undefined, smartPreset: undefined })}
               className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline font-semibold ml-2 cursor-pointer"
             >
               Clear Range
