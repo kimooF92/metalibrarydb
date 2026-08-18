@@ -29,6 +29,7 @@ import {
   Award,
   Target,
   Crown,
+  Sparkles,
 } from "lucide-react";
 
 interface SpyFiltersProps {
@@ -59,75 +60,52 @@ const SMART_PILLS: SmartPill[] = [
     description: "Browse all captured ad creatives",
   },
   {
-    id: "multi_angle",
-    label: "Multi-Angle Winners",
-    icon: Target,
-    colorClass: "hover:border-cyan-400 dark:hover:border-cyan-600 text-cyan-600 dark:text-cyan-400",
-    activeColorClass: "bg-gradient-to-r from-cyan-600 to-blue-600 text-white border-cyan-500 shadow-sm shadow-cyan-500/25",
-    badge: "🎯 3+ Angles",
-    description: "High-conviction products with 3+ creative variations tested by the brand",
+    id: "top_winners",
+    label: "Top Winners",
+    icon: Trophy,
+    colorClass: "hover:border-amber-400 dark:hover:border-amber-600 text-amber-600 dark:text-amber-400",
+    activeColorClass: "bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-bold border-amber-400 shadow-sm shadow-amber-500/25",
+    description: "Highest Winner Scores (80+) combining scale and longevity",
   },
   {
     id: "breakout",
-    label: "Breakout Winners",
+    label: "Breakout",
     icon: Rocket,
     colorClass: "hover:border-pink-400 dark:hover:border-pink-600 text-pink-600 dark:text-pink-400",
-    activeColorClass: "bg-gradient-to-r from-pink-600 via-rose-500 to-amber-500 text-white border-pink-500 shadow-sm shadow-pink-500/25 animate-pulse",
-    badge: "🚀 Viral",
+    activeColorClass: "bg-gradient-to-r from-pink-600 via-rose-500 to-amber-500 text-white border-pink-500 shadow-sm shadow-pink-500/25",
     description: "New ads launched in last 7 days scaling fast with 3+ copies",
   },
   {
-    id: "top_winners",
-    label: "Top Winners",
-    icon: Award,
-    colorClass: "hover:border-amber-400 dark:hover:border-amber-600 text-amber-600 dark:text-amber-400",
-    activeColorClass: "bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-bold border-amber-400 shadow-sm shadow-amber-500/25",
-    badge: "🏆 80+",
-    description: "Highest Winner Scores combining scale and longevity",
-  },
-  {
-    id: "fast_scalers",
-    label: "Fast Scalers",
-    icon: Flame,
-    colorClass: "hover:border-amber-400 dark:hover:border-amber-600 text-amber-600 dark:text-amber-400",
-    activeColorClass: "bg-gradient-to-r from-amber-500 to-orange-600 text-white border-amber-500 shadow-sm shadow-amber-500/25",
-    badge: "Hot",
-    description: "Launched in last 7 days with 3+ copies running",
+    id: "multi_angle",
+    label: "Multi-Angle",
+    icon: Target,
+    colorClass: "hover:border-cyan-400 dark:hover:border-cyan-600 text-cyan-600 dark:text-cyan-400",
+    activeColorClass: "bg-gradient-to-r from-cyan-600 to-blue-600 text-white border-cyan-500 shadow-sm shadow-cyan-500/25",
+    description: "High-conviction products with 3+ creative angles tested by the brand",
   },
   {
     id: "evergreen",
-    label: "Evergreen Winners",
-    icon: Trophy,
+    label: "Evergreen",
+    icon: Sparkles,
     colorClass: "hover:border-emerald-400 dark:hover:border-emerald-600 text-emerald-600 dark:text-emerald-400",
     activeColorClass: "bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-emerald-500 shadow-sm shadow-emerald-500/25",
-    badge: "30d+",
     description: "Active profitable ads running 30+ days",
   },
   {
     id: "viral_videos",
-    label: "Viral Videos",
+    label: "Videos",
     icon: Video,
     colorClass: "hover:border-purple-400 dark:hover:border-purple-600 text-purple-600 dark:text-purple-400",
     activeColorClass: "bg-gradient-to-r from-purple-600 to-indigo-600 text-white border-purple-500 shadow-sm shadow-purple-500/25",
-    badge: "UGC",
     description: "High-duplication video & UGC creatives",
   },
   {
     id: "watchlist",
-    label: "Watchlist Only",
+    label: "Watchlist",
     icon: Star,
     colorClass: "hover:border-yellow-400 dark:hover:border-yellow-600 text-yellow-600 dark:text-yellow-400",
     activeColorClass: "bg-gradient-to-r from-amber-500 to-yellow-600 text-white border-yellow-500 shadow-sm shadow-yellow-500/25",
     description: "Ads from your starred competitor pages",
-  },
-  {
-    id: "daily_radar",
-    label: "Daily Radar",
-    icon: Zap,
-    colorClass: "hover:border-fuchsia-400 dark:hover:border-fuchsia-600 text-fuchsia-600 dark:text-fuchsia-400",
-    activeColorClass: "bg-gradient-to-r from-fuchsia-600 to-pink-600 text-white border-fuchsia-500 shadow-sm shadow-fuchsia-500/25",
-    badge: "New",
-    description: "Ads launched within the last 48 hours",
   },
 ];
 
@@ -341,47 +319,38 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
 
       {/* 2. 1-Click Smart Filter Pills Bar */}
       <div className="pt-2 border-t border-slate-200/80 dark:border-slate-800/60">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 shrink-0 mr-1 hidden sm:inline-block">
-            Quick Filters:
-          </span>
-          {SMART_PILLS.map((pill) => {
-            const Icon = pill.icon;
-            const isActive =
-              (pill.id === "all" && (!filters.smartPreset || filters.smartPreset === "all")) ||
-              filters.smartPreset === pill.id;
+        <div className="flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 shrink-0 mr-1 hidden md:inline-block">
+              Quick Filters:
+            </span>
+            {SMART_PILLS.map((pill) => {
+              const Icon = pill.icon;
+              const isActive =
+                (pill.id === "all" && (!filters.smartPreset || filters.smartPreset === "all")) ||
+                filters.smartPreset === pill.id;
 
-            return (
-              <button
-                key={pill.id}
-                type="button"
-                onClick={() => handlePillClick(pill.id)}
-                title={pill.description}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all cursor-pointer shrink-0 ${
-                  isActive
-                    ? pill.activeColorClass
-                    : `bg-slate-50 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 ${pill.colorClass}`
-                }`}
-              >
-                <Icon className={`w-3.5 h-3.5 ${isActive ? "text-current" : ""}`} />
-                <span>{pill.label}</span>
-                {pill.badge && (
-                  <span
-                    className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider ${
-                      isActive
-                        ? "bg-white/20 text-white"
-                        : "bg-slate-200/80 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
-                    }`}
-                  >
-                    {pill.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={pill.id}
+                  type="button"
+                  onClick={() => handlePillClick(pill.id)}
+                  title={pill.description}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all cursor-pointer shrink-0 ${
+                    isActive
+                      ? pill.activeColorClass
+                      : `bg-slate-50 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 ${pill.colorClass}`
+                  }`}
+                >
+                  <Icon className={`w-3.5 h-3.5 ${isActive ? "text-current" : ""}`} />
+                  <span>{pill.label}</span>
+                </button>
+              );
+            })}
+          </div>
 
           {/* More Filters Toggle Button */}
-          <div className="ml-auto pl-2 shrink-0">
+          <div className="shrink-0 ml-auto">
             <button
               type="button"
               onClick={() => setShowAdvancedFilters((prev) => !prev)}
