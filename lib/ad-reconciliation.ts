@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { ads, adObservations, trackedPages } from "@/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, or, inArray } from "drizzle-orm";
 
 export interface ReconciliationOptions {
   isVerifiedZeroState?: boolean;
@@ -24,15 +24,22 @@ export async function reconcileArchivedAds(
   let archivedCount = 0;
 
   try {
-    // 0. Safeguard: Only run auto-archival for official Meta Page ID targets (searchType === 'page')
+    // 0. Safeguard: Only run auto-archival for official Meta Page targets
     const trackedPage = await db.query.trackedPages.findFirst({
       where: eq(trackedPages.id, trackedPageId),
       columns: { id: true, searchType: true, pageId: true, displayName: true, currentResults: true },
     });
 
-    if (!trackedPage || trackedPage.searchType !== "page") {
+    const isPageTarget = Boolean(
+      trackedPage && (
+        trackedPage.searchType === "page" ||
+        (trackedPage.pageId && trackedPage.pageId !== "0" && !trackedPage.pageId.includes(" "))
+      )
+    );
+
+    if (!isPageTarget) {
       console.log(
-        `[Ad Reconciliation] ⚠️ Skipped archival: Tracked page ${trackedPageId} ("${trackedPage?.displayName || "unknown"}") is not an official Page ID target (searchType="${trackedPage?.searchType || "none"}").`
+        `[Ad Reconciliation] ⚠️ Skipped archival: Tracked page ${trackedPageId} ("${trackedPage?.displayName || "unknown"}") is not an official Page target (searchType="${trackedPage?.searchType || "none"}", pageId="${trackedPage?.pageId || "none"}").`
       );
       return { archivedCount: 0 };
     }
@@ -43,18 +50,30 @@ export async function reconcileArchivedAds(
       columns: { adId: true },
     });
 
-    if (previousObservations.length === 0) {
+    const obsAdIds = Array.from(new Set(previousObservations.map((o) => o.adId)));
+
+    // 2. Efficiently fetch canonical ads associated with this page that are currently ACTIVE (isArchived = false)
+    const adConditions = [eq(ads.isArchived, false)];
+    const targetMatchers = [];
+    if (obsAdIds.length > 0) {
+      targetMatchers.push(inArray(ads.id, obsAdIds));
+    }
+    if (trackedPage?.pageId && trackedPage.pageId !== "0") {
+      targetMatchers.push(eq(ads.pageId, trackedPage.pageId));
+    }
+
+    if (targetMatchers.length === 0) {
       return { archivedCount: 0 };
     }
 
-    const previousAdIds = Array.from(new Set(previousObservations.map((o) => o.adId)));
+    if (targetMatchers.length === 1) {
+      adConditions.push(targetMatchers[0]);
+    } else {
+      adConditions.push(or(...targetMatchers)!);
+    }
 
-    // 2. Efficiently fetch ONLY canonical ads that are currently ACTIVE (isArchived = false)
     const activeAds = await db.query.ads.findMany({
-      where: and(
-        inArray(ads.id, previousAdIds),
-        eq(ads.isArchived, false)
-      ),
+      where: and(...adConditions),
       columns: { id: true, adArchiveId: true },
     });
 
@@ -69,13 +88,13 @@ export async function reconcileArchivedAds(
     if (observedCount === 0) {
       if (!options.isVerifiedZeroState) {
         console.warn(
-          `[Ad Reconciliation] ⚠️ Skipped 0-ad archival: 0 ads observed for ${trackedPage.displayName}, but isVerifiedZeroState flag is false.`
+          `[Ad Reconciliation] ⚠️ Skipped 0-ad archival: 0 ads observed for ${trackedPage?.displayName || trackedPageId}, but isVerifiedZeroState flag is false.`
         );
         return { archivedCount: 0 };
       }
     } else if (!options.isFullScan) {
       // For automated background scans that are not verified full scans, check drop-rate
-      const expectedCount = trackedPage.currentResults || previousActiveCount;
+      const expectedCount = trackedPage?.currentResults || previousActiveCount;
       const threshold = Math.min(previousActiveCount, expectedCount) * 0.7;
       if (observedCount < threshold && observedCount < 5) {
         console.warn(
@@ -102,8 +121,14 @@ export async function reconcileArchivedAds(
       .set({ isArchived: true, archivedAt: now, updatedAt: now })
       .where(inArray(ads.id, adIdsToArchive));
 
-    // 6. Update or insert observations for this scan
+    // 6. Update or insert observations for this scan and mark previous observations as inactive
     for (const adId of adIdsToArchive) {
+      // Ensure all observations for this archived ad are marked inactive
+      await db
+        .update(adObservations)
+        .set({ isActive: false, duplicationCount: 0 })
+        .where(eq(adObservations.adId, adId));
+
       const existingObs = await db.query.adObservations.findFirst({
         where: and(
           eq(adObservations.creativeScanId, creativeScanId),
@@ -111,12 +136,7 @@ export async function reconcileArchivedAds(
         ),
       });
 
-      if (existingObs) {
-        await db
-          .update(adObservations)
-          .set({ isActive: false, duplicationCount: 0 })
-          .where(eq(adObservations.id, existingObs.id));
-      } else {
+      if (!existingObs) {
         await db.insert(adObservations).values({
           creativeScanId,
           adId,
@@ -132,7 +152,7 @@ export async function reconcileArchivedAds(
 
     if (archivedCount > 0) {
       console.log(
-        `[Ad Reconciliation] 📦 Archived ${archivedCount} turned-off ad(s) for tracked page ${trackedPage.displayName || trackedPageId}.`
+        `[Ad Reconciliation] 📦 Archived ${archivedCount} turned-off ad(s) for tracked page ${trackedPage?.displayName || trackedPageId}.`
       );
     }
   } catch (error) {

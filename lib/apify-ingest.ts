@@ -287,13 +287,15 @@ export async function ingestApifyDatasetItems(
       });
 
       if (existingObservation) {
-        // Update duplication count if higher
-        if (duplicationCount > existingObservation.duplicationCount) {
-          await db
-            .update(adObservations)
-            .set({ duplicationCount, isActive: true })
-            .where(eq(adObservations.id, existingObservation.id));
-        }
+        // Update duplication count and ensure isActive: true
+        await db
+          .update(adObservations)
+          .set({
+            duplicationCount: Math.max(duplicationCount, existingObservation.duplicationCount),
+            isActive: true,
+            observedAt: now,
+          })
+          .where(eq(adObservations.id, existingObservation.id));
       } else {
         // Insert new observation record
         await db.insert(adObservations).values({
@@ -306,17 +308,34 @@ export async function ingestApifyDatasetItems(
         });
       }
 
+      // Also reactivate all observations for this ad so legacy inactive observations don't shadow active status
+      await db
+        .update(adObservations)
+        .set({ isActive: true })
+        .where(and(eq(adObservations.adId, upsertedAd.id), eq(adObservations.isActive, false)));
+
       extractedCount++;
     }
   }
 
-  // Determine if this scan is an explicit Full Page Scan (ONLY full page scans run archival reconciliation)
+  // Determine if this scan is an explicit Full Page Scan (Runs archival reconciliation for official page targets)
   let config: any = {};
   try {
     config = JSON.parse(scanRecord.configSnapshot || "{}");
   } catch {}
 
-  const isFullScan = Boolean(config.isFullScan === true || config.mode === "drawer_bulk_refresh");
+  const isOfficialPageTarget = Boolean(
+    pageRecord && (
+      pageRecord.searchType === "page" ||
+      (pageRecord.pageId && pageRecord.pageId !== "0" && !pageRecord.pageId.includes(" "))
+    )
+  );
+
+  const isFullScan = Boolean(
+    config.isFullScan === true ||
+    config.mode === "drawer_bulk_refresh" ||
+    isOfficialPageTarget
+  );
 
   // Require non-empty items OR explicit zero-state flag to prevent actor errors/empty payloads from wiping active ads
   if (isFullScan && (items.length > 0 || config.isVerifiedZeroState === true)) {

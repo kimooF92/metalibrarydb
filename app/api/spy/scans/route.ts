@@ -75,6 +75,12 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
+      const isPageTarget = Boolean(
+        page.searchType === "page" ||
+        (page.pageId && page.pageId !== "0" && !page.pageId.includes(" "))
+      );
+      const isFullScan = isPageTarget;
+
       if (runner === "apify") {
         // Fetch latest scan history to get positive count delta
         const latestHistory = await db.query.scanHistory.findFirst({
@@ -82,7 +88,17 @@ export async function POST(req: NextRequest) {
           orderBy: [sql`${scanHistory.checkedAt} desc`],
         });
 
-        const delta = Math.max(1, latestHistory?.difference || page.currentResults || 10);
+        // For official page targets, scrape up to the brand's total active ads (page.currentResults, min 15, max 100) to ensure a complete sync
+        const delta = isPageTarget
+          ? Math.max(15, Math.min(100, page.currentResults || 24))
+          : Math.max(1, latestHistory?.difference || page.currentResults || 10);
+
+        const configObj = {
+          runner: "apify",
+          delta,
+          maxResults: delta + Math.max(3, Math.ceil(delta * 0.2)),
+          isFullScan,
+        };
 
         // Create creative_scans record for Apify
         const [newScan] = await db
@@ -91,8 +107,8 @@ export async function POST(req: NextRequest) {
             trackedPageId: page.id,
             status: "running",
             startedAt: new Date(),
-            configSnapshot: JSON.stringify({ runner: "apify", delta, maxResults: delta + Math.max(3, Math.ceil(delta * 0.2)) }),
-            outcomeDetails: `Apify Delta Cloud run launched for ${delta} new ad(s)`,
+            configSnapshot: JSON.stringify(configObj),
+            outcomeDetails: `Apify ${isFullScan ? "Full" : "Delta"} Cloud run launched for ${delta} ad(s) limit`,
           })
           .returning();
 
@@ -113,13 +129,11 @@ export async function POST(req: NextRequest) {
               .update(creativeScans)
               .set({
                 configSnapshot: JSON.stringify({
-                  runner: "apify",
-                  delta,
-                  maxResults: delta + Math.max(3, Math.ceil(delta * 0.2)),
+                  ...configObj,
                   apifyRunId: runRes.id,
                   defaultDatasetId: runRes.defaultDatasetId,
                 }),
-                outcomeDetails: `Apify Delta Cloud run launched (Run ID: ${runRes.id}, Dataset ID: ${runRes.defaultDatasetId})`,
+                outcomeDetails: `Apify Cloud run launched (Run ID: ${runRes.id}, Dataset ID: ${runRes.defaultDatasetId})`,
               })
               .where(eq(creativeScans.id, newScan.id));
 
@@ -134,7 +148,7 @@ export async function POST(req: NextRequest) {
             status: "apify_launched",
             isScannedToday,
             lastCreativeScan: page.lastCreativeScan,
-            message: `Launched ⚡ Apify Delta Cloud scan for "${page.displayName || page.pageId || page.id}" (${delta} ads limit).`,
+            message: `Launched ⚡ Apify Cloud scan for "${page.displayName || page.pageId || page.id}" (${delta} ads limit, full reconciliation enabled).`,
             runId: runRes?.id,
           });
         } catch (apifyErr: any) {
@@ -165,7 +179,12 @@ export async function POST(req: NextRequest) {
         .values({
           trackedPageId: page.id,
           status: "pending",
-          configSnapshot: JSON.stringify({ runner: "local", maxScrolls: 15, timeoutMs: 25000 }),
+          configSnapshot: JSON.stringify({
+            runner: "local",
+            maxScrolls: 15,
+            timeoutMs: 25000,
+            isFullScan,
+          }),
         })
         .returning();
 
