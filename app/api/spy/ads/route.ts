@@ -3,8 +3,8 @@ import { db } from "@/db";
 import { ads, adObservations, trackedPages } from "@/db/schema";
 import { eq, ilike, gte, lte, and, sql, desc, asc, or, not, inArray } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
-
 import { syncApifyRuns } from "@/lib/apify-sync";
+import { calculateWinnerScore } from "@/lib/winner-score";
 
 export async function GET(req: NextRequest) {
   const authError = validateApiSecret(req);
@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
     const dateTo = searchParams.get("dateTo");
     const minDaysRunning = parseInt(searchParams.get("minDaysRunning") || "0", 10);
     const minDuplications = parseInt(searchParams.get("minDuplications") || "1", 10);
+    const minWinnerScore = parseInt(searchParams.get("minWinnerScore") || "0", 10);
     const mediaType = searchParams.get("mediaType");
     const status = searchParams.get("status");
     const ctaText = searchParams.get("ctaText");
@@ -46,7 +47,18 @@ export async function GET(req: NextRequest) {
     const conditions = [];
 
     // Apply Smart Presets if designated
-    if (smartPreset === "fast_scalers") {
+    if (smartPreset === "breakout" || smartPreset === "breakout_winners") {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      conditions.push(gte(ads.startedRunningOn, sevenDaysAgo));
+      conditions.push(gte(adObservations.duplicationCount, 3));
+      conditions.push(eq(adObservations.isActive, true));
+      if (!searchParams.get("sortBy")) sortBy = "winner_score";
+    } else if (smartPreset === "top_winners") {
+      conditions.push(gte(adObservations.duplicationCount, 2));
+      conditions.push(eq(adObservations.isActive, true));
+      if (!searchParams.get("sortBy")) sortBy = "winner_score";
+    } else if (smartPreset === "fast_scalers") {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       conditions.push(gte(ads.startedRunningOn, sevenDaysAgo));
@@ -59,6 +71,7 @@ export async function GET(req: NextRequest) {
       conditions.push(lte(ads.startedRunningOn, thirtyDaysAgo));
       conditions.push(gte(adObservations.duplicationCount, 2));
       conditions.push(eq(adObservations.isActive, true));
+      if (!searchParams.get("sortBy")) sortBy = "winner_score";
     } else if (smartPreset === "viral_videos") {
       conditions.push(eq(ads.mediaType, "video"));
       conditions.push(gte(adObservations.duplicationCount, 3));
@@ -173,6 +186,30 @@ export async function GET(req: NextRequest) {
       conditions.push(gte(adObservations.duplicationCount, minDuplications));
     }
 
+    if (minWinnerScore > 0 && !smartPreset) {
+      const winnerScoreSql = sql`(
+        (CASE 
+          WHEN ${adObservations.duplicationCount} >= 20 THEN 40
+          WHEN ${adObservations.duplicationCount} >= 10 THEN 37
+          WHEN ${adObservations.duplicationCount} >= 5 THEN 32
+          WHEN ${adObservations.duplicationCount} >= 3 THEN 24
+          WHEN ${adObservations.duplicationCount} >= 2 THEN 14
+          ELSE 5
+        END) + 
+        (CASE
+          WHEN ${ads.startedRunningOn} IS NULL THEN 4
+          WHEN EXTRACT(DAY FROM NOW() - ${ads.startedRunningOn}) <= 3 THEN 8
+          WHEN EXTRACT(DAY FROM NOW() - ${ads.startedRunningOn}) <= 7 THEN 16
+          WHEN EXTRACT(DAY FROM NOW() - ${ads.startedRunningOn}) <= 14 THEN 25
+          WHEN EXTRACT(DAY FROM NOW() - ${ads.startedRunningOn}) <= 30 THEN 34
+          WHEN EXTRACT(DAY FROM NOW() - ${ads.startedRunningOn}) <= 90 THEN 40
+          ELSE 38
+        END) +
+        (CASE WHEN ${adObservations.isActive} = true THEN 15 ELSE 2 END)
+      )`;
+      conditions.push(gte(winnerScoreSql, minWinnerScore));
+    }
+
     if (mediaType && mediaType !== "all" && smartPreset !== "viral_videos") {
       conditions.push(eq(ads.mediaType, mediaType));
     }
@@ -229,9 +266,31 @@ export async function GET(req: NextRequest) {
       .as("distinct_ads");
 
     // Outer sorting order
-    let outerOrderBy = desc(subquery.startedRunningOn);
+    let outerOrderBy: any = desc(subquery.startedRunningOn);
 
-    if (sortBy === "oldest") {
+    if (sortBy === "winner_score" || sortBy === "winner") {
+      const winnerScoreSql = sql`(
+        (CASE 
+          WHEN ${subquery.duplicationCount} >= 20 THEN 40
+          WHEN ${subquery.duplicationCount} >= 10 THEN 37
+          WHEN ${subquery.duplicationCount} >= 5 THEN 32
+          WHEN ${subquery.duplicationCount} >= 3 THEN 24
+          WHEN ${subquery.duplicationCount} >= 2 THEN 14
+          ELSE 5
+        END) + 
+        (CASE
+          WHEN ${subquery.startedRunningOn} IS NULL THEN 4
+          WHEN EXTRACT(DAY FROM NOW() - ${subquery.startedRunningOn}) <= 3 THEN 8
+          WHEN EXTRACT(DAY FROM NOW() - ${subquery.startedRunningOn}) <= 7 THEN 16
+          WHEN EXTRACT(DAY FROM NOW() - ${subquery.startedRunningOn}) <= 14 THEN 25
+          WHEN EXTRACT(DAY FROM NOW() - ${subquery.startedRunningOn}) <= 30 THEN 34
+          WHEN EXTRACT(DAY FROM NOW() - ${subquery.startedRunningOn}) <= 90 THEN 40
+          ELSE 38
+        END) +
+        (CASE WHEN ${subquery.isActive} = true THEN 15 ELSE 2 END)
+      )`;
+      outerOrderBy = sortOrder === "asc" ? asc(winnerScoreSql) : desc(winnerScoreSql);
+    } else if (sortBy === "oldest") {
       outerOrderBy = asc(subquery.startedRunningOn);
     } else if (sortBy === "duplication_count" || sortBy === "scale" || sortBy === "most_duplicated") {
       outerOrderBy = sortOrder === "asc" ? asc(subquery.duplicationCount) : desc(subquery.duplicationCount);
@@ -261,32 +320,56 @@ export async function GET(req: NextRequest) {
 
     const total = Number(countResult?.count || 0);
 
-    // Synchronous row mapping using stored public/CDN thumbnailUrl
-    const items = rows.map((row) => ({
-      id: row.id,
-      adArchiveId: row.adArchiveId,
-      pageId: row.pageId,
-      pageName: row.pageName || row.pageDisplayName,
-      startedRunningOn: row.startedRunningOn,
-      caption: row.caption,
-      title: row.title,
-      ctaText: row.ctaText,
-      linkUrl: row.linkUrl,
-      mediaType: row.mediaType,
-      mediaUrls: row.mediaUrls,
-      thumbnailUrl: row.thumbnailUrl,
-      thumbnailStoragePath: row.thumbnailStoragePath,
-      firstSeenAt: row.firstSeenAt,
-      lastSeenAt: row.lastSeenAt,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-      duplicationCount: Number(row.duplicationCount || 1),
-      isActive: Boolean(row.isActive),
-      isArchived: Boolean(row.isArchived),
-      archivedAt: row.archivedAt ? new Date(row.archivedAt).toISOString() : null,
-      trackedPageId: row.trackedPageId,
-      signedThumbnailUrl: row.thumbnailUrl,
-    }));
+    // Synchronous row mapping with Winner Score & Breakout calculations
+    const items = rows.map((row) => {
+      const winnerMetrics = calculateWinnerScore({
+        startedRunningOn: row.startedRunningOn,
+        firstSeenAt: row.firstSeenAt,
+        lastSeenAt: row.lastSeenAt,
+        duplicationCount: Number(row.duplicationCount || 1),
+        isActive: Boolean(row.isActive),
+        isArchived: Boolean(row.isArchived),
+        mediaType: row.mediaType,
+      });
+
+      return {
+        id: row.id,
+        adArchiveId: row.adArchiveId,
+        pageId: row.pageId,
+        pageName: row.pageName || row.pageDisplayName,
+        startedRunningOn: row.startedRunningOn,
+        caption: row.caption,
+        title: row.title,
+        ctaText: row.ctaText,
+        linkUrl: row.linkUrl,
+        mediaType: row.mediaType,
+        mediaUrls: row.mediaUrls,
+        thumbnailUrl: row.thumbnailUrl,
+        thumbnailStoragePath: row.thumbnailStoragePath,
+        firstSeenAt: row.firstSeenAt,
+        lastSeenAt: row.lastSeenAt,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        duplicationCount: Number(row.duplicationCount || 1),
+        isActive: Boolean(row.isActive),
+        isArchived: Boolean(row.isArchived),
+        archivedAt: row.archivedAt ? new Date(row.archivedAt).toISOString() : null,
+        trackedPageId: row.trackedPageId,
+        signedThumbnailUrl: row.thumbnailUrl,
+        // Winner metrics
+        winnerScore: winnerMetrics.winnerScore,
+        winnerTier: winnerMetrics.winnerTier,
+        isBreakout: winnerMetrics.isBreakout,
+        isEvergreen: winnerMetrics.isEvergreen,
+        daysRunning: winnerMetrics.daysRunning,
+        winnerBreakdown: {
+          longevityPts: winnerMetrics.breakdown.longevityPts,
+          scalePts: winnerMetrics.breakdown.scalePts,
+          recencyPts: winnerMetrics.breakdown.recencyPts,
+          bonusPts: winnerMetrics.breakdown.bonusPts,
+        },
+      };
+    });
 
     return NextResponse.json({
       items,

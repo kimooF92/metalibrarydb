@@ -25,6 +25,8 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  Rocket,
+  Award,
 } from "lucide-react";
 
 interface SpyFiltersProps {
@@ -53,6 +55,24 @@ const SMART_PILLS: SmartPill[] = [
     colorClass: "hover:border-slate-400 dark:hover:border-slate-600",
     activeColorClass: "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 border-slate-900 dark:border-slate-100 shadow-sm",
     description: "Browse all captured ad creatives",
+  },
+  {
+    id: "breakout",
+    label: "Breakout Winners",
+    icon: Rocket,
+    colorClass: "hover:border-pink-400 dark:hover:border-pink-600 text-pink-600 dark:text-pink-400",
+    activeColorClass: "bg-gradient-to-r from-pink-600 via-rose-500 to-amber-500 text-white border-pink-500 shadow-sm shadow-pink-500/25 animate-pulse",
+    badge: "🚀 Viral",
+    description: "New ads launched in last 7 days scaling fast with 3+ copies",
+  },
+  {
+    id: "top_winners",
+    label: "Top Winners",
+    icon: Award,
+    colorClass: "hover:border-amber-400 dark:hover:border-amber-600 text-amber-600 dark:text-amber-400",
+    activeColorClass: "bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-bold border-amber-400 shadow-sm shadow-amber-500/25",
+    badge: "🏆 80+",
+    description: "Highest Winner Scores combining scale and longevity",
   },
   {
     id: "fast_scalers",
@@ -111,6 +131,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
   const excludedIds = filters.excludePageIds || [];
 
   const activeAdvancedCount =
+    (filters.minWinnerScore && filters.minWinnerScore > 0 ? 1 : 0) +
     (filters.minDaysRunning && filters.minDaysRunning > 0 ? 1 : 0) +
     (filters.minDuplications && filters.minDuplications > 1 ? 1 : 0) +
     (filters.mediaType && filters.mediaType !== "all" ? 1 : 0) +
@@ -121,6 +142,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
 
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(
     Boolean(
+      filters.minWinnerScore ||
       filters.minDaysRunning ||
       (filters.minDuplications && filters.minDuplications > 1) ||
       (filters.mediaType && filters.mediaType !== "all") ||
@@ -293,6 +315,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
             onChange={(e) => onFilterChange({ sortBy: e.target.value as any })}
             className="bg-white dark:bg-slate-950/80 text-slate-800 dark:text-slate-200 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-3 py-1.5 focus:outline-none focus:border-indigo-500 cursor-pointer"
           >
+            <option value="winner_score" className="bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 font-bold">🏆 Sort: Winner Score (Highest First)</option>
             <option value="started_running_on" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Sort: Newest Launched</option>
             <option value="oldest" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Sort: Oldest / Longest Running</option>
             <option value="duplication_count" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Sort: Most Scaled (Copies)</option>
@@ -372,19 +395,37 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
         <div className="flex flex-col gap-3 animate-in fade-in slide-in-from-top-1 duration-150">
           {/* 3. Detailed Filter Options Row */}
           <div className="flex flex-wrap items-center gap-2.5 pt-2.5 border-t border-slate-200 dark:border-slate-800/40 text-[11px]">
+            {/* Winner Score Filter */}
+            <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-amber-300/60 dark:border-amber-700/50 shadow-sm shadow-amber-500/5">
+              <Award className="w-3.5 h-3.5 text-amber-500" />
+              <span className="text-amber-700 dark:text-amber-300 font-bold">Winner Score:</span>
+              <select
+                value={filters.minWinnerScore || 0}
+                onChange={(e) =>
+                  onFilterChange({ minWinnerScore: Number(e.target.value), smartPreset: undefined })
+                }
+                className="bg-transparent text-slate-800 dark:text-slate-200 font-semibold focus:outline-none cursor-pointer"
+              >
+                <option value={0} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All Scores</option>
+                <option value={85} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">🏆 85+ (Super Winners Only)</option>
+                <option value={70} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">🔥 70+ (High Potential)</option>
+                <option value={50} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">⚡ 50+ (Promising Tests)</option>
+              </select>
+            </div>
+
             {/* Running For Filter */}
-        <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
-          <Clock className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
-          <span className="text-slate-600 dark:text-slate-400 font-semibold">Running For:</span>
-          <select
-            value={filters.minDaysRunning || 0}
-            onChange={(e) =>
-              onFilterChange({ minDaysRunning: Number(e.target.value), smartPreset: undefined })
-            }
-            className="bg-transparent text-slate-800 dark:text-slate-200 font-semibold focus:outline-none cursor-pointer"
-          >
-            <option value={0} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Any duration</option>
-            <option value={1} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Running 1+ days</option>
+            <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
+              <Clock className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+              <span className="text-slate-600 dark:text-slate-400 font-semibold">Running For:</span>
+              <select
+                value={filters.minDaysRunning || 0}
+                onChange={(e) =>
+                  onFilterChange({ minDaysRunning: Number(e.target.value), smartPreset: undefined })
+                }
+                className="bg-transparent text-slate-800 dark:text-slate-200 font-semibold focus:outline-none cursor-pointer"
+              >
+                <option value={0} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Any duration</option>
+                <option value={1} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Running 1+ days</option>
             <option value={7} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Running 7+ days</option>
             <option value={14} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Running 14+ days</option>
             <option value={30} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Running 30+ days</option>

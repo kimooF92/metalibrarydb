@@ -268,7 +268,7 @@ export default function DashboardPage() {
     if (col === sortBy) {
       setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
     } else {
-      setSortBy(col);
+      setSortBy(col as any);
       setSortOrder("desc");
     }
     setPage(1);
@@ -454,17 +454,17 @@ export default function DashboardPage() {
         }}
         statusFilter={statusFilter}
         onStatusFilterChange={(val) => {
-          setStatusFilter(val);
+          setStatusFilter(val as any);
           setPage(1);
         }}
         searchTypeFilter={searchTypeFilter}
         onSearchTypeFilterChange={(val) => {
-          setSearchTypeFilter(val);
+          setSearchTypeFilter(val as any);
           setPage(1);
         }}
         activeTab={activeTab}
         onTabChange={(tab) => {
-          setActiveTab(tab);
+          setActiveTab(tab as any);
           setPage(1);
         }}
         page={page}

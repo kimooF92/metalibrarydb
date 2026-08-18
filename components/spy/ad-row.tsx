@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Ad } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
+import { calculateWinnerScore } from "@/lib/winner-score";
 import { ImagePreviewModal } from "./image-preview-modal";
 import {
   Calendar,
@@ -24,6 +25,11 @@ import {
   X,
   VolumeX,
   Volume2,
+  Award,
+  Rocket,
+  Zap,
+  Sparkles,
+  Trophy,
 } from "lucide-react";
 
 interface AdRowProps {
@@ -157,6 +163,17 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
   const isScaled = duplicationCount >= 5;
   const freshnessLabel = formatFreshnessDate(currentAd.lastSeenAt);
 
+  // Calculate Winner Metrics
+  const winnerMetrics = calculateWinnerScore({
+    startedRunningOn: currentAd.startedRunningOn,
+    firstSeenAt: currentAd.firstSeenAt,
+    lastSeenAt: currentAd.lastSeenAt,
+    duplicationCount,
+    isActive: currentAd.isActive,
+    isArchived: currentAd.isArchived,
+    mediaType: currentAd.mediaType,
+  });
+
   const firstVideoUrl = currentAd.mediaUrls?.find(
     (url: string) => url.includes(".mp4") || url.includes("video") || currentAd.mediaType === "video"
   );
@@ -287,7 +304,7 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
 
         {/* Info Column */}
         <div className="flex flex-col min-w-0 flex-1 gap-1">
-          {/* Header Row: Page Name & Status */}
+          {/* Header Row: Page Name, Winner Score, Status */}
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1 min-w-0">
               <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
@@ -307,6 +324,45 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
             <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
               ID: {currentAd.adArchiveId}
             </span>
+
+            {/* Winner Score Badge in List View */}
+            <span
+              title={`Winner Score: ${winnerMetrics.winnerScore}/100 (Longevity: ${winnerMetrics.daysRunning}d, Scale: ${duplicationCount} copies)`}
+              className={`inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[10px] font-extrabold shadow-sm ${
+                winnerMetrics.winnerScore >= 85
+                  ? "bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 border border-amber-300"
+                  : winnerMetrics.winnerScore >= 68
+                  ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white"
+                  : winnerMetrics.winnerScore >= 45
+                  ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                  : "bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800"
+              }`}
+            >
+              {winnerMetrics.winnerScore >= 85 ? (
+                <Trophy className="w-2.5 h-2.5 fill-slate-950" />
+              ) : winnerMetrics.winnerScore >= 68 ? (
+                <Flame className="w-2.5 h-2.5 fill-white" />
+              ) : (
+                <Zap className="w-2.5 h-2.5 text-indigo-500" />
+              )}
+              <span>{winnerMetrics.winnerScore} Score</span>
+            </span>
+
+            {/* Breakout Velocity Badge */}
+            {winnerMetrics.isBreakout && (
+              <span className="inline-flex items-center gap-1 text-[9px] font-bold text-pink-700 dark:text-pink-300 bg-pink-50 dark:bg-pink-950/60 border border-pink-200 dark:border-pink-800 px-1.5 py-0.2 rounded-full animate-pulse">
+                <Rocket className="w-2.5 h-2.5 text-pink-500" />
+                <span>🚀 Breakout</span>
+              </span>
+            )}
+
+            {/* Evergreen Badge */}
+            {winnerMetrics.isEvergreen && !winnerMetrics.isBreakout && (
+              <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.2 rounded-full">
+                <Sparkles className="w-2.5 h-2.5 text-emerald-500" />
+                <span>💎 Evergreen</span>
+              </span>
+            )}
 
             {isArchived ? (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-600 dark:text-purple-400 bg-purple-500/10 border border-purple-500/20 px-2 py-0.2 rounded-full">

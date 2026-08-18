@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import NextImage from "next/image";
 import { Ad } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
+import { calculateWinnerScore } from "@/lib/winner-score";
 import { ImagePreviewModal } from "./image-preview-modal";
 import {
   Calendar,
@@ -25,6 +26,12 @@ import {
   X,
   VolumeX,
   Volume2,
+  Award,
+  Rocket,
+  Zap,
+  Sparkles,
+  Trophy,
+  Info,
 } from "lucide-react";
 
 interface AdCardProps {
@@ -46,6 +53,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
   const [isArchiving, setIsArchiving] = useState(false);
   const [isRefreshingMedia, setIsRefreshingMedia] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [showScoreTooltip, setShowScoreTooltip] = useState(false);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Sync when prop updates
@@ -165,6 +173,17 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
   const isScaled = duplicationCount >= 5;
   const freshnessLabel = formatFreshnessDate(currentAd.lastSeenAt);
 
+  // Calculate Winner Metrics
+  const winnerMetrics = calculateWinnerScore({
+    startedRunningOn: currentAd.startedRunningOn,
+    firstSeenAt: currentAd.firstSeenAt,
+    lastSeenAt: currentAd.lastSeenAt,
+    duplicationCount,
+    isActive: currentAd.isActive,
+    isArchived: currentAd.isArchived,
+    mediaType: currentAd.mediaType,
+  });
+
   const firstVideoUrl = currentAd.mediaUrls?.find(
     (url) => url.includes(".mp4") || url.includes("video") || currentAd.mediaType === "video"
   );
@@ -235,6 +254,94 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
               </span>
             )}
           </div>
+        </div>
+
+        {/* Winner Score & Velocity Badges Bar */}
+        <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
+          {/* Winner Score Pill with Breakdown Popover */}
+          <div className="relative">
+            <button
+              type="button"
+              onMouseEnter={() => setShowScoreTooltip(true)}
+              onMouseLeave={() => setShowScoreTooltip(false)}
+              onClick={() => setShowScoreTooltip((prev) => !prev)}
+              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold cursor-pointer transition-all ${
+                winnerMetrics.winnerScore >= 85
+                  ? "bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-300 text-slate-950 shadow-sm shadow-amber-500/20 border border-amber-300"
+                  : winnerMetrics.winnerScore >= 68
+                  ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-sm shadow-orange-500/20"
+                  : winnerMetrics.winnerScore >= 45
+                  ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                  : "bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800"
+              }`}
+            >
+              {winnerMetrics.winnerScore >= 85 ? (
+                <Trophy className="w-3 h-3 fill-slate-950" />
+              ) : winnerMetrics.winnerScore >= 68 ? (
+                <Flame className="w-3 h-3 fill-white" />
+              ) : winnerMetrics.winnerScore >= 45 ? (
+                <Zap className="w-3 h-3 text-indigo-500" />
+              ) : (
+                <Sparkles className="w-3 h-3 text-slate-400" />
+              )}
+              <span>
+                {winnerMetrics.winnerScore >= 85
+                  ? `🏆 ${winnerMetrics.winnerScore} Super Winner`
+                  : winnerMetrics.winnerScore >= 68
+                  ? `🔥 ${winnerMetrics.winnerScore} Winner Score`
+                  : `${winnerMetrics.winnerScore} Score`}
+              </span>
+            </button>
+
+            {/* Score Breakdown Tooltip */}
+            {showScoreTooltip && (
+              <div className="absolute left-0 top-full mt-1.5 w-60 p-2.5 bg-slate-900 text-white dark:bg-slate-950 dark:border-slate-800 border border-slate-700 rounded-xl shadow-2xl z-50 text-[10px] space-y-1.5 animate-in fade-in zoom-in-95 duration-100">
+                <div className="flex items-center justify-between font-bold border-b border-slate-800 pb-1 text-amber-400">
+                  <div className="flex items-center gap-1">
+                    <Award className="w-3.5 h-3.5" />
+                    <span>Winner Score Breakdown</span>
+                  </div>
+                  <span className="text-xs font-black">{winnerMetrics.winnerScore}/100</span>
+                </div>
+                <div className="space-y-1 text-slate-300">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">📈 Scale ({duplicationCount} copies):</span>
+                    <strong className="text-emerald-400 font-mono">+{winnerMetrics.breakdown.scalePts} pts</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">⏳ Longevity ({winnerMetrics.daysRunning}d running):</span>
+                    <strong className="text-emerald-400 font-mono">+{winnerMetrics.breakdown.longevityPts} pts</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">⚡ Status & Recency:</span>
+                    <strong className="text-emerald-400 font-mono">+{winnerMetrics.breakdown.recencyPts} pts</strong>
+                  </div>
+                  {winnerMetrics.breakdown.bonusPts > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">🚀 Velocity & Format Bonus:</span>
+                      <strong className="text-amber-400 font-mono">+{winnerMetrics.breakdown.bonusPts} pts</strong>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Breakout Velocity Badge */}
+          {winnerMetrics.isBreakout && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-pink-700 dark:text-pink-300 bg-pink-50 dark:bg-pink-950/60 border border-pink-200 dark:border-pink-800 px-2 py-0.5 rounded-full shadow-sm animate-pulse">
+              <Rocket className="w-3 h-3 text-pink-500 fill-pink-500/20" />
+              <span>Breakout Velocity</span>
+            </span>
+          )}
+
+          {/* Evergreen Badge */}
+          {winnerMetrics.isEvergreen && !winnerMetrics.isBreakout && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-full shadow-sm">
+              <Sparkles className="w-3 h-3 text-emerald-500 fill-emerald-500/20" />
+              <span>Evergreen Winner</span>
+            </span>
+          )}
         </div>
 
         {/* Badges Bar: Launch Date, Scale & Freshness */}

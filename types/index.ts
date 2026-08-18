@@ -116,6 +116,19 @@ export interface Ad {
   archivedAt?: string | null;
   trackedPageId?: string;
   signedThumbnailUrl?: string | null;
+
+  // Winner Score & Breakout Intelligence
+  winnerScore?: number;
+  winnerTier?: "super" | "high" | "promising" | "testing";
+  isBreakout?: boolean;
+  isEvergreen?: boolean;
+  daysRunning?: number;
+  winnerBreakdown?: {
+    longevityPts: number;
+    scalePts: number;
+    recencyPts: number;
+    bonusPts: number;
+  };
 }
 
 export interface AdObservation {
@@ -156,13 +169,20 @@ export interface AdFilterParams {
   dateTo?: string;
   minDaysRunning?: number;
   minDuplications?: number;
+  minWinnerScore?: number;
   mediaType?: "all" | "image" | "video" | "carousel";
   status?: "all" | "active" | "inactive" | "archived" | "unknown";
   ctaText?: string;
   isWatchlisted?: boolean;
   excludePageIds?: string[];
   smartPreset?: string;
-  sortBy?: "started_running_on" | "duplication_count" | "first_seen_at" | "oldest" | "recently_observed";
+  sortBy?:
+    | "started_running_on"
+    | "duplication_count"
+    | "winner_score"
+    | "first_seen_at"
+    | "oldest"
+    | "recently_observed";
   sortOrder?: "asc" | "desc";
   page?: number;
   limit?: number;

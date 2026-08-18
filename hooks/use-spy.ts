@@ -5,13 +5,24 @@ import { Ad, AdSpyStats, AdFilterParams, PaginationMeta, BrandOption } from "@/t
 
 const VALID_SPY_STATUSES = ["all", "active", "inactive", "archived", "unknown"] as const;
 const VALID_SPY_MEDIA = ["all", "video", "image", "carousel"] as const;
-const VALID_SPY_SORTS = ["started_running_on", "duplication_count", "first_seen", "last_seen", "page_name"] as const;
+const VALID_SPY_SORTS = [
+  "started_running_on",
+  "duplication_count",
+  "winner_score",
+  "first_seen_at",
+  "oldest",
+  "recently_observed",
+  "first_seen",
+  "last_seen",
+  "page_name",
+] as const;
 
 function getInitialSpyParams(initialParams?: AdFilterParams): AdFilterParams {
   const defaults: AdFilterParams = {
     page: 1,
     limit: 24,
     minDuplications: 1,
+    minWinnerScore: 0,
     mediaType: "all",
     status: "all",
     sortBy: "started_running_on",
@@ -82,6 +93,7 @@ function getInitialSpyParams(initialParams?: AdFilterParams): AdFilterParams {
     if (urlParams.has("ctaText")) state.ctaText = urlParams.get("ctaText") || undefined;
     if (urlParams.has("minDaysRunning")) state.minDaysRunning = Number(urlParams.get("minDaysRunning")) || 0;
     if (urlParams.has("minDuplications")) state.minDuplications = Number(urlParams.get("minDuplications")) || 1;
+    if (urlParams.has("minWinnerScore")) state.minWinnerScore = Number(urlParams.get("minWinnerScore")) || 0;
     if (urlParams.has("isWatchlisted")) state.isWatchlisted = urlParams.get("isWatchlisted") === "true";
     if (urlParams.has("sortBy")) {
       const sb = urlParams.get("sortBy");
@@ -121,6 +133,7 @@ function syncSpyParamsToUrlAndStorage(params: AdFilterParams) {
     if (params.ctaText && params.ctaText !== "all") query.set("ctaText", params.ctaText);
     if (params.minDaysRunning && params.minDaysRunning > 0) query.set("minDaysRunning", String(params.minDaysRunning));
     if (params.minDuplications && params.minDuplications > 1) query.set("minDuplications", String(params.minDuplications));
+    if (params.minWinnerScore && params.minWinnerScore > 0) query.set("minWinnerScore", String(params.minWinnerScore));
     if (params.isWatchlisted) query.set("isWatchlisted", "true");
     if (params.dateFrom) query.set("dateFrom", params.dateFrom);
     if (params.dateTo) query.set("dateTo", params.dateTo);
@@ -141,6 +154,7 @@ function syncSpyParamsToUrlAndStorage(params: AdFilterParams) {
       ctaText: params.ctaText,
       minDaysRunning: params.minDaysRunning,
       minDuplications: params.minDuplications,
+      minWinnerScore: params.minWinnerScore,
       isWatchlisted: params.isWatchlisted,
       dateFrom: params.dateFrom,
       dateTo: params.dateTo,
@@ -185,6 +199,7 @@ export function useAdFeed(initialParams?: AdFilterParams) {
           prev.ctaText !== initialParams.ctaText ||
           prev.isWatchlisted !== initialParams.isWatchlisted ||
           prev.smartPreset !== initialParams.smartPreset ||
+          prev.minWinnerScore !== initialParams.minWinnerScore ||
           JSON.stringify(prev.excludePageIds) !== JSON.stringify(initialParams.excludePageIds);
 
         if (hasChanged) {
@@ -209,6 +224,7 @@ export function useAdFeed(initialParams?: AdFilterParams) {
     initialParams?.ctaText,
     initialParams?.isWatchlisted,
     initialParams?.smartPreset,
+    initialParams?.minWinnerScore,
     initialParams?.excludePageIds,
   ]);
 
@@ -250,6 +266,9 @@ export function useAdFeed(initialParams?: AdFilterParams) {
       }
       if (params.minDuplications && params.minDuplications > 1) {
         query.set("minDuplications", params.minDuplications.toString());
+      }
+      if (params.minWinnerScore && params.minWinnerScore > 0) {
+        query.set("minWinnerScore", params.minWinnerScore.toString());
       }
       if (params.mediaType && params.mediaType !== "all") query.set("mediaType", params.mediaType);
       if (params.status && params.status !== "all") query.set("status", params.status);

@@ -841,7 +841,7 @@ export default function DiscoveryPage() {
             </label>
             <select
               value={mediaType}
-              onChange={(e) => setMediaType(e.target.value)}
+              onChange={(e) => setMediaType(e.target.value as "all" | "video" | "image")}
               className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:border-indigo-500 transition cursor-pointer"
             >
               <option value="video">Video Ads Only</option>
