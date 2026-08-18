@@ -271,17 +271,19 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
           </div>
         </div>
 
-        {/* Winner Score, Product Angle & Velocity Badges Bar */}
-        <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
-          {/* Winner Score Pill with Breakdown Popover */}
+        {/* Row 1: High-Signal Intelligence Pills (Max 2 clean pills) */}
+        <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+          {/* Winner Score / Breakout Pill with Breakdown Popover */}
           <div className="relative">
             <button
               type="button"
               onMouseEnter={() => setShowScoreTooltip(true)}
               onMouseLeave={() => setShowScoreTooltip(false)}
               onClick={() => setShowScoreTooltip((prev) => !prev)}
-              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold cursor-pointer transition-all ${
-                winnerMetrics.winnerScore >= 85
+              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold cursor-pointer transition-all ${
+                winnerMetrics.isBreakout
+                  ? "bg-gradient-to-r from-pink-600 via-rose-500 to-amber-500 text-white shadow-sm shadow-pink-500/20 border border-pink-400/40 animate-pulse"
+                  : winnerMetrics.winnerScore >= 85
                   ? "bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-300 text-slate-950 shadow-sm shadow-amber-500/20 border border-amber-300"
                   : winnerMetrics.winnerScore >= 68
                   ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-sm shadow-orange-500/20"
@@ -290,7 +292,9 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
                   : "bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800"
               }`}
             >
-              {winnerMetrics.winnerScore >= 85 ? (
+              {winnerMetrics.isBreakout ? (
+                <Rocket className="w-3 h-3 text-white fill-white/20" />
+              ) : winnerMetrics.winnerScore >= 85 ? (
                 <Trophy className="w-3 h-3 fill-slate-950" />
               ) : winnerMetrics.winnerScore >= 68 ? (
                 <Flame className="w-3 h-3 fill-white" />
@@ -300,10 +304,12 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
                 <Sparkles className="w-3 h-3 text-slate-400" />
               )}
               <span>
-                {winnerMetrics.winnerScore >= 85
-                  ? `🏆 ${winnerMetrics.winnerScore} Super Winner`
+                {winnerMetrics.isBreakout
+                  ? `Breakout (${winnerMetrics.winnerScore})`
+                  : winnerMetrics.winnerScore >= 85
+                  ? `${winnerMetrics.winnerScore} Super Winner`
                   : winnerMetrics.winnerScore >= 68
-                  ? `🔥 ${winnerMetrics.winnerScore} Winner Score`
+                  ? `${winnerMetrics.winnerScore} Winner Score`
                   : `${winnerMetrics.winnerScore} Score`}
               </span>
             </button>
@@ -333,7 +339,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
                   </div>
                   {winnerMetrics.breakdown.bonusPts > 0 && (
                     <div className="flex justify-between">
-                      <span className="text-slate-400">🚀 Velocity & Creative Bonus:</span>
+                      <span className="text-slate-400">🚀 Velocity & Angle Bonus:</span>
                       <strong className="text-amber-400 font-mono">+{winnerMetrics.breakdown.bonusPts} pts</strong>
                     </div>
                   )}
@@ -342,80 +348,58 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
             )}
           </div>
 
-          {/* Product Creative Angle Pill (Clickable) */}
-          {isMultiCreative && (
+          {/* Product Creative Angle & Flagship Trigger Pill */}
+          {(isMultiCreative || currentAd.isFlagshipProduct) && (
             <button
               type="button"
               onClick={() => setIsClusterModalOpen(true)}
               title="Click to view all sister creative angles tested for this product"
-              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-all cursor-pointer shadow-sm"
+              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-all cursor-pointer shadow-sm"
             >
-              <Layers className="w-3 h-3 text-indigo-500" />
-              <span>🎯 {creativeCount} Angles</span>
-              <span className="text-[9px] text-indigo-500 font-medium">
-                ({currentAd.productVideoCount || 0}V/{currentAd.productImageCount || 0}I)
-              </span>
+              <Layers className="w-3 h-3 text-indigo-500 shrink-0" />
+              <span>{creativeCount} Angles</span>
+              {currentAd.isFlagshipProduct && (
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 ml-0.5">
+                  <Crown className="w-2.5 h-2.5 text-amber-500 fill-amber-500/20" />
+                  Hero
+                </span>
+              )}
             </button>
           )}
 
-          {/* Flagship Hero Product Badge */}
-          {currentAd.isFlagshipProduct && (
-            <button
-              type="button"
-              onClick={() => setIsClusterModalOpen(true)}
-              title={`Flagship Hero Product (${currentAd.productSharePercent || 0}% of brand's creative budget)`}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shadow-sm cursor-pointer hover:scale-105 transition"
-            >
-              <Crown className="w-3 h-3 text-amber-500 fill-amber-500/20" />
-              <span>👑 Flagship Hero</span>
-            </button>
-          )}
-
-          {/* Breakout Velocity Badge */}
-          {winnerMetrics.isBreakout && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-pink-700 dark:text-pink-300 bg-pink-50 dark:bg-pink-950/60 border border-pink-200 dark:border-pink-800 px-2 py-0.5 rounded-full shadow-sm animate-pulse">
-              <Rocket className="w-3 h-3 text-pink-500 fill-pink-500/20" />
-              <span>Breakout Velocity</span>
-            </span>
-          )}
-
-          {/* Evergreen Badge */}
+          {/* Evergreen Badge (Subtle inline pill) */}
           {winnerMetrics.isEvergreen && !winnerMetrics.isBreakout && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-full shadow-sm">
-              <Sparkles className="w-3 h-3 text-emerald-500 fill-emerald-500/20" />
-              <span>Evergreen Winner</span>
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-full shadow-sm">
+              <Sparkles className="w-2.5 h-2.5 text-emerald-500 fill-emerald-500/20" />
+              <span>Evergreen</span>
             </span>
           )}
         </div>
 
-        {/* Badges Bar: Launch Date, Scale & Freshness */}
-        <div className="flex flex-wrap items-center gap-1.5 mb-3">
-          <span className="inline-flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-900 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-800 font-medium">
-            <Calendar className="w-3 h-3 text-indigo-500 dark:text-indigo-400" />
-            {formatLaunchDate(currentAd.startedRunningOn, currentAd.firstSeenAt)}
+        {/* Row 2: Unified Metadata Line (Clean, non-boxy) */}
+        <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 mb-2.5 flex-wrap">
+          <span className="inline-flex items-center gap-1 font-medium text-slate-600 dark:text-slate-300">
+            <Calendar className="w-3 h-3 text-indigo-500/80" />
+            <span>{formatLaunchDate(currentAd.startedRunningOn, currentAd.firstSeenAt)}</span>
           </span>
 
-          <span
-            className={`inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md border font-semibold ${
-              isScaled
-                ? "bg-amber-100 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-500/30"
-                : "bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-300 border-slate-250 dark:border-slate-800"
-            }`}
-          >
-            {isScaled ? (
-              <Flame className="w-3 h-3 text-amber-600 dark:text-amber-400 fill-amber-500/20 animate-pulse" />
-            ) : (
-              <Layers className="w-3 h-3 text-slate-600 dark:text-slate-400" />
+          <span className="text-slate-300 dark:text-slate-700">•</span>
+
+          <span className={`inline-flex items-center gap-1 font-semibold ${isScaled ? "text-amber-600 dark:text-amber-400" : "text-slate-700 dark:text-slate-300"}`}>
+            {isScaled ? <Flame className="w-3 h-3 text-amber-500 fill-amber-500/20 animate-pulse" /> : <Layers className="w-3 h-3 text-slate-400" />}
+            <span>{duplicationCount} {duplicationCount === 1 ? "copy" : "copies running"}</span>
+            {isScaled && (
+              <span className="text-[9px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 px-1 py-0.2 rounded uppercase tracking-wider">
+                Scaled
+              </span>
             )}
-            {duplicationCount} {duplicationCount === 1 ? "Copy" : "Copies running"}
-            {isScaled && <span className="ml-0.5">🔥 Scaled</span>}
           </span>
 
           {freshnessLabel && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-900/60 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-800">
-              <Clock className="w-2.5 h-2.5 text-slate-400" />
-              {freshnessLabel}
-            </span>
+            <>
+              <span className="text-slate-300 dark:text-slate-700 hidden sm:inline">•</span>
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 hidden sm:inline">{freshnessLabel}</span>
+            </>
           )}
         </div>
 
