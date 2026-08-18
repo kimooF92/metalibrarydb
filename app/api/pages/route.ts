@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { trackedPages, scanHistory, queue } from "@/db/schema";
+import { trackedPages, scanHistory, queue, ads } from "@/db/schema";
 import { addSingleUrl } from "@/actions/add-url";
 import { singleUrlSchema } from "@/lib/validators";
 import { eq, ilike, or, and, sql, desc, asc, inArray, gte, lte, isNotNull } from "drizzle-orm";
+import { extractProductClusterKey } from "@/lib/product-clustering";
 
 export async function GET(request: Request) {
   try {
@@ -191,6 +192,60 @@ export async function GET(request: Request) {
       activeCreativeJobMap = Object.fromEntries(activeCreativeJobs.map((q) => [q.trackedPageId, true]));
     }
 
+    // Fetch active non-archived ads per Meta pageId and cluster them by product
+    // (grouping duplicated ad copy fingerprints and landing page URLs)
+    let approxProductCountMap: Record<string, number> = {};
+    let extractedAdCountMap: Record<string, number> = {};
+    if (pageIds.length > 0) {
+      const pageIdValues = pages
+        .map((p) => p.pageId)
+        .filter(Boolean) as string[];
+
+      if (pageIdValues.length > 0) {
+        const brandAds = await db
+          .select({
+            id: ads.id,
+            pageId: ads.pageId,
+            linkUrl: ads.linkUrl,
+            caption: ads.caption,
+            title: ads.title,
+          })
+          .from(ads)
+          .where(
+            and(
+              inArray(ads.pageId, pageIdValues),
+              eq(ads.isArchived, false)
+            )
+          );
+
+        // Group ads and count unique product cluster keys per brand
+        const brandProducts = new Map<string, Set<string>>();
+        const brandAdCounts = new Map<string, number>();
+
+        for (const ad of brandAds) {
+          brandAdCounts.set(ad.pageId, (brandAdCounts.get(ad.pageId) || 0) + 1);
+
+          const keyInfo = extractProductClusterKey(ad);
+          if (!brandProducts.has(ad.pageId)) {
+            brandProducts.set(ad.pageId, new Set());
+          }
+          brandProducts.get(ad.pageId)!.add(keyInfo.productKey);
+        }
+
+        // Map counts by tracked page ID
+        for (const p of pages) {
+          if (p.pageId) {
+            if (brandProducts.has(p.pageId)) {
+              approxProductCountMap[p.id] = brandProducts.get(p.pageId)!.size;
+            }
+            if (brandAdCounts.has(p.pageId)) {
+              extractedAdCountMap[p.id] = brandAdCounts.get(p.pageId)!;
+            }
+          }
+        }
+      }
+    }
+
     const pagesWithPrev = pages.map((p) => {
       const prev = prevResultsMap[p.id] ?? null;
       const difference =
@@ -208,6 +263,8 @@ export async function GET(request: Request) {
         isWatchlisted: p.isWatchlisted ?? false,
         isCreativeQueued: Boolean(activeCreativeJobMap[p.id]),
         historyPoints,
+        extractedAdCount: extractedAdCountMap[p.id] ?? 0,
+        approxProductCount: approxProductCountMap[p.id] ?? null,
       };
     });
 

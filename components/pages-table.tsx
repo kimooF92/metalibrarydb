@@ -33,6 +33,7 @@ import {
   Sparkles,
   Clock,
   CheckCircle2,
+  Package,
 } from "lucide-react";
 
 function formatRelativeTime(dateInput: string | Date | null | undefined): string {
@@ -692,6 +693,12 @@ export function PagesTable({
                 </th>
                 <SortHeader col="displayName" label="Brand / Page Name" className="min-w-[180px]" />
                 <SortHeader col="currentResults" label="Active Ads" className="w-36" />
+                <th className="px-3 py-1.5 whitespace-nowrap text-slate-400 font-medium" title="Approximate number of unique products advertised by this brand (clustered by landing page URLs and ad copy fingerprints)">
+                  <span className="flex items-center gap-1">
+                    <Package className="w-3 h-3 text-indigo-400" />
+                    Approx Products
+                  </span>
+                </th>
                 <th className="px-3 py-1.5 whitespace-nowrap text-slate-400 font-medium">Prev Ads</th>
                 <SortHeader col="difference" label="Difference" className="w-32" />
                 <SortHeader col="status" label="Status" className="w-28" />
@@ -702,14 +709,14 @@ export function PagesTable({
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-slate-500 dark:text-slate-400">
+                  <td colSpan={10} className="px-4 py-12 text-center text-slate-500 dark:text-slate-400">
                     <Loader2 className="w-6 h-6 animate-spin text-indigo-500 dark:text-indigo-400 mx-auto mb-2" />
                     <span>Loading tracked pages...</span>
                   </td>
                 </tr>
               ) : pages.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-16 text-center">
+                  <td colSpan={10} className="px-4 py-16 text-center">
                     <div className="flex flex-col items-center justify-center max-w-md mx-auto space-y-3">
                       <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center text-slate-400">
                         <Filter className="w-6 h-6 opacity-60" />
@@ -956,6 +963,21 @@ export function PagesTable({
 
                           <InlineSparkline points={p.historyPoints} difference={p.difference} />
                         </div>
+                      </td>
+
+                      {/* Approx Products Count (Clustered by Landing Page URLs & Ad Copy) */}
+                      <td className="px-3 py-1.5 text-center">
+                        {p.approxProductCount !== null && p.approxProductCount !== undefined && p.approxProductCount > 0 ? (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20"
+                            title={`~${p.approxProductCount} distinct product(s) identified across ${(p as any).extractedAdCount || 0} active ad creative(s)`}
+                          >
+                            <Package className="w-2.5 h-2.5 shrink-0" />
+                            ~{p.approxProductCount} {p.approxProductCount === 1 ? "prod" : "prods"}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300 dark:text-slate-600 text-xs">—</span>
+                        )}
                       </td>
 
                       {/* Previous Results */}

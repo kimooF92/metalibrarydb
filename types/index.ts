@@ -20,6 +20,8 @@ export interface TrackedPage {
   lastCreativeScan?: string | null;
   isCreativeQueued?: boolean;
   historyPoints?: number[];
+  approxProductCount?: number | null;
+  extractedAdCount?: number | null;
 }
 
 export interface ScanHistoryEntry {
