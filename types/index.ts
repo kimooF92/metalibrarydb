@@ -129,6 +129,18 @@ export interface Ad {
     recencyPts: number;
     bonusPts: number;
   };
+
+  // Product Clustering & Creative Angle Intelligence
+  productKey?: string;
+  productName?: string;
+  cleanProductUrl?: string | null;
+  productCreativeCount?: number;
+  productVideoCount?: number;
+  productImageCount?: number;
+  brandProductCount?: number;
+  brandTotalCreatives?: number;
+  productSharePercent?: number;
+  isFlagshipProduct?: boolean;
 }
 
 export interface AdObservation {
@@ -170,6 +182,8 @@ export interface AdFilterParams {
   minDaysRunning?: number;
   minDuplications?: number;
   minWinnerScore?: number;
+  minProductCreatives?: number;
+  productKey?: string;
   mediaType?: "all" | "image" | "video" | "carousel";
   status?: "all" | "active" | "inactive" | "archived" | "unknown";
   ctaText?: string;
@@ -178,16 +192,14 @@ export interface AdFilterParams {
   smartPreset?: string;
   sortBy?:
     | "started_running_on"
-    | "duplication_count"
-    | "winner_score"
-    | "first_seen_at"
     | "oldest"
-    | "recently_observed";
+    | "duplication_count"
+    | "recently_observed"
+    | "first_seen_at"
+    | "winner_score"
+    | "product_creatives";
   sortOrder?: "asc" | "desc";
   page?: number;
   limit?: number;
   enabled?: boolean;
 }
-
-
-

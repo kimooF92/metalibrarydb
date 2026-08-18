@@ -27,6 +27,8 @@ import {
   ChevronUp,
   Rocket,
   Award,
+  Target,
+  Crown,
 } from "lucide-react";
 
 interface SpyFiltersProps {
@@ -55,6 +57,15 @@ const SMART_PILLS: SmartPill[] = [
     colorClass: "hover:border-slate-400 dark:hover:border-slate-600",
     activeColorClass: "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 border-slate-900 dark:border-slate-100 shadow-sm",
     description: "Browse all captured ad creatives",
+  },
+  {
+    id: "multi_angle",
+    label: "Multi-Angle Winners",
+    icon: Target,
+    colorClass: "hover:border-cyan-400 dark:hover:border-cyan-600 text-cyan-600 dark:text-cyan-400",
+    activeColorClass: "bg-gradient-to-r from-cyan-600 to-blue-600 text-white border-cyan-500 shadow-sm shadow-cyan-500/25",
+    badge: "🎯 3+ Angles",
+    description: "High-conviction products with 3+ creative variations tested by the brand",
   },
   {
     id: "breakout",
@@ -132,6 +143,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
 
   const activeAdvancedCount =
     (filters.minWinnerScore && filters.minWinnerScore > 0 ? 1 : 0) +
+    (filters.minProductCreatives && filters.minProductCreatives > 0 ? 1 : 0) +
     (filters.minDaysRunning && filters.minDaysRunning > 0 ? 1 : 0) +
     (filters.minDuplications && filters.minDuplications > 1 ? 1 : 0) +
     (filters.mediaType && filters.mediaType !== "all" ? 1 : 0) +
@@ -143,6 +155,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(
     Boolean(
       filters.minWinnerScore ||
+      filters.minProductCreatives ||
       filters.minDaysRunning ||
       (filters.minDuplications && filters.minDuplications > 1) ||
       (filters.mediaType && filters.mediaType !== "all") ||
@@ -316,6 +329,7 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
             className="bg-white dark:bg-slate-950/80 text-slate-800 dark:text-slate-200 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-3 py-1.5 focus:outline-none focus:border-indigo-500 cursor-pointer"
           >
             <option value="winner_score" className="bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 font-bold">🏆 Sort: Winner Score (Highest First)</option>
+            <option value="product_creatives" className="bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 font-bold">🎯 Sort: Most Creative Angles (Product Depth)</option>
             <option value="started_running_on" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Sort: Newest Launched</option>
             <option value="oldest" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Sort: Oldest / Longest Running</option>
             <option value="duplication_count" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Sort: Most Scaled (Copies)</option>
@@ -410,6 +424,24 @@ export function SpyFilters({ filters, viewMode, onViewModeChange, onFilterChange
                 <option value={85} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">🏆 85+ (Super Winners Only)</option>
                 <option value={70} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">🔥 70+ (High Potential)</option>
                 <option value={50} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">⚡ 50+ (Promising Tests)</option>
+              </select>
+            </div>
+
+            {/* Creative Angles Filter */}
+            <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-cyan-300/60 dark:border-cyan-700/50 shadow-sm shadow-cyan-500/5">
+              <Target className="w-3.5 h-3.5 text-cyan-500" />
+              <span className="text-cyan-700 dark:text-cyan-300 font-bold">Creative Angles:</span>
+              <select
+                value={filters.minProductCreatives || 0}
+                onChange={(e) =>
+                  onFilterChange({ minProductCreatives: Number(e.target.value), smartPreset: undefined })
+                }
+                className="bg-transparent text-slate-800 dark:text-slate-200 font-semibold focus:outline-none cursor-pointer"
+              >
+                <option value={0} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All Products</option>
+                <option value={5} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">🎯 5+ Angles (Heavy Scale)</option>
+                <option value={3} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">🎯 3+ Angles (Proven Iteration)</option>
+                <option value={2} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">🎯 2+ Angles (Multi-Angle Tests)</option>
               </select>
             </div>
 

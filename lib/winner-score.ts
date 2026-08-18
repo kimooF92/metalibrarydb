@@ -6,6 +6,7 @@ export interface WinnerCalculationInput {
   isActive?: boolean | null;
   isArchived?: boolean | null;
   mediaType?: string | null;
+  productCreativeCount?: number;
 }
 
 export interface WinnerCalculationResult {
@@ -85,17 +86,26 @@ export function calculateWinnerScore(input: WinnerCalculationInput): WinnerCalcu
     recencyPts = 2; // Inactive or archived ad
   }
 
-  // 5. Velocity & Media Bonuses (0 - 5 pts)
+  // 5. Velocity & Multi-Creative Bonuses (0 - 8 pts)
   let bonusPts = 0;
   // Fast scale velocity bonus (scaled to 3+ copies within 7 days)
   if (isActive && daysRunning <= 7 && dup >= 3) {
-    bonusPts += 4;
+    bonusPts += 3;
   }
   // Video production bonus
   if (input.mediaType === "video") {
     bonusPts += 1;
   }
-  bonusPts = Math.min(5, bonusPts);
+  // Multi-Creative Angle / Landing Page Effort Bonus
+  const creativesCount = Number(input.productCreativeCount || 1);
+  if (creativesCount >= 5) {
+    bonusPts += 4;
+  } else if (creativesCount >= 3) {
+    bonusPts += 2;
+  } else if (creativesCount >= 2) {
+    bonusPts += 1;
+  }
+  bonusPts = Math.min(8, bonusPts);
 
   // Total raw score
   let rawScore = longevityPts + scalePts + recencyPts + bonusPts;

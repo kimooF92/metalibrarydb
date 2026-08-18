@@ -9,6 +9,7 @@ const VALID_SPY_SORTS = [
   "started_running_on",
   "duplication_count",
   "winner_score",
+  "product_creatives",
   "first_seen_at",
   "oldest",
   "recently_observed",
@@ -23,6 +24,7 @@ function getInitialSpyParams(initialParams?: AdFilterParams): AdFilterParams {
     limit: 24,
     minDuplications: 1,
     minWinnerScore: 0,
+    minProductCreatives: 0,
     mediaType: "all",
     status: "all",
     sortBy: "started_running_on",
@@ -48,16 +50,16 @@ function getInitialSpyParams(initialParams?: AdFilterParams): AdFilterParams {
     }
 
     if (saved.status && !VALID_SPY_STATUSES.includes(saved.status as any)) {
-      saved.status = "all";
+      delete saved.status;
     }
     if (saved.mediaType && !VALID_SPY_MEDIA.includes(saved.mediaType as any)) {
-      saved.mediaType = "all";
+      delete saved.mediaType;
     }
     if (saved.sortBy && !VALID_SPY_SORTS.includes(saved.sortBy as any)) {
-      saved.sortBy = "started_running_on";
+      delete saved.sortBy;
     }
     if (saved.sortOrder && saved.sortOrder !== "asc" && saved.sortOrder !== "desc") {
-      saved.sortOrder = "desc";
+      delete saved.sortOrder;
     }
 
     // Check dedicated brand exclusions storage for robust cross-tab persistence
@@ -94,6 +96,8 @@ function getInitialSpyParams(initialParams?: AdFilterParams): AdFilterParams {
     if (urlParams.has("minDaysRunning")) state.minDaysRunning = Number(urlParams.get("minDaysRunning")) || 0;
     if (urlParams.has("minDuplications")) state.minDuplications = Number(urlParams.get("minDuplications")) || 1;
     if (urlParams.has("minWinnerScore")) state.minWinnerScore = Number(urlParams.get("minWinnerScore")) || 0;
+    if (urlParams.has("minProductCreatives")) state.minProductCreatives = Number(urlParams.get("minProductCreatives")) || 0;
+    if (urlParams.has("productKey")) state.productKey = urlParams.get("productKey") || undefined;
     if (urlParams.has("isWatchlisted")) state.isWatchlisted = urlParams.get("isWatchlisted") === "true";
     if (urlParams.has("sortBy")) {
       const sb = urlParams.get("sortBy");
@@ -134,12 +138,14 @@ function syncSpyParamsToUrlAndStorage(params: AdFilterParams) {
     if (params.minDaysRunning && params.minDaysRunning > 0) query.set("minDaysRunning", String(params.minDaysRunning));
     if (params.minDuplications && params.minDuplications > 1) query.set("minDuplications", String(params.minDuplications));
     if (params.minWinnerScore && params.minWinnerScore > 0) query.set("minWinnerScore", String(params.minWinnerScore));
+    if (params.minProductCreatives && params.minProductCreatives > 0) query.set("minProductCreatives", String(params.minProductCreatives));
+    if (params.productKey) query.set("productKey", params.productKey);
     if (params.isWatchlisted) query.set("isWatchlisted", "true");
     if (params.dateFrom) query.set("dateFrom", params.dateFrom);
     if (params.dateTo) query.set("dateTo", params.dateTo);
     if (params.excludePageIds && params.excludePageIds.length > 0) query.set("excludePageIds", params.excludePageIds.join(","));
-    if (params.sortBy && params.sortBy !== "started_running_on") query.set("sortBy", params.sortBy);
-    if (params.sortOrder && params.sortOrder !== "desc") query.set("sortOrder", params.sortOrder);
+    if (params.sortBy) query.set("sortBy", params.sortBy);
+    if (params.sortOrder) query.set("sortOrder", params.sortOrder);
     if (params.page && params.page > 1) query.set("page", String(params.page));
 
     const queryString = query.toString();
@@ -200,6 +206,8 @@ export function useAdFeed(initialParams?: AdFilterParams) {
           prev.isWatchlisted !== initialParams.isWatchlisted ||
           prev.smartPreset !== initialParams.smartPreset ||
           prev.minWinnerScore !== initialParams.minWinnerScore ||
+          prev.minProductCreatives !== initialParams.minProductCreatives ||
+          prev.productKey !== initialParams.productKey ||
           JSON.stringify(prev.excludePageIds) !== JSON.stringify(initialParams.excludePageIds);
 
         if (hasChanged) {
@@ -225,6 +233,8 @@ export function useAdFeed(initialParams?: AdFilterParams) {
     initialParams?.isWatchlisted,
     initialParams?.smartPreset,
     initialParams?.minWinnerScore,
+    initialParams?.minProductCreatives,
+    initialParams?.productKey,
     initialParams?.excludePageIds,
   ]);
 
@@ -270,6 +280,10 @@ export function useAdFeed(initialParams?: AdFilterParams) {
       if (params.minWinnerScore && params.minWinnerScore > 0) {
         query.set("minWinnerScore", params.minWinnerScore.toString());
       }
+      if (params.minProductCreatives && params.minProductCreatives > 0) {
+        query.set("minProductCreatives", params.minProductCreatives.toString());
+      }
+      if (params.productKey) query.set("productKey", params.productKey);
       if (params.mediaType && params.mediaType !== "all") query.set("mediaType", params.mediaType);
       if (params.status && params.status !== "all") query.set("status", params.status);
       if (params.ctaText && params.ctaText !== "all") query.set("ctaText", params.ctaText);

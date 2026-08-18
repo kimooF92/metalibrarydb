@@ -5,6 +5,7 @@ import { Ad } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
 import { calculateWinnerScore } from "@/lib/winner-score";
 import { ImagePreviewModal } from "./image-preview-modal";
+import { ProductClusterModal } from "./product-cluster-modal";
 import {
   Calendar,
   Layers,
@@ -30,6 +31,7 @@ import {
   Zap,
   Sparkles,
   Trophy,
+  Crown,
 } from "lucide-react";
 
 interface AdRowProps {
@@ -47,6 +49,7 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
   const [imgError, setImgError] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isClusterModalOpen, setIsClusterModalOpen] = useState(false);
   const [isArchived, setIsArchived] = useState(Boolean(ad.isArchived));
   const [isArchiving, setIsArchiving] = useState(false);
   const [isRefreshingMedia, setIsRefreshingMedia] = useState(false);
@@ -172,6 +175,7 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
     isActive: currentAd.isActive,
     isArchived: currentAd.isArchived,
     mediaType: currentAd.mediaType,
+    productCreativeCount: currentAd.productCreativeCount || 1,
   });
 
   const firstVideoUrl = currentAd.mediaUrls?.find(
@@ -197,6 +201,9 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
     }
     setIsHovered(false);
   };
+
+  const creativeCount = currentAd.productCreativeCount || 1;
+  const isMultiCreative = creativeCount > 1;
 
   return (
     <div className="group relative flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3.5 shadow-sm hover:border-slate-300 dark:hover:border-slate-700/80 hover:shadow-md transition-all">
@@ -310,6 +317,14 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
               <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
                 {currentAd.pageName || `Page ${currentAd.pageId}`}
               </span>
+              {currentAd.brandProductCount && currentAd.brandProductCount > 1 && (
+                <span
+                  title={`Brand tested ${currentAd.brandProductCount} products`}
+                  className="text-[9px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-medium"
+                >
+                  {currentAd.brandProductCount} Products
+                </span>
+              )}
               {onExcludeBrand && (
                 <button
                   type="button"
@@ -327,7 +342,7 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
 
             {/* Winner Score Badge in List View */}
             <span
-              title={`Winner Score: ${winnerMetrics.winnerScore}/100 (Longevity: ${winnerMetrics.daysRunning}d, Scale: ${duplicationCount} copies)`}
+              title={`Winner Score: ${winnerMetrics.winnerScore}/100 (Longevity: ${winnerMetrics.daysRunning}d, Scale: ${duplicationCount} copies, Angles: ${creativeCount})`}
               className={`inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[10px] font-extrabold shadow-sm ${
                 winnerMetrics.winnerScore >= 85
                   ? "bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 border border-amber-300"
@@ -347,6 +362,32 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
               )}
               <span>{winnerMetrics.winnerScore} Score</span>
             </span>
+
+            {/* Product Creative Angle Pill (Clickable) */}
+            {isMultiCreative && (
+              <button
+                type="button"
+                onClick={() => setIsClusterModalOpen(true)}
+                title="View all sister creative angles for this product"
+                className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[9px] font-bold bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition cursor-pointer"
+              >
+                <Layers className="w-2.5 h-2.5 text-indigo-500" />
+                <span>🎯 {creativeCount} Angles</span>
+              </button>
+            )}
+
+            {/* Flagship Hero Product Badge */}
+            {currentAd.isFlagshipProduct && (
+              <button
+                type="button"
+                onClick={() => setIsClusterModalOpen(true)}
+                title="Flagship Hero Product"
+                className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-50 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 cursor-pointer"
+              >
+                <Crown className="w-2.5 h-2.5 text-amber-500" />
+                <span>👑 Flagship</span>
+              </button>
+            )}
 
             {/* Breakout Velocity Badge */}
             {winnerMetrics.isBreakout && (
@@ -521,6 +562,16 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
         caption={currentAd.caption}
         destinationUrl={destinationUrl}
         adArchiveId={currentAd.adArchiveId}
+      />
+
+      {/* Product Creative Cluster Modal */}
+      <ProductClusterModal
+        isOpen={isClusterModalOpen}
+        onClose={() => setIsClusterModalOpen(false)}
+        initialAd={currentAd}
+        adId={currentAd.id}
+        pageId={currentAd.pageId}
+        productKey={currentAd.productKey}
       />
     </div>
   );

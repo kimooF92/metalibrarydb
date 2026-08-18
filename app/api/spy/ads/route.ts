@@ -5,6 +5,7 @@ import { eq, ilike, gte, lte, and, sql, desc, asc, or, not, inArray } from "driz
 import { validateApiSecret } from "@/lib/api-guard";
 import { syncApifyRuns } from "@/lib/apify-sync";
 import { calculateWinnerScore } from "@/lib/winner-score";
+import { enrichAdsWithProductClusters } from "@/lib/product-clustering";
 
 export async function GET(req: NextRequest) {
   const authError = validateApiSecret(req);
@@ -29,6 +30,8 @@ export async function GET(req: NextRequest) {
       ? excludePageIdsParam.split(",").map((s) => s.trim()).filter(Boolean)
       : [];
     const smartPreset = searchParams.get("smartPreset");
+    let minProductCreatives = parseInt(searchParams.get("minProductCreatives") || "0", 10);
+    const productKey = searchParams.get("productKey");
     let sortBy = searchParams.get("sortBy") || "started_running_on";
     const sortOrder = searchParams.get("sortOrder") || "desc";
 
@@ -47,7 +50,11 @@ export async function GET(req: NextRequest) {
     const conditions = [];
 
     // Apply Smart Presets if designated
-    if (smartPreset === "breakout" || smartPreset === "breakout_winners") {
+    if (smartPreset === "multi_angle") {
+      conditions.push(eq(adObservations.isActive, true));
+      if (!searchParams.get("sortBy")) sortBy = "winner_score";
+      if (minProductCreatives === 0) minProductCreatives = 2;
+    } else if (smartPreset === "breakout" || smartPreset === "breakout_winners") {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       conditions.push(gte(ads.startedRunningOn, sevenDaysAgo));
@@ -320,8 +327,46 @@ export async function GET(req: NextRequest) {
 
     const total = Number(countResult?.count || 0);
 
-    // Synchronous row mapping with Winner Score & Breakout calculations
+    // Fetch all ads for these brands to build comprehensive product cluster metrics
+    const pageIds = Array.from(new Set(rows.map((r) => r.pageId).filter(Boolean)));
+    let brandAds: any[] = [];
+    if (pageIds.length > 0) {
+      brandAds = await db
+        .select({
+          id: ads.id,
+          pageId: ads.pageId,
+          linkUrl: ads.linkUrl,
+          caption: ads.caption,
+          title: ads.title,
+          mediaType: ads.mediaType,
+        })
+        .from(ads)
+        .where(inArray(ads.pageId, pageIds));
+    }
+
+    const clusterMap = new Map<string, any>();
+    if (brandAds.length > 0) {
+      const enrichedBrandAds = enrichAdsWithProductClusters(brandAds);
+      enrichedBrandAds.forEach((item) => {
+        clusterMap.set(item.id, item);
+      });
+    }
+
+    // Synchronous row mapping with Winner Score & Product Cluster calculations
     const items = rows.map((row) => {
+      const clusterInfo = clusterMap.get(row.id) || {
+        productKey: `ad:${row.pageId}:${row.id}`,
+        productName: row.title || "Product Offer",
+        cleanProductUrl: null,
+        productCreativeCount: 1,
+        productVideoCount: row.mediaType === "video" ? 1 : 0,
+        productImageCount: row.mediaType === "image" ? 1 : 0,
+        brandProductCount: 1,
+        brandTotalCreatives: 1,
+        productSharePercent: 100,
+        isFlagshipProduct: false,
+      };
+
       const winnerMetrics = calculateWinnerScore({
         startedRunningOn: row.startedRunningOn,
         firstSeenAt: row.firstSeenAt,
@@ -330,6 +375,7 @@ export async function GET(req: NextRequest) {
         isActive: Boolean(row.isActive),
         isArchived: Boolean(row.isArchived),
         mediaType: row.mediaType,
+        productCreativeCount: clusterInfo.productCreativeCount,
       });
 
       return {
@@ -368,16 +414,45 @@ export async function GET(req: NextRequest) {
           recencyPts: winnerMetrics.breakdown.recencyPts,
           bonusPts: winnerMetrics.breakdown.bonusPts,
         },
+        // Product Clustering Metrics
+        productKey: clusterInfo.productKey,
+        productName: clusterInfo.productName,
+        cleanProductUrl: clusterInfo.cleanProductUrl,
+        productCreativeCount: clusterInfo.productCreativeCount,
+        productVideoCount: clusterInfo.productVideoCount,
+        productImageCount: clusterInfo.productImageCount,
+        brandProductCount: clusterInfo.brandProductCount,
+        brandTotalCreatives: clusterInfo.brandTotalCreatives,
+        productSharePercent: clusterInfo.productSharePercent,
+        isFlagshipProduct: clusterInfo.isFlagshipProduct,
       };
     });
 
+    let finalItems = items;
+
+    if (minProductCreatives > 0) {
+      finalItems = finalItems.filter((i) => (i.productCreativeCount || 1) >= minProductCreatives);
+    }
+
+    if (productKey) {
+      finalItems = finalItems.filter((i) => i.productKey === productKey);
+    }
+
+    if (sortBy === "product_creatives") {
+      finalItems.sort((a, b) => {
+        const countA = a.productCreativeCount || 1;
+        const countB = b.productCreativeCount || 1;
+        return sortOrder === "asc" ? countA - countB : countB - countA;
+      });
+    }
+
     return NextResponse.json({
-      items,
+      items: finalItems,
       pagination: {
         page,
         limit,
-        total,
-        totalPages: Math.ceil(total / limit),
+        total: minProductCreatives > 0 || productKey ? finalItems.length : total,
+        totalPages: Math.ceil((minProductCreatives > 0 || productKey ? finalItems.length : total) / limit),
       },
     });
   } catch (err: any) {

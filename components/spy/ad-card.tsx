@@ -6,6 +6,7 @@ import { Ad } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
 import { calculateWinnerScore } from "@/lib/winner-score";
 import { ImagePreviewModal } from "./image-preview-modal";
+import { ProductClusterModal } from "./product-cluster-modal";
 import {
   Calendar,
   Layers,
@@ -31,6 +32,7 @@ import {
   Zap,
   Sparkles,
   Trophy,
+  Crown,
   Info,
 } from "lucide-react";
 
@@ -49,6 +51,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
   const [imgError, setImgError] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isClusterModalOpen, setIsClusterModalOpen] = useState(false);
   const [isArchived, setIsArchived] = useState(Boolean(ad.isArchived));
   const [isArchiving, setIsArchiving] = useState(false);
   const [isRefreshingMedia, setIsRefreshingMedia] = useState(false);
@@ -173,7 +176,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
   const isScaled = duplicationCount >= 5;
   const freshnessLabel = formatFreshnessDate(currentAd.lastSeenAt);
 
-  // Calculate Winner Metrics
+  // Calculate Winner Metrics with multi-creative angle bonus
   const winnerMetrics = calculateWinnerScore({
     startedRunningOn: currentAd.startedRunningOn,
     firstSeenAt: currentAd.firstSeenAt,
@@ -182,6 +185,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
     isActive: currentAd.isActive,
     isArchived: currentAd.isArchived,
     mediaType: currentAd.mediaType,
+    productCreativeCount: currentAd.productCreativeCount || 1,
   });
 
   const firstVideoUrl = currentAd.mediaUrls?.find(
@@ -208,6 +212,9 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
     setIsHovered(false);
   };
 
+  const creativeCount = currentAd.productCreativeCount || 1;
+  const isMultiCreative = creativeCount > 1;
+
   return (
     <div className="group relative flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-4 shadow-sm transition-all hover:border-slate-300 dark:hover:border-slate-700/80 hover:shadow-md">
       {/* Top Section */}
@@ -215,10 +222,18 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
         {/* Brand Name & Status Badges */}
         <div className="flex items-start justify-between gap-2 mb-2.5">
           <div className="flex flex-col min-w-0">
-            <div className="flex items-center gap-1 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0">
               <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
                 {currentAd.pageName || `Page ${currentAd.pageId}`}
               </span>
+              {currentAd.brandProductCount && currentAd.brandProductCount > 1 && (
+                <span
+                  title={`Brand tested ${currentAd.brandProductCount} distinct products (${currentAd.productSharePercent || 100}% creatives dedicated to this product)`}
+                  className="text-[9px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-medium shrink-0"
+                >
+                  {currentAd.brandProductCount} Products
+                </span>
+              )}
               {onExcludeBrand && (
                 <button
                   type="button"
@@ -256,7 +271,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
           </div>
         </div>
 
-        {/* Winner Score & Velocity Badges Bar */}
+        {/* Winner Score, Product Angle & Velocity Badges Bar */}
         <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
           {/* Winner Score Pill with Breakdown Popover */}
           <div className="relative">
@@ -318,7 +333,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
                   </div>
                   {winnerMetrics.breakdown.bonusPts > 0 && (
                     <div className="flex justify-between">
-                      <span className="text-slate-400">🚀 Velocity & Format Bonus:</span>
+                      <span className="text-slate-400">🚀 Velocity & Creative Bonus:</span>
                       <strong className="text-amber-400 font-mono">+{winnerMetrics.breakdown.bonusPts} pts</strong>
                     </div>
                   )}
@@ -326,6 +341,35 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
               </div>
             )}
           </div>
+
+          {/* Product Creative Angle Pill (Clickable) */}
+          {isMultiCreative && (
+            <button
+              type="button"
+              onClick={() => setIsClusterModalOpen(true)}
+              title="Click to view all sister creative angles tested for this product"
+              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-all cursor-pointer shadow-sm"
+            >
+              <Layers className="w-3 h-3 text-indigo-500" />
+              <span>🎯 {creativeCount} Angles</span>
+              <span className="text-[9px] text-indigo-500 font-medium">
+                ({currentAd.productVideoCount || 0}V/{currentAd.productImageCount || 0}I)
+              </span>
+            </button>
+          )}
+
+          {/* Flagship Hero Product Badge */}
+          {currentAd.isFlagshipProduct && (
+            <button
+              type="button"
+              onClick={() => setIsClusterModalOpen(true)}
+              title={`Flagship Hero Product (${currentAd.productSharePercent || 0}% of brand's creative budget)`}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shadow-sm cursor-pointer hover:scale-105 transition"
+            >
+              <Crown className="w-3 h-3 text-amber-500 fill-amber-500/20" />
+              <span>👑 Flagship Hero</span>
+            </button>
+          )}
 
           {/* Breakout Velocity Badge */}
           {winnerMetrics.isBreakout && (
@@ -615,6 +659,16 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
         caption={currentAd.caption}
         destinationUrl={destinationUrl}
         adArchiveId={currentAd.adArchiveId}
+      />
+
+      {/* Product Creative Cluster Modal */}
+      <ProductClusterModal
+        isOpen={isClusterModalOpen}
+        onClose={() => setIsClusterModalOpen(false)}
+        initialAd={currentAd}
+        adId={currentAd.id}
+        pageId={currentAd.pageId}
+        productKey={currentAd.productKey}
       />
     </div>
   );
