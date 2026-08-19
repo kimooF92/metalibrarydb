@@ -646,15 +646,16 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
         )}
       </div>
 
-      {/* Footer Actions */}
-      <div className="pt-2.5 border-t border-slate-200 dark:border-slate-800/60 flex items-center justify-between gap-2 mt-auto text-xs">
+      {/* Two-Tier Footer Actions */}
+      <div className="pt-2.5 border-t border-slate-200 dark:border-slate-800/60 flex flex-col gap-2 mt-auto text-xs">
+        {/* Tier 1: Main Action Buttons (Visit Store & Fetch Product) */}
         {destinationUrl ? (
-          <div className="flex items-center gap-1.5 max-w-[75%]">
+          <div className="flex items-center gap-2 w-full">
             <a
               href={destinationUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-white bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg shadow-sm transition-all truncate"
+              className="flex-1 min-w-0 inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-white bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg shadow-sm transition-all truncate"
               title={`Direct Brand Website: ${destinationUrl}`}
             >
               <Globe className="w-3.5 h-3.5 text-indigo-200 shrink-0" />
@@ -668,7 +669,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
               <button
                 onClick={handleFetchProduct}
                 disabled={isExtractingProduct}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200/60 dark:border-indigo-800/60 px-2.5 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer shrink-0 disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200/60 dark:border-indigo-800/60 px-3 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer shrink-0 disabled:opacity-50"
                 title="Scan Landing Page with Firecrawl to Extract Product, Price & Offers"
               >
                 {isExtractingProduct ? (
@@ -678,7 +679,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
                   </>
                 ) : (
                   <>
-                    <ShoppingBag className="w-3 h-3 text-indigo-500" />
+                    <ShoppingBag className="w-3.5 h-3.5 text-indigo-500" />
                     <span>Fetch Product</span>
                   </>
                 )}
@@ -686,55 +687,67 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
             )}
           </div>
         ) : (
-          <span className="text-[11px] text-slate-500 dark:text-slate-400 italic font-medium">No store website link</span>
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 italic font-medium py-0.5">
+            No store website link
+          </div>
         )}
 
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            onClick={handleRefreshMedia}
-            disabled={isRefreshingMedia}
-            className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors cursor-pointer"
-            title="Refresh Single Ad Media Links"
-          >
-            <RotateCw className={`w-3.5 h-3.5 ${isRefreshingMedia ? "animate-spin text-indigo-500" : ""}`} />
-          </button>
+        {/* Tier 2: Metadata & Quick Tools Row */}
+        <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-100 dark:border-slate-800/40 text-[11px] text-slate-500 dark:text-slate-400">
+          <div className="flex items-center gap-1 truncate font-medium">
+            <Clock className="w-3 h-3 shrink-0 text-slate-400" />
+            <span className="truncate">
+              {formatLaunchDate(currentAd.startedRunningOn, currentAd.firstSeenAt)}
+            </span>
+          </div>
 
-          <button
-            onClick={toggleArchive}
-            disabled={isArchiving}
-            className={`p-1.5 rounded-md transition-colors cursor-pointer ${
-              isArchived
-                ? "text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
-                : "text-slate-600 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-slate-100 dark:hover:bg-slate-900"
-            }`}
-            title={isArchived ? "Unarchive Ad (Move to Active Feed)" : "Archive Ad (Move to Vault)"}
-          >
-            {isArchived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={handleRefreshMedia}
+              disabled={isRefreshingMedia}
+              className="p-1 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors cursor-pointer"
+              title="Refresh Single Ad Media Links"
+            >
+              <RotateCw className={`w-3.5 h-3.5 ${isRefreshingMedia ? "animate-spin text-indigo-500" : ""}`} />
+            </button>
 
-          {(firstVideoUrl || displayImage) && (
+            <button
+              onClick={toggleArchive}
+              disabled={isArchiving}
+              className={`p-1 rounded-md transition-colors cursor-pointer ${
+                isArchived
+                  ? "text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
+                  : "text-slate-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-slate-100 dark:hover:bg-slate-900"
+              }`}
+              title={isArchived ? "Unarchive Ad (Move to Active Feed)" : "Archive Ad (Move to Vault)"}
+            >
+              {isArchived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+            </button>
+
+            {(firstVideoUrl || displayImage) && (
+              <a
+                href={firstVideoUrl || displayImage}
+                target="_blank"
+                rel="noopener noreferrer"
+                download
+                className="p-1 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors"
+                title="Download Media File"
+              >
+                <Download className="w-3.5 h-3.5" />
+              </a>
+            )}
+
             <a
-              href={firstVideoUrl || displayImage}
+              href={`https://www.facebook.com/ads/library/?id=${currentAd.adArchiveId}`}
               target="_blank"
               rel="noopener noreferrer"
-              download
-              className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors"
-              title="Download Media File"
+              className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline inline-flex items-center gap-0.5 px-1 py-0.5 rounded"
+              title="Open in Meta Ad Library"
             >
-              <Download className="w-3.5 h-3.5" />
+              <span>Meta</span>
+              <ExternalLink className="w-2.5 h-2.5" />
             </a>
-          )}
-
-          <a
-            href={`https://www.facebook.com/ads/library/?id=${currentAd.adArchiveId}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[11px] font-semibold text-slate-700 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline inline-flex items-center gap-1 p-1 rounded-md"
-            title="Open in Meta Ad Library"
-          >
-            Meta
-            <ExternalLink className="w-3 h-3" />
-          </a>
+          </div>
         </div>
       </div>
 
