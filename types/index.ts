@@ -92,6 +92,28 @@ export interface CreativeScan {
   finishedAt?: string | null;
 }
 
+export interface ScrapedProduct {
+  id: string;
+  url: string;
+  domain: string | null;
+  pageId: string | null;
+  title: string | null;
+  currentPrice: string | null;
+  originalPrice: string | null;
+  currency: string | null;
+  discountOrOffer: string | null;
+  mainImageUrl: string | null;
+  galleryImages?: string[] | null;
+  allOffers?: Array<{ tierName: string; price: string; savings?: string }> | null;
+  rawExtract?: any;
+  scrapeStatus: "pending" | "scraping" | "success" | "failed";
+  failureReason?: string | null;
+  lastScrapedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  linkedAdsCount?: number;
+}
+
 export interface Ad {
   id: string;
   adArchiveId: string;
@@ -102,6 +124,8 @@ export interface Ad {
   title: string | null;
   ctaText: string | null;
   linkUrl: string | null;
+  productId?: string | null;
+  product?: ScrapedProduct | null;
   mediaType: "image" | "video" | "carousel" | "unknown" | null;
   mediaUrls: string[] | null;
   thumbnailUrl: string | null;

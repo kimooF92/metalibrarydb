@@ -50,6 +50,13 @@
       "when": 1786478780000,
       "tag": "0006_enable_rls_discovery",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787161327899,
+      "tag": "0007_little_bug",
+      "breakpoints": true
     }
   ]
 }

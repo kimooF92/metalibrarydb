@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { ads, adObservations, trackedPages } from "@/db/schema";
+import { ads, adObservations, trackedPages, scrapedProducts } from "@/db/schema";
 import { eq, ilike, gte, lte, and, sql, desc, asc, or, not, inArray } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { syncApifyRuns } from "@/lib/apify-sync";
@@ -250,6 +250,7 @@ export async function GET(req: NextRequest) {
         title: ads.title,
         ctaText: ads.ctaText,
         linkUrl: ads.linkUrl,
+        productId: ads.productId,
         mediaType: ads.mediaType,
         mediaUrls: ads.mediaUrls,
         thumbnailUrl: ads.thumbnailUrl,
@@ -352,6 +353,21 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // Fetch products linked to these ads in batch
+    const productIds = Array.from(
+      new Set(rows.map((r) => r.productId).filter((id): id is string => Boolean(id)))
+    );
+    const productMap = new Map<string, any>();
+    if (productIds.length > 0) {
+      const fetchedProducts = await db
+        .select()
+        .from(scrapedProducts)
+        .where(inArray(scrapedProducts.id, productIds));
+      fetchedProducts.forEach((p) => {
+        productMap.set(p.id, p);
+      });
+    }
+
     // Synchronous row mapping with Winner Score & Product Cluster calculations
     const items = rows.map((row) => {
       const clusterInfo = clusterMap.get(row.id) || {
@@ -388,6 +404,8 @@ export async function GET(req: NextRequest) {
         title: row.title,
         ctaText: row.ctaText,
         linkUrl: row.linkUrl,
+        productId: row.productId,
+        product: row.productId ? productMap.get(row.productId) || null : null,
         mediaType: row.mediaType,
         mediaUrls: row.mediaUrls,
         thumbnailUrl: row.thumbnailUrl,

@@ -6,6 +6,7 @@ import {
   boolean,
   timestamp,
   index,
+  json,
 } from "drizzle-orm/pg-core";
 
 // 1. Tracked Pages Table
@@ -104,6 +105,38 @@ export const creativeScans = pgTable(
   ]
 );
 
+// 4b. Scraped Products Table (Landing page extracted products)
+export const scrapedProducts = pgTable(
+  "scraped_products",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    url: text("url").notNull().unique(), // Normalized destination URL (stripped of UTM/shims)
+    domain: text("domain"),
+    pageId: text("page_id"), // Associated brand page ID if known
+    title: text("title"),
+    currentPrice: text("current_price"),
+    originalPrice: text("original_price"),
+    currency: text("currency"),
+    discountOrOffer: text("discount_or_offer"),
+    mainImageUrl: text("main_image_url"),
+    galleryImages: text("gallery_images").array(),
+    allOffers: json("all_offers"),
+    rawExtract: json("raw_extract"),
+    scrapeStatus: text("scrape_status").default("pending").notNull(), // pending | scraping | success | failed
+    failureReason: text("failure_reason"),
+    lastScrapedAt: timestamp("last_scraped_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_scraped_products_url").on(table.url),
+    index("idx_scraped_products_domain").on(table.domain),
+    index("idx_scraped_products_page_id").on(table.pageId),
+    index("idx_scraped_products_status").on(table.scrapeStatus),
+    index("idx_scraped_products_created_at").on(table.createdAt.desc()),
+  ]
+);
+
 // 5. Canonical Ads Table
 export const ads = pgTable(
   "ads",
@@ -117,6 +150,7 @@ export const ads = pgTable(
     title: text("title"),
     ctaText: text("cta_text"),
     linkUrl: text("link_url"),
+    productId: uuid("product_id").references(() => scrapedProducts.id, { onDelete: "set null" }),
     mediaType: text("media_type"), // 'image' | 'video' | 'carousel' | 'unknown'
     mediaUrls: text("media_urls").array(),
     thumbnailUrl: text("thumbnail_url"),
@@ -134,6 +168,7 @@ export const ads = pgTable(
     index("idx_ads_started_running").on(table.startedRunningOn),
     index("idx_ads_media_type").on(table.mediaType),
     index("idx_ads_is_archived").on(table.isArchived),
+    index("idx_ads_product_id").on(table.productId),
   ]
 );
 

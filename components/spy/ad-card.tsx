@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useRef } from "react";
 import NextImage from "next/image";
-import { Ad } from "@/types";
+import Link from "next/link";
+import { Ad, ScrapedProduct } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
 import { calculateWinnerScore } from "@/lib/winner-score";
 import { ImagePreviewModal } from "./image-preview-modal";
 import { ProductClusterModal } from "./product-cluster-modal";
+import { useToast } from "@/components/toast-context";
 import {
   Calendar,
   Layers,
@@ -34,6 +36,8 @@ import {
   Trophy,
   Crown,
   Info,
+  ShoppingBag,
+  Tag,
 } from "lucide-react";
 
 interface AdCardProps {
@@ -44,6 +48,7 @@ interface AdCardProps {
 }
 
 export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }: AdCardProps) {
+  const { showToast } = useToast();
   const [currentAd, setCurrentAd] = useState<Ad>(ad);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
@@ -55,6 +60,8 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
   const [isArchived, setIsArchived] = useState(Boolean(ad.isArchived));
   const [isArchiving, setIsArchiving] = useState(false);
   const [isRefreshingMedia, setIsRefreshingMedia] = useState(false);
+  const [isExtractingProduct, setIsExtractingProduct] = useState(false);
+  const [extractedProduct, setExtractedProduct] = useState<ScrapedProduct | null>(ad.product || null);
   const [isHovered, setIsHovered] = useState(false);
   const [showScoreTooltip, setShowScoreTooltip] = useState(false);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -63,6 +70,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
   useEffect(() => {
     setCurrentAd(ad);
     setIsArchived(Boolean(ad.isArchived));
+    if (ad.product) setExtractedProduct(ad.product);
   }, [ad]);
 
   // Clean up hover timeout on unmount
@@ -135,6 +143,55 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
       alert("Failed to refresh media: " + (err.message || "Network error"));
     } finally {
       setIsRefreshingMedia(false);
+    }
+  };
+
+  const handleFetchProduct = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!destinationUrl || isExtractingProduct) return;
+
+    setIsExtractingProduct(true);
+    try {
+      const res = await fetch("/api/products/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: destinationUrl,
+          adId: currentAd.id,
+          pageId: currentAd.pageId,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success && data.product) {
+        setExtractedProduct(data.product);
+        setCurrentAd((prev) => ({
+          ...prev,
+          productId: data.product.id,
+          product: data.product,
+        }));
+        showToast({
+          type: "success",
+          title: data.cached ? "Product Linked (Cached)" : "Product Added to Hub!",
+          message: `${data.product.title || "Product"} ${data.product.currentPrice ? `(${data.product.currentPrice})` : ""} has been saved.`,
+          link: "/products",
+          linkLabel: "View in Products Hub ↗",
+        });
+      } else {
+        showToast({
+          type: "error",
+          title: "Extraction Failed",
+          message: data.error || "Could not extract product details from this landing page.",
+        });
+      }
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Network Error",
+        message: err.message || "Failed to contact extraction service.",
+      });
+    } finally {
+      setIsExtractingProduct(false);
     }
   };
 
@@ -535,6 +592,31 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
           )}
         </div>
 
+        {/* Extracted Product Info Pill */}
+        {extractedProduct && (
+          <div className="mb-2 px-2.5 py-1.5 rounded-lg bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-800/60 flex items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-1.5 truncate">
+              <ShoppingBag className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <span className="font-bold text-indigo-700 dark:text-indigo-300 truncate">
+                {extractedProduct.currentPrice || "Product Scraped"}
+              </span>
+              {extractedProduct.discountOrOffer && (
+                <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded truncate">
+                  {extractedProduct.discountOrOffer}
+                </span>
+              )}
+            </div>
+            <Link
+              href="/products"
+              onClick={(e) => e.stopPropagation()}
+              className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline shrink-0 flex items-center gap-0.5"
+            >
+              <span>View Hub</span>
+              <ExternalLink className="w-2.5 h-2.5" />
+            </Link>
+          </div>
+        )}
+
         {/* Title */}
         {currentAd.title && (
           <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 mb-1 line-clamp-1">
@@ -567,19 +649,42 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
       {/* Footer Actions */}
       <div className="pt-2.5 border-t border-slate-200 dark:border-slate-800/60 flex items-center justify-between gap-2 mt-auto text-xs">
         {destinationUrl ? (
-          <a
-            href={destinationUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-white bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg shadow-sm transition-all truncate max-w-[72%]"
-            title={`Direct Brand Website: ${destinationUrl}`}
-          >
-            <Globe className="w-3.5 h-3.5 text-indigo-200 shrink-0" />
-            <span className="truncate">
-              {currentAd.ctaText || "Visit Store"} {targetDomain ? `• ${targetDomain}` : ""}
-            </span>
-            <ExternalLink className="w-3 h-3 text-indigo-200 shrink-0 ml-0.5" />
-          </a>
+          <div className="flex items-center gap-1.5 max-w-[75%]">
+            <a
+              href={destinationUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-white bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg shadow-sm transition-all truncate"
+              title={`Direct Brand Website: ${destinationUrl}`}
+            >
+              <Globe className="w-3.5 h-3.5 text-indigo-200 shrink-0" />
+              <span className="truncate">
+                {currentAd.ctaText || "Visit Store"} {targetDomain ? `• ${targetDomain}` : ""}
+              </span>
+              <ExternalLink className="w-3 h-3 text-indigo-200 shrink-0 ml-0.5" />
+            </a>
+
+            {!extractedProduct && (
+              <button
+                onClick={handleFetchProduct}
+                disabled={isExtractingProduct}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200/60 dark:border-indigo-800/60 px-2.5 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer shrink-0 disabled:opacity-50"
+                title="Scan Landing Page with Firecrawl to Extract Product, Price & Offers"
+              >
+                {isExtractingProduct ? (
+                  <>
+                    <RotateCw className="w-3 h-3 animate-spin text-indigo-500" />
+                    <span>Extracting...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShoppingBag className="w-3 h-3 text-indigo-500" />
+                    <span>Fetch Product</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         ) : (
           <span className="text-[11px] text-slate-500 dark:text-slate-400 italic font-medium">No store website link</span>
         )}

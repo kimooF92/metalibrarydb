@@ -21,6 +21,7 @@ export const metadata: Metadata = {
 };
 
 import { SidebarProvider } from "@/components/sidebar-context";
+import { ToastProvider } from "@/components/toast-context";
 
 export default function RootLayout({
   children,
@@ -48,12 +49,14 @@ export default function RootLayout({
         />
       </head>
       <body className={`${inter.className} bg-background text-foreground h-screen w-screen flex flex-col md:flex-row antialiased overflow-hidden`}>
-        <SidebarProvider>
-          <Navigation />
-          <main className="flex-1 min-w-0 h-full overflow-y-auto flex flex-col p-4 md:px-6 md:py-5 bg-background">
-            {children}
-          </main>
-        </SidebarProvider>
+        <ToastProvider>
+          <SidebarProvider>
+            <Navigation />
+            <main className="flex-1 min-w-0 h-full overflow-y-auto flex flex-col p-4 md:px-6 md:py-5 bg-background">
+              {children}
+            </main>
+          </SidebarProvider>
+        </ToastProvider>
       </body>
     </html>
   );

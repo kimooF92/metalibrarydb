@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, UploadCloud, BarChart3, Eye, Compass, Globe, Menu, X, ChevronLeft, ChevronRight, Sun, Moon } from "lucide-react";
+import { LayoutDashboard, UploadCloud, BarChart3, Eye, Compass, Globe, ShoppingBag, Menu, X, ChevronLeft, ChevronRight, Sun, Moon } from "lucide-react";
 import { WorkerStatus } from "./worker-status";
 import { useSidebar } from "@/components/sidebar-context";
 
@@ -97,6 +97,7 @@ export function Navigation() {
               { href: "/", label: "Dashboard", icon: LayoutDashboard },
               { href: "/discovery", label: "Discover Pages", icon: Globe },
               { href: "/spy", label: "Ad Spy Feed", icon: Eye },
+              { href: "/products", label: "Products", icon: ShoppingBag },
               { href: "/analytics", label: "Analytics", icon: BarChart3 },
             ].map((item) => {
               const Icon = item.icon;
@@ -245,6 +246,7 @@ export function Navigation() {
               { href: "/", label: "Dashboard", icon: LayoutDashboard },
               { href: "/discovery", label: "Discover Pages", icon: Globe },
               { href: "/spy", label: "Ad Spy Feed", icon: Eye },
+              { href: "/products", label: "Products", icon: ShoppingBag },
               { href: "/analytics", label: "Analytics", icon: BarChart3 },
             ].map((item) => {
               const Icon = item.icon;
