@@ -153,23 +153,45 @@ export function ProductCard({
             )}
           </div>
 
-          {product.deliveryCost && (
-            <span
-              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${
-                product.deliveryCost.toLowerCase().includes("gratuit") ||
-                product.deliveryCost.toLowerCase().includes("free") ||
-                product.deliveryCost.toLowerCase().includes("مجاني") ||
-                product.deliveryCost.toLowerCase().includes("0 dt") ||
-                product.deliveryCost.toLowerCase().includes("0dt")
-                  ? "bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-                  : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
-              }`}
-              title={`Delivery Policy: ${product.deliveryCost}`}
-            >
-              <Truck className="w-2.5 h-2.5" />
-              <span className="truncate max-w-[110px]">{product.deliveryCost}</span>
-            </span>
-          )}
+          {/* Delivery pill */}
+          {(() => {
+            const delivery = product.deliveryCost;
+            const isFree =
+              delivery?.toLowerCase().includes("gratuit") ||
+              delivery?.toLowerCase().includes("free") ||
+              delivery?.toLowerCase().includes("مجاني") ||
+              delivery?.toLowerCase().includes("0 dt") ||
+              delivery?.toLowerCase().includes("0dt") ||
+              product.discountOrOffer?.toLowerCase().includes("livraison gratuite") ||
+              product.discountOrOffer?.toLowerCase().includes("توصيل مجاني");
+
+            const isSpecifiedPaid =
+              delivery &&
+              delivery !== "Livraison Non Spécifiée" &&
+              !isFree;
+
+            const label = isFree
+              ? "Livraison Gratuite"
+              : isSpecifiedPaid
+              ? delivery
+              : "Livraison: ~7 DT";
+
+            return (
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                  isFree
+                    ? "bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                    : isSpecifiedPaid
+                    ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                }`}
+                title={label}
+              >
+                <Truck className="w-2.5 h-2.5" />
+                <span className="truncate max-w-[110px]">{label}</span>
+              </span>
+            );
+          })()}
         </div>
 
         {/* Multi-tier offers counter if available */}

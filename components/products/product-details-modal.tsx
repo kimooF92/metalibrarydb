@@ -462,22 +462,51 @@ ${imagesText}`;
                     </span>
                   )}
 
-                  {product.deliveryCost && (
-                    <span
-                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                        product.deliveryCost.toLowerCase().includes("gratuit") ||
-                        product.deliveryCost.toLowerCase().includes("free") ||
-                        product.deliveryCost.toLowerCase().includes("مجاني") ||
-                        product.deliveryCost.toLowerCase().includes("0 dt") ||
-                        product.deliveryCost.toLowerCase().includes("0dt")
-                          ? "bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-                          : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
-                      }`}
-                    >
-                      <Truck className="w-3 h-3" />
-                      {product.deliveryCost}
-                    </span>
-                  )}
+                  {/* Delivery / Tawsil Badge */}
+                  {(() => {
+                    const delivery = product.deliveryCost;
+                    const isFree =
+                      delivery?.toLowerCase().includes("gratuit") ||
+                      delivery?.toLowerCase().includes("free") ||
+                      delivery?.toLowerCase().includes("مجاني") ||
+                      delivery?.toLowerCase().includes("0 dt") ||
+                      delivery?.toLowerCase().includes("0dt") ||
+                      product.discountOrOffer?.toLowerCase().includes("livraison gratuite") ||
+                      product.discountOrOffer?.toLowerCase().includes("توصيل مجاني");
+
+                    const isSpecifiedPaid =
+                      delivery &&
+                      delivery !== "Livraison Non Spécifiée" &&
+                      !isFree;
+
+                    const label = isFree
+                      ? "Livraison Gratuite"
+                      : isSpecifiedPaid
+                      ? delivery
+                      : "Livraison: 7 DT (Standard COD)";
+
+                    return (
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                          isFree
+                            ? "bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                            : isSpecifiedPaid
+                            ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                            : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700"
+                        }`}
+                        title={
+                          isFree
+                            ? "Livraison gratuite / Free Delivery"
+                            : isSpecifiedPaid
+                            ? `Frais de livraison: ${delivery}`
+                            : "Livraison standard COD en Tunisie (~7 DT)"
+                        }
+                      >
+                        <Truck className="w-3.5 h-3.5" />
+                        <span>{label}</span>
+                      </span>
+                    );
+                  })()}
                 </div>
               </div>
 
