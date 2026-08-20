@@ -117,7 +117,11 @@ export async function POST(req: NextRequest) {
     const whatsappNumbers = extractWhatsAppNumbers(combinedText);
     const metaPixelIds = extractMetaPixelIds(rawHtml);
     const storePlatform = detectStorePlatform(rawHtml, normalizedUrl);
-    const deliveryInfo = extractDeliveryInfo(combinedText, extracted.delivery_cost);
+    const deliveryInfo = extractDeliveryInfo(
+      combinedText,
+      extracted.delivery_cost,
+      extracted.all_offers
+    );
 
     // 3. Save or update product in DB
     let savedProduct;

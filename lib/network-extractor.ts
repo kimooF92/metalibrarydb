@@ -186,12 +186,74 @@ export function formatTunisianPhone(phone: string): {
 }
 
 /**
- * Detects delivery/shipping policy (Livraison gratuite, 7 DT, 8 DT, etc.)
+ * Detects delivery/shipping policy (Livraison gratuite, 7 DT, 8 DT, Gratuite dès 2 pièces, etc.)
  */
 export function extractDeliveryInfo(
   htmlOrText?: string | null,
-  extractedDelivery?: string | null
-): { isFree: boolean; label: string; rawCost?: string } {
+  extractedDelivery?: string | null,
+  allOffers?: Array<{ tier_name?: string; tierName?: string; price?: string }> | null
+): { isFree: boolean; label: string; rawCost?: string; isConditional?: boolean } {
+  const content = (htmlOrText || "").toLowerCase();
+
+  // 1. Check for explicit checkout paid shipping amounts first (e.g. "Shipping: 7.00 DT", "Frais de livraison: 7 DT")
+  const paidMatch =
+    content.match(/(?:shipping|frais de livraison|frais livraison|livraison|توصيل|مصاريف الشحن)\s*[:=\s]\s*([1-9][0-9]*(?:\.[0-9]+)?\s*(?:dt|tnd|dinar|dinars|د\.ت|د))/i) ||
+    content.match(/([1-9][0-9]*(?:\.[0-9]{2})?)\s*(?:dt|tnd)\s*(?:de livraison|pour la livraison|frais)/i);
+
+  // 2. Check for Conditional Free Delivery (e.g. "Livraison gratuite à partir de 2", "اشتري زوز توصيل مجاني")
+  const hasConditionalFree =
+    content.includes("livraison gratuite à partir de") ||
+    content.includes("livraison gratuite des") ||
+    content.includes("livraison gratuite dès") ||
+    content.includes("توصيل مجاني عند شراء") ||
+    content.includes("توصيل مجاني بداية من") ||
+    content.includes("اشتري زوز توصيل مجاني") ||
+    content.includes("اشتري 2 توصيل مجاني") ||
+    content.includes("اشري 2 توصيل مجاني") ||
+    content.includes("اشري زوز توصيل مجاني") ||
+    (content.includes("pack 2") && content.includes("gratuit")) ||
+    (allOffers &&
+      Array.isArray(allOffers) &&
+      allOffers.some((o, idx) => {
+        const name = (o.tier_name || o.tierName || "").toLowerCase();
+        return (
+          idx > 0 &&
+          (name.includes("مجاني") ||
+            name.includes("gratuit") ||
+            name.includes("free") ||
+            name.includes("بلاش"))
+        );
+      }));
+
+  // If there's an explicit paid delivery amount
+  if (paidMatch) {
+    const rawCost = paidMatch[1].toUpperCase().trim();
+    if (hasConditionalFree) {
+      return {
+        isFree: false,
+        isConditional: true,
+        label: `Livraison: ${rawCost} (Gratuite dès 2 pcs)`,
+        rawCost,
+      };
+    }
+    return {
+      isFree: false,
+      label: `Livraison: ${rawCost}`,
+      rawCost,
+    };
+  }
+
+  // If conditional free delivery detected (e.g. Buy 2 get free delivery) but single item has standard delivery
+  if (hasConditionalFree) {
+    return {
+      isFree: false,
+      isConditional: true,
+      label: "Livraison: 7 DT (Gratuite dès 2 pcs)",
+      rawCost: "7 DT",
+    };
+  }
+
+  // If Firecrawl explicitly extracted a delivery policy
   if (
     extractedDelivery &&
     extractedDelivery.trim().length > 0 &&
@@ -206,47 +268,50 @@ export function extractDeliveryInfo(
       lower.includes("0 dt") ||
       lower.includes("0dt") ||
       lower.includes("بلاش");
-    return {
-      isFree,
-      label: isFree ? "Livraison Gratuite" : extractedDelivery,
-      rawCost: extractedDelivery,
-    };
+
+    if (isFree && !hasConditionalFree) {
+      return {
+        isFree: true,
+        label: "Livraison Gratuite",
+        rawCost: "0 DT",
+      };
+    }
+
+    if (!isFree) {
+      return {
+        isFree: false,
+        label: extractedDelivery.startsWith("Livraison")
+          ? extractedDelivery
+          : `Livraison: ${extractedDelivery}`,
+        rawCost: extractedDelivery,
+      };
+    }
   }
 
-  const content = (htmlOrText || "").toLowerCase();
+  // 3. Check for genuine Unconditional Free Delivery on single item
+  const hasUnconditionalFree =
+    (content.includes("livraison gratuite") ||
+      content.includes("livraison offerte") ||
+      content.includes("توصيل مجاني") ||
+      content.includes("شحن مجاني") ||
+      content.includes("free shipping") ||
+      content.includes("livraison 0 dt") ||
+      content.includes("livraison 0dt") ||
+      content.includes("توصيل بلاش")) &&
+    !hasConditionalFree;
 
-  // Check for Free Delivery phrases
-  if (
-    content.includes("livraison gratuite") ||
-    content.includes("livraison offerte") ||
-    content.includes("توصيل مجاني") ||
-    content.includes("شحن مجاني") ||
-    content.includes("free shipping") ||
-    content.includes("livraison 0 dt") ||
-    content.includes("livraison 0dt") ||
-    content.includes("توصيل بلاش")
-  ) {
+  if (hasUnconditionalFree) {
     return {
       isFree: true,
       label: "Livraison Gratuite",
+      rawCost: "0 DT",
     };
   }
 
-  // Check for specific price in Dinars (e.g., 7 DT, 8 DT, 6 DT, 5 DT)
-  const paidMatch =
-    content.match(/(?:frais de )?livraison\s*(?:est de|:)?\s*([0-9]+(?:\.[0-9]+)?\s*(?:dt|dinar|dinars|tnd))/i) ||
-    content.match(/(?:مصاريف )?توصيل\s*(?:بـ)?\s*([0-9]+(?:\.[0-9]+)?\s*(?:دينار|د\.ت|د))/i);
-
-  if (paidMatch) {
-    return {
-      isFree: false,
-      label: `Livraison: ${paidMatch[1].toUpperCase()}`,
-      rawCost: paidMatch[1].toUpperCase(),
-    };
-  }
-
+  // 4. Default for Tunisian COD
   return {
     isFree: false,
-    label: "Livraison Non Spécifiée",
+    label: "Livraison: 7 DT",
+    rawCost: "7 DT",
   };
 }
