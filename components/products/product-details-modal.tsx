@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import NextImage from "next/image";
 import { ScrapedProduct, Ad } from "@/types";
 import { CompetitorBenchmarkSummary } from "@/lib/product-matcher";
+import { useToast } from "@/components/toast-context";
 import {
   X,
   ExternalLink,
@@ -24,6 +25,11 @@ import {
   Globe,
   TrendingUp,
   Percent,
+  Copy,
+  Check,
+  Bot,
+  FileText,
+  ChevronDown,
 } from "lucide-react";
 
 interface ProductDetailsModalProps {
@@ -41,12 +47,26 @@ export function ProductDetailsModal({
   onRefresh,
   onDelete,
 }: ProductDetailsModalProps) {
+  const { showToast } = useToast();
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [linkedAds, setLinkedAds] = useState<Ad[]>([]);
   const [loadingAds, setLoadingAds] = useState(false);
   const [benchmark, setBenchmark] = useState<CompetitorBenchmarkSummary | null>(null);
   const [loadingBenchmark, setLoadingBenchmark] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [copiedType, setCopiedType] = useState<string | null>(null);
+  const [showCopyMenu, setShowCopyMenu] = useState(false);
+  const copyMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (copyMenuRef.current && !copyMenuRef.current.contains(event.target as Node)) {
+        setShowCopyMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (product) {
@@ -105,6 +125,118 @@ export function ProductDetailsModal({
     ...(product.galleryImages || []),
   ].filter((img, idx, arr) => arr.indexOf(img) === idx);
 
+  const generateAIProductPrompt = () => {
+    if (!product) return "";
+    const offersText =
+      product.allOffers && Array.isArray(product.allOffers) && product.allOffers.length > 0
+        ? product.allOffers
+            .map((o: any) => `- ${o.tier_name || "Tier"}: ${o.price || ""} ${o.savings ? `(${o.savings})` : ""}`)
+            .join("\n")
+        : "- Price: " + (product.currentPrice || "N/A");
+
+    const imagesText = allImages.map((img, i) => `${i + 1}. ${img}`).join("\n");
+
+    const adCopiesText =
+      linkedAds.length > 0
+        ? linkedAds
+            .slice(0, 5)
+            .map((ad, i) => `Angle ${i + 1} (${ad.pageName || "Store"}):\n"${ad.caption || ad.title || "No copy text"}"`)
+            .join("\n\n")
+        : "No active ad copies tracked.";
+
+    const competitorBenchmarkText =
+      benchmark && benchmark.matches.length > 0
+        ? `Lowest Price: ${benchmark.currency}${benchmark.minPrice} | Highest Price: ${benchmark.currency}${benchmark.maxPrice} | Average Price: ${benchmark.currency}${benchmark.avgPrice} across ${benchmark.uniqueDomainsCount} competitor stores.`
+        : "Single store tracked.";
+
+    return `# Product Brief for AI Copywriting & Store Listing
+
+## Product Details:
+- **Title:** ${product.title || "Product Landing Page"}
+- **Current Price:** ${product.currentPrice || "N/A"}
+- **Original / Regular Price:** ${product.originalPrice || "N/A"}
+- **Discount Offer:** ${product.discountOrOffer || "N/A"}
+- **Store Domain:** ${product.domain || "N/A"}
+- **Destination URL:** ${product.url}
+
+## Multi-Tier Offers & Bundles:
+${offersText}
+
+## Competitor Pricing Benchmark:
+${competitorBenchmarkText}
+
+## Product Images (High-Resolution):
+${imagesText}
+
+## Active Meta Ad Creative Angles:
+${adCopiesText}
+
+---
+### 🤖 Copywriting Instructions for AI:
+"You are a world-class direct response e-commerce copywriter. Based on the product data above:
+1. Write 5 high-converting headline hooks (Problem-Agitate-Solve, Curiosity, Benefit-Driven).
+2. Write a complete high-converting Shopify product page description with Bullet Points, Benefits, and an FAQ section.
+3. Write 3 short-form UGC video ad scripts (30 seconds each) with visual scene directions and voiceover text."`;
+  };
+
+  const generateCleanMarkdown = () => {
+    if (!product) return "";
+    const offersText =
+      product.allOffers && Array.isArray(product.allOffers) && product.allOffers.length > 0
+        ? product.allOffers
+            .map((o: any) => `- ${o.tier_name || "Tier"}: ${o.price || ""} ${o.savings ? `(${o.savings})` : ""}`)
+            .join("\n")
+        : "- Price: " + (product.currentPrice || "N/A");
+
+    const imagesText = allImages.map((img) => `- ${img}`).join("\n");
+
+    return `# ${product.title || "Product Landing Page"}
+
+**Price:** ${product.currentPrice || "N/A"} ${product.originalPrice ? `(Regular: ${product.originalPrice})` : ""}
+**Offer:** ${product.discountOrOffer || "N/A"}
+**Source URL:** ${product.url}
+
+### Offers / Quantity Discounts:
+${offersText}
+
+### Images:
+${imagesText}`;
+  };
+
+  const handleCopy = async (type: "ai" | "markdown" | "images") => {
+    let textToCopy = "";
+    let label = "";
+
+    if (type === "ai") {
+      textToCopy = generateAIProductPrompt();
+      label = "Full AI Copywriting Prompt";
+    } else if (type === "markdown") {
+      textToCopy = generateCleanMarkdown();
+      label = "Clean Product Specs & Offers";
+    } else if (type === "images") {
+      textToCopy = allImages.join("\n");
+      label = `${allImages.length} Image URL${allImages.length === 1 ? "" : "s"}`;
+    }
+
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      setCopiedType(type);
+      setShowCopyMenu(false);
+      showToast({
+        type: "success",
+        title: "Copied to Clipboard!",
+        message: `${label} copied. Ready to paste into ChatGPT, Claude, or your store builder.`,
+      });
+      setTimeout(() => setCopiedType(null), 2500);
+    } catch {
+      showToast({
+        type: "error",
+        title: "Copy Failed",
+        message: "Could not access clipboard.",
+      });
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
       <div
@@ -128,6 +260,69 @@ export function ProductDetailsModal({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {/* 1-Click Copy Dropdown */}
+            <div className="relative" ref={copyMenuRef}>
+              <button
+                onClick={() => setShowCopyMenu(!showCopyMenu)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 rounded-lg shadow-sm transition-all cursor-pointer"
+                title="Copy Product Pack for AI Copywriting & Store Builders"
+              >
+                {copiedType ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-300" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-indigo-200" />
+                    <span>Copy for AI / Store</span>
+                    <ChevronDown className="w-3 h-3 text-indigo-200 ml-0.5" />
+                  </>
+                )}
+              </button>
+
+              {/* Copy Menu Dropdown */}
+              {showCopyMenu && (
+                <div className="absolute right-0 mt-1.5 w-64 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl py-1.5 z-50 animate-in fade-in slide-in-from-top-2">
+                  <div className="px-3 py-1.5 border-b border-slate-100 dark:border-slate-800 text-[10px] uppercase font-bold text-slate-400">
+                    1-Click Content Export
+                  </div>
+                  <button
+                    onClick={() => handleCopy("ai")}
+                    className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-start gap-2 transition-colors cursor-pointer"
+                  >
+                    <Bot className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-slate-100">Full AI Prompt Pack</div>
+                      <div className="text-[10px] text-slate-400">Ready for ChatGPT/Claude (Hooks, Description, Video Scripts)</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => handleCopy("markdown")}
+                    className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-start gap-2 transition-colors cursor-pointer"
+                  >
+                    <FileText className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-slate-100">Clean Specs & Offers</div>
+                      <div className="text-[10px] text-slate-400">Markdown format for store builders</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => handleCopy("images")}
+                    className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-start gap-2 transition-colors cursor-pointer"
+                  >
+                    <ImageIcon className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-slate-100">All Image URLs Only</div>
+                      <div className="text-[10px] text-slate-400">{allImages.length} high-res photo links</div>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+
             {onRefresh && (
               <button
                 onClick={handleRefresh}
