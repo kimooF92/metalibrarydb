@@ -126,6 +126,7 @@ export const scrapedProducts = pgTable(
     whatsappNumbers: text("whatsapp_numbers").array(),
     metaPixelIds: text("meta_pixel_ids").array(),
     storePlatform: text("store_platform"),
+    deliveryCost: text("delivery_cost"),
     scrapeStatus: text("scrape_status").default("pending").notNull(), // pending | scraping | success | failed
     failureReason: text("failure_reason"),
     lastScrapedAt: timestamp("last_scraped_at", { withTimezone: true }),

@@ -184,3 +184,69 @@ export function formatTunisianPhone(phone: string): {
   const formatted = `+216 ${localDigits.slice(0, 2)} ${localDigits.slice(2, 5)} ${localDigits.slice(5)}`;
   return { formatted, operator };
 }
+
+/**
+ * Detects delivery/shipping policy (Livraison gratuite, 7 DT, 8 DT, etc.)
+ */
+export function extractDeliveryInfo(
+  htmlOrText?: string | null,
+  extractedDelivery?: string | null
+): { isFree: boolean; label: string; rawCost?: string } {
+  if (
+    extractedDelivery &&
+    extractedDelivery.trim().length > 0 &&
+    extractedDelivery.toLowerCase() !== "non spécifiée" &&
+    extractedDelivery.toLowerCase() !== "unspecified"
+  ) {
+    const lower = extractedDelivery.toLowerCase();
+    const isFree =
+      lower.includes("gratuit") ||
+      lower.includes("free") ||
+      lower.includes("مجاني") ||
+      lower.includes("0 dt") ||
+      lower.includes("0dt") ||
+      lower.includes("بلاش");
+    return {
+      isFree,
+      label: isFree ? "Livraison Gratuite" : extractedDelivery,
+      rawCost: extractedDelivery,
+    };
+  }
+
+  const content = (htmlOrText || "").toLowerCase();
+
+  // Check for Free Delivery phrases
+  if (
+    content.includes("livraison gratuite") ||
+    content.includes("livraison offerte") ||
+    content.includes("توصيل مجاني") ||
+    content.includes("شحن مجاني") ||
+    content.includes("free shipping") ||
+    content.includes("livraison 0 dt") ||
+    content.includes("livraison 0dt") ||
+    content.includes("توصيل بلاش")
+  ) {
+    return {
+      isFree: true,
+      label: "Livraison Gratuite",
+    };
+  }
+
+  // Check for specific price in Dinars (e.g., 7 DT, 8 DT, 6 DT, 5 DT)
+  const paidMatch =
+    content.match(/(?:frais de )?livraison\s*(?:est de|:)?\s*([0-9]+(?:\.[0-9]+)?\s*(?:dt|dinar|dinars|tnd))/i) ||
+    content.match(/(?:مصاريف )?توصيل\s*(?:بـ)?\s*([0-9]+(?:\.[0-9]+)?\s*(?:دينار|د\.ت|د))/i);
+
+  if (paidMatch) {
+    return {
+      isFree: false,
+      label: `Livraison: ${paidMatch[1].toUpperCase()}`,
+      rawCost: paidMatch[1].toUpperCase(),
+    };
+  }
+
+  return {
+    isFree: false,
+    label: "Livraison Non Spécifiée",
+  };
+}

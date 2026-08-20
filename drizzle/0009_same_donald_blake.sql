@@ -1,0 +1,1 @@
+ALTER TABLE "scraped_products" ADD COLUMN "delivery_cost" text;

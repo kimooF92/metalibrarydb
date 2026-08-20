@@ -15,6 +15,7 @@ import {
   AlertCircle,
   Clock,
   Eye,
+  Truck,
 } from "lucide-react";
 
 interface ProductCardProps {
@@ -135,18 +136,38 @@ export function ProductCard({
         </h3>
 
         {/* Price & Offers */}
-        <div className="flex items-baseline gap-2 mb-3 mt-auto">
-          {product.currentPrice ? (
-            <span className="text-base font-extrabold text-indigo-600 dark:text-indigo-400">
-              {product.currentPrice}
-            </span>
-          ) : (
-            <span className="text-xs text-slate-400 italic">Price not detected</span>
-          )}
+        <div className="flex items-center justify-between gap-2 mb-3 mt-auto flex-wrap">
+          <div className="flex items-baseline gap-2">
+            {product.currentPrice ? (
+              <span className="text-base font-extrabold text-indigo-600 dark:text-indigo-400">
+                {product.currentPrice}
+              </span>
+            ) : (
+              <span className="text-xs text-slate-400 italic">Price not detected</span>
+            )}
 
-          {product.originalPrice && (
-            <span className="text-xs text-slate-600 dark:text-slate-400 line-through">
-              {product.originalPrice}
+            {product.originalPrice && (
+              <span className="text-xs text-slate-600 dark:text-slate-400 line-through">
+                {product.originalPrice}
+              </span>
+            )}
+          </div>
+
+          {product.deliveryCost && (
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                product.deliveryCost.toLowerCase().includes("gratuit") ||
+                product.deliveryCost.toLowerCase().includes("free") ||
+                product.deliveryCost.toLowerCase().includes("مجاني") ||
+                product.deliveryCost.toLowerCase().includes("0 dt") ||
+                product.deliveryCost.toLowerCase().includes("0dt")
+                  ? "bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                  : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+              }`}
+              title={`Delivery Policy: ${product.deliveryCost}`}
+            >
+              <Truck className="w-2.5 h-2.5" />
+              <span className="truncate max-w-[110px]">{product.deliveryCost}</span>
             </span>
           )}
         </div>

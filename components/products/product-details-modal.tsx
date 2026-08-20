@@ -36,6 +36,7 @@ import {
   Server,
   Network,
   Radio,
+  Truck,
 } from "lucide-react";
 
 interface ProductDetailsModalProps {
@@ -182,6 +183,7 @@ export function ProductDetailsModal({
 - **Current Price:** ${product.currentPrice || "N/A"}
 - **Original / Regular Price:** ${product.originalPrice || "N/A"}
 - **Discount Offer:** ${product.discountOrOffer || "N/A"}
+- **Delivery / Shipping Policy:** ${product.deliveryCost || "Not specified"}
 - **Store Domain:** ${product.domain || "N/A"}
 - **Destination URL:** ${product.url}
 
@@ -220,6 +222,7 @@ ${adCopiesText}
 
 **Price:** ${product.currentPrice || "N/A"} ${product.originalPrice ? `(Regular: ${product.originalPrice})` : ""}
 **Offer:** ${product.discountOrOffer || "N/A"}
+**Delivery:** ${product.deliveryCost || "Not specified"}
 **Source URL:** ${product.url}
 
 ### Offers / Quantity Discounts:
@@ -456,6 +459,23 @@ ${imagesText}`;
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold border border-emerald-500/20">
                       <Tag className="w-3 h-3" />
                       {product.discountOrOffer}
+                    </span>
+                  )}
+
+                  {product.deliveryCost && (
+                    <span
+                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                        product.deliveryCost.toLowerCase().includes("gratuit") ||
+                        product.deliveryCost.toLowerCase().includes("free") ||
+                        product.deliveryCost.toLowerCase().includes("مجاني") ||
+                        product.deliveryCost.toLowerCase().includes("0 dt") ||
+                        product.deliveryCost.toLowerCase().includes("0dt")
+                          ? "bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                          : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                      }`}
+                    >
+                      <Truck className="w-3 h-3" />
+                      {product.deliveryCost}
                     </span>
                   )}
                 </div>

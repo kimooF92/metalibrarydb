@@ -10,6 +10,7 @@ import {
   extractWhatsAppNumbers,
   extractMetaPixelIds,
   detectStorePlatform,
+  extractDeliveryInfo,
 } from "@/lib/network-extractor";
 
 export async function POST(req: NextRequest) {
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest) {
 
     const extracted = extractionResult.data;
 
-    // 2b. Extract Tunisian Network Fingerprints (Phone, WhatsApp, Pixel IDs, Platform)
+    // 2b. Extract Tunisian Network Fingerprints (Phone, WhatsApp, Pixel IDs, Platform, Delivery)
     const rawHtml =
       extractionResult.raw?.html ||
       extractionResult.raw?.data?.html ||
@@ -116,6 +117,7 @@ export async function POST(req: NextRequest) {
     const whatsappNumbers = extractWhatsAppNumbers(combinedText);
     const metaPixelIds = extractMetaPixelIds(rawHtml);
     const storePlatform = detectStorePlatform(rawHtml, normalizedUrl);
+    const deliveryInfo = extractDeliveryInfo(combinedText, extracted.delivery_cost);
 
     // 3. Save or update product in DB
     let savedProduct;
@@ -138,6 +140,7 @@ export async function POST(req: NextRequest) {
           whatsappNumbers: whatsappNumbers.length > 0 ? whatsappNumbers : existingProduct.whatsappNumbers,
           metaPixelIds: metaPixelIds.length > 0 ? metaPixelIds : existingProduct.metaPixelIds,
           storePlatform: storePlatform !== "other" ? storePlatform : existingProduct.storePlatform,
+          deliveryCost: deliveryInfo.label || existingProduct.deliveryCost,
           scrapeStatus: "success",
           failureReason: null,
           lastScrapedAt: new Date(),
@@ -166,6 +169,7 @@ export async function POST(req: NextRequest) {
           whatsappNumbers: whatsappNumbers.length > 0 ? whatsappNumbers : [],
           metaPixelIds: metaPixelIds.length > 0 ? metaPixelIds : [],
           storePlatform: storePlatform || "other",
+          deliveryCost: deliveryInfo.label || null,
           scrapeStatus: "success",
           lastScrapedAt: new Date(),
         })

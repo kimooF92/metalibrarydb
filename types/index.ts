@@ -110,6 +110,7 @@ export interface ScrapedProduct {
   whatsappNumbers?: string[] | null;
   metaPixelIds?: string[] | null;
   storePlatform?: string | null;
+  deliveryCost?: string | null;
   scrapeStatus: "pending" | "scraping" | "success" | "failed";
   failureReason?: string | null;
   lastScrapedAt: string | null;

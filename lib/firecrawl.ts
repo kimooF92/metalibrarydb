@@ -92,6 +92,10 @@ export const productJsonSchema = {
       type: "string",
       description: "Promotional offer, percentage off, or bundle deal (e.g., '50% OFF', 'Buy 1 Get 1 Free', 'Free Delivery')",
     },
+    delivery_cost: {
+      type: "string",
+      description: "Shipping / delivery policy or cost (e.g., 'Livraison Gratuite', '7 DT', '8 DT', 'Gratuite à partir de 2 articles', 'Non spécifiée')",
+    },
     main_image_url: {
       type: "string",
       description: "The primary high-resolution product image URL",
@@ -124,6 +128,7 @@ export interface ExtractedProductData {
   original_price?: string;
   currency?: string;
   discount_or_offer?: string;
+  delivery_cost?: string;
   main_image_url?: string;
   gallery_images?: string[];
   all_offers?: Array<{
