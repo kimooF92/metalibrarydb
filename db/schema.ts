@@ -122,6 +122,10 @@ export const scrapedProducts = pgTable(
     galleryImages: text("gallery_images").array(),
     allOffers: json("all_offers"),
     rawExtract: json("raw_extract"),
+    phoneNumbers: text("phone_numbers").array(),
+    whatsappNumbers: text("whatsapp_numbers").array(),
+    metaPixelIds: text("meta_pixel_ids").array(),
+    storePlatform: text("store_platform"),
     scrapeStatus: text("scrape_status").default("pending").notNull(), // pending | scraping | success | failed
     failureReason: text("failure_reason"),
     lastScrapedAt: timestamp("last_scraped_at", { withTimezone: true }),

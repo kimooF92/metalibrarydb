@@ -5,6 +5,12 @@ import { eq, sql, inArray } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { normalizeProductUrl, extractProductFromUrl } from "@/lib/firecrawl";
 import { getCleanDomain } from "@/lib/utils";
+import {
+  extractTunisianPhoneNumbers,
+  extractWhatsAppNumbers,
+  extractMetaPixelIds,
+  detectStorePlatform,
+} from "@/lib/network-extractor";
 
 export async function POST(req: NextRequest) {
   const authError = validateApiSecret(req);
@@ -86,6 +92,31 @@ export async function POST(req: NextRequest) {
 
     const extracted = extractionResult.data;
 
+    // 2b. Extract Tunisian Network Fingerprints (Phone, WhatsApp, Pixel IDs, Platform)
+    const rawHtml =
+      extractionResult.raw?.html ||
+      extractionResult.raw?.data?.html ||
+      extractionResult.raw?.rawHtml ||
+      "";
+
+    let adCaptionText = "";
+    if (adId) {
+      const [adRecord] = await db
+        .select({ caption: ads.caption, title: ads.title })
+        .from(ads)
+        .where(eq(ads.id, adId));
+      if (adRecord) {
+        adCaptionText = `${adRecord.title || ""} ${adRecord.caption || ""}`;
+      }
+    }
+
+    const combinedText = `${rawHtml} ${adCaptionText} ${JSON.stringify(extractionResult.raw || {})}`;
+
+    const phoneNumbers = extractTunisianPhoneNumbers(combinedText);
+    const whatsappNumbers = extractWhatsAppNumbers(combinedText);
+    const metaPixelIds = extractMetaPixelIds(rawHtml);
+    const storePlatform = detectStorePlatform(rawHtml, normalizedUrl);
+
     // 3. Save or update product in DB
     let savedProduct;
     if (existingProduct) {
@@ -103,6 +134,10 @@ export async function POST(req: NextRequest) {
           galleryImages: extracted.gallery_images || existingProduct.galleryImages,
           allOffers: extracted.all_offers || existingProduct.allOffers,
           rawExtract: extractionResult.raw || existingProduct.rawExtract,
+          phoneNumbers: phoneNumbers.length > 0 ? phoneNumbers : existingProduct.phoneNumbers,
+          whatsappNumbers: whatsappNumbers.length > 0 ? whatsappNumbers : existingProduct.whatsappNumbers,
+          metaPixelIds: metaPixelIds.length > 0 ? metaPixelIds : existingProduct.metaPixelIds,
+          storePlatform: storePlatform !== "other" ? storePlatform : existingProduct.storePlatform,
           scrapeStatus: "success",
           failureReason: null,
           lastScrapedAt: new Date(),
@@ -127,6 +162,10 @@ export async function POST(req: NextRequest) {
           galleryImages: extracted.gallery_images || [],
           allOffers: extracted.all_offers || null,
           rawExtract: extractionResult.raw || null,
+          phoneNumbers: phoneNumbers.length > 0 ? phoneNumbers : [],
+          whatsappNumbers: whatsappNumbers.length > 0 ? whatsappNumbers : [],
+          metaPixelIds: metaPixelIds.length > 0 ? metaPixelIds : [],
+          storePlatform: storePlatform || "other",
           scrapeStatus: "success",
           lastScrapedAt: new Date(),
         })

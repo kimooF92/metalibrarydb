@@ -106,6 +106,10 @@ export interface ScrapedProduct {
   galleryImages?: string[] | null;
   allOffers?: Array<{ tierName: string; price: string; savings?: string }> | null;
   rawExtract?: any;
+  phoneNumbers?: string[] | null;
+  whatsappNumbers?: string[] | null;
+  metaPixelIds?: string[] | null;
+  storePlatform?: string | null;
   scrapeStatus: "pending" | "scraping" | "success" | "failed";
   failureReason?: string | null;
   lastScrapedAt: string | null;

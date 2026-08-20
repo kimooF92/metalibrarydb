@@ -169,6 +169,7 @@ export async function extractProductFromUrl(url: string): Promise<{
           prompt:
             "Extract the main product title, current selling price, original/crossed-out price, discount/offer summary, main product photo URL, and any quantity/bundle discount tiers.",
         },
+        "html",
       ],
       waitFor: 2000,
     });
