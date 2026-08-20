@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
     const smartPreset = searchParams.get("smartPreset");
     let minProductCreatives = parseInt(searchParams.get("minProductCreatives") || "0", 10);
     const productKey = searchParams.get("productKey");
+    const productId = searchParams.get("productId");
     let sortBy = searchParams.get("sortBy") || "started_running_on";
     const sortOrder = searchParams.get("sortOrder") || "desc";
 
@@ -118,6 +119,10 @@ export async function GET(req: NextRequest) {
 
     if (isWatchlisted && smartPreset !== "watchlist") {
       conditions.push(eq(trackedPages.isWatchlisted, true));
+    }
+
+    if (productId) {
+      conditions.push(eq(ads.productId, productId));
     }
 
     if (excludePageIds.length > 0) {
