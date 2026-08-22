@@ -49,6 +49,9 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
 
   const fetchNotifications = async () => {
     try {
+      // Best-effort background sync for active Apify cloud scans
+      fetch("/api/spy/scans/sync", { method: "POST" }).catch(() => {});
+
       const typeParam = activeTab === "all" ? "" : `&type=${activeTab}`;
       const res = await fetch(`/api/notifications?limit=40${typeParam}`);
       if (res.ok) {
@@ -181,7 +184,24 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
   return (
     <div className="relative inline-block" ref={dropdownRef}>
       {/* Trigger Button */}
-      {layout === "collapsed" ? (
+      {layout === "navbar" ? (
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          title={`Notifications (${unreadCount} unread)`}
+          aria-label={`Notifications (${unreadCount} unread)`}
+          className={`relative flex items-center justify-center w-8.5 h-8.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-sm transition-all cursor-pointer ${
+            isOpen ? "border-indigo-500/40 text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/30" : ""
+          }`}
+        >
+          <Bell className="w-4 h-4" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500 ring-2 ring-white dark:ring-slate-900"></span>
+            </span>
+          )}
+        </button>
+      ) : layout === "collapsed" ? (
         <button
           onClick={() => setIsOpen(!isOpen)}
           title={`Notifications (${unreadCount} unread)`}
@@ -225,7 +245,9 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
       {isOpen && (
         <div
           className={`fixed sm:absolute z-50 ${
-            layout === "collapsed"
+            layout === "navbar"
+              ? "right-0 top-full mt-2"
+              : layout === "collapsed"
               ? "left-16 bottom-0"
               : "left-0 sm:left-full sm:bottom-0 sm:ml-2 bottom-4 sm:bottom-auto"
           } w-[calc(100vw-2rem)] sm:w-[420px] max-h-[80vh] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150`}

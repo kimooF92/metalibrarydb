@@ -22,6 +22,7 @@ export const metadata: Metadata = {
 
 import { SidebarProvider } from "@/components/sidebar-context";
 import { ToastProvider } from "@/components/toast-context";
+import { TopBar } from "@/components/top-bar";
 import { Analytics } from "@vercel/analytics/react";
 
 export default function RootLayout({
@@ -53,9 +54,12 @@ export default function RootLayout({
         <ToastProvider>
           <SidebarProvider>
             <Navigation />
-            <main className="flex-1 min-w-0 h-full overflow-y-auto flex flex-col p-4 md:px-6 md:py-5 bg-background">
-              {children}
-            </main>
+            <div className="flex-1 min-w-0 h-full flex flex-col overflow-hidden bg-background">
+              <TopBar />
+              <main className="flex-1 min-w-0 overflow-y-auto flex flex-col p-4 md:px-6 md:py-5 bg-background">
+                {children}
+              </main>
+            </div>
           </SidebarProvider>
         </ToastProvider>
         <Analytics />

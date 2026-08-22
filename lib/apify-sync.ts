@@ -144,6 +144,16 @@ export async function syncApifyRuns(): Promise<{ syncedCount: number; checkedCou
           })
           .where(eq(creativeScans.id, scan.id));
         await resetTrackedPageFromScan(scan.id);
+
+        const { createNotification } = await import("@/lib/notifications");
+        await createNotification({
+          type: "system_alert",
+          title: "⚠️ Apify Scan Failed",
+          message: `Apify Cloud run for scan ${scan.id.slice(0, 8)} ended with status: ${status}.`,
+          severity: "error",
+          trackedPageId: scan.trackedPageId,
+        });
+
         syncedCount++;
       }
     }
@@ -165,7 +175,7 @@ export function pollApifyRunUntilDone(
   creativeScanId: string,
   runId: string,
   defaultDatasetId?: string,
-  maxAttempts: number = 24, // 24 * 5s = 2 minutes max
+  maxAttempts: number = 60, // 60 * 5s = 5 minutes max
   intervalMs: number = 5000
 ) {
   let attempts = 0;
@@ -198,6 +208,15 @@ export function pollApifyRunUntilDone(
           })
           .where(eq(creativeScans.id, creativeScanId));
         await resetTrackedPageFromScan(creativeScanId);
+
+        const { createNotification } = await import("@/lib/notifications");
+        await createNotification({
+          type: "system_alert",
+          title: "⚠️ Apify Scan Failed",
+          message: `Apify run ended with status: ${status}.`,
+          severity: "error",
+          trackedPageId: creativeScanId,
+        });
         return;
       }
 
@@ -214,6 +233,15 @@ export function pollApifyRunUntilDone(
           })
           .where(eq(creativeScans.id, creativeScanId));
         await resetTrackedPageFromScan(creativeScanId);
+
+        const { createNotification } = await import("@/lib/notifications");
+        await createNotification({
+          type: "system_alert",
+          title: "⏱️ Apify Polling Timeout",
+          message: `Apify run is still processing after ${Math.round((maxAttempts * intervalMs) / 1000)}s. Sync will finalize once complete.`,
+          severity: "warning",
+          trackedPageId: creativeScanId,
+        });
       }
     } catch (err) {
       console.error(`[Apify Poller] Error on attempt #${attempts}:`, err);

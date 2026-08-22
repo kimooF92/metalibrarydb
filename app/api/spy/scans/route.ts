@@ -88,15 +88,14 @@ export async function POST(req: NextRequest) {
           orderBy: [sql`${scanHistory.checkedAt} desc`],
         });
 
-        // For official page targets, scrape up to the brand's total active ads (page.currentResults, min 15, max 100) to ensure a complete sync
+        // For official page targets, scrape up to the brand's total active ads (page.currentResults, min 15, max 300) to ensure a complete sync
         const delta = isPageTarget
-          ? Math.max(15, Math.min(100, page.currentResults || 24))
-          : Math.max(1, latestHistory?.difference || page.currentResults || 10);
+          ? Math.max(15, Math.min(300, page.currentResults || 30))
+          : Math.max(1, latestHistory?.difference || page.currentResults || 15);
 
         const configObj = {
           runner: "apify",
           delta,
-          maxResults: delta + Math.max(3, Math.ceil(delta * 0.2)),
           isFullScan,
         };
 
@@ -138,6 +137,7 @@ export async function POST(req: NextRequest) {
             delta,
             creativeScanId: newScan.id,
             webhookBaseUrl,
+            isFullScan,
           });
 
           // Update scan record with apifyRunId and defaultDatasetId
@@ -186,6 +186,15 @@ export async function POST(req: NextRequest) {
               updatedAt: new Date(),
             })
             .where(eq(trackedPages.id, page.id));
+
+          const { createNotification } = await import("@/lib/notifications");
+          await createNotification({
+            type: "system_alert",
+            title: "⚠️ Apify Launch Failed",
+            message: `Failed to launch Apify scan for "${page.displayName || page.pageId || page.id}": ${apifyErr?.message}`,
+            severity: "error",
+            trackedPageId: page.id,
+          });
 
           pageStatuses.push({
             id: page.id,

@@ -1,28 +1,36 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { uploadMediaFromUrlToCatbox } from "./catbox-storage";
 
-const keyId = process.env.B2_KEY_ID?.trim();
-const appKey = process.env.B2_APPLICATION_KEY?.trim();
-const bucketName = process.env.B2_BUCKET_NAME?.trim() || "meta-ad-media-feed";
-const endpoint = process.env.B2_ENDPOINT?.trim() || "s3.eu-central-003.backblazeb2.com";
-const region = process.env.B2_REGION?.trim() || "eu-central-003";
-
-const formattedEndpoint = endpoint.startsWith("http") ? endpoint : `https://${endpoint}`;
-
 export function isB2Configured(): boolean {
+  const keyId = process.env.B2_KEY_ID?.trim();
+  const appKey = process.env.B2_APPLICATION_KEY?.trim();
+  const bucketName = process.env.B2_BUCKET_NAME?.trim() || "meta-ad-media-feed";
   return Boolean(keyId && appKey && bucketName);
 }
 
-const s3Client = isB2Configured()
-  ? new S3Client({
-      endpoint: formattedEndpoint,
-      region: region,
-      credentials: {
-        accessKeyId: keyId!,
-        secretAccessKey: appKey!,
-      },
-    })
-  : null;
+let cachedS3Client: S3Client | null = null;
+
+function getS3Client(): S3Client | null {
+  if (!isB2Configured()) return null;
+  if (cachedS3Client) return cachedS3Client;
+
+  const keyId = process.env.B2_KEY_ID?.trim()!;
+  const appKey = process.env.B2_APPLICATION_KEY?.trim()!;
+  const endpoint = process.env.B2_ENDPOINT?.trim() || "s3.eu-central-003.backblazeb2.com";
+  const region = process.env.B2_REGION?.trim() || "eu-central-003";
+  const formattedEndpoint = endpoint.startsWith("http") ? endpoint : `https://${endpoint}`;
+
+  cachedS3Client = new S3Client({
+    endpoint: formattedEndpoint,
+    region: region,
+    credentials: {
+      accessKeyId: keyId,
+      secretAccessKey: appKey,
+    },
+  });
+
+  return cachedS3Client;
+}
 
 /**
  * Uploads a Buffer asset directly to Backblaze B2.
@@ -32,12 +40,15 @@ export async function uploadBufferToB2(
   key: string,
   contentType: string = "application/octet-stream"
 ): Promise<string | null> {
-  if (!s3Client || !isB2Configured()) {
+  const client = getS3Client();
+  const bucketName = process.env.B2_BUCKET_NAME?.trim() || "meta-ad-media-feed";
+
+  if (!client) {
     return null;
   }
 
   try {
-    await s3Client.send(
+    await client.send(
       new PutObjectCommand({
         Bucket: bucketName,
         Key: key,
@@ -67,7 +78,7 @@ export async function uploadMediaFromUrlToB2(
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 35000);
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
 
     const res = await fetch(sourceUrl, {
       signal: controller.signal,

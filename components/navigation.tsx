@@ -1,50 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, UploadCloud, BarChart3, Eye, Compass, Globe, ShoppingBag, Menu, X, ChevronLeft, ChevronRight, Sun, Moon } from "lucide-react";
+import { LayoutDashboard, UploadCloud, BarChart3, Eye, Compass, Globe, ShoppingBag, Menu, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { NotificationCenter } from "./notification-center";
 import { WorkerStatus } from "./worker-status";
+import { ThemeToggle } from "./theme-toggle";
 import { useSidebar } from "@/components/sidebar-context";
 
 export function Navigation() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const { isCollapsed, toggleSidebar } = useSidebar();
-
-  const [mounted, setMounted] = useState(false);
-  const [theme, setTheme] = useState<"light" | "dark">("dark");
-
-  useEffect(() => {
-    setMounted(true);
-    const savedTheme = localStorage.getItem("theme") as "light" | "dark" || "dark";
-    setTheme(savedTheme);
-    if (savedTheme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  }, []);
-
-  const toggleTheme = () => {
-    const nextTheme = theme === "dark" ? "light" : "dark";
-    const applyTheme = () => {
-      setTheme(nextTheme);
-      document.documentElement.classList.toggle("dark", nextTheme === "dark");
-      localStorage.setItem("theme", nextTheme);
-    };
-
-    if (
-      "startViewTransition" in document &&
-      !window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      document.startViewTransition(applyTheme);
-      return;
-    }
-
-    applyTheme();
-  };
 
   return (
     <>
@@ -139,76 +107,13 @@ export function Navigation() {
           </nav>
         </div>
 
-        {/* Theme, Notifications & System Status Section at Bottom of Sidebar */}
+        {/* System Status Section at Bottom of Sidebar */}
         {isCollapsed ? (
           <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 flex flex-col items-center space-y-3">
-            <NotificationCenter layout="collapsed" />
-
-            {mounted && (
-              <button
-                onClick={toggleTheme}
-                title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none ${
-                  theme === "dark"
-                    ? "bg-indigo-600 border-indigo-500"
-                    : "bg-slate-300 border-slate-400"
-                }`}
-                role="switch"
-                aria-checked={theme === "dark"}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`pointer-events-none flex items-center justify-center h-5 w-5 transform rounded-full bg-white shadow-md ring-1 ring-slate-400/40 transition duration-200 ease-in-out ${
-                    theme === "dark" ? "translate-x-5 text-indigo-600" : "translate-x-0 text-amber-600"
-                  }`}
-                >
-                  {theme === "dark" ? <Moon className="w-3 h-3" /> : <Sun className="w-3 h-3" />}
-                </span>
-              </button>
-            )}
             <WorkerStatus layout="collapsed" />
           </div>
         ) : (
           <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 space-y-3">
-            <NotificationCenter layout="sidebar" />
-
-            {mounted && (
-              <div className="flex items-center justify-between px-1 py-1">
-                <div className="flex items-center space-x-2 text-[11px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-                  {theme === "dark" ? (
-                    <>
-                      <Moon className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>Dark Theme</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sun className="w-3.5 h-3.5 text-amber-600" />
-                      <span>Light Theme</span>
-                    </>
-                  )}
-                </div>
-                <button
-                  onClick={toggleTheme}
-                  title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none ${
-                    theme === "dark"
-                      ? "bg-indigo-600 border-indigo-500"
-                      : "bg-slate-300 border-slate-400"
-                  }`}
-                  role="switch"
-                  aria-checked={theme === "dark"}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`pointer-events-none flex items-center justify-center h-5 w-5 transform rounded-full bg-white shadow-md ring-1 ring-slate-400/40 transition duration-200 ease-in-out ${
-                      theme === "dark" ? "translate-x-5 text-indigo-600" : "translate-x-0 text-amber-600"
-                    }`}
-                  >
-                    {theme === "dark" ? <Moon className="w-3 h-3" /> : <Sun className="w-3 h-3" />}
-                  </span>
-                </button>
-              </div>
-            )}
             <div>
               <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest block mb-2 px-1">
                 System Status
@@ -222,12 +127,12 @@ export function Navigation() {
       </header>
 
       {/* Mobile Top Bar */}
-      <header className="flex md:hidden items-center justify-between h-16 w-full px-4 border-b border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900/60 backdrop-blur-md sticky top-0 z-40">
-        <div className="flex items-center space-x-3">
+      <header className="flex md:hidden items-center justify-between h-14 w-full px-4 border-b border-slate-200 dark:border-slate-800/80 bg-slate-50/80 dark:bg-slate-900/60 backdrop-blur-md sticky top-0 z-40">
+        <div className="flex items-center space-x-2.5">
           <img
             src="/icon.png"
             alt="Meta Ad Tracker Logo"
-            className="w-8 h-8 rounded-lg border border-cyan-400/30 object-cover"
+            className="w-7 h-7 rounded-lg border border-cyan-400/30 object-cover"
           />
           <span className="font-extrabold text-sm text-slate-900 dark:text-white tracking-tight">
             Meta Ad Tracker
@@ -235,20 +140,21 @@ export function Navigation() {
         </div>
 
         <div className="flex items-center space-x-2">
-          <NotificationCenter layout="collapsed" />
+          <NotificationCenter layout="navbar" />
+          <ThemeToggle size="sm" />
           <button
             onClick={() => setIsOpen(!isOpen)}
             aria-label={isOpen ? "Close menu" : "Open menu"}
-            className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-850 transition-all cursor-pointer"
+            className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 transition-all cursor-pointer"
           >
-            {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {isOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
           </button>
         </div>
       </header>
 
       {/* Mobile Drawer Menu Overlay */}
       {isOpen && (
-        <div className="fixed inset-x-0 bottom-0 top-16 z-40 bg-white/98 dark:bg-[#0b0f19]/98 backdrop-blur-md md:hidden flex flex-col p-6 space-y-6 animate-in slide-in-from-top-5 duration-200">
+        <div className="fixed inset-x-0 bottom-0 top-14 z-40 bg-white/98 dark:bg-[#0b0f19]/98 backdrop-blur-md md:hidden flex flex-col p-6 space-y-6 animate-in slide-in-from-top-5 duration-200">
           <nav className="flex flex-col space-y-2">
             {[
               { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -278,44 +184,6 @@ export function Navigation() {
           </nav>
 
           <div className="pt-6 border-t border-slate-200 dark:border-slate-800/80 mt-auto flex flex-col space-y-4">
-            {mounted && (
-              <div className="flex items-center justify-between px-1">
-                <div className="flex items-center space-x-2 text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-                  {theme === "dark" ? (
-                    <>
-                      <Moon className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>Dark Theme</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sun className="w-3.5 h-3.5 text-amber-600" />
-                      <span>Light Theme</span>
-                    </>
-                  )}
-                </div>
-                <button
-                  onClick={toggleTheme}
-                  title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none ${
-                    theme === "dark"
-                      ? "bg-indigo-600 border-indigo-500"
-                      : "bg-slate-300 border-slate-400"
-                  }`}
-                  role="switch"
-                  aria-checked={theme === "dark"}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`pointer-events-none flex items-center justify-center h-5 w-5 transform rounded-full bg-white shadow-md ring-1 ring-slate-400/40 transition duration-200 ease-in-out ${
-                      theme === "dark" ? "translate-x-5 text-indigo-600" : "translate-x-0 text-amber-600"
-                    }`}
-                  >
-                    {theme === "dark" ? <Moon className="w-3 h-3" /> : <Sun className="w-3 h-3" />}
-                  </span>
-                </button>
-              </div>
-            )}
-
             <div>
               <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest block mb-2 px-1">
                 System Status

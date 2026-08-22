@@ -60,9 +60,9 @@ export function getApifyTokens(): string[] {
  * Formula: Limit = Delta + max(3, ceil(Delta * 0.2))
  * Optional maxCap parameter to prevent credit drain on huge deltas (default: 100).
  */
-export function calculateDeltaLimit(delta: number, maxCap: number = 100): number {
+export function calculateDeltaLimit(delta: number, maxCap: number = 250): number {
   const safeDelta = Math.max(1, delta);
-  const buffer = Math.max(3, Math.ceil(safeDelta * 0.2));
+  const buffer = Math.max(5, Math.ceil(safeDelta * 0.25));
   const calculated = safeDelta + buffer;
   return Math.min(calculated, maxCap);
 }
@@ -153,6 +153,8 @@ export async function startApifyDeltaScan(params: {
   creativeScanId: string;
   webhookBaseUrl?: string;
   maxCap?: number;
+  isFullScan?: boolean;
+  activeStatus?: "active" | "all";
 }): Promise<ApifyActorRunResponse | null> {
   const tokens = getApifyTokens();
   if (tokens.length === 0) {
@@ -162,20 +164,21 @@ export async function startApifyDeltaScan(params: {
   const rawActorId = process.env.APIFY_ACTOR_ID || "curious_coder/facebook-ads-library-scraper";
   const actorIdPath = rawActorId.includes("/") ? rawActorId.replace("/", "~") : rawActorId;
 
-  // Calculate safety-buffered limit (delta + buffer), capped at maxCap (default: 100)
-  const maxResults = calculateDeltaLimit(params.delta, params.maxCap ?? 100);
+  // Calculate limit: For full scans allow high cap (up to 350 ads), for delta scans calculate buffer
+  const defaultCap = params.isFullScan ? 350 : 200;
+  const maxResults = params.isFullScan
+    ? Math.min(Math.max(params.delta, 50), params.maxCap ?? defaultCap)
+    : calculateDeltaLimit(params.delta, params.maxCap ?? defaultCap);
+
   const targetUrl = ensureMostRecentSortingUrl(params.pageUrl);
+  const activeStatus = params.activeStatus || "active";
 
   const actorInput = {
-    startUrls: [{ url: targetUrl }],
     urls: [{ url: targetUrl }],
-    searchUrl: targetUrl,
-    maxResults,
     limitPerSource: maxResults,
-    extractCards: true,
-    includeRawSnapshot: true,
+    count: maxResults,
     scrapeAdDetails: false,
-    "scrapePageAds.activeStatus": "all",
+    "scrapePageAds.activeStatus": activeStatus,
     "scrapePageAds.countryCode": "ALL",
     "scrapePageAds.sortBy": "most_recent",
   };
@@ -287,13 +290,9 @@ export async function scrapeSingleAdViaApify(adArchiveId: string): Promise<any |
   )}&search_type=keyword_unordered&sort_data[direction]=desc&sort_data[mode]=relevancy_monthly_grouped`;
 
   const actorInput = {
-    startUrls: [{ url: targetUrl }],
     urls: [{ url: targetUrl }],
-    searchUrl: targetUrl,
-    maxResults: 1,
     limitPerSource: 1,
-    extractCards: true,
-    includeRawSnapshot: true,
+    count: 1,
     scrapeAdDetails: false,
     "scrapePageAds.activeStatus": "all",
     "scrapePageAds.countryCode": "ALL",

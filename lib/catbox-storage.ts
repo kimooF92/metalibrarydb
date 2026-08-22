@@ -12,7 +12,7 @@ export async function uploadMediaFromUrlToCatbox(
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 35000);
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
 
     // 1. Download source media from Meta CDN
     const sourceRes = await fetch(sourceUrl, {

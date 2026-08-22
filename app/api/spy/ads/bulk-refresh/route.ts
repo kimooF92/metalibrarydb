@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
         })
         .returning();
 
-      const delta = Math.max(10, Math.min(100, page.currentResults || 24));
+      const delta = Math.max(15, Math.min(350, page.currentResults || 30));
       const host = req.headers.get("host") || "localhost:3000";
       const protocol = req.headers.get("x-forwarded-proto") || (host.startsWith("localhost") ? "http" : "https");
       const webhookBaseUrl = `${protocol}://${host}`;
@@ -78,7 +78,8 @@ export async function POST(req: NextRequest) {
         delta,
         creativeScanId: newScan.id,
         webhookBaseUrl,
-        maxCap: 100,
+        isFullScan: true,
+        maxCap: 350,
       });
 
       if (!runRes?.id) {
