@@ -446,6 +446,7 @@ export async function ingestApifyDatasetItems(
 
   // Initialize tracked page updates object
   const pageUpdates: any = {
+    status: "success",
     lastCreativeScan: now,
     updatedAt: now,
   };

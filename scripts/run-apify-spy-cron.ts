@@ -316,6 +316,23 @@ async function main() {
       })
       .returning();
 
+    // Mark tracked page status as scanning for real-time UI visibility
+    await db
+      .update(trackedPages)
+      .set({ status: "scanning", updatedAt: new Date() })
+      .where(eq(trackedPages.id, page.id));
+
+    // Log in-app notification that scan has started
+    const { createNotification } = await import("../lib/notifications");
+    await createNotification({
+      type: "ad_spy",
+      title: "⚡ Apify Scan Started",
+      message: `Started creative extraction for "${pageName}" (+${delta} ads)...`,
+      severity: "info",
+      trackedPageId: page.id,
+      actionUrl: `/spy?trackedPageId=${page.id}`,
+    });
+
     try {
       // Launch Apify Actor run
       const runRes = await startApifyDeltaScan({

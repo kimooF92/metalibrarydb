@@ -1035,15 +1035,21 @@ export function PagesTable({
                             >
                               Unclear
                             </span>
+                          ) : p.status === "scanning" ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 animate-pulse shadow-sm"
+                              title="Apify creative extraction scan is actively running for this brand"
+                            >
+                              <Loader2 className="w-2.5 h-2.5 animate-spin text-indigo-500" />
+                              <span>Scanning...</span>
+                            </span>
                           ) : (
                             <span
                               className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${p.status === "success"
                                   ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                                  : p.status === "scanning"
-                                    ? "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 animate-pulse"
-                                    : p.status === "pending"
-                                      ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
-                                      : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+                                  : p.status === "pending"
+                                    ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                                    : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
                                 }`}
                             >
                               {p.status}

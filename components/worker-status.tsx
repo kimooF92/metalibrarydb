@@ -2,7 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { WorkerState } from "@/types";
-import { PauseCircle, PlayCircle, ShieldAlert, Cpu, Trash2, CheckCircle2 } from "lucide-react";
+import { PauseCircle, PlayCircle, ShieldAlert, Cpu, Trash2, CheckCircle2, Loader2, Sparkles } from "lucide-react";
+
+interface ActiveCreativeScan {
+  id: string;
+  trackedPageId: string;
+  brandName?: string | null;
+  url?: string | null;
+  startedAt?: string | null;
+  outcomeDetails?: string | null;
+}
 
 export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" | "vertical" | "collapsed" }) {
   const [state, setState] = useState<WorkerState | null>(null);
@@ -11,6 +20,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
   const [pruning, setPruning] = useState(false);
   const [pruneCount, setPruneCount] = useState<number | null>(null);
   const [pruneToast, setPruneToast] = useState<string | null>(null);
+  const [activeScans, setActiveScans] = useState<ActiveCreativeScan[]>([]);
 
   const [maxHour, setMaxHour] = useState(100);
   const [maxDay, setMaxDay] = useState(0);
@@ -24,6 +34,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
         setIsBackoffActive(data.isBackoffActive);
         if (data.maxHour !== undefined) setMaxHour(data.maxHour);
         if (data.maxDay !== undefined) setMaxDay(data.maxDay);
+        if (Array.isArray(data.activeScans)) setActiveScans(data.activeScans);
       }
     } catch {
       // Quiet failure
@@ -114,6 +125,18 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
   const isPaused = state.isPaused;
 
   if (layout === "collapsed") {
+    if (activeScans.length > 0) {
+      return (
+        <div
+          title={`Apify Cloud Scanning Active (${activeScans.length} brand(s))` }
+          className="flex items-center justify-center w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 relative"
+        >
+          <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
+          <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
+        </div>
+      );
+    }
+
     return (
       <button
         onClick={toggleWorker}
@@ -180,6 +203,24 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
             {isPaused ? "Resume" : "Pause"}
           </button>
         </div>
+
+        {/* Active Apify Scans Live Box */}
+        {activeScans.length > 0 && (
+          <div className="flex flex-col space-y-1 p-2 rounded-lg bg-indigo-500/10 dark:bg-indigo-500/15 border border-indigo-500/30 text-[10px] animate-pulse">
+            <div className="flex items-center justify-between font-bold text-indigo-600 dark:text-indigo-400">
+              <span className="flex items-center gap-1.5">
+                <Loader2 className="w-3 h-3 animate-spin text-indigo-500" />
+                <span>Apify Scanning ({activeScans.length})</span>
+              </span>
+              <span className="px-1.5 py-0.2 rounded-full bg-indigo-500/20 text-[9px] font-black tracking-wider text-indigo-600 dark:text-indigo-300">
+                LIVE
+              </span>
+            </div>
+            <div className="truncate text-slate-600 dark:text-slate-300 font-medium text-[10px]">
+              {activeScans.map((s) => s.brandName || "Brand").join(", ")}
+            </div>
+          </div>
+        )}
 
         {/* Backoff / Warning */}
         {isBackoffActive && (

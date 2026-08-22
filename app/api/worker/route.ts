@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { workerState } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { workerState, creativeScans, trackedPages } from "@/db/schema";
+import { eq, desc } from "drizzle-orm";
 
 async function getOrCreateWorkerState() {
   let state = await db.query.workerState.findFirst({
@@ -29,11 +29,27 @@ export async function GET() {
     const maxHour = parseInt(process.env.MAX_SCANS_PER_HOUR || "100", 10);
     const maxDay = parseInt(process.env.MAX_SCANS_PER_DAY || "0", 10);
 
+    const activeScans = await db
+      .select({
+        id: creativeScans.id,
+        trackedPageId: creativeScans.trackedPageId,
+        brandName: trackedPages.displayName,
+        url: trackedPages.url,
+        startedAt: creativeScans.startedAt,
+        outcomeDetails: creativeScans.outcomeDetails,
+      })
+      .from(creativeScans)
+      .leftJoin(trackedPages, eq(creativeScans.trackedPageId, trackedPages.id))
+      .where(eq(creativeScans.status, "running"))
+      .orderBy(desc(creativeScans.startedAt))
+      .limit(5);
+
     return NextResponse.json({
       state,
       isBackoffActive,
       maxHour,
       maxDay,
+      activeScans,
     });
   } catch (error) {
     console.error("Error in GET /api/worker:", error);
