@@ -1,6 +1,4 @@
-import { db } from "@/db";
-import { activityNotifications } from "@/db/schema";
-import { eq, desc, and, inArray } from "drizzle-orm";
+import { eq, desc, and, inArray, gte } from "drizzle-orm";
 
 export type NotificationType =
   | "count_scan"
@@ -22,8 +20,6 @@ export interface CreateNotificationParams {
   metadata?: Record<string, any> | null;
 }
 
-import { sql } from "drizzle-orm";
-
 /**
  * Creates a persistent in-app notification record.
  * Deduplicates identical notifications created within the last 60 seconds.
@@ -35,7 +31,7 @@ export async function createNotification(params: CreateNotificationParams) {
     const conditions = [
       eq(activityNotifications.type, params.type),
       eq(activityNotifications.title, params.title),
-      sql`${activityNotifications.createdAt} >= ${sixtySecondsAgo}`,
+      gte(activityNotifications.createdAt, sixtySecondsAgo),
     ];
 
     if (params.trackedPageId) {

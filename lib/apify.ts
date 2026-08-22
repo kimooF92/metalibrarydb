@@ -64,7 +64,8 @@ export function calculateDeltaLimit(delta: number, maxCap: number = 250): number
   const safeDelta = Math.max(1, delta);
   const buffer = Math.max(5, Math.ceil(safeDelta * 0.25));
   const calculated = safeDelta + buffer;
-  return Math.min(calculated, maxCap);
+  // Curious Coder Facebook Ads Library scraper requires at least 10 results to execute
+  return Math.min(Math.max(10, calculated), maxCap);
 }
 
 /**
@@ -164,11 +165,14 @@ export async function startApifyDeltaScan(params: {
   const rawActorId = process.env.APIFY_ACTOR_ID || "curious_coder/facebook-ads-library-scraper";
   const actorIdPath = rawActorId.includes("/") ? rawActorId.replace("/", "~") : rawActorId;
 
-  // Calculate limit: For full scans allow high cap (up to 350 ads), for delta scans calculate buffer
+  // Calculate limit: For full scans allow high cap (up to 350 ads), for delta scans calculate buffer (minimum 10)
   const defaultCap = params.isFullScan ? 350 : 200;
-  const maxResults = params.isFullScan
-    ? Math.min(Math.max(params.delta, 50), params.maxCap ?? defaultCap)
-    : calculateDeltaLimit(params.delta, params.maxCap ?? defaultCap);
+  const maxResults = Math.max(
+    10,
+    params.isFullScan
+      ? Math.min(Math.max(params.delta, 50), params.maxCap ?? defaultCap)
+      : calculateDeltaLimit(params.delta, params.maxCap ?? defaultCap)
+  );
 
   const targetUrl = ensureMostRecentSortingUrl(params.pageUrl);
   const activeStatus = params.activeStatus || "active";
@@ -291,8 +295,8 @@ export async function scrapeSingleAdViaApify(adArchiveId: string): Promise<any |
 
   const actorInput = {
     urls: [{ url: targetUrl }],
-    limitPerSource: 1,
-    count: 1,
+    limitPerSource: 10,
+    count: 10,
     scrapeAdDetails: false,
     "scrapePageAds.activeStatus": "all",
     "scrapePageAds.countryCode": "ALL",
