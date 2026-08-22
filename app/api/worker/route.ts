@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { workerState, creativeScans, trackedPages } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, lt, gte } from "drizzle-orm";
 
 async function getOrCreateWorkerState() {
   let state = await db.query.workerState.findFirst({
@@ -29,6 +29,21 @@ export async function GET() {
     const maxHour = parseInt(process.env.MAX_SCANS_PER_HOUR || "100", 10);
     const maxDay = parseInt(process.env.MAX_SCANS_PER_DAY || "0", 10);
 
+    const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
+
+    // Auto-expire any orphaned scans older than 15 minutes
+    await db
+      .update(creativeScans)
+      .set({
+        status: "failed",
+        failureReason: "timeout",
+        outcomeDetails: "Scan expired after 15 minutes of inactivity",
+        finishedAt: new Date(),
+      })
+      .where(and(eq(creativeScans.status, "running"), lt(creativeScans.startedAt, fifteenMinsAgo)))
+      .catch(() => {});
+
+    // Only query active scans started within the last 15 minutes
     const activeScans = await db
       .select({
         id: creativeScans.id,
@@ -40,7 +55,7 @@ export async function GET() {
       })
       .from(creativeScans)
       .leftJoin(trackedPages, eq(creativeScans.trackedPageId, trackedPages.id))
-      .where(eq(creativeScans.status, "running"))
+      .where(and(eq(creativeScans.status, "running"), gte(creativeScans.startedAt, fifteenMinsAgo)))
       .orderBy(desc(creativeScans.startedAt))
       .limit(5);
 
