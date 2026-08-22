@@ -1,3 +1,5 @@
+import { db } from "@/db";
+import { activityNotifications } from "@/db/schema";
 import { eq, desc, and, inArray, gte } from "drizzle-orm";
 
 export type NotificationType =
