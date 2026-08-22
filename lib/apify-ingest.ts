@@ -444,6 +444,9 @@ export async function ingestApifyDatasetItems(
     })
     .where(eq(creativeScans.id, creativeScanId));
 
+  // Multi-Page vs Single-Page Brand Resolution
+  const candidatePages = Array.from(discoveredPagesMap.values());
+
   // Initialize tracked page updates object
   const pageUpdates: any = {
     status: "success",
@@ -451,46 +454,11 @@ export async function ingestApifyDatasetItems(
     updatedAt: now,
   };
 
-  // Multi-Page vs Single-Page Brand Resolution
-  const candidatePages = Array.from(discoveredPagesMap.values());
-
-  if (pageRecord && pageRecord.searchType !== "page") {
-    if (candidatePages.length === 1) {
-      const single = candidatePages[0];
-      console.log(`[Apify Ingest] Exact match resolved to single Meta Page ID "${single.pageId}" (${single.pageName}). Auto-merging...`);
-      const { mergeExactMatchWithPageId } = await import("@/actions/merge-pages");
-      await mergeExactMatchWithPageId(trackedPageId, single.pageId, single.pageName);
-
-      const { logPageMergedNotification } = await import("@/lib/notifications");
-      await logPageMergedNotification({
-        trackedPageId,
-        originalName: pageRecord.displayName || pageRecord.url,
-        resolvedPageName: single.pageName || `Page ${single.pageId}`,
-        resolvedPageId: single.pageId,
-      });
-    } else if (candidatePages.length > 1) {
-      console.log(`[Apify Ingest] Multi-page conflict: ${candidatePages.length} Facebook Pages detected for "${pageRecord.displayName || pageRecord.url}".`);
-
-      const { saveExtractedPageIdsToDiscovery } = await import("../worker/db");
-      await saveExtractedPageIdsToDiscovery(
-        candidatePages.map((c) => c.pageId),
-        pageRecord.url,
-        pageRecord.country || "TN",
-        pageRecord.id
-      );
-
-      pageUpdates.discoveredPagesCount = candidatePages.length;
-
-      const { logMultiPageDetectedNotification } = await import("@/lib/notifications");
-      await logMultiPageDetectedNotification({
-        trackedPageId,
-        domainName: pageRecord.displayName || pageRecord.url,
-        candidatePages,
-      });
-    }
+  if (candidatePages.length > 1 && pageRecord && pageRecord.searchType !== "page") {
+    pageUpdates.discoveredPagesCount = candidatePages.length;
   }
 
-  // Update tracked page metadata
+  // Update tracked page metadata (status, timestamps, candidate counts)
   if (pageRecord && (!pageRecord.pageId || pageRecord.pageId === "0") && detectedPageId && isNumericString(detectedPageId)) {
     pageUpdates.pageId = detectedPageId;
     if (detectedPageName && (!pageRecord.displayName || pageRecord.displayName.startsWith("http"))) {
@@ -503,10 +471,50 @@ export async function ingestApifyDatasetItems(
     .set(pageUpdates)
     .where(eq(trackedPages.id, trackedPageId));
 
+  let finalTrackedPageId = trackedPageId;
+
+  if (pageRecord && pageRecord.searchType !== "page") {
+    if (candidatePages.length === 1) {
+      const single = candidatePages[0];
+      console.log(`[Apify Ingest] Exact match resolved to single Meta Page ID "${single.pageId}" (${single.pageName}). Auto-merging...`);
+      const { mergeExactMatchWithPageId } = await import("@/actions/merge-pages");
+      const mergeResult = await mergeExactMatchWithPageId(trackedPageId, single.pageId, single.pageName);
+
+      if (mergeResult?.mergedPageId) {
+        finalTrackedPageId = mergeResult.mergedPageId;
+      }
+
+      const { logPageMergedNotification } = await import("@/lib/notifications");
+      await logPageMergedNotification({
+        trackedPageId: finalTrackedPageId,
+        originalName: pageRecord.displayName || pageRecord.url,
+        resolvedPageName: single.pageName || `Page ${single.pageId}`,
+        resolvedPageId: single.pageId,
+      });
+    } else if (candidatePages.length > 1) {
+      console.log(`[Apify Ingest] Multi-page conflict: ${candidatePages.length} Facebook Pages detected for "${pageRecord.displayName || pageRecord.url}".`);
+
+      const { saveExtractedPageIdsToDiscovery } = await import("@/worker/db");
+      await saveExtractedPageIdsToDiscovery(
+        candidatePages.map((c) => c.pageId),
+        pageRecord.url,
+        pageRecord.country || "TN",
+        pageRecord.id
+      );
+
+      const { logMultiPageDetectedNotification } = await import("@/lib/notifications");
+      await logMultiPageDetectedNotification({
+        trackedPageId,
+        domainName: pageRecord.displayName || pageRecord.url,
+        candidatePages,
+      });
+    }
+  }
+
   // Log central Ad Spy notification
   const { logAdSpyNotification } = await import("@/lib/notifications");
   await logAdSpyNotification({
-    trackedPageId,
+    trackedPageId: finalTrackedPageId,
     brandName: detectedPageName || pageRecord?.displayName || "Tracked Brand",
     extractedCount,
     isFullScan,

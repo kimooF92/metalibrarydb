@@ -53,24 +53,16 @@ export async function reconcileArchivedAds(
     const obsAdIds = Array.from(new Set(previousObservations.map((o) => o.adId)));
 
     // 2. Efficiently fetch canonical ads associated with this page that are currently ACTIVE (isArchived = false)
-    const adConditions = [eq(ads.isArchived, false)];
-    const targetMatchers = [];
-    if (obsAdIds.length > 0) {
-      targetMatchers.push(inArray(ads.id, obsAdIds));
-    }
-    if (trackedPage?.pageId && trackedPage.pageId !== "0") {
-      targetMatchers.push(eq(ads.pageId, trackedPage.pageId));
-    }
-
-    if (targetMatchers.length === 0) {
+    // Strictly isolate reconciliation to ads belonging to this official Meta Page ID
+    const targetPageId = trackedPage?.pageId && trackedPage.pageId !== "0" ? trackedPage.pageId : null;
+    if (!targetPageId) {
       return { archivedCount: 0 };
     }
 
-    if (targetMatchers.length === 1) {
-      adConditions.push(targetMatchers[0]);
-    } else {
-      adConditions.push(or(...targetMatchers)!);
-    }
+    const adConditions = [
+      eq(ads.isArchived, false),
+      eq(ads.pageId, targetPageId),
+    ];
 
     const activeAds = await db.query.ads.findMany({
       where: and(...adConditions),

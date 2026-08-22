@@ -75,7 +75,8 @@ export async function mergeExactMatchWithPageId(
           url: newPageUrl,
           landingPage: preservedDomain,
           displayName: resolvedDisplayName || exactMatchPage.displayName || preservedDomain,
-          status: "pending",
+          status: exactMatchPage.status || "success",
+          discoveredPagesCount: 0,
           updatedAt: now,
         })
         .where(eq(trackedPages.id, exactMatchTrackedPageId))
@@ -121,6 +122,7 @@ export async function mergeExactMatchWithPageId(
           landingPage: existingTargetPage.landingPage || preservedDomain,
           displayName:
             resolvedDisplayName || existingTargetPage.displayName || exactMatchPage.displayName,
+          discoveredPagesCount: 0,
           updatedAt: now,
         })
         .where(eq(trackedPages.id, existingTargetPage.id));
