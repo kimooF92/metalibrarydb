@@ -2,12 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { activityNotifications } from "@/db/schema";
 import { desc, eq, and, inArray, sql } from "drizzle-orm";
-import { validateApiSecret } from "@/lib/api-guard";
 
 export async function GET(req: NextRequest) {
-  const authError = validateApiSecret(req);
-  if (authError) return authError;
-
   try {
     const { searchParams } = new URL(req.url);
     const type = searchParams.get("type");
@@ -50,9 +46,6 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const authError = validateApiSecret(req);
-  if (authError) return authError;
-
   try {
     const body = await req.json();
     const { id, ids, action } = body;
@@ -94,9 +87,6 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const authError = validateApiSecret(req);
-  if (authError) return authError;
-
   try {
     const body = await req.json().catch(() => ({}));
     const { id, clearAll } = body;

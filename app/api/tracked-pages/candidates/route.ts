@@ -2,12 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { discoveredPages, trackedPages } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
-import { validateApiSecret } from "@/lib/api-guard";
 
 export async function GET(req: NextRequest) {
-  const authError = validateApiSecret(req);
-  if (authError) return authError;
-
   try {
     const { searchParams } = new URL(req.url);
     const trackedPageId = searchParams.get("trackedPageId");

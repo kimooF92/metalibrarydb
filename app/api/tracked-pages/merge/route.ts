@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { mergeExactMatchWithPageId } from "@/actions/merge-pages";
-import { validateApiSecret } from "@/lib/api-guard";
 
 export async function POST(req: NextRequest) {
-  const authError = validateApiSecret(req);
-  if (authError) return authError;
-
   try {
     const body = await req.json();
     const { exactMatchTrackedPageId, resolvedPageId, resolvedDisplayName } = body;
