@@ -220,6 +220,11 @@ export async function ingestApifyDatasetItems(
     throw new Error(`Creative scan record ${creativeScanId} not found.`);
   }
 
+  if (scanRecord.status === "completed") {
+    console.log(`[Apify Ingest] Scan ${creativeScanId} is already marked completed. Skipping duplicate ingestion.`);
+    return { success: true, extractedCount: scanRecord.extractedCount || 0 };
+  }
+
   const trackedPageId = scanRecord.trackedPageId;
   const pageRecord = await db.query.trackedPages.findFirst({
     where: eq(trackedPages.id, trackedPageId),

@@ -125,9 +125,19 @@ export async function syncApifyRuns(): Promise<{ syncedCount: number; checkedCou
       }
 
       const status = runDetails?.status || "RUNNING";
-      datasetId = runDetails?.defaultDatasetId || datasetId;
-
       if (status === "SUCCEEDED" && datasetId) {
+        // Atomic claim: only proceed if scan is still in status 'running'
+        const [claimed] = await db
+          .update(creativeScans)
+          .set({ status: "ingesting", outcomeDetails: "Ingesting Apify dataset items..." })
+          .where(and(eq(creativeScans.id, scan.id), eq(creativeScans.status, "running")))
+          .returning();
+
+        if (!claimed) {
+          console.log(`[Apify Sync] Scan ${scan.id} is already being processed by another worker. Skipping.`);
+          continue;
+        }
+
         console.log(`[Apify Sync] Scan ${scan.id} finished on Apify! Fetching dataset ${datasetId}...`);
         const items = await fetchApifyDatasetItems(datasetId);
         await ingestApifyDatasetItems(scan.id, items);
@@ -189,6 +199,19 @@ export function pollApifyRunUntilDone(
 
       if (status === "SUCCEEDED" && targetDatasetId) {
         clearInterval(timer);
+
+        // Atomic claim: only proceed if scan is still in status 'running'
+        const [claimed] = await db
+          .update(creativeScans)
+          .set({ status: "ingesting", outcomeDetails: "Ingesting Apify dataset items..." })
+          .where(and(eq(creativeScans.id, creativeScanId), eq(creativeScans.status, "running")))
+          .returning();
+
+        if (!claimed) {
+          console.log(`[Apify Poller] Scan ${creativeScanId} is already being ingested by sync worker. Skipping.`);
+          return;
+        }
+
         console.log(`[Apify Poller] ⚡ Run ${runId} SUCCEEDED on attempt #${attempts}! Ingesting dataset ${targetDatasetId}...`);
         const items = await fetchApifyDatasetItems(targetDatasetId);
         await ingestApifyDatasetItems(creativeScanId, items);

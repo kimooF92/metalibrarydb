@@ -22,11 +22,36 @@ export interface CreateNotificationParams {
   metadata?: Record<string, any> | null;
 }
 
+import { sql } from "drizzle-orm";
+
 /**
  * Creates a persistent in-app notification record.
+ * Deduplicates identical notifications created within the last 60 seconds.
  */
 export async function createNotification(params: CreateNotificationParams) {
   try {
+    // Deduplication window: Prevent duplicate identical notifications within the last 60 seconds
+    const sixtySecondsAgo = new Date(Date.now() - 60 * 1000);
+    const conditions = [
+      eq(activityNotifications.type, params.type),
+      eq(activityNotifications.title, params.title),
+      sql`${activityNotifications.createdAt} >= ${sixtySecondsAgo}`,
+    ];
+
+    if (params.trackedPageId) {
+      conditions.push(eq(activityNotifications.trackedPageId, params.trackedPageId));
+    }
+
+    const existing = await db.query.activityNotifications.findFirst({
+      where: and(...conditions),
+      orderBy: [desc(activityNotifications.createdAt)],
+    });
+
+    if (existing) {
+      console.log(`[Notification] Deduplicated duplicate notification "${params.title}" within 60s.`);
+      return existing;
+    }
+
     const [record] = await db
       .insert(activityNotifications)
       .values({
@@ -111,6 +136,11 @@ export async function logAdSpyNotification(params: {
   archivedCount?: number;
 }) {
   const { trackedPageId, brandName, extractedCount, isFullScan, archivedCount } = params;
+
+  // Don't log spammy 0-item notifications for delta scans where no new ads were found
+  if (extractedCount === 0 && !isFullScan && (!archivedCount || archivedCount === 0)) {
+    return null;
+  }
 
   const title = `Ad Spy Synced: ${brandName}`;
   let message = `Ingested ${extractedCount} ad creative(s) for "${brandName}".`;
