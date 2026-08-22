@@ -515,6 +515,22 @@ export async function markJobCompleted(
     })
     .where(eq(queue.id, queueId));
 
+  // 4b. Log in-app activity notification for count check
+  try {
+    const trackedPage = await db.query.trackedPages.findFirst({
+      where: eq(trackedPages.id, pageId),
+      columns: { displayName: true, url: true },
+    });
+    const { logCountScanNotification } = await import("../lib/notifications");
+    await logCountScanNotification({
+      trackedPageId: pageId,
+      brandName: trackedPage?.displayName || trackedPage?.url || "Tracked Brand",
+      currentResults: results,
+      difference,
+      status,
+    });
+  } catch {}
+
   // 5. Automatic Apify Delta Trigger: If new ads detected (difference >= 1), launch Apify Cloud scan in background
   if (status === "success" && difference !== null && difference >= 1) {
     tryAutoTriggerApifyDeltaScan(pageId, difference).catch((err) => {

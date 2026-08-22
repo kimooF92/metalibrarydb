@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, UploadCloud, BarChart3, Eye, Compass, Globe, ShoppingBag, Menu, X, ChevronLeft, ChevronRight, Sun, Moon } from "lucide-react";
+import { NotificationCenter } from "./notification-center";
 import { WorkerStatus } from "./worker-status";
 import { useSidebar } from "@/components/sidebar-context";
 
@@ -138,39 +139,41 @@ export function Navigation() {
           </nav>
         </div>
 
-        {/* Theme & System Status Section at Bottom of Sidebar */}
+        {/* Theme, Notifications & System Status Section at Bottom of Sidebar */}
         {isCollapsed ? (
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 flex flex-col items-center">
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 flex flex-col items-center space-y-3">
+            <NotificationCenter layout="collapsed" />
+
             {mounted && (
-              <div className="mb-4">
-                <button
-                  onClick={toggleTheme}
-                  title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none ${
-                    theme === "dark"
-                      ? "bg-indigo-600 border-indigo-500"
-                      : "bg-slate-300 border-slate-400"
+              <button
+                onClick={toggleTheme}
+                title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none ${
+                  theme === "dark"
+                    ? "bg-indigo-600 border-indigo-500"
+                    : "bg-slate-300 border-slate-400"
+                }`}
+                role="switch"
+                aria-checked={theme === "dark"}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none flex items-center justify-center h-5 w-5 transform rounded-full bg-white shadow-md ring-1 ring-slate-400/40 transition duration-200 ease-in-out ${
+                    theme === "dark" ? "translate-x-5 text-indigo-600" : "translate-x-0 text-amber-600"
                   }`}
-                  role="switch"
-                  aria-checked={theme === "dark"}
                 >
-                  <span
-                    aria-hidden="true"
-                    className={`pointer-events-none flex items-center justify-center h-5 w-5 transform rounded-full bg-white shadow-md ring-1 ring-slate-400/40 transition duration-200 ease-in-out ${
-                      theme === "dark" ? "translate-x-5 text-indigo-600" : "translate-x-0 text-amber-600"
-                    }`}
-                  >
-                    {theme === "dark" ? <Moon className="w-3 h-3" /> : <Sun className="w-3 h-3" />}
-                  </span>
-                </button>
-              </div>
+                  {theme === "dark" ? <Moon className="w-3 h-3" /> : <Sun className="w-3 h-3" />}
+                </span>
+              </button>
             )}
             <WorkerStatus layout="collapsed" />
           </div>
         ) : (
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80">
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 space-y-3">
+            <NotificationCenter layout="sidebar" />
+
             {mounted && (
-              <div className="flex items-center justify-between px-1 py-1 mb-4">
+              <div className="flex items-center justify-between px-1 py-1">
                 <div className="flex items-center space-x-2 text-[11px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
                   {theme === "dark" ? (
                     <>
@@ -206,11 +209,13 @@ export function Navigation() {
                 </button>
               </div>
             )}
-            <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest block mb-2 px-1">
-              System Status
-            </span>
-            <div className="bg-slate-100 dark:bg-slate-950/40 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800/60 overflow-hidden">
-              <WorkerStatus layout="vertical" />
+            <div>
+              <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest block mb-2 px-1">
+                System Status
+              </span>
+              <div className="bg-slate-100 dark:bg-slate-950/40 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800/60 overflow-hidden">
+                <WorkerStatus layout="vertical" />
+              </div>
             </div>
           </div>
         )}
@@ -229,13 +234,16 @@ export function Navigation() {
           </span>
         </div>
 
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          aria-label={isOpen ? "Close menu" : "Open menu"}
-          className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-850 transition-all cursor-pointer"
-        >
-          {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
+        <div className="flex items-center space-x-2">
+          <NotificationCenter layout="collapsed" />
+          <button
+            onClick={() => setIsOpen(!isOpen)}
+            aria-label={isOpen ? "Close menu" : "Open menu"}
+            className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-850 transition-all cursor-pointer"
+          >
+            {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </header>
 
       {/* Mobile Drawer Menu Overlay */}

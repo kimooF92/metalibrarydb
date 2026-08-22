@@ -6,6 +6,7 @@ import { HistoryModal } from "./history-modal";
 import { DeleteConfirmModal } from "./delete-confirm-modal";
 import { PageAdLibraryDrawer } from "./spy/page-ad-library-drawer";
 import { ScanRunnerModal } from "./scan-runner-modal";
+import { ResolveBrandModal } from "./resolve-brand-modal";
 import {
   Search,
   Filter,
@@ -282,6 +283,18 @@ export function PagesTable({
 
   const [runnerModalPages, setRunnerModalPages] = useState<TrackedPage[]>([]);
   const [runnerModalOpen, setRunnerModalOpen] = useState(false);
+
+  const [resolveModalPageId, setResolveModalPageId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const target = params.get("resolveModal");
+      if (target) {
+        setResolveModalPageId(target);
+      }
+    }
+  }, []);
 
   const handleLaunchScan = async (runner: "local" | "apify") => {
     if (runnerModalPages.length === 0) return;
@@ -938,6 +951,21 @@ export function PagesTable({
                             ID: {p.pageId}
                           </div>
                         )}
+                        {Boolean(
+                          (p.discoveredPagesCount && p.discoveredPagesCount >= 2) ||
+                          (p.searchType !== "page" && p.discoveredPagesCount && p.discoveredPagesCount > 0)
+                        ) && (
+                          <div>
+                            <button
+                              onClick={() => setResolveModalPageId(p.id)}
+                              className="mt-1 inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 text-[10px] font-bold border border-amber-500/25 transition-all shadow-sm active:scale-95 cursor-pointer"
+                              title="Multiple Facebook Pages detected for this domain. Click to review and resolve."
+                            >
+                              <AlertTriangle className="w-2.5 h-2.5" />
+                              <span>{p.discoveredPagesCount} Pages Found — Review</span>
+                            </button>
+                          </div>
+                        )}
                       </td>
 
                       {/* Current Results & Inline Sparkline */}
@@ -1353,6 +1381,14 @@ export function PagesTable({
         }}
         trackedPages={runnerModalPages}
         onConfirm={handleLaunchScan}
+      />
+
+      {/* Multi-Page Brand Resolution Modal */}
+      <ResolveBrandModal
+        trackedPageId={resolveModalPageId}
+        isOpen={Boolean(resolveModalPageId)}
+        onClose={() => setResolveModalPageId(null)}
+        onSuccess={() => onWatchlistToggle?.()}
       />
     </div>
   );

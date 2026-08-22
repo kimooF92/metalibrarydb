@@ -151,7 +151,7 @@ async function main() {
   console.log(`🔑 Configured Apify Tokens: ${tokens.length} available.`);
   const balanceInfo = await getApifyAccountBalance().catch(() => null);
   if (balanceInfo) {
-    console.log(`💳 Active Token Balance: $${balanceInfo.currentBalanceUsd.toFixed(2)} / $${balanceInfo.maxMonthlyUsageUsd.toFixed(2)} (Plan: ${balanceInfo.plan})`);
+    console.log(`💳 Active Token Balance: $${balanceInfo.remainingUsd.toFixed(2)} remaining / $${balanceInfo.maxMonthlyUsageUsd.toFixed(2)} limit (${balanceInfo.usagePercent.toFixed(1)}% used)`);
   }
 
   // 2. Fetch Active Scans to prevent concurrency collision
@@ -242,9 +242,10 @@ async function main() {
     }
 
     // ELIGIBLE: New ads detected and not yet scanned!
+    const lastScanTimeStr = page.lastCreativeScan ? page.lastCreativeScan.toLocaleTimeString() : "Never";
     eligiblePlans.push({
       page,
-      reason: `+${diff} new ad(s) detected (Diff logged at ${checkedAt.toLocaleTimeString()}, Last spy scan: ${page.lastCreativeScan.toLocaleTimeString()})`,
+      reason: `+${diff} new ad(s) detected (Diff logged at ${checkedAt.toLocaleTimeString()}, Last spy scan: ${lastScanTimeStr})`,
       delta: diff,
       isFullScan: false, // Delta scan only (does not archive active catalog)
     });

@@ -145,6 +145,66 @@ export function parseAdStartDate(item: any): Date | null {
 }
 
 /**
+ * Strict Meta Page ID and Page Name extractor.
+ * Strictly extracts real numeric Meta Page IDs (e.g. 104829104820) and clean display names.
+ * NEVER returns UUIDs or dummy placeholder strings.
+ */
+export function extractPageInfo(item: any): { pageId: string | null; pageName: string | null } {
+  const isNumericPageId = (str: any) => typeof str === "string" && /^\d{6,25}$/.test(str.trim());
+
+  // Check all candidate keys in Apify dataset item
+  const candidateIds = [
+    item.pageId,
+    item.page_id,
+    item.snapshot?.page_id,
+    item.publisher_page_id,
+    item.snapshot?.publisher_page_id,
+    typeof item.page_profile_uri === "string" ? item.page_profile_uri.match(/id=(\d+)/)?.[1] : null,
+  ];
+
+  let resolvedPageId: string | null = null;
+  for (const cid of candidateIds) {
+    if (cid !== undefined && cid !== null) {
+      const clean = String(cid).trim();
+      if (isNumericPageId(clean)) {
+        resolvedPageId = clean;
+        break;
+      }
+    }
+  }
+
+  const candidateNames = [
+    item.pageName,
+    item.page_name,
+    item.snapshot?.page_name,
+    item.snapshot?.byline,
+    item.page_profile_name,
+  ];
+
+  let resolvedPageName: string | null = null;
+  for (const cname of candidateNames) {
+    if (cname && typeof cname === "string") {
+      const clean = cname.trim();
+      if (
+        clean &&
+        !clean.startsWith("http://") &&
+        !clean.startsWith("https://") &&
+        !clean.toLowerCase().startsWith("page ") &&
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean)
+      ) {
+        resolvedPageName = clean;
+        break;
+      }
+    }
+  }
+
+  return {
+    pageId: resolvedPageId,
+    pageName: resolvedPageName,
+  };
+}
+
+/**
  * Ingests a list of dataset items returned from Apify into the database.
  * Enforces strict canonical ad de-duplication (by ad_archive_id) and observation de-duplication.
  */
@@ -169,25 +229,43 @@ export async function ingestApifyDatasetItems(
   let extractedCount = 0;
   let detectedPageId: string | null = null;
   let detectedPageName: string | null = null;
+  const discoveredPagesMap = new Map<string, { pageId: string; pageName: string | null; adCount: number }>();
+
+  const isNumericString = (str?: string | null) => Boolean(str && /^\d{6,25}$/.test(str.trim()));
 
   for (const item of items) {
     const adArchiveId = extractAdArchiveId(item);
     if (!adArchiveId || adArchiveId === "0") continue;
 
-    const rawPageId = String(
-      item.pageId || item.page_id || pageRecord?.pageId || "0"
-    ).trim();
+    const { pageId: itemPageId, pageName: itemPageName } = extractPageInfo(item);
 
-    const pageId = rawPageId !== "0" ? rawPageId : (pageRecord?.pageId || "0");
+    // Never fallback to a database UUID!
+    const pageId =
+      itemPageId ||
+      (isNumericString(pageRecord?.pageId) ? pageRecord!.pageId! : "0");
+
     if (pageId && pageId !== "0" && !detectedPageId) {
       detectedPageId = pageId;
     }
 
     const pageName =
-      item.pageName || item.page_name || pageRecord?.displayName || `Page ${pageId}`;
+      itemPageName ||
+      (pageRecord?.displayName && !pageRecord.displayName.startsWith("http") ? pageRecord.displayName : null) ||
+      (pageId !== "0" ? `Page ${pageId}` : "Unknown Brand");
 
     if (pageName && !detectedPageName) {
       detectedPageName = pageName;
+    }
+
+    // Track unique Meta Page IDs in this scan
+    if (itemPageId && itemPageId !== "0") {
+      const existing = discoveredPagesMap.get(itemPageId);
+      if (existing) {
+        existing.adCount += 1;
+        if (!existing.pageName && itemPageName) existing.pageName = itemPageName;
+      } else {
+        discoveredPagesMap.set(itemPageId, { pageId: itemPageId, pageName: itemPageName, adCount: 1 });
+      }
     }
 
     const caption =
@@ -366,14 +444,53 @@ export async function ingestApifyDatasetItems(
     })
     .where(eq(creativeScans.id, creativeScanId));
 
-  // Update tracked page
+  // Initialize tracked page updates object
   const pageUpdates: any = {
     lastCreativeScan: now,
     updatedAt: now,
   };
 
-  // If pageId was missing on tracked_pages, populate it from Apify extracted item
-  if (pageRecord && (!pageRecord.pageId || pageRecord.pageId === "0") && detectedPageId) {
+  // Multi-Page vs Single-Page Brand Resolution
+  const candidatePages = Array.from(discoveredPagesMap.values());
+
+  if (pageRecord && pageRecord.searchType !== "page") {
+    if (candidatePages.length === 1) {
+      const single = candidatePages[0];
+      console.log(`[Apify Ingest] Exact match resolved to single Meta Page ID "${single.pageId}" (${single.pageName}). Auto-merging...`);
+      const { mergeExactMatchWithPageId } = await import("@/actions/merge-pages");
+      await mergeExactMatchWithPageId(trackedPageId, single.pageId, single.pageName);
+
+      const { logPageMergedNotification } = await import("@/lib/notifications");
+      await logPageMergedNotification({
+        trackedPageId,
+        originalName: pageRecord.displayName || pageRecord.url,
+        resolvedPageName: single.pageName || `Page ${single.pageId}`,
+        resolvedPageId: single.pageId,
+      });
+    } else if (candidatePages.length > 1) {
+      console.log(`[Apify Ingest] Multi-page conflict: ${candidatePages.length} Facebook Pages detected for "${pageRecord.displayName || pageRecord.url}".`);
+
+      const { saveExtractedPageIdsToDiscovery } = await import("../worker/db");
+      await saveExtractedPageIdsToDiscovery(
+        candidatePages.map((c) => c.pageId),
+        pageRecord.url,
+        pageRecord.country || "TN",
+        pageRecord.id
+      );
+
+      pageUpdates.discoveredPagesCount = candidatePages.length;
+
+      const { logMultiPageDetectedNotification } = await import("@/lib/notifications");
+      await logMultiPageDetectedNotification({
+        trackedPageId,
+        domainName: pageRecord.displayName || pageRecord.url,
+        candidatePages,
+      });
+    }
+  }
+
+  // Update tracked page metadata
+  if (pageRecord && (!pageRecord.pageId || pageRecord.pageId === "0") && detectedPageId && isNumericString(detectedPageId)) {
     pageUpdates.pageId = detectedPageId;
     if (detectedPageName && (!pageRecord.displayName || pageRecord.displayName.startsWith("http"))) {
       pageUpdates.displayName = detectedPageName;
@@ -384,6 +501,15 @@ export async function ingestApifyDatasetItems(
     .update(trackedPages)
     .set(pageUpdates)
     .where(eq(trackedPages.id, trackedPageId));
+
+  // Log central Ad Spy notification
+  const { logAdSpyNotification } = await import("@/lib/notifications");
+  await logAdSpyNotification({
+    trackedPageId,
+    brandName: detectedPageName || pageRecord?.displayName || "Tracked Brand",
+    extractedCount,
+    isFullScan,
+  });
 
   return { success: true, extractedCount };
 }

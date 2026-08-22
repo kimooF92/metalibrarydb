@@ -22,6 +22,7 @@ export interface TrackedPage {
   historyPoints?: number[];
   approxProductCount?: number | null;
   extractedAdCount?: number | null;
+  discoveredPagesCount?: number | null;
 }
 
 export interface ScanHistoryEntry {

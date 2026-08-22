@@ -21,13 +21,25 @@ export async function GET(req: Request) {
       .where(isNotNull(trackedPages.pageId))
       .orderBy(asc(trackedPages.displayName));
 
-    const brands = pages.map((p) => ({
-      id: p.id,
-      pageId: p.pageId || p.id,
-      displayName: p.displayName || `Page (${p.pageId})`,
-      adCount: p.adCount || 0,
-      isWatchlisted: Boolean(p.isWatchlisted),
-    }));
+    const isNumericString = (str?: string | null) => Boolean(str && /^\d{6,25}$/.test(str.trim()));
+
+    const brands = pages.map((p) => {
+      const validPageId = isNumericString(p.pageId) ? p.pageId! : "";
+      const validDisplayName =
+        p.displayName && !p.displayName.startsWith("http")
+          ? p.displayName
+          : validPageId
+          ? `Page ${validPageId}`
+          : "Unnamed Brand";
+
+      return {
+        id: p.id,
+        pageId: validPageId || p.id,
+        displayName: validDisplayName,
+        adCount: p.adCount || 0,
+        isWatchlisted: Boolean(p.isWatchlisted),
+      };
+    });
 
     return NextResponse.json({ brands });
   } catch (err: any) {

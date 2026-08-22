@@ -37,6 +37,7 @@ export const trackedPages = pgTable(
     lastCreativeScan: timestamp("last_creative_scan", { withTimezone: true }),
     creativeHash: text("creative_hash"),
     isWatchlisted: boolean("is_watchlisted").default(false),
+    discoveredPagesCount: integer("discovered_pages_count").default(0),
   },
   (table) => [
     index("idx_tracked_pages_status").on(table.status),
@@ -304,5 +305,30 @@ export const discoveredPages = pgTable(
     index("idx_discovered_pages_run_page").on(table.runId, table.pageId),
   ]
 );
+
+// 11. Activity Notifications Table (Unified In-App Notification Center)
+export const activityNotifications = pgTable(
+  "activity_notifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    type: text("type").notNull(), // count_scan | ad_spy | page_merged | multi_page_detected | system_alert
+    title: text("title").notNull(),
+    message: text("message").notNull(),
+    severity: text("severity").default("info").notNull(), // info | success | warning | error
+    trackedPageId: uuid("tracked_page_id").references(() => trackedPages.id, { onDelete: "cascade" }),
+    adArchiveId: text("ad_archive_id"),
+    actionUrl: text("action_url"),
+    metadata: json("metadata"),
+    isRead: boolean("is_read").default(false).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_notifications_created_at").on(table.createdAt.desc()),
+    index("idx_notifications_is_read").on(table.isRead),
+    index("idx_notifications_type").on(table.type),
+    index("idx_notifications_tracked_page_id").on(table.trackedPageId),
+  ]
+);
+
 
 
