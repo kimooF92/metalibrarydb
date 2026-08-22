@@ -22,6 +22,7 @@ export const metadata: Metadata = {
 
 import { SidebarProvider } from "@/components/sidebar-context";
 import { ToastProvider } from "@/components/toast-context";
+import { Analytics } from "@vercel/analytics/react";
 
 export default function RootLayout({
   children,
@@ -57,7 +58,9 @@ export default function RootLayout({
             </main>
           </SidebarProvider>
         </ToastProvider>
+        <Analytics />
       </body>
     </html>
   );
 }
+
