@@ -373,6 +373,13 @@ async function main() {
         totalAdsIngested += pollResult.extractedCount;
       } else {
         console.warn(`⚠️ Scan for "${pageName}" failed: ${pollResult.error}`);
+        await db
+          .update(trackedPages)
+          .set({
+            status: page.lastSuccessAt || page.currentResults !== null ? "success" : "failed",
+            updatedAt: new Date(),
+          })
+          .where(eq(trackedPages.id, page.id));
         failedCount++;
       }
     } catch (err: any) {
@@ -386,6 +393,14 @@ async function main() {
           finishedAt: new Date(),
         })
         .where(eq(creativeScans.id, newScan.id));
+
+      await db
+        .update(trackedPages)
+        .set({
+          status: page.lastSuccessAt || page.currentResults !== null ? "success" : "failed",
+          updatedAt: new Date(),
+        })
+        .where(eq(trackedPages.id, page.id));
       failedCount++;
     }
 

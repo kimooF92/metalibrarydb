@@ -179,6 +179,14 @@ export async function POST(req: NextRequest) {
             })
             .where(eq(creativeScans.id, newScan.id));
 
+          await db
+            .update(trackedPages)
+            .set({
+              status: page.lastSuccessAt || page.currentResults !== null ? "success" : "failed",
+              updatedAt: new Date(),
+            })
+            .where(eq(trackedPages.id, page.id));
+
           pageStatuses.push({
             id: page.id,
             displayName: page.displayName || page.pageId || page.id,

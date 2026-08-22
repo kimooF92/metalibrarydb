@@ -3,15 +3,8 @@ import { trackedPages, queue, scanHistory, workerState, creativeScans, discovere
 import { eq, asc, desc, sql, inArray } from "drizzle-orm";
 
 export async function resetStuckJobs() {
-  await db
-    .update(queue)
-    .set({ status: "pending" })
-    .where(eq(queue.status, "running"));
-
-  await db
-    .update(trackedPages)
-    .set({ status: "failed" })
-    .where(eq(trackedPages.status, "scanning"));
+  const { cleanOrphanedScans } = await import("../lib/clean-scans");
+  await cleanOrphanedScans(0);
 
   await db
     .update(discoveredPages)
@@ -726,6 +719,24 @@ export async function markCreativeJobFailed(
       finishedAt: now,
     })
     .where(eq(creativeScans.id, creativeScanId));
+
+  const creativeScan = await db.query.creativeScans.findFirst({
+    where: eq(creativeScans.id, creativeScanId),
+  });
+  if (creativeScan?.trackedPageId) {
+    const page = await db.query.trackedPages.findFirst({
+      where: eq(trackedPages.id, creativeScan.trackedPageId),
+    });
+    if (page && page.status === "scanning") {
+      await db
+        .update(trackedPages)
+        .set({
+          status: page.lastSuccessAt || page.currentResults !== null ? "success" : "failed",
+          updatedAt: now,
+        })
+        .where(eq(trackedPages.id, creativeScan.trackedPageId));
+    }
+  }
 
   await db
     .update(queue)

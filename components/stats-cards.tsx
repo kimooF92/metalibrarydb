@@ -46,13 +46,6 @@ export function StatsCards({ stats, loading }: StatsCardsProps) {
         <strong className="font-bold">{stats.completed.toLocaleString()}</strong>
       </span>
 
-      {stats.scanning > 0 && (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-800/60 text-cyan-700 dark:text-cyan-300 animate-pulse shadow-sm">
-          <RefreshCw className="w-3.5 h-3.5 text-cyan-500 animate-spin" />
-          <span className="text-cyan-600/80 dark:text-cyan-400/80 font-medium">Scanning:</span>
-          <strong className="font-bold">{stats.scanning.toLocaleString()}</strong>
-        </span>
-      )}
 
       {stats.pending > 0 && (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-700 dark:text-amber-300 shadow-sm">

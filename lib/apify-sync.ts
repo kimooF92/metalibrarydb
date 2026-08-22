@@ -1,8 +1,32 @@
 import { db } from "@/db";
-import { creativeScans } from "@/db/schema";
+import { creativeScans, trackedPages } from "@/db/schema";
 import { eq, inArray, desc } from "drizzle-orm";
 import { getApifyTokens, fetchApifyDatasetItems } from "@/lib/apify";
 import { ingestApifyDatasetItems } from "@/lib/apify-ingest";
+
+async function resetTrackedPageFromScan(creativeScanId: string) {
+  try {
+    const scan = await db.query.creativeScans.findFirst({
+      where: eq(creativeScans.id, creativeScanId),
+    });
+    if (scan?.trackedPageId) {
+      const page = await db.query.trackedPages.findFirst({
+        where: eq(trackedPages.id, scan.trackedPageId),
+      });
+      if (page && page.status === "scanning") {
+        await db
+          .update(trackedPages)
+          .set({
+            status: page.lastSuccessAt || page.currentResults !== null ? "success" : "failed",
+            updatedAt: new Date(),
+          })
+          .where(eq(trackedPages.id, scan.trackedPageId));
+      }
+    }
+  } catch (err) {
+    console.error("[Apify Sync] Error resetting tracked page status:", err);
+  }
+}
 
 const APIFY_BASE_URL = "https://api.apify.com/v2";
 
@@ -119,6 +143,7 @@ export async function syncApifyRuns(): Promise<{ syncedCount: number; checkedCou
             finishedAt: new Date(),
           })
           .where(eq(creativeScans.id, scan.id));
+        await resetTrackedPageFromScan(scan.id);
         syncedCount++;
       }
     }
@@ -172,12 +197,23 @@ export function pollApifyRunUntilDone(
             finishedAt: new Date(),
           })
           .where(eq(creativeScans.id, creativeScanId));
+        await resetTrackedPageFromScan(creativeScanId);
         return;
       }
 
       if (attempts >= maxAttempts) {
         clearInterval(timer);
-        console.log(`[Apify Poller] Reached max polling attempts (${maxAttempts}) for run ${runId}. Sync will catch up on next feed refresh.`);
+        console.log(`[Apify Poller] Reached max polling attempts (${maxAttempts}) for run ${runId}.`);
+        await db
+          .update(creativeScans)
+          .set({
+            status: "failed",
+            failureReason: "poll_timeout",
+            outcomeDetails: `Polling exceeded ${maxAttempts} attempts (${(maxAttempts * intervalMs) / 1000}s)`,
+            finishedAt: new Date(),
+          })
+          .where(eq(creativeScans.id, creativeScanId));
+        await resetTrackedPageFromScan(creativeScanId);
       }
     } catch (err) {
       console.error(`[Apify Poller] Error on attempt #${attempts}:`, err);

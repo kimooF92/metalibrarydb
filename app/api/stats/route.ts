@@ -2,9 +2,15 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { trackedPages, importJobs } from "@/db/schema";
 import { sql, desc } from "drizzle-orm";
+import { cleanOrphanedScans } from "@/lib/clean-scans";
 
 export async function GET() {
   try {
+    // 0. Auto-heal any orphaned scans stuck longer than 5 minutes
+    await cleanOrphanedScans(5).catch((err) => {
+      console.warn("Failed to auto-clean orphaned scans in /api/stats:", err);
+    });
+
     // 1. Status counts
     const statusCounts = await db
       .select({

@@ -3,6 +3,8 @@ import { db } from "@/db";
 import { workerState, creativeScans, trackedPages } from "@/db/schema";
 import { eq, desc, and, lt, gte } from "drizzle-orm";
 
+import { cleanOrphanedScans } from "@/lib/clean-scans";
+
 async function getOrCreateWorkerState() {
   let state = await db.query.workerState.findFirst({
     where: eq(workerState.id, 1),
@@ -31,17 +33,8 @@ export async function GET() {
 
     const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
 
-    // Auto-expire any orphaned scans older than 15 minutes
-    await db
-      .update(creativeScans)
-      .set({
-        status: "failed",
-        failureReason: "timeout",
-        outcomeDetails: "Scan expired after 15 minutes of inactivity",
-        finishedAt: new Date(),
-      })
-      .where(and(eq(creativeScans.status, "running"), lt(creativeScans.startedAt, fifteenMinsAgo)))
-      .catch(() => {});
+    // Auto-expire any orphaned scans, queue jobs, or stuck scanning pages older than 10 minutes
+    await cleanOrphanedScans(10).catch(() => {});
 
     // Only query active scans started within the last 15 minutes
     const activeScans = await db
