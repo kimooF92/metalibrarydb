@@ -46,7 +46,7 @@ function buildMetaAdLibrarySearchUrl(domain: string): string {
     `&q=${quotedDomain}` +
     `&search_type=keyword_exact_phrase` +
     `&sort_data[direction]=desc` +
-    `&sort_data[mode]=total_impressions`
+    `&sort_data[mode]=relevancy_monthly_grouped`
   );
 }
 

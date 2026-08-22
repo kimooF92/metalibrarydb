@@ -73,21 +73,21 @@ export function calculateDeltaLimit(delta: number, maxCap: number = 100): number
  */
 export function ensureMostRecentSortingUrl(rawUrl: string): string {
   try {
-    let url = rawUrl.trim();
-    if (url.includes("sort_data[mode]=total_impressions")) {
-      url = url.replace("sort_data[mode]=total_impressions", "sort_data[mode]=relevancy_monthly_grouped");
-    } else if (!url.includes("sort_data[mode]=")) {
-      const separator = url.includes("?") ? "&" : "?";
-      url += `${separator}sort_data[mode]=relevancy_monthly_grouped`;
+    let normalized = rawUrl.trim();
+    if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) {
+      normalized = `https://${normalized}`;
     }
-
-    if (!url.includes("sort_data[direction]=")) {
-      url += "&sort_data[direction]=desc";
-    }
-
-    return url;
+    const urlObj = new URL(normalized);
+    urlObj.searchParams.set("sort_data[mode]", "relevancy_monthly_grouped");
+    urlObj.searchParams.set("sort_data[direction]", "desc");
+    return urlObj.toString();
   } catch {
-    return rawUrl;
+    let url = rawUrl.trim();
+    url = url.replace(/sort_data\[mode\]=[^&]*/g, "");
+    url = url.replace(/sort_data\[direction\]=[^&]*/g, "");
+    url = url.replace(/&&+/g, "&").replace(/\?&/, "?").replace(/&$/, "");
+    const separator = url.includes("?") ? "&" : "?";
+    return `${url}${separator}sort_data[mode]=relevancy_monthly_grouped&sort_data[direction]=desc`;
   }
 }
 

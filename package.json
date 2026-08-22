@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "worker": "npx tsx worker/index.ts",
+    "spy:apify": "npx tsx scripts/run-apify-spy-cron.ts",
     "reset-limits": "npx tsx scripts/reset-limits.ts"
   },
   "dependencies": {

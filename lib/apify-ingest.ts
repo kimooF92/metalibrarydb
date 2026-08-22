@@ -331,10 +331,11 @@ export async function ingestApifyDatasetItems(
     )
   );
 
-  const isFullScan = Boolean(
+  const isExplicitDelta = Boolean(config.isFullScan === false || config.isDeltaScan === true);
+  const isFullScan = !isExplicitDelta && Boolean(
     config.isFullScan === true ||
     config.mode === "drawer_bulk_refresh" ||
-    isOfficialPageTarget
+    (isOfficialPageTarget && !config.delta)
   );
 
   // Require non-empty items OR explicit zero-state flag to prevent actor errors/empty payloads from wiping active ads

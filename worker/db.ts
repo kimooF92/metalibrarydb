@@ -28,13 +28,13 @@ export async function enqueueAllPagesForRefresh(cooldownHours: number = 12) {
   // Find pages that either have never been checked, or were last checked before the cutoff time
   const pagesToRefresh = cooldownHours > 0
     ? await db.query.trackedPages.findMany({
-        where: (pages, { or, isNull, lt }) =>
-          or(isNull(pages.lastChecked), lt(pages.lastChecked, cutoff)),
-        columns: { id: true },
-      })
+      where: (pages, { or, isNull, lt }) =>
+        or(isNull(pages.lastChecked), lt(pages.lastChecked, cutoff)),
+      columns: { id: true },
+    })
     : await db.query.trackedPages.findMany({
-        columns: { id: true },
-      });
+      columns: { id: true },
+    });
 
   if (pagesToRefresh.length === 0) {
     console.log(
@@ -146,8 +146,7 @@ export async function enqueuePagesForCreativeScan(
   const skipped = eligiblePages.length - batch.length;
 
   console.log(
-    `[Enqueue Spy] ${eligiblePages.length} eligible page(s) found. Enqueuing top ${batch.length} by ad count (cap: ${maxPages}${
-      skipped > 0 ? `, ${skipped} deferred to next round` : ""
+    `[Enqueue Spy] ${eligiblePages.length} eligible page(s) found. Enqueuing top ${batch.length} by ad count (cap: ${maxPages}${skipped > 0 ? `, ${skipped} deferred to next round` : ""
     }).`
   );
 

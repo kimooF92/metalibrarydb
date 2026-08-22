@@ -1,10 +1,23 @@
-name: Meta Ad Tracker Spy Worker
+name: Meta Ad Tracker Apify Spy Worker
 
 on:
   schedule:
     # 2 rounds per day: Midday (12:00 PM UTC+1 / 11:00 UTC) & Midnight (00:00 AM UTC+1 / 23:00 UTC)
     - cron: '0 11,23 * * *'
-  workflow_dispatch: # Allows manual trigger from GitHub UI anytime
+  workflow_dispatch: # Allows manual trigger from GitHub UI anytime with optional inputs
+    inputs:
+      max_pages:
+        description: 'Maximum Pages to Scan (default: 25)'
+        required: false
+        default: '25'
+      force_all:
+        description: 'Force all active pages regardless of +1 diff (true/false)'
+        required: false
+        default: 'false'
+      page_id:
+        description: 'Target specific Tracked Page UUID (optional)'
+        required: false
+        default: ''
 
 # Global concurrency group to guarantee zero job overlap across workflows
 concurrency:
@@ -12,9 +25,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  run-spy-worker:
+  run-apify-spy-worker:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 30
 
     steps:
       - name: Checkout Code
@@ -26,32 +39,30 @@ jobs:
           node-version: 22
           cache: 'npm'
 
-      - name: Cache Playwright Browsers
-        uses: actions/cache@v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: playwright-chromium-${{ runner.os }}-
-
       - name: Install Dependencies
         run: npm ci
 
-      - name: Ensure Playwright Chromium Browser
-        run: npx playwright install chromium --with-deps
-        continue-on-error: false
-
-      - name: Run Background Ad Spy Worker Queue
+      - name: Run Apify Ad Spy Cloud Extraction
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          SINGLE_RUN: "true"
-          PLAYWRIGHT_HEADLESS: "true"
-          ENQUEUE_SPY: "true"
-          AUTO_BURST_ENQUEUE: "false"
-          SPY_COOLDOWN_DAYS: "3"
-          SPY_MAX_PAGES_PER_RUN: "50"
-          MAX_SCANS_PER_HOUR: "100"
-          MAX_SCANS_PER_DAY: "0"
-        run: npm run worker -- --enqueue-spy
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+          APIFY_API_TOKENS: ${{ secrets.APIFY_API_TOKENS }}
+          APIFY_ACTOR_ID: ${{ secrets.APIFY_ACTOR_ID }}
+          # Backblaze B2 Media Storage (optional)
+          B2_APPLICATION_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
+          B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          B2_BUCKET_NAME: ${{ secrets.B2_BUCKET_NAME }}
+          B2_ENDPOINT: ${{ secrets.B2_ENDPOINT }}
+          # Run parameters
+          SPY_MAX_PAGES_PER_RUN: ${{ inputs.max_pages || '25' }}
+          SPY_FORCE_ALL: ${{ inputs.force_all || 'false' }}
+        run: |
+          if [ -n "${{ inputs.page_id }}" ]; then
+            echo "Running targeted Apify scan for page ID: ${{ inputs.page_id }}"
+            npx tsx scripts/run-apify-spy-cron.ts --page-id "${{ inputs.page_id }}"
+          else
+            echo "Running batch Apify scan for eligible pages..."
+            npm run spy:apify
+          fi
