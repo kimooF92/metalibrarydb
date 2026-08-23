@@ -66,23 +66,19 @@ export function Navigation() {
           {/* Header Row (Logo & Title) */}
           {isCollapsed ? (
             <div className="flex flex-col items-center mb-8">
-              <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 flex items-center justify-center p-1.5 shadow-sm">
-                <img
-                  src="/icon.png"
-                  alt="Meta Ad Tracker Logo"
-                  className="w-full h-full object-contain"
-                />
-              </div>
+              <img
+                src="/icon.png"
+                alt="Meta Ad Tracker Logo"
+                className="w-9 h-9 object-contain"
+              />
             </div>
           ) : (
             <div className="flex items-center space-x-3 mb-8 px-1 truncate">
-              <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 flex items-center justify-center p-1.5 shadow-sm shrink-0">
-                <img
-                  src="/icon.png"
-                  alt="Meta Ad Tracker Logo"
-                  className="w-full h-full object-contain"
-                />
-              </div>
+              <img
+                src="/icon.png"
+                alt="Meta Ad Tracker Logo"
+                className="w-9 h-9 object-contain shrink-0"
+              />
               <div className="truncate">
                 <span className="font-extrabold text-sm text-slate-900 dark:text-white tracking-tight block leading-tight">
                   Meta Ad Tracker
@@ -204,13 +200,11 @@ export function Navigation() {
       {/* Mobile Top Bar */}
       <header className="flex md:hidden items-center justify-between h-14 w-full px-4 border-b border-slate-200 dark:border-slate-800/80 bg-slate-50/80 dark:bg-slate-900/60 backdrop-blur-md sticky top-0 z-40">
         <div className="flex items-center space-x-2.5">
-          <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 flex items-center justify-center p-1 shadow-sm shrink-0">
-            <img
-              src="/icon.png"
-              alt="Meta Ad Tracker Logo"
-              className="w-full h-full object-contain"
-            />
-          </div>
+          <img
+            src="/icon.png"
+            alt="Meta Ad Tracker Logo"
+            className="w-8 h-8 object-contain shrink-0"
+          />
           <span className="font-extrabold text-sm text-slate-900 dark:text-white tracking-tight">
             Meta Ad Tracker
           </span>
