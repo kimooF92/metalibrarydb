@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
       targetUrl.hostname.endsWith(".fbcdn.net") ||
       targetUrl.hostname.endsWith(".facebook.com") ||
       targetUrl.hostname.endsWith(".cdninstagram.com") ||
+      targetUrl.hostname.endsWith(".instagram.com") ||
       targetUrl.hostname.endsWith(".fbsbx.com") ||
       targetUrl.hostname.endsWith(".supabase.co") ||
       targetUrl.hostname.endsWith(".supabase.in");
@@ -32,8 +33,11 @@ export async function GET(req: NextRequest) {
       signal: controller.signal,
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": "https://www.facebook.com/",
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Referer": "https://www.facebook.com/ads/library/",
+        "Sec-Fetch-Dest": "image",
+        "Sec-Fetch-Mode": "no-cors",
+        "Sec-Fetch-Site": "cross-site",
         "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
       },
     });

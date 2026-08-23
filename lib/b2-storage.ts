@@ -87,7 +87,7 @@ export interface MediaUploadResult {
  */
 export async function uploadMediaWithHashing(
   sourceUrl: string,
-  keyPrefix: "videos" | "thumbnails",
+  keyPrefix: "videos" | "thumbnails" | "images",
   fallbackFilename?: string
 ): Promise<MediaUploadResult> {
   if (!sourceUrl) {
@@ -178,7 +178,7 @@ export async function uploadMediaWithHashing(
  */
 export async function uploadMediaFromUrlToB2(
   sourceUrl: string,
-  keyPrefix: "videos" | "thumbnails",
+  keyPrefix: "videos" | "thumbnails" | "images",
   filename: string
 ): Promise<string | null> {
   const result = await uploadMediaWithHashing(sourceUrl, keyPrefix, filename);

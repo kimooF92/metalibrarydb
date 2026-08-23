@@ -39,6 +39,8 @@ import {
   Info,
   ShoppingBag,
   Tag,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 interface AdCardProps {
@@ -54,6 +56,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
   const [isProxied, setIsProxied] = useState(false);
+  const [carouselIndex, setCarouselIndex] = useState(0);
   const [imgError, setImgError] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -84,13 +87,17 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
     };
   }, []);
 
-  const initialDisplayImage = currentAd.signedThumbnailUrl || currentAd.thumbnailUrl || currentAd.mediaUrls?.[0];
-  const activeImageSrc = isProxied && initialDisplayImage
-    ? `/api/spy/image-proxy?url=${encodeURIComponent(initialDisplayImage)}`
-    : initialDisplayImage;
+  const displayImage = currentAd.signedThumbnailUrl || currentAd.thumbnailUrl || currentAd.mediaUrls?.[0];
+  const previewImages = currentAd.mediaUrls && currentAd.mediaUrls.length > 0 ? currentAd.mediaUrls : displayImage ? [displayImage] : [];
+  const isCarousel = currentAd.mediaType === "carousel" || previewImages.length > 1;
+  const activeSlideUrl = previewImages.length > 0 ? previewImages[carouselIndex % previewImages.length] : displayImage;
+
+  const activeImageSrc = isProxied && activeSlideUrl && activeSlideUrl.startsWith("http")
+    ? `/api/spy/image-proxy?url=${encodeURIComponent(activeSlideUrl)}`
+    : activeSlideUrl;
 
   const handleImageError = () => {
-    if (!isProxied && initialDisplayImage) {
+    if (!isProxied && activeSlideUrl && activeSlideUrl.startsWith("http")) {
       setIsProxied(true);
     } else {
       setImgError(true);
@@ -250,11 +257,8 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
   const firstVideoUrl = currentAd.mediaUrls?.find(
     (url) => url.includes(".mp4") || url.includes("video") || currentAd.mediaType === "video"
   );
-  const displayImage = currentAd.signedThumbnailUrl || currentAd.thumbnailUrl || currentAd.mediaUrls?.[0];
   const destinationUrl = resolveDestinationUrl(currentAd.linkUrl);
   const targetDomain = getCleanDomain(currentAd.linkUrl);
-
-  const previewImages = currentAd.mediaUrls && currentAd.mediaUrls.length > 0 ? currentAd.mediaUrls : displayImage ? [displayImage] : [];
 
   const handleMouseEnter = () => {
     if (!firstVideoUrl || isPlayingVideo || videoError) return;
@@ -601,6 +605,40 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
                     {currentAd.mediaType === "video" ? "Video Creative" : "Image Creative"}
                   </span>
                 </div>
+              )}
+
+              {/* Carousel Multi-Slide Navigation Controls */}
+              {isCarousel && previewImages.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCarouselIndex((prev) => (prev > 0 ? prev - 1 : previewImages.length - 1));
+                    }}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/75 hover:bg-black text-white flex items-center justify-center transition-all cursor-pointer z-20 shadow-md border border-white/20 opacity-0 group-hover/media:opacity-100"
+                    title="Previous Slide"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCarouselIndex((prev) => (prev + 1) % previewImages.length);
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/75 hover:bg-black text-white flex items-center justify-center transition-all cursor-pointer z-20 shadow-md border border-white/20 opacity-0 group-hover/media:opacity-100"
+                    title="Next Slide"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+
+                  {/* Slide Counter Pill */}
+                  <div className="absolute bottom-2 left-2 z-20 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/80 border border-white/15 text-[10px] font-bold text-white shadow-md pointer-events-none">
+                    <Layers className="w-3 h-3 text-indigo-400" />
+                    <span>{carouselIndex + 1}/{previewImages.length}</span>
+                  </div>
+                </>
               )}
 
               {firstVideoUrl && (

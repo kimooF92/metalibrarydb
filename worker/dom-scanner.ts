@@ -190,53 +190,76 @@ export async function extractAdsFromDOM(page: Page, defaultPageId: string): Prom
           const caption = bodyEl ? bodyEl.textContent?.trim() || null : null;
 
           // 3. Media (Images / Video / Carousel)
-          const imgs = Array.from(targetCard.querySelectorAll<HTMLImageElement>("img")).filter(function(img) {
-            if (!img.src || img.src.includes("data:image")) return false;
-            if (!img.src.includes("scontent") && !img.src.includes("fbcdn")) return false;
-            
-            const isLogo = /_s60x60|_s50x50|_s100x100|_p60x60|_p50x50|s60x60|p60x60|s50x50|s100x100/i.test(img.src) || img.src.includes("profile") || img.src.includes("avatar");
-            if (isLogo) return false;
+          const extractedMediaUrls: string[] = [];
+          let extractedThumbnail: string | null = null;
+          let hasVideo = false;
+
+          // Check video tags
+          const videoEls = Array.from(targetCard.querySelectorAll<HTMLVideoElement>("video"));
+          for (const v of videoEls) {
+            if (v.src && !v.src.startsWith("blob:") && !extractedMediaUrls.includes(v.src)) {
+              hasVideo = true;
+              extractedMediaUrls.push(v.src);
+            }
+            const poster = v.poster || v.getAttribute("poster");
+            if (poster && !extractedThumbnail && !/_s\d+x\d+|_p\d+x\d+|profile|avatar/i.test(poster)) {
+              extractedThumbnail = poster;
+            }
+          }
+
+          // Check image tags
+          const imgEls = Array.from(targetCard.querySelectorAll<HTMLImageElement>("img"));
+          for (const img of imgEls) {
+            const src = img.currentSrc || img.src || img.getAttribute("data-src") || img.getAttribute("data-original-src") || img.getAttribute("src") || "";
+            if (!src || src.includes("data:image")) continue;
+            if (!src.includes("scontent") && !src.includes("fbcdn") && !src.includes("cdninstagram") && !src.includes("fbsbx")) continue;
+
+            const isLogo = /_s\d+x\d+|_p\d+x\d+|profile|avatar|emoji/i.test(src);
+            if (isLogo) continue;
 
             const alt = (img.alt || "").toLowerCase();
-            if (alt.includes("profile") || alt.includes("logo") || alt.includes("avatar")) return false;
+            if (alt.includes("profile") || alt.includes("logo") || alt.includes("avatar")) continue;
 
-            const isHeaderImg =
-              !!img.closest('a[href*="facebook.com/"]') ||
-              !!img.closest('div[class*="header"]') ||
-              !!img.closest('div[role="header"]');
-            const width = img.width || img.clientWidth || img.naturalWidth || 0;
-            const height = img.height || img.clientHeight || img.naturalHeight || 0;
+            const isHeaderImg = !!img.closest('a[href*="facebook.com/"]') && !img.closest('div[class*="creative"]');
+            if (isHeaderImg) continue;
 
-            if (isHeaderImg) return false;
-            if (width > 0 && width <= 120 && height > 0 && height <= 120) return false;
+            if (!extractedMediaUrls.includes(src)) {
+              extractedMediaUrls.push(src);
+            }
+            if (!extractedThumbnail) {
+              extractedThumbnail = src;
+            }
+          }
 
-            return true;
-          });
-
-          const videoEl = targetCard.querySelector<HTMLVideoElement>("video");
+          // Check background image divs (common for carousel cards)
+          const bgEls = Array.from(targetCard.querySelectorAll<HTMLElement>('div[style*="background-image"], span[style*="background-image"]'));
+          for (const el of bgEls) {
+            const style = el.getAttribute("style") || "";
+            const bgMatch = style.match(/url\(["']?(https?:\/\/[^"')]+)["']?\)/i);
+            if (bgMatch && bgMatch[1]) {
+              const bgUrl = bgMatch[1];
+              if ((bgUrl.includes("scontent") || bgUrl.includes("fbcdn")) && !/_s\d+x\d+|_p\d+x\d+|profile|avatar/i.test(bgUrl)) {
+                if (!extractedMediaUrls.includes(bgUrl)) {
+                  extractedMediaUrls.push(bgUrl);
+                }
+                if (!extractedThumbnail) {
+                  extractedThumbnail = bgUrl;
+                }
+              }
+            }
+          }
 
           let mediaType: "image" | "video" | "carousel" | "unknown" = "unknown";
-          const mediaUrls: string[] = [];
-          let thumbnailUrl: string | null = null;
-
-          if (videoEl) {
+          if (hasVideo) {
             mediaType = "video";
-            if (videoEl.src && !videoEl.src.startsWith("blob:")) {
-              mediaUrls.push(videoEl.src);
-            }
-            if (videoEl.poster) {
-              const isLogo = /_s60x60|_s50x50|_s100x100|_p60x60|_p50x50|s60x60|p60x60|s50x50|s100x100/i.test(videoEl.poster) || videoEl.poster.includes("profile") || videoEl.poster.includes("avatar");
-              if (!isLogo) thumbnailUrl = videoEl.poster;
-            }
-          } else if (imgs.length > 1) {
+          } else if (extractedMediaUrls.length > 1) {
             mediaType = "carousel";
-            for (const img of imgs) mediaUrls.push(img.src);
-            thumbnailUrl = imgs[0]?.src || null;
-          } else if (imgs.length >= 1) {
+          } else if (extractedMediaUrls.length === 1) {
             mediaType = "image";
-            mediaUrls.push(imgs[0].src);
-            thumbnailUrl = imgs[0].src;
           }
+
+          const mediaUrls = extractedMediaUrls;
+          const thumbnailUrl = extractedThumbnail || (mediaUrls.length > 0 ? mediaUrls[0] : null);
 
           // 4. CTA link & text
           const linkEl = targetCard.querySelector<HTMLAnchorElement>('a[href*="l.facebook.com"], a[data-lynx-mode], a[target="_blank"]:not([href*="facebook.com"])');

@@ -4,7 +4,8 @@ import { ads, adObservations, creativeScans, trackedPages, scanHistory } from ".
 import { eq, sql } from "drizzle-orm";
 import { cacheThumbnail } from "./thumbnail-cache";
 import { extractAdsFromDOM, extractPageIdsFromPage } from "./dom-scanner";
-import { uploadMediaFromUrlToB2, isB2Configured } from "../lib/b2-storage";
+import { uploadMediaFromUrlToB2, uploadMediaWithHashing, isB2Configured } from "../lib/b2-storage";
+import { extractMedia } from "../lib/apify-ingest";
 import { parseResultCountFromText } from "./scanner";
 import { resolveDestinationUrl } from "../lib/utils";
 
@@ -89,73 +90,8 @@ function parseAdGraphQLNode(node: any): ExtractedAdData | null {
       null;
     const linkUrl = resolveDestinationUrl(rawLinkUrl);
 
-    // Media type & URLs
-    let mediaType: "image" | "video" | "carousel" | "unknown" = "unknown";
-    const mediaUrls: string[] = [];
-    let thumbnailUrl: string | null = null;
-
-    const cards = Array.isArray(snapshot.cards) ? snapshot.cards : [];
-
-    if (cards.length > 1) {
-      mediaType = "carousel";
-      for (const card of cards) {
-        const imgUrl = card.resized_image_url || card.original_image_url || (Array.isArray(card.images) ? card.images[0]?.resized_image_url || card.images[0]?.original_image_url : null);
-        if (imgUrl) mediaUrls.push(imgUrl);
-        const vidUrl = card.video_hd_url || card.video_sd_url;
-        if (vidUrl) mediaUrls.push(vidUrl);
-      }
-      thumbnailUrl = cards[0]?.resized_image_url || cards[0]?.original_image_url || cards[0]?.video_preview_image_url || null;
-    } else if (cards.length === 1) {
-      const card = cards[0];
-      const cardVideos = Array.isArray(card.videos) ? card.videos : (card.video_hd_url || card.video_sd_url) ? [card] : [];
-      const cardImages = Array.isArray(card.images) ? card.images : (card.resized_image_url || card.original_image_url) ? [card] : [];
-
-      if (cardVideos.length > 0) {
-        mediaType = "video";
-        for (const v of cardVideos) {
-          if (v.video_hd_url) mediaUrls.push(v.video_hd_url);
-          if (v.video_sd_url) mediaUrls.push(v.video_sd_url);
-          if (v.src) mediaUrls.push(v.src);
-        }
-        thumbnailUrl = card.video_preview_image_url || card.preview_image_url || card.resized_image_url || null;
-      } else if (cardImages.length > 0) {
-        mediaType = "image";
-        for (const img of cardImages) {
-          const url = img.resized_image_url || img.original_image_url || img.src;
-          if (url) mediaUrls.push(url);
-        }
-        thumbnailUrl = card.resized_image_url || card.original_image_url || mediaUrls[0] || null;
-      }
-    }
-
-    // Fallback if cards array was empty or didn't yield media: check root snapshot properties
-    if (mediaUrls.length === 0) {
-      if (Array.isArray(snapshot.videos) && snapshot.videos.length > 0) {
-        mediaType = "video";
-        for (const video of snapshot.videos) {
-          if (video.video_hd_url) mediaUrls.push(video.video_hd_url);
-          if (video.video_sd_url) mediaUrls.push(video.video_sd_url);
-          if (!thumbnailUrl) thumbnailUrl = video.video_preview_image_url || video.preview_image_url || null;
-        }
-      } else if (Array.isArray(snapshot.images) && snapshot.images.length > 0) {
-        mediaType = "image";
-        for (const img of snapshot.images) {
-          const url = img.resized_image_url || img.original_image_url || img.src;
-          if (url) mediaUrls.push(url);
-        }
-        if (!thumbnailUrl) thumbnailUrl = mediaUrls[0] || null;
-      } else if (snapshot.resized_image_url || snapshot.original_image_url) {
-        mediaType = "image";
-        const url = snapshot.resized_image_url || snapshot.original_image_url;
-        mediaUrls.push(url);
-        if (!thumbnailUrl) thumbnailUrl = url;
-      } else if (snapshot.video_hd_url || snapshot.video_sd_url || snapshot.video_preview_image_url) {
-        mediaType = "video";
-        if (snapshot.video_hd_url) mediaUrls.push(snapshot.video_hd_url);
-        if (snapshot.video_sd_url) mediaUrls.push(snapshot.video_sd_url);
-        if (!thumbnailUrl) thumbnailUrl = snapshot.video_preview_image_url || null;
-      }
-    }
+    // Extract comprehensive media (Images, Videos, Carousels, Thumbnails)
+    const { mediaType, mediaUrls, thumbnailUrl } = extractMedia(node);
 
     // Duplication / collation count
     const collationCount =
@@ -619,23 +555,65 @@ export async function scanAdCreatives(
     let savedCount = 0;
 
     for (const adData of collectedAds.values()) {
-      // Best-effort thumbnail caching (prioritizes B2)
-      const { storagePath, publicUrl } = await cacheThumbnail(
-        adData.adArchiveId,
-        adData.thumbnailUrl
-      );
-
-      // Best-effort B2 video caching if configured
       let finalMediaUrls = adData.mediaUrls || [];
-      if (isB2Configured() && adData.mediaType === "video" && finalMediaUrls.length > 0) {
-        const b2VideoUrls = await Promise.all(
-          finalMediaUrls.map(async (url, idx) => {
-            if (url.includes("backblazeb2.com") || url.includes("/api/spy/b2-media")) return url;
-            const b2Url = await uploadMediaFromUrlToB2(url, "videos", `${adData.adArchiveId}_${idx}`);
-            return b2Url || url;
-          })
+      let finalThumbnailUrl = adData.thumbnailUrl;
+      let storagePath: string | null = null;
+      let mediaHash: string | null = null;
+      let perceptualHash: string | null = null;
+
+      if (isB2Configured()) {
+        // 1. Best-effort B2 thumbnail caching & perceptual hash
+        if (finalThumbnailUrl) {
+          try {
+            const res = await uploadMediaWithHashing(finalThumbnailUrl, "thumbnails", `${adData.adArchiveId}_thumb`);
+            if (res && res.url) {
+              finalThumbnailUrl = res.url;
+              storagePath = `b2/thumbnails/${adData.adArchiveId}.jpg`;
+              mediaHash = res.mediaHash;
+              perceptualHash = res.perceptualHash;
+            }
+          } catch (e: any) {
+            console.warn(`[Spy Scanner] Thumbnail B2 upload error for ${adData.adArchiveId}:`, e.message);
+          }
+        }
+
+        // 2. Best-effort B2 media caching for all types (video, image, carousel slides)
+        if (finalMediaUrls.length > 0) {
+          const b2MediaUrls = await Promise.all(
+            finalMediaUrls.map(async (url, idx) => {
+              if (url.includes("backblazeb2.com") || url.includes("/api/spy/b2-media")) return url;
+              const isVid = adData.mediaType === "video" || url.includes(".mp4");
+              const folder = isVid ? "videos" : "images";
+              try {
+                const res = await uploadMediaWithHashing(url, folder as any, `${adData.adArchiveId}_${idx}`);
+                if (res && res.url) {
+                  if (!mediaHash) mediaHash = res.mediaHash;
+                  if (!perceptualHash) perceptualHash = res.perceptualHash;
+                  return res.url;
+                }
+              } catch (e: any) {
+                console.warn(`[Spy Scanner] Media B2 upload error for ${adData.adArchiveId}_${idx}:`, e.message);
+              }
+              return url;
+            })
+          );
+          finalMediaUrls = b2MediaUrls;
+
+          // If thumbnail was missing or null, pick first cached media URL
+          if (!finalThumbnailUrl && finalMediaUrls.length > 0) {
+            finalThumbnailUrl = finalMediaUrls[0];
+          }
+        }
+      } else {
+        // Fallback to Supabase thumbnail caching if B2 not configured
+        const cached = await cacheThumbnail(
+          adData.adArchiveId,
+          adData.thumbnailUrl
         );
-        finalMediaUrls = b2VideoUrls;
+        if (cached.publicUrl) {
+          finalThumbnailUrl = cached.publicUrl;
+          storagePath = cached.storagePath;
+        }
       }
 
       // Upsert canonical ad record
@@ -652,8 +630,10 @@ export async function scanAdCreatives(
           linkUrl: adData.linkUrl,
           mediaType: adData.mediaType,
           mediaUrls: finalMediaUrls,
-          thumbnailUrl: publicUrl || adData.thumbnailUrl,
+          thumbnailUrl: finalThumbnailUrl,
           thumbnailStoragePath: storagePath,
+          mediaHash,
+          perceptualHash,
           firstSeenAt: now,
           lastSeenAt: now,
           updatedAt: now,
@@ -669,8 +649,10 @@ export async function scanAdCreatives(
             linkUrl: adData.linkUrl,
             mediaType: adData.mediaType,
             mediaUrls: finalMediaUrls,
-            thumbnailUrl: publicUrl || adData.thumbnailUrl,
+            thumbnailUrl: finalThumbnailUrl || ads.thumbnailUrl,
             thumbnailStoragePath: storagePath || ads.thumbnailStoragePath,
+            ...(mediaHash ? { mediaHash } : {}),
+            ...(perceptualHash ? { perceptualHash } : {}),
             lastSeenAt: now,
             updatedAt: now,
             isArchived: false,

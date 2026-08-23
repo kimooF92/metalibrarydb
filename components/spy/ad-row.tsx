@@ -81,13 +81,13 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
     };
   }, []);
 
-  const initialDisplayImage = currentAd.signedThumbnailUrl || currentAd.thumbnailUrl || currentAd.mediaUrls?.[0];
-  const activeImageSrc = isProxied && initialDisplayImage
-    ? `/api/spy/image-proxy?url=${encodeURIComponent(initialDisplayImage)}`
-    : initialDisplayImage;
+  const displayImage = currentAd.signedThumbnailUrl || currentAd.thumbnailUrl || currentAd.mediaUrls?.[0];
+  const activeImageSrc = isProxied && displayImage && displayImage.startsWith("http")
+    ? `/api/spy/image-proxy?url=${encodeURIComponent(displayImage)}`
+    : displayImage;
 
   const handleImageError = () => {
-    if (!isProxied && initialDisplayImage) {
+    if (!isProxied && displayImage && displayImage.startsWith("http")) {
       setIsProxied(true);
     } else {
       setImgError(true);
@@ -241,7 +241,6 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
   const firstVideoUrl = currentAd.mediaUrls?.find(
     (url: string) => url.includes(".mp4") || url.includes("video") || currentAd.mediaType === "video"
   );
-  const displayImage = currentAd.signedThumbnailUrl || currentAd.thumbnailUrl || currentAd.mediaUrls?.[0];
   const destinationUrl = resolveDestinationUrl(currentAd.linkUrl);
   const targetDomain = getCleanDomain(currentAd.linkUrl);
 
