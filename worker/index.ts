@@ -30,7 +30,6 @@ import {
   enqueuePagesForCreativeScan,
   updateWorkerState,
   enqueueOrEscalateJob,
-  saveExtractedPageIdsToDiscovery,
   getAppSettings,
 } from "./db";
 import {
@@ -311,15 +310,7 @@ async function runWorker() {
         );
         const pageIdsFound = (outcome.extractedPageIds || []).filter(isValidPageId);
 
-        // Save all extracted Page IDs to discovered_pages table so they show up on the Discovery UI Table
-        if (pageIdsFound.length > 0) {
-          await saveExtractedPageIdsToDiscovery(
-            pageIdsFound,
-            trackedPage.url,
-            trackedPage.country || "TN",
-            trackedPage.id
-          );
-        }
+        // Multi-page candidate detection is logged via multi-page notification and reviewed in Candidate Modal
 
         // Case A: Exactly 1 Page ID found -> Auto-merge exact match entry into official Page ID record
         if (pageIdsFound.length === 1 && trackedPage.searchType !== "page") {
@@ -439,13 +430,7 @@ async function runWorker() {
                 });
               } else if (pageCandidates.length > 1) {
                 console.log(
-                  `[Local Multi-Page Conflict] Detected ${pageCandidates.length} candidate Facebook Pages for "${targetDisplayName}". Saving to Discovered Pages for user review.`
-                );
-                await saveExtractedPageIdsToDiscovery(
-                  pageCandidates.map((c) => c.pageId),
-                  trackedPage.url,
-                  trackedPage.country || "TN",
-                  trackedPage.id
+                  `[Local Multi-Page Conflict] Detected ${pageCandidates.length} candidate Facebook Pages for "${targetDisplayName}". Posting notification for user review.`
                 );
                 const { logMultiPageDetectedNotification } = await import("../lib/notifications");
                 await logMultiPageDetectedNotification({

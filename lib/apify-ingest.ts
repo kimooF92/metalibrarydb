@@ -513,15 +513,7 @@ export async function ingestApifyDatasetItems(
         resolvedPageId: single.pageId,
       });
     } else if (candidatePages.length > 1) {
-      console.log(`[Apify Ingest] Multi-page conflict: ${candidatePages.length} Facebook Pages detected for "${pageRecord.displayName || pageRecord.url}".`);
-
-      const { saveExtractedPageIdsToDiscovery } = await import("@/worker/db");
-      await saveExtractedPageIdsToDiscovery(
-        candidatePages.map((c) => c.pageId),
-        pageRecord.url,
-        pageRecord.country || "TN",
-        pageRecord.id
-      );
+      console.log(`[Apify Ingest] Multi-page conflict: ${candidatePages.length} Facebook Pages detected for "${pageRecord.displayName || pageRecord.url}". Posting multi-page notification for user resolution.`);
 
       const { logMultiPageDetectedNotification } = await import("@/lib/notifications");
       await logMultiPageDetectedNotification({

@@ -1,16 +1,19 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { discoveryRuns } from "@/db/schema";
-import { desc, gte, or, eq } from "drizzle-orm";
+import { desc, gte, or, eq, and, sql } from "drizzle-orm";
 import { triggerGitHubWorkflow } from "@/lib/github";
 
 export async function GET() {
   try {
     const runs = await db.query.discoveryRuns.findMany({
-      where: or(
-        gte(discoveryRuns.totalPagesDiscovered, 1),
-        eq(discoveryRuns.status, "running"),
-        eq(discoveryRuns.status, "pending")
+      where: and(
+        or(
+          gte(discoveryRuns.totalPagesDiscovered, 1),
+          eq(discoveryRuns.status, "running"),
+          eq(discoveryRuns.status, "pending")
+        ),
+        sql`(${discoveryRuns.outcomeDetails} NOT LIKE 'Inline page extraction%' OR ${discoveryRuns.outcomeDetails} IS NULL)`
       ),
       orderBy: [desc(discoveryRuns.createdAt)],
     });
