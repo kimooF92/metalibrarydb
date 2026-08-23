@@ -7,6 +7,7 @@ export type NotificationType =
   | "ad_spy"
   | "page_merged"
   | "multi_page_detected"
+  | "batch_summary"
   | "system_alert";
 
 export type NotificationSeverity = "info" | "success" | "warning" | "error";
@@ -46,7 +47,6 @@ export async function createNotification(params: CreateNotificationParams) {
     });
 
     if (existing) {
-      console.log(`[Notification] Deduplicated duplicate notification "${params.title}" within 60s.`);
       return existing;
     }
 
@@ -66,6 +66,9 @@ export async function createNotification(params: CreateNotificationParams) {
       })
       .returning();
 
+    // Auto-prune old notifications in background to keep table lightweight
+    pruneOldNotifications(120).catch(() => {});
+
     return record;
   } catch (error) {
     console.error("[Notification] Failed to create notification:", error);
@@ -74,7 +77,9 @@ export async function createNotification(params: CreateNotificationParams) {
 }
 
 /**
- * Convenience helper to log Count Scan activities (differences, zero changes, or issues).
+ * Convenience helper to log Count Scan activities.
+ * SMART FILTER: Silences routine 'no-change' scans (difference = 0) to avoid spamming the notification center.
+ * Only logs high-signal events: positive differences (+new ads), significant drops, or errors.
  */
 export async function logCountScanNotification(params: {
   trackedPageId: string;
@@ -85,6 +90,7 @@ export async function logCountScanNotification(params: {
 }) {
   const { trackedPageId, brandName, currentResults, difference, status } = params;
 
+  // 1. Log errors or unclear navigation warnings
   if (status !== "success") {
     return createNotification({
       type: "count_scan",
@@ -98,33 +104,40 @@ export async function logCountScanNotification(params: {
   }
 
   const diffNum = difference || 0;
-  let title = "Count Checked";
-  let message = `Checked "${brandName}": ${currentResults ?? 0} active ads (No change).`;
-  let severity: NotificationSeverity = "info";
 
+  // 2. High-Signal: Positive difference (+new ads launched!)
   if (diffNum > 0) {
-    title = `+${diffNum} New Ads Detected!`;
-    message = `"${brandName}" launched +${diffNum} new ad(s)! Total active ads: ${currentResults ?? 0}.`;
-    severity = "success";
-  } else if (diffNum < 0) {
-    title = `${diffNum} Ads Turned Off`;
-    message = `"${brandName}" paused ${Math.abs(diffNum)} ad(s). Total active ads: ${currentResults ?? 0}.`;
-    severity = "info";
+    return createNotification({
+      type: "count_scan",
+      title: `+${diffNum} New Ads on ${brandName}!`,
+      message: `"${brandName}" launched +${diffNum} new ad(s)! Total active ads: ${currentResults ?? 0}.`,
+      severity: "success",
+      trackedPageId,
+      actionUrl: `/spy?trackedPageId=${trackedPageId}`,
+      metadata: { currentResults, difference: diffNum, brandName },
+    });
   }
 
-  return createNotification({
-    type: "count_scan",
-    title,
-    message,
-    severity,
-    trackedPageId,
-    actionUrl: `/spy?trackedPageId=${trackedPageId}`,
-    metadata: { currentResults, difference: diffNum },
-  });
+  // 3. Significant drop: 5 or more ads turned off at once
+  if (diffNum <= -5) {
+    return createNotification({
+      type: "count_scan",
+      title: `${Math.abs(diffNum)} Ads Paused on ${brandName}`,
+      message: `"${brandName}" paused ${Math.abs(diffNum)} ad(s). Total active ads: ${currentResults ?? 0}.`,
+      severity: "info",
+      trackedPageId,
+      actionUrl: `/spy?trackedPageId=${trackedPageId}`,
+      metadata: { currentResults, difference: diffNum, brandName },
+    });
+  }
+
+  // 4. Routine check with 0 difference -> SILENT (recorded to scan_history only)
+  return null;
 }
 
 /**
  * Convenience helper to log Ad Spy creative scans.
+ * Only logs when actual new creatives are ingested or ads archived.
  */
 export async function logAdSpyNotification(params: {
   trackedPageId: string;
@@ -140,7 +153,7 @@ export async function logAdSpyNotification(params: {
     return null;
   }
 
-  const title = `Ad Spy Synced: ${brandName}`;
+  const title = `✨ +${extractedCount} Creatives Synced: ${brandName}`;
   let message = `Ingested ${extractedCount} ad creative(s) for "${brandName}".`;
   if (archivedCount && archivedCount > 0) {
     message += ` Archived ${archivedCount} turned-off ad(s).`;
@@ -153,7 +166,100 @@ export async function logAdSpyNotification(params: {
     severity: "success",
     trackedPageId,
     actionUrl: `/spy?trackedPageId=${trackedPageId}`,
-    metadata: { extractedCount, isFullScan, archivedCount },
+    metadata: { extractedCount, isFullScan, archivedCount, brandName },
+  });
+}
+
+export interface BatchSummaryMover {
+  name: string;
+  diff?: number;
+  extractedCount?: number;
+  currentResults?: number;
+  trackedPageId?: string;
+}
+
+export interface LogBatchSummaryParams {
+  runnerType: "count_worker" | "apify_spy" | "discovery";
+  totalScanned: number;
+  newAdsCount?: number;
+  movers?: BatchSummaryMover[];
+  unchangedCount?: number;
+  failedCount?: number;
+  durationSeconds?: number;
+  actionUrl?: string;
+}
+
+/**
+ * Creates a single consolidated Executive Summary Notification for a completed batch run.
+ */
+export async function logBatchSummaryNotification(params: LogBatchSummaryParams) {
+  const {
+    runnerType,
+    totalScanned,
+    newAdsCount = 0,
+    movers = [],
+    unchangedCount = 0,
+    failedCount = 0,
+    durationSeconds = 0,
+    actionUrl,
+  } = params;
+
+  if (totalScanned === 0) return null;
+
+  let title = "🏁 Scan Round Complete";
+  let message = "";
+  let severity: NotificationSeverity = "info";
+
+  if (runnerType === "apify_spy") {
+    title = `⚡ Apify Spy Sync (${totalScanned} Brands)`;
+    if (newAdsCount > 0) {
+      severity = "success";
+      const moverSummary = movers.slice(0, 3).map((m) => `${m.name} (+${m.extractedCount || m.diff || 1})`).join(", ");
+      message = `Ingested ${newAdsCount} new ad creatives across ${movers.length} active advertiser(s): ${moverSummary}${movers.length > 3 ? ` +${movers.length - 3} more` : ""}.`;
+    } else {
+      message = `All ${totalScanned} advertiser catalogs up to date (no new creatives detected).`;
+    }
+  } else if (runnerType === "count_worker") {
+    title = `🏁 Count Check Complete (${totalScanned} Brands)`;
+    if (movers.length > 0) {
+      severity = "success";
+      const moverSummary = movers.slice(0, 3).map((m) => `${m.name} (+${m.diff})`).join(", ");
+      message = `🚀 ${movers.length} brand(s) launched new ads: ${moverSummary}${movers.length > 3 ? ` +${movers.length - 3} more` : ""}. (${unchangedCount} unchanged)`;
+    } else {
+      message = `Verified ${totalScanned} tracked pages. All counts unchanged.`;
+    }
+  } else {
+    title = `🌐 Discovery Round Complete (${totalScanned} Pages)`;
+    message = `Processed discovery scan across ${totalScanned} candidates.`;
+  }
+
+  if (failedCount > 0) {
+    message += ` • ⚠️ ${failedCount} error(s)`;
+    if (movers.length === 0) severity = "warning";
+  }
+
+  if (durationSeconds > 0) {
+    const mins = Math.floor(durationSeconds / 60);
+    const secs = durationSeconds % 60;
+    const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+    message += ` (${timeStr})`;
+  }
+
+  return createNotification({
+    type: "batch_summary",
+    title,
+    message,
+    severity,
+    actionUrl: actionUrl || (runnerType === "apify_spy" ? "/spy" : "/"),
+    metadata: {
+      runnerType,
+      totalScanned,
+      newAdsCount,
+      movers,
+      unchangedCount,
+      failedCount,
+      durationSeconds,
+    },
   });
 }
 
@@ -168,8 +274,8 @@ export async function logPageMergedNotification(params: {
 }) {
   return createNotification({
     type: "page_merged",
-    title: "Brand Verified & Auto-Merged",
-    message: `Exact match "${params.originalName}" was resolved and linked to official Meta Page "${params.resolvedPageName}" (ID: ${params.resolvedPageId}).`,
+    title: `🔗 Brand Auto-Merged: ${params.resolvedPageName}`,
+    message: `Exact match "${params.originalName}" was resolved and upgraded to official Page ID "${params.resolvedPageName}" (${params.resolvedPageId}).`,
     severity: "success",
     trackedPageId: params.trackedPageId,
     actionUrl: `/?search=${encodeURIComponent(params.resolvedPageName)}`,
@@ -193,7 +299,7 @@ export async function logMultiPageDetectedNotification(params: {
   return createNotification({
     type: "multi_page_detected",
     title: `⚠️ ${count} Facebook Pages Found`,
-    message: `Found ${count} Facebook Pages running ads for "${params.domainName}". Review and assign the primary brand page.`,
+    message: `Found ${count} candidate Facebook Pages running ads for "${params.domainName}". Review and assign the primary brand page.`,
     severity: "warning",
     trackedPageId: params.trackedPageId,
     actionUrl: `/?search=${encodeURIComponent(params.domainName)}&resolveModal=${params.trackedPageId}`,
@@ -202,4 +308,25 @@ export async function logMultiPageDetectedNotification(params: {
       candidates: params.candidatePages,
     },
   });
+}
+
+/**
+ * Prunes older notifications to keep the database table compact and fast.
+ */
+export async function pruneOldNotifications(maxKeep = 120) {
+  try {
+    const rows = await db.query.activityNotifications.findMany({
+      columns: { id: true },
+      orderBy: [desc(activityNotifications.createdAt)],
+      offset: maxKeep,
+      limit: 200,
+    });
+
+    if (rows.length > 0) {
+      const idsToDelete = rows.map((r) => r.id);
+      await db.delete(activityNotifications).where(inArray(activityNotifications.id, idsToDelete));
+    }
+  } catch (err) {
+    // Non-fatal background cleanup
+  }
 }

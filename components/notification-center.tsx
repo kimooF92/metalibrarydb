@@ -13,15 +13,14 @@ import {
   AlertTriangle,
   AlertCircle,
   X,
-  Loader2,
   Inbox,
-  Filter,
+  Sparkles,
 } from "lucide-react";
 import { useToast } from "@/components/toast-context";
 
 export interface ActivityNotification {
   id: string;
-  type: "count_scan" | "ad_spy" | "page_merged" | "multi_page_detected" | "system_alert";
+  type: "count_scan" | "ad_spy" | "page_merged" | "multi_page_detected" | "batch_summary" | "system_alert";
   title: string;
   message: string;
   severity: "info" | "success" | "warning" | "error";
@@ -43,7 +42,6 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
   const [notifications, setNotifications] = useState<ActivityNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeTab, setActiveTab] = useState<string>("all");
-  const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
 
@@ -145,7 +143,14 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
     return `${Math.floor(diffSec / 86400)}d ago`;
   };
 
-  const getNotificationIcon = (type: string, severity: string) => {
+  const getNotificationIcon = (type: string) => {
+    if (type === "batch_summary") {
+      return (
+        <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 flex items-center justify-center shrink-0 shadow-sm">
+          <Sparkles className="w-4 h-4" />
+        </div>
+      );
+    }
     if (type === "count_scan") {
       return (
         <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 flex items-center justify-center shrink-0">
@@ -162,7 +167,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
     }
     if (type === "page_merged") {
       return (
-        <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
+        <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center justify-center shrink-0">
           <CheckCircle2 className="w-4 h-4" />
         </div>
       );
@@ -250,13 +255,13 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
               : layout === "collapsed"
               ? "left-16 bottom-0"
               : "left-0 sm:left-full sm:bottom-0 sm:ml-2 bottom-4 sm:bottom-auto"
-          } w-[calc(100vw-2rem)] sm:w-[420px] max-h-[80vh] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150`}
+          } w-[calc(100vw-2rem)] sm:w-[440px] max-h-[82vh] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150`}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
             <div className="flex items-center space-x-2">
               <span className="text-sm font-bold text-slate-900 dark:text-white">
-                Live Activity & Notifications
+                Live Activity & Summaries
               </span>
               {unreadCount > 0 && (
                 <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
@@ -297,10 +302,10 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
           <div className="flex items-center px-3 py-2 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/30 dark:bg-slate-900/30 overflow-x-auto gap-1 text-[11px] font-semibold">
             {[
               { id: "all", label: "All" },
-              { id: "count_scan", label: "Count Scans" },
+              { id: "batch_summary", label: "Summaries" },
+              { id: "count_scan", label: "New Ads" },
               { id: "ad_spy", label: "Ad Spy" },
-              { id: "page_merged", label: "Merges" },
-              { id: "multi_page_detected", label: "Alerts" },
+              { id: "page_merged,multi_page_detected,system_alert", label: "Alerts & Merges" },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -317,77 +322,107 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
           </div>
 
           {/* Notifications Scroll List */}
-          <div className="overflow-y-auto max-h-[460px] divide-y divide-slate-100 dark:divide-slate-800/60">
+          <div className="overflow-y-auto max-h-[480px] divide-y divide-slate-100 dark:divide-slate-800/60">
             {notifications.length === 0 ? (
               <div className="py-12 px-4 text-center flex flex-col items-center justify-center space-y-2 text-slate-400">
                 <Inbox className="w-8 h-8 opacity-40" />
                 <p className="text-xs">No activity notifications yet.</p>
               </div>
             ) : (
-              notifications.map((n) => (
-                <div
-                  key={n.id}
-                  onClick={() => !n.isRead && handleMarkSingleRead(n.id)}
-                  className={`p-3.5 flex items-start space-x-3 transition-colors ${
-                    n.isRead
-                      ? "bg-transparent hover:bg-slate-50/50 dark:hover:bg-slate-800/30 opacity-80 hover:opacity-100"
-                      : "bg-indigo-50/40 dark:bg-indigo-950/20 hover:bg-indigo-50/70 dark:hover:bg-indigo-950/40"
-                  }`}
-                >
-                  {getNotificationIcon(n.type, n.severity)}
+              notifications.map((n) => {
+                const movers = (n.metadata?.movers as any[]) || [];
 
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <h4
-                        className={`text-xs font-bold truncate ${
-                          n.isRead ? "text-slate-700 dark:text-slate-300" : "text-slate-900 dark:text-white"
-                        }`}
-                      >
-                        {n.title}
-                      </h4>
-                      <span className="text-[10px] text-slate-400 shrink-0">
-                        {formatRelativeTime(n.createdAt)}
-                      </span>
-                    </div>
+                return (
+                  <div
+                    key={n.id}
+                    onClick={() => !n.isRead && handleMarkSingleRead(n.id)}
+                    className={`p-3.5 flex items-start space-x-3 transition-colors ${
+                      n.isRead
+                        ? "bg-transparent hover:bg-slate-50/50 dark:hover:bg-slate-800/30 opacity-80 hover:opacity-100"
+                        : n.type === "batch_summary"
+                        ? "bg-emerald-500/5 dark:bg-emerald-950/20 hover:bg-emerald-500/10 border-l-2 border-emerald-500"
+                        : "bg-indigo-50/40 dark:bg-indigo-950/20 hover:bg-indigo-50/70 dark:hover:bg-indigo-950/40"
+                    }`}
+                  >
+                    {getNotificationIcon(n.type)}
 
-                    <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed break-words">
-                      {n.message}
-                    </p>
-
-                    {/* Action Buttons */}
-                    <div className="flex items-center gap-2 pt-1">
-                      {n.type === "multi_page_detected" && n.trackedPageId && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setIsOpen(false);
-                            onOpenResolveModal?.(n.trackedPageId!);
-                          }}
-                          className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 text-[10px] font-bold border border-amber-500/20 transition-all active:scale-95"
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <h4
+                          className={`text-xs font-bold truncate ${
+                            n.isRead ? "text-slate-700 dark:text-slate-300" : "text-slate-900 dark:text-white"
+                          }`}
                         >
-                          <span>Review Brand Pages</span>
-                          <ExternalLink className="w-2.5 h-2.5" />
-                        </button>
+                          {n.title}
+                        </h4>
+                        <span className="text-[10px] text-slate-400 shrink-0">
+                          {formatRelativeTime(n.createdAt)}
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed break-words">
+                        {n.message}
+                      </p>
+
+                      {/* Movers Pills for Batch Summaries */}
+                      {n.type === "batch_summary" && movers.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {movers.slice(0, 4).map((m, idx) => (
+                            <Link
+                              key={idx}
+                              href={m.trackedPageId ? `/spy?trackedPageId=${m.trackedPageId}` : `/?search=${encodeURIComponent(m.name)}`}
+                              onClick={() => setIsOpen(false)}
+                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/60 dark:border-indigo-800/40 text-[10px] font-bold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors"
+                            >
+                              <span>{m.name}</span>
+                              <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">
+                                +{m.extractedCount || m.diff || 1}
+                              </span>
+                            </Link>
+                          ))}
+                          {movers.length > 4 && (
+                            <span className="text-[10px] text-slate-400 self-center">
+                              +{movers.length - 4} more
+                            </span>
+                          )}
+                        </div>
                       )}
 
-                      {n.actionUrl && (
-                        <Link
-                          href={n.actionUrl}
-                          onClick={() => setIsOpen(false)}
-                          className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/20 text-[10px] font-bold border border-indigo-500/20 transition-all active:scale-95"
-                        >
-                          <span>View Details</span>
-                          <ExternalLink className="w-2.5 h-2.5" />
-                        </Link>
-                      )}
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2 pt-1">
+                        {n.type === "multi_page_detected" && n.trackedPageId && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsOpen(false);
+                              onOpenResolveModal?.(n.trackedPageId!);
+                            }}
+                            className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 text-[10px] font-bold border border-amber-500/20 transition-all active:scale-95 cursor-pointer"
+                          >
+                            <span>Review Brand Pages</span>
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+
+                        {n.actionUrl && n.type !== "multi_page_detected" && (
+                          <Link
+                            href={n.actionUrl}
+                            onClick={() => setIsOpen(false)}
+                            className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/20 text-[10px] font-bold border border-indigo-500/20 transition-all active:scale-95"
+                          >
+                            <span>View Details</span>
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </Link>
+                        )}
+                      </div>
                     </div>
+
+                    {!n.isRead && (
+                      <span className="w-2 h-2 rounded-full bg-indigo-600 shrink-0 mt-1" />
+                    )}
                   </div>
-
-                  {!n.isRead && (
-                    <span className="w-2 h-2 rounded-full bg-indigo-600 shrink-0 mt-1" />
-                  )}
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { creativeScans, trackedPages } from "@/db/schema";
-import { eq, inArray, desc } from "drizzle-orm";
+import { eq, inArray, desc, and } from "drizzle-orm";
 import { getApifyTokens, fetchApifyDatasetItems } from "@/lib/apify";
 import { ingestApifyDatasetItems } from "@/lib/apify-ingest";
 

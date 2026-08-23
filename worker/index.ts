@@ -148,6 +148,34 @@ async function runWorker() {
   }
 
   let ranJobs = 0;
+  let sessionScanned = 0;
+  let sessionErrors = 0;
+  const sessionMovers: Array<{ name: string; diff: number; currentResults: number; trackedPageId: string }> = [];
+  let sessionStartTime = Date.now();
+
+  const emitSessionSummary = async () => {
+    if (sessionScanned > 0) {
+      try {
+        const { logBatchSummaryNotification } = await import("../lib/notifications");
+        await logBatchSummaryNotification({
+          runnerType: "count_worker",
+          totalScanned: sessionScanned,
+          newAdsCount: sessionMovers.reduce((acc, m) => acc + (m.diff || 0), 0),
+          movers: sessionMovers,
+          unchangedCount: sessionScanned - sessionMovers.length - sessionErrors,
+          failedCount: sessionErrors,
+          durationSeconds: Math.round((Date.now() - sessionStartTime) / 1000),
+          actionUrl: "/",
+        });
+      } catch (err) {
+        console.error("[Worker] Failed to emit batch summary:", err);
+      }
+      sessionScanned = 0;
+      sessionErrors = 0;
+      sessionMovers.length = 0;
+      sessionStartTime = Date.now();
+    }
+  };
 
   try {
     while (true) {
@@ -189,6 +217,7 @@ async function runWorker() {
         console.log(`[Worker Paused] ${backoff.reason}`);
         if (isSingleRun) {
           console.log("[Single Run] Worker paused due to backoff. Exiting.");
+          await emitSessionSummary();
           process.exit(0);
         }
         await randomDelay(15000, 30000);
@@ -201,6 +230,7 @@ async function runWorker() {
         console.log(`[Rate Limit] ${caps.reason}`);
         if (isSingleRun) {
           console.log("[Single Run] Rate cap reached. Exiting.");
+          await emitSessionSummary();
           process.exit(0);
         }
         await randomDelay(30000, 60000);
@@ -212,6 +242,7 @@ async function runWorker() {
 
       if (!nextJob) {
         console.log(`[Queue Empty] All pending jobs completed. Worker idling (${ranJobs} processed).`);
+        await emitSessionSummary();
         if (isSingleRun) {
           console.log("[Single Run] Queue is empty. Exiting worker cleanly.");
           process.exit(0);
@@ -343,18 +374,29 @@ async function runWorker() {
           console.log(
             `[Count Success] Status: ${outcome.status} | Results: ${outcome.results ?? "N/A"}`
           );
-          await markJobCompleted(
+          const res = await markJobCompleted(
             queueJob.id,
             trackedPage.id,
             outcome.results,
             outcome.status
           );
+          sessionScanned++;
+          if (res && res.difference && res.difference > 0) {
+            sessionMovers.push({
+              name: res.brandName || trackedPage.displayName || "Brand",
+              diff: res.difference,
+              currentResults: res.results || 0,
+              trackedPageId: trackedPage.id,
+            });
+          }
           await recordSuccessfulScan();
           await handleSuccess();
         } else {
           console.warn(
             `[Count Failed] Reason: ${outcome.failureReason}`
           );
+          sessionScanned++;
+          sessionErrors++;
           await markJobFailed(
             queueJob.id,
             trackedPage.id,

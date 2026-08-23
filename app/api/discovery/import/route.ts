@@ -49,11 +49,22 @@ export async function POST(req: Request) {
     for (const discPage of pagesToImport) {
       const pageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${discPage.country || "TN"}&view_all_page_id=${discPage.pageId}&search_type=page&media_type=all`;
 
+      let seedLandingPage: string | undefined = undefined;
+      if (discPage.trackedPageId) {
+        const parentTrackedPage = await db.query.trackedPages.findFirst({
+          where: eq(trackedPages.id, discPage.trackedPageId),
+        });
+        if (parentTrackedPage) {
+          seedLandingPage = parentTrackedPage.landingPage || parentTrackedPage.displayName || parentTrackedPage.url;
+        }
+      }
+
       const [tp] = await db
         .insert(trackedPages)
         .values({
           url: pageUrl,
           displayName: discPage.displayName || `Page ${discPage.pageId}`,
+          landingPage: seedLandingPage,
           pageId: discPage.pageId,
           searchType: "page",
           country: discPage.country || "TN",
@@ -65,6 +76,9 @@ export async function POST(req: Request) {
           target: trackedPages.url,
           set: {
             displayName: discPage.displayName || trackedPages.displayName,
+            landingPage: seedLandingPage || trackedPages.landingPage,
+            pageId: discPage.pageId,
+            searchType: "page",
             updatedAt: new Date(),
           },
         })

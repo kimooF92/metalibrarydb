@@ -282,6 +282,7 @@ async function main() {
   let successCount = 0;
   let totalAdsIngested = 0;
   let failedCount = 0;
+  const movers: Array<{ name: string; extractedCount: number; currentResults?: number; trackedPageId: string }> = [];
 
   for (let i = 0; i < selectedPlans.length; i++) {
     const { page, delta, isFullScan } = selectedPlans[i];
@@ -322,17 +323,6 @@ async function main() {
       .set({ status: "scanning", updatedAt: new Date() })
       .where(eq(trackedPages.id, page.id));
 
-    // Log in-app notification that scan has started
-    const { createNotification } = await import("../lib/notifications");
-    await createNotification({
-      type: "ad_spy",
-      title: "⚡ Apify Scan Started",
-      message: `Started creative extraction for "${pageName}" (+${delta} ads)...`,
-      severity: "info",
-      trackedPageId: page.id,
-      actionUrl: `/spy?trackedPageId=${page.id}`,
-    });
-
     try {
       // Launch Apify Actor run
       const runRes = await startApifyDeltaScan({
@@ -371,6 +361,14 @@ async function main() {
         console.log(`🎉 Successfully ingested ${pollResult.extractedCount} ad(s) for "${pageName}".`);
         successCount++;
         totalAdsIngested += pollResult.extractedCount;
+        if (pollResult.extractedCount > 0) {
+          movers.push({
+            name: pageName,
+            extractedCount: pollResult.extractedCount,
+            currentResults: page.currentResults || 0,
+            trackedPageId: page.id,
+          });
+        }
       } else {
         console.warn(`⚠️ Scan for "${pageName}" failed: ${pollResult.error}`);
         await db
@@ -408,6 +406,24 @@ async function main() {
     if (i < selectedPlans.length - 1) {
       console.log(`Sleeping 3s before next page...`);
       await sleep(3000);
+    }
+  }
+
+  // 5. Emit single consolidated Batch Summary notification
+  if (selectedPlans.length > 0) {
+    try {
+      const { logBatchSummaryNotification } = await import("../lib/notifications");
+      await logBatchSummaryNotification({
+        runnerType: "apify_spy",
+        totalScanned: selectedPlans.length,
+        newAdsCount: totalAdsIngested,
+        movers,
+        unchangedCount: selectedPlans.length - movers.length - failedCount,
+        failedCount,
+        actionUrl: "/spy",
+      });
+    } catch (err) {
+      console.error("Failed to log batch summary notification:", err);
     }
   }
 

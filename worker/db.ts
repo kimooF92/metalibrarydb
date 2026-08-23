@@ -508,16 +508,18 @@ export async function markJobCompleted(
     })
     .where(eq(queue.id, queueId));
 
-  // 4b. Log in-app activity notification for count check
+  let brandName = "Tracked Brand";
+  // 4b. Log in-app activity notification for count check (only logs if positive diff or error)
   try {
     const trackedPage = await db.query.trackedPages.findFirst({
       where: eq(trackedPages.id, pageId),
       columns: { displayName: true, url: true },
     });
+    brandName = trackedPage?.displayName || trackedPage?.url || "Tracked Brand";
     const { logCountScanNotification } = await import("../lib/notifications");
     await logCountScanNotification({
       trackedPageId: pageId,
-      brandName: trackedPage?.displayName || trackedPage?.url || "Tracked Brand",
+      brandName,
       currentResults: results,
       difference,
       status,
@@ -530,6 +532,8 @@ export async function markJobCompleted(
       console.error("[Apify Auto-Trigger] Error launching background delta scan:", err);
     });
   }
+
+  return { difference, results, brandName };
 }
 
 /**

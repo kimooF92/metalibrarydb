@@ -12,7 +12,12 @@ export async function GET(req: NextRequest) {
 
     const conditions = [];
     if (type && type !== "all") {
-      conditions.push(eq(activityNotifications.type, type));
+      if (type.includes(",")) {
+        const types = type.split(",").map((t) => t.trim()).filter(Boolean);
+        conditions.push(inArray(activityNotifications.type, types));
+      } else {
+        conditions.push(eq(activityNotifications.type, type));
+      }
     }
     if (unreadOnly) {
       conditions.push(eq(activityNotifications.isRead, false));

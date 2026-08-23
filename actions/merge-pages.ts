@@ -115,10 +115,13 @@ export async function mergeExactMatchWithPageId(
         .set({ trackedPageId: existingTargetPage.id })
         .where(eq(discoveredPages.trackedPageId, exactMatchTrackedPageId));
 
-      // Update existingTargetPage metadata
+      // Update existingTargetPage metadata and ensure official Page ID URL and searchType
       await db
         .update(trackedPages)
         .set({
+          url: newPageUrl,
+          pageId: cleanPageId,
+          searchType: "page",
           landingPage: existingTargetPage.landingPage || preservedDomain,
           displayName:
             resolvedDisplayName || existingTargetPage.displayName || exactMatchPage.displayName,
