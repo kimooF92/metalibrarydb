@@ -23,7 +23,8 @@ import { useToast } from "@/components/toast-context";
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<"general" | "spy" | "discovery" | "maintenance">("general");
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [pruneEligible, setPruneEligible] = useState<number | null>(null);
   const [pruning, setPruning] = useState(false);
   const [savedSettings, setSavedSettings] = useState({
@@ -38,13 +39,33 @@ export default function SettingsPage() {
   const { showToast } = useToast();
 
   useEffect(() => {
-    // Load local storage preferences if any
-    try {
-      const saved = localStorage.getItem("app_user_settings");
-      if (saved) {
-        setSavedSettings((prev) => ({ ...prev, ...JSON.parse(saved) }));
-      }
-    } catch {}
+    // Load preferences from database via API
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && data.settings) {
+          setSavedSettings({
+            defaultCountry: data.settings.defaultCountry ?? "TN",
+            autoMerge: data.settings.autoMerge ?? true,
+            staleHours: data.settings.staleHours ?? 12,
+            autoSpyThreshold: data.settings.autoSpyThreshold ?? 1,
+            discoveryWindowDays: data.settings.discoveryWindowDays ?? 7,
+            autoB2Backup: data.settings.autoB2Backup ?? true,
+          });
+        }
+      })
+      .catch(() => {
+        // Fallback to local storage if API is momentarily unavailable
+        try {
+          const saved = localStorage.getItem("app_user_settings");
+          if (saved) {
+            setSavedSettings((prev) => ({ ...prev, ...JSON.parse(saved) }));
+          }
+        } catch {}
+      })
+      .finally(() => {
+        setInitialLoading(false);
+      });
 
     // Fetch queue maintenance status
     fetch("/api/queue/prune")
@@ -53,12 +74,30 @@ export default function SettingsPage() {
       .catch(() => {});
   }, []);
 
-  const handleSavePreferences = () => {
+  const handleSavePreferences = async () => {
+    setSaving(true);
     try {
-      localStorage.setItem("app_user_settings", JSON.stringify(savedSettings));
-      showToast({ type: "success", title: "Settings saved successfully" });
-    } catch {
-      showToast({ type: "error", title: "Failed to save settings" });
+      // Save to database
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(savedSettings),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        // Also keep local storage in sync as client cache
+        try {
+          localStorage.setItem("app_user_settings", JSON.stringify(savedSettings));
+        } catch {}
+        showToast({ type: "success", title: "Settings saved to database" });
+      } else {
+        throw new Error(data.error || "Failed to save settings");
+      }
+    } catch (err: any) {
+      showToast({ type: "error", title: "Failed to save settings", message: err.message });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -137,10 +176,20 @@ export default function SettingsPage() {
 
         <button
           onClick={handleSavePreferences}
-          className="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/30 transition-all active:scale-95 cursor-pointer"
+          disabled={saving || initialLoading}
+          className="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white text-xs font-bold shadow-md shadow-indigo-600/30 transition-all active:scale-95 cursor-pointer disabled:cursor-not-allowed"
         >
-          <Check className="w-4 h-4" />
-          <span>Save Changes</span>
+          {saving ? (
+            <>
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              <span>Saving...</span>
+            </>
+          ) : (
+            <>
+              <Check className="w-4 h-4" />
+              <span>Save Changes</span>
+            </>
+          )}
         </button>
       </div>
 

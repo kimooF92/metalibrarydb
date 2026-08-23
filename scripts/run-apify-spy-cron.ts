@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
 import { db } from "../db";
-import { trackedPages, creativeScans, scanHistory } from "../db/schema";
+import { trackedPages, creativeScans, scanHistory, appSettings } from "../db/schema";
 import { eq, sql, desc, asc } from "drizzle-orm";
 import {
   getApifyTokens,
@@ -135,10 +135,16 @@ interface TargetScanPlan {
 async function main() {
   const options = parseCliArgs();
 
+  // Load dynamic app settings from DB
+  const dbSettings = await db.query.appSettings.findFirst({
+    where: eq(appSettings.id, "default"),
+  }).catch(() => null);
+  const autoSpyThreshold = dbSettings?.autoSpyThreshold || 1;
+
   console.log("=================================================");
   console.log(" 🚀 Meta Ad Tracker — Apify Cloud Spy Worker   ");
   console.log("=================================================");
-  console.log(`Mode: ${options.forceAll ? "⚡ FORCE ALL ACTIVE PAGES" : "🎯 SMART +1 DIFFERENCE ONLY"} | Max Pages: ${options.maxPages}`);
+  console.log(`Mode: ${options.forceAll ? "⚡ FORCE ALL ACTIVE PAGES" : `🎯 SMART +${autoSpyThreshold} DIFFERENCE ONLY`} | Max Pages: ${options.maxPages}`);
 
   // 1. Verify Apify API Tokens
   const tokens = getApifyTokens();
@@ -221,13 +227,13 @@ async function main() {
       continue;
     }
 
-    // Rule 2: Check latest count scan history for difference >= 1
+    // Rule 2: Check latest count scan history for difference >= autoSpyThreshold
     const latestHistory = await db.query.scanHistory.findFirst({
       where: eq(scanHistory.trackedPageId, page.id),
       orderBy: [desc(scanHistory.checkedAt)],
     });
 
-    if (!latestHistory || (latestHistory.difference || 0) < 1) {
+    if (!latestHistory || (latestHistory.difference || 0) < autoSpyThreshold) {
       skippedNoDiffCount++;
       continue;
     }

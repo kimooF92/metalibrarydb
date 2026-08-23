@@ -1,6 +1,34 @@
 import { db } from "../db";
-import { trackedPages, queue, scanHistory, workerState, creativeScans, discoveredPages, discoveryRuns } from "../db/schema";
+import { trackedPages, queue, scanHistory, workerState, creativeScans, discoveredPages, discoveryRuns, appSettings } from "../db/schema";
 import { eq, asc, desc, sql, inArray } from "drizzle-orm";
+
+export async function getAppSettings() {
+  try {
+    const settings = await db.query.appSettings.findFirst({
+      where: eq(appSettings.id, "default"),
+    });
+    return settings || {
+      id: "default",
+      defaultCountry: "TN",
+      autoMerge: true,
+      staleHours: 12,
+      autoSpyThreshold: 1,
+      discoveryWindowDays: 7,
+      autoB2Backup: true,
+    };
+  } catch (err) {
+    console.warn("[App Settings] Failed to load settings from DB, using defaults:", err);
+    return {
+      id: "default",
+      defaultCountry: "TN",
+      autoMerge: true,
+      staleHours: 12,
+      autoSpyThreshold: 1,
+      discoveryWindowDays: 7,
+      autoB2Backup: true,
+    };
+  }
+}
 
 export async function resetStuckJobs() {
   const { cleanOrphanedScans } = await import("../lib/clean-scans");
@@ -70,7 +98,8 @@ export async function enqueueAllPagesForRefresh(cooldownHours: number = 12) {
 
 export async function enqueuePagesForCreativeScan(
   cooldownDays: number = 3,
-  maxPages: number = 25
+  maxPages: number = 25,
+  minDifferenceThreshold: number = 1
 ) {
   const cutoff = new Date(Date.now() - cooldownDays * 24 * 60 * 60 * 1000);
 
@@ -112,13 +141,13 @@ export async function enqueuePagesForCreativeScan(
         eligiblePages.push({ id: page.id, currentResults: page.currentResults || 0 });
       }
     } else {
-      // Subsequent scan: requires latest scanHistory difference >= 1 (new ads added)
+      // Subsequent scan: requires latest scanHistory difference >= minDifferenceThreshold (new ads added)
       const latestHistory = await db.query.scanHistory.findFirst({
         where: eq(scanHistory.trackedPageId, page.id),
         orderBy: [sql`${scanHistory.checkedAt} desc`],
       });
 
-      if (latestHistory && (latestHistory.difference || 0) >= 1) {
+      if (latestHistory && (latestHistory.difference || 0) >= minDifferenceThreshold) {
         eligiblePages.push({ id: page.id, currentResults: page.currentResults || 0 });
       }
     }
@@ -126,7 +155,7 @@ export async function enqueuePagesForCreativeScan(
 
   if (eligiblePages.length === 0) {
     console.log(
-      `[Enqueue Spy] No eligible pages found for Ad Spy creative scan (difference < +1 or cooldown active).`
+      `[Enqueue Spy] No eligible pages found for Ad Spy creative scan (difference < +${minDifferenceThreshold} or cooldown active).`
     );
     return 0;
   }

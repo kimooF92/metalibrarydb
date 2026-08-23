@@ -31,6 +31,7 @@ import {
   updateWorkerState,
   enqueueOrEscalateJob,
   saveExtractedPageIdsToDiscovery,
+  getAppSettings,
 } from "./db";
 import {
   checkRateCaps,
@@ -52,6 +53,9 @@ async function runWorker() {
   // Clear any orphaned scanning/running jobs from previous unexpected shutdowns
   await resetStuckJobs();
 
+  // Load live application settings from database (with fallback defaults)
+  const settings = await getAppSettings();
+
   // Check command line arguments and environment variables
   const args = process.argv.slice(2);
   const testUrlIdx = args.indexOf("--test-url");
@@ -67,7 +71,7 @@ async function runWorker() {
   if (shouldRefreshAll) {
     const cooldownHours = isForceRefresh
       ? 0
-      : parseInt(process.env.AUTO_REFRESH_COOLDOWN_HOURS || "12", 10);
+      : parseInt(process.env.AUTO_REFRESH_COOLDOWN_HOURS || String(settings.staleHours || 12), 10);
     console.log(
       `[Refresh Mode] Enqueuing eligible pages for auto-refresh (cooldown: ${cooldownHours}h)...`
     );
@@ -78,10 +82,11 @@ async function runWorker() {
   if (shouldEnqueueSpy) {
     const spyCooldownDays = parseInt(process.env.SPY_COOLDOWN_DAYS || "3", 10);
     const spyMaxPages = parseInt(process.env.SPY_MAX_PAGES_PER_RUN || "25", 10);
+    const spyThreshold = settings.autoSpyThreshold || 1;
     console.log(
-      `[Spy Mode] Enqueuing eligible pages for Ad Spy creative scan (cooldown: ${spyCooldownDays}d, max: ${spyMaxPages} pages/round)...`
+      `[Spy Mode] Enqueuing eligible pages for Ad Spy creative scan (cooldown: ${spyCooldownDays}d, max: ${spyMaxPages} pages/round, threshold: +${spyThreshold})...`
     );
-    await enqueuePagesForCreativeScan(spyCooldownDays, spyMaxPages);
+    await enqueuePagesForCreativeScan(spyCooldownDays, spyMaxPages, spyThreshold);
   }
 
   if (testUrlIdx !== -1 && args[testUrlIdx + 1]) {

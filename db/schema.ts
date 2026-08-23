@@ -330,5 +330,14 @@ export const activityNotifications = pgTable(
   ]
 );
 
-
-
+// 12. Application Settings Table (Dynamic Configuration)
+export const appSettings = pgTable("app_settings", {
+  id: text("id").primaryKey().default("default"),
+  defaultCountry: text("default_country").default("TN").notNull(),
+  autoMerge: boolean("auto_merge").default(true).notNull(),
+  staleHours: integer("stale_hours").default(12).notNull(),
+  autoSpyThreshold: integer("auto_spy_threshold").default(1).notNull(),
+  discoveryWindowDays: integer("discovery_window_days").default(7).notNull(),
+  autoB2Backup: boolean("auto_b2_backup").default(true).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});

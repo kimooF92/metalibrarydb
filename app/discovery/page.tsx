@@ -255,6 +255,31 @@ export default function DiscoveryPage() {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  // Fetch app settings to prefill defaultCountry and discoveryWindow if not explicitly in URL
+  useEffect(() => {
+    const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const hasExplicitCountry = urlParams?.has("country");
+
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && data.settings) {
+          if (!hasExplicitCountry && data.settings.defaultCountry) {
+            setCountry(data.settings.defaultCountry);
+          }
+          if (data.settings.discoveryWindowDays && data.settings.discoveryWindowDays !== 7) {
+            const d = new Date();
+            d.setDate(d.getDate() - data.settings.discoveryWindowDays);
+            setStartDateMin(d.toISOString().split("T")[0]);
+            if (data.settings.discoveryWindowDays === 30) {
+              setActiveDatePreset("last30");
+            }
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
   const [sortBy, setSortBy] = useState<string>("matchingAdCount");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [selectedPageIds, setSelectedPageIds] = useState<Set<string>>(new Set());
