@@ -63,8 +63,12 @@ function LoginForm() {
     <div className="w-full max-w-md">
       {/* Brand Header */}
       <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-sky-500/20 via-indigo-500/20 to-purple-500/20 border border-sky-500/30 shadow-lg shadow-sky-500/10 mb-4 backdrop-blur-xl group">
-          <ShieldCheck className="w-8 h-8 text-sky-400 group-hover:scale-110 transition-transform duration-300" />
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-border/80 p-2.5 shadow-lg shadow-black/10 mb-4 backdrop-blur-xl group">
+          <img
+            src="/icon.png"
+            alt="Meta Ad Tracker Logo"
+            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+          />
         </div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground font-heading">
           Meta Ad Tracker
