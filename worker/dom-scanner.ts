@@ -58,18 +58,36 @@ export async function extractPageIdsFromPage(page: Page): Promise<ExtractedPageI
     const pageInfos = await page.evaluate(() => {
       const resultsMap = new Map<string, string | null>();
 
-      // Extract exclusively from view_all_page_id anchor tags (Canonical Page IDs)
+      // 1. Extract from view_all_page_id and profile anchor tags (Canonical Page IDs)
       const viewAllAnchors = Array.from(
-        document.querySelectorAll<HTMLAnchorElement>('a[href*="view_all_page_id="]')
+        document.querySelectorAll<HTMLAnchorElement>('a[href*="view_all_page_id="], a[href*="profile.php?id="]')
       );
       for (const a of viewAllAnchors) {
         const href = a.href || "";
-        const match = href.match(/view_all_page_id=(\d{10,20})/i);
+        const match = href.match(/view_all_page_id=(\d{6,25})/i) || href.match(/profile\.php\?id=(\d{6,25})/i);
         if (match && match[1] && match[1] !== "0") {
           const pageId = match[1];
           const pageName = a.textContent?.trim() || null;
           if (!resultsMap.has(pageId) || (pageName && !resultsMap.get(pageId))) {
             resultsMap.set(pageId, pageName);
+          }
+        }
+      }
+
+      // 2. Extract from JSON scripts if no anchors found
+      if (resultsMap.size === 0) {
+        const scripts = Array.from(
+          document.querySelectorAll<HTMLScriptElement>('script[type="application/json"], script:not([src])')
+        );
+        for (const s of scripts) {
+          const text = s.textContent || "";
+          if (text.includes("page_id") || text.includes("view_all_page_id") || text.includes("pageID")) {
+            const matches = text.matchAll(/"(?:page_id|view_all_page_id|pageID)":\s*"?(\d{10,25})"?/g);
+            for (const m of matches) {
+              if (m[1] && m[1] !== "0" && !resultsMap.has(m[1])) {
+                resultsMap.set(m[1], null);
+              }
+            }
           }
         }
       }

@@ -323,6 +323,16 @@ async function runWorker() {
             `[Auto-Merge] Exact match page "${targetDisplayName}" resolved to single Meta Page ID "${singlePageId}". Merging records and queueing Page ID creative scan...`
           );
           const mergeRes = await mergeExactMatchWithPageId(trackedPage.id, singlePageId);
+          const finalPageId = mergeRes.mergedPageId || trackedPage.id;
+
+          const { logPageMergedNotification } = await import("../lib/notifications");
+          await logPageMergedNotification({
+            trackedPageId: finalPageId,
+            originalName: trackedPage.displayName || trackedPage.url,
+            resolvedPageName: `Page ${singlePageId}`,
+            resolvedPageId: singlePageId,
+          }).catch(() => {});
+
           if (mergeRes.mergedPageId) {
             await enqueueOrEscalateJob(mergeRes.mergedPageId, "creative", 10);
             await markCreativeJobCompleted(
@@ -340,6 +350,12 @@ async function runWorker() {
           console.log(
             `[Discovered Pages] Keyword search target "${targetDisplayName}" revealed ${pageIdsFound.length} unique Facebook Page IDs (${pageIdsFound.join(", ")}). Saved to Discovered Pages for user review.`
           );
+          const { logMultiPageDetectedNotification } = await import("../lib/notifications");
+          await logMultiPageDetectedNotification({
+            trackedPageId: trackedPage.id,
+            domainName: trackedPage.displayName || trackedPage.url,
+            candidatePages: pageIdsFound.map((pid) => ({ pageId: pid })),
+          }).catch(() => {});
         }
 
         if (outcome.status === "completed" || outcome.status === "partial") {
@@ -389,6 +405,58 @@ async function runWorker() {
               trackedPageId: trackedPage.id,
             });
           }
+
+          // 4c. Auto-Resolve / Auto-Merge Exact Match Search Targets during Local Count Scan
+          if (trackedPage.searchType !== "page" || !trackedPage.pageId) {
+            try {
+              const { extractPageIdsFromPage } = await import("./dom-scanner");
+              const pageCandidates = await extractPageIdsFromPage(page);
+
+              if (pageCandidates.length === 1) {
+                const single = pageCandidates[0];
+                console.log(
+                  `[Local Count Auto-Merge] Exact match page "${targetDisplayName}" resolved to Meta Page ID "${single.pageId}" (${single.pageName || "Verified Brand"}). Auto-upgrading...`
+                );
+                const mergeRes = await mergeExactMatchWithPageId(
+                  trackedPage.id,
+                  single.pageId,
+                  single.pageName
+                );
+
+                const finalPageId = mergeRes.mergedPageId || trackedPage.id;
+                const { logPageMergedNotification } = await import("../lib/notifications");
+                await logPageMergedNotification({
+                  trackedPageId: finalPageId,
+                  originalName: trackedPage.displayName || trackedPage.url,
+                  resolvedPageName: single.pageName || `Page ${single.pageId}`,
+                  resolvedPageId: single.pageId,
+                });
+              } else if (pageCandidates.length > 1) {
+                console.log(
+                  `[Local Multi-Page Conflict] Detected ${pageCandidates.length} candidate Facebook Pages for "${targetDisplayName}". Saving to Discovered Pages for user review.`
+                );
+                await saveExtractedPageIdsToDiscovery(
+                  pageCandidates.map((c) => c.pageId),
+                  trackedPage.url,
+                  trackedPage.country || "TN",
+                  trackedPage.id
+                );
+                const { logMultiPageDetectedNotification } = await import("../lib/notifications");
+                await logMultiPageDetectedNotification({
+                  trackedPageId: trackedPage.id,
+                  domainName: trackedPage.displayName || trackedPage.url,
+                  candidatePages: pageCandidates.map((c) => ({
+                    pageId: c.pageId,
+                    pageName: c.pageName,
+                    adCount: outcome.results || 0,
+                  })),
+                });
+              }
+            } catch (err) {
+              console.warn("[Local Count Page Extraction] Non-fatal error resolving Page ID:", err);
+            }
+          }
+
           await recordSuccessfulScan();
           await handleSuccess();
         } else {
