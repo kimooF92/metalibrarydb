@@ -40,8 +40,9 @@ export function Navigation() {
     { href: "/spy", label: "Ad Spy Feed", icon: Eye },
     { href: "/products", label: "Products", icon: ShoppingBag },
     { href: "/analytics", label: "Analytics", icon: BarChart3 },
-    { href: "/settings", label: "Settings", icon: Settings },
   ];
+
+  const isSettingsActive = pathname === "/settings";
 
   return (
     <>
@@ -138,20 +139,56 @@ export function Navigation() {
           </nav>
         </div>
 
-        {/* Sidebar Bottom Footer — Lock / Sign Out */}
-        <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80">
+        {/* Sidebar Bottom Footer — Settings & Lock / Sign Out */}
+        <div className="pt-3 border-t border-slate-200 dark:border-slate-800/80 space-y-1">
+          {/* Settings Button */}
+          {isCollapsed ? (
+            <Link
+              href="/settings"
+              title="Settings"
+              className={`flex items-center justify-center w-10 h-10 mx-auto rounded-lg transition-all border ${
+                isSettingsActive
+                  ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-300 shadow-md shadow-indigo-600/[0.03]"
+                  : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
+              }`}
+            >
+              <Settings
+                className={`w-4 h-4 ${
+                  isSettingsActive ? "text-indigo-650 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
+                }`}
+              />
+            </Link>
+          ) : (
+            <Link
+              href="/settings"
+              className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all border ${
+                isSettingsActive
+                  ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-650 dark:text-indigo-300 shadow-md shadow-indigo-600/[0.03]"
+                  : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
+              }`}
+            >
+              <Settings
+                className={`w-4 h-4 ${
+                  isSettingsActive ? "text-indigo-650 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
+                }`}
+              />
+              <span className="truncate">Settings</span>
+            </Link>
+          )}
+
+          {/* Logout / Lock Session */}
           {isCollapsed ? (
             <button
               onClick={handleLogout}
               title="Lock Session / Log Out"
-              className="flex items-center justify-center w-10 h-10 mx-auto rounded-lg text-slate-500 hover:text-rose-500 hover:bg-rose-500/10 transition-colors border border-transparent hover:border-rose-500/20"
+              className="flex items-center justify-center w-10 h-10 mx-auto rounded-lg text-slate-500 hover:text-rose-500 hover:bg-rose-500/10 transition-colors border border-transparent hover:border-rose-500/20 cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
             </button>
           ) : (
             <button
               onClick={handleLogout}
-              className="w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 transition-all border border-transparent hover:border-rose-500/20 group"
+              className="w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 transition-all border border-transparent hover:border-rose-500/20 group cursor-pointer"
             >
               <LogOut className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
               <span>Lock Session</span>
@@ -211,10 +248,23 @@ export function Navigation() {
             })}
           </nav>
 
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-2">
+            <Link
+              href="/settings"
+              onClick={() => setIsOpen(false)}
+              className={`flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all border ${
+                isSettingsActive
+                  ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-650 dark:text-indigo-300"
+                  : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/40"
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+              <span>Settings</span>
+            </Link>
+
             <button
               onClick={handleLogout}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-3 rounded-xl text-sm font-semibold text-rose-500 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-all"
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 rounded-xl text-sm font-semibold text-rose-500 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-all cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
               <span>Lock Session / Sign Out</span>
