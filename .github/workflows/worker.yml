@@ -2,8 +2,8 @@ name: Meta Ad Tracker Worker
 
 on:
   schedule:
-    # 2 Burst Windows of 3 Rounds: Morning (9:00-11:00 AM UTC+1 / 8:00-10:00 UTC) & Night (9:00-11:00 PM UTC+1 / 20:00-22:00 UTC)
-    - cron: '0 8,9,10,20,21,22 * * *'
+    # Runs every 2 hours (00:00, 02:00, 04:00, 06:00, 08:00, 10:00, 12:00, 14:00, 16:00, 18:00, 20:00, 22:00 UTC)
+    - cron: '0 */2 * * *'
   workflow_dispatch: # Allows manual trigger from GitHub UI anytime
 
 # Global concurrency group to guarantee zero job overlap across workflows
@@ -48,7 +48,7 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           SINGLE_RUN: "true"
           PLAYWRIGHT_HEADLESS: "true"
-          MAX_SCANS_PER_HOUR: "100"
+          MAX_SCANS_PER_HOUR: "0"
           MAX_SCANS_PER_DAY: "0"
           AUTO_REFRESH_COOLDOWN_HOURS: "12"
         run: npm run worker
