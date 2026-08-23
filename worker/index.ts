@@ -14,6 +14,7 @@ import { scanAdCreatives } from "./spy-scanner";
 import { runDiscoveryScan } from "./discovery-scanner";
 import { extractUrlMetadata } from "../lib/url-parser";
 import { mergeExactMatchWithPageId } from "../actions/merge-pages";
+import { isValidPageId } from "../lib/utils";
 import { eq, asc } from "drizzle-orm";
 import {
   getNextPendingJob,
@@ -303,8 +304,7 @@ async function runWorker() {
           creativeScan.id,
           trackedPage.country || "TN"
         );
-
-        const pageIdsFound = outcome.extractedPageIds || [];
+        const pageIdsFound = (outcome.extractedPageIds || []).filter(isValidPageId);
 
         // Save all extracted Page IDs to discovered_pages table so they show up on the Discovery UI Table
         if (pageIdsFound.length > 0) {
@@ -410,7 +410,8 @@ async function runWorker() {
           if (trackedPage.searchType !== "page" || !trackedPage.pageId) {
             try {
               const { extractPageIdsFromPage } = await import("./dom-scanner");
-              const pageCandidates = await extractPageIdsFromPage(page);
+              const rawCandidates = await extractPageIdsFromPage(page);
+              const pageCandidates = rawCandidates.filter((c) => isValidPageId(c.pageId));
 
               if (pageCandidates.length === 1) {
                 const single = pageCandidates[0];

@@ -45,6 +45,8 @@ export function extractDateFromCardText(cardText: string): Date | null {
   return null;
 }
 
+import { isValidPageId } from "../lib/utils";
+
 export interface ExtractedPageIdInfo {
   pageId: string;
   pageName: string | null;
@@ -64,7 +66,7 @@ export async function extractPageIdsFromPage(page: Page): Promise<ExtractedPageI
       );
       for (const a of viewAllAnchors) {
         const href = a.href || "";
-        const match = href.match(/view_all_page_id=(\d{6,25})/i) || href.match(/profile\.php\?id=(\d{6,25})/i);
+        const match = href.match(/view_all_page_id=(\d{5,25})/i) || href.match(/profile\.php\?id=(\d{5,25})/i);
         if (match && match[1] && match[1] !== "0") {
           const pageId = match[1];
           const pageName = a.textContent?.trim() || null;
@@ -82,7 +84,7 @@ export async function extractPageIdsFromPage(page: Page): Promise<ExtractedPageI
         for (const s of scripts) {
           const text = s.textContent || "";
           if (text.includes("page_id") || text.includes("view_all_page_id") || text.includes("pageID")) {
-            const matches = text.matchAll(/"(?:page_id|view_all_page_id|pageID)":\s*"?(\d{10,25})"?/g);
+            const matches = text.matchAll(/"(?:page_id|view_all_page_id|pageID)":\s*"?(\d{5,25})"?/g);
             for (const m of matches) {
               if (m[1] && m[1] !== "0" && !resultsMap.has(m[1])) {
                 resultsMap.set(m[1], null);
@@ -95,7 +97,7 @@ export async function extractPageIdsFromPage(page: Page): Promise<ExtractedPageI
       return Array.from(resultsMap.entries()).map(([pageId, pageName]) => ({ pageId, pageName }));
     });
 
-    return pageInfos;
+    return pageInfos.filter((info) => isValidPageId(info.pageId));
   } catch {
     return [];
   }

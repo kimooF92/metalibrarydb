@@ -1,3 +1,5 @@
+import { isValidPageId } from "./utils";
+
 export interface UrlMetadata {
   url: string;
   pageId: string | null;
@@ -87,7 +89,10 @@ export function extractUrlMetadata(rawUrl: string): UrlMetadata {
 
     // 1. Extract Page ID (view_all_page_id)
     if (params.has("view_all_page_id")) {
-      pageId = params.get("view_all_page_id")?.trim() || null;
+      const rawId = params.get("view_all_page_id")?.trim() || "";
+      if (isValidPageId(rawId)) {
+        pageId = rawId;
+      }
     }
 
     // 2. Extract Query (q)

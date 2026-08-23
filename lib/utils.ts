@@ -54,3 +54,14 @@ export function getCleanDomain(rawUrl: string | null | undefined): string | null
     return resolved.replace(/^https?:\/\/(www\.)?/, "").split("/")[0];
   }
 }
+
+/**
+ * Strict validator for Facebook / Meta Page IDs.
+ * Page IDs must be purely numeric strings between 5 and 25 digits (not '0', not alphanumeric).
+ */
+export function isValidPageId(pageId?: string | null): boolean {
+  if (!pageId) return false;
+  const clean = pageId.trim();
+  return Boolean(clean && /^\d{5,25}$/.test(clean) && clean !== "0");
+}
+

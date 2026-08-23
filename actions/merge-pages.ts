@@ -9,6 +9,8 @@ import {
 } from "@/db/schema";
 import { eq, or, sql } from "drizzle-orm";
 
+import { isValidPageId } from "@/lib/utils";
+
 export interface MergeResult {
   success: boolean;
   message: string;
@@ -25,9 +27,9 @@ export async function mergeExactMatchWithPageId(
   resolvedDisplayName?: string | null
 ): Promise<MergeResult> {
   try {
-    const cleanPageId = resolvedPageId.trim();
-    if (!cleanPageId) {
-      return { success: false, message: "A valid resolved Page ID is required." };
+    const cleanPageId = resolvedPageId?.trim() || "";
+    if (!isValidPageId(cleanPageId)) {
+      return { success: false, message: `Invalid Page ID format: "${resolvedPageId}". Page ID must be purely numeric (5-25 digits).` };
     }
 
     // 1. Fetch exact match tracked page
