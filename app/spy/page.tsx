@@ -152,8 +152,12 @@ export default function AdSpyPage() {
           <h1 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight">
             Ad Spy Feed
           </h1>
-          <span className="text-[10px] bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full font-medium hidden md:inline-block">
-            {stats.totalAdsCaptured} ads captured • {stats.launchedLast7Days} new this week
+          <span className="text-[10px] bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 px-2.5 py-0.5 rounded-full font-medium hidden md:inline-flex items-center gap-1.5">
+            <span className="font-bold text-indigo-600 dark:text-indigo-400">{pagination.total.toLocaleString()} filtered ads</span>
+            <span className="text-slate-300 dark:text-slate-700">•</span>
+            <span>{stats.totalAdsCaptured.toLocaleString()} total captured</span>
+            <span className="text-slate-300 dark:text-slate-700">•</span>
+            <span>{stats.launchedLast7Days.toLocaleString()} new this week</span>
           </span>
         </div>
 
@@ -230,6 +234,9 @@ export default function AdSpyPage() {
       <SpyFilters
         filters={params}
         viewMode={viewMode}
+        filteredCount={pagination.total}
+        totalCount={stats.totalAdsCaptured}
+        isLoading={isLoading || isFetchingMore}
         onViewModeChange={handleViewModeChange}
         onFilterChange={updateFilters}
         onReset={handleResetFilters}
