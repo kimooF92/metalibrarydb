@@ -107,7 +107,7 @@ function getRunKeywordDisplay(run: DiscoveryRun): string {
   return q;
 }
 
-const VALID_DISCOVERY_STATUSES = ["all", "discovered", "verified", "verifying", "imported", "ignored"] as const;
+const VALID_DISCOVERY_STATUSES = ["all", "discovered", "verified", "verified_high", "verifying", "imported", "ignored"] as const;
 const VALID_DISCOVERY_MEDIA = ["all", "video", "image"] as const;
 
 function getInitialDiscoveryState() {
@@ -134,6 +134,9 @@ function getInitialDiscoveryState() {
       } catch {}
     }
 
+    if (saved.statusFilter === ("high_potential" as any)) {
+      saved.statusFilter = "verified_high";
+    }
     if (saved.statusFilter && !VALID_DISCOVERY_STATUSES.includes(saved.statusFilter as any)) {
       saved.statusFilter = "all";
     }
@@ -157,7 +160,11 @@ function getInitialDiscoveryState() {
     if (urlParams.has("search")) state.searchFilter = urlParams.get("search") || "";
     if (urlParams.has("status")) {
       const s = urlParams.get("status");
-      state.statusFilter = s && VALID_DISCOVERY_STATUSES.includes(s as any) ? (s as any) : "all";
+      if (s === "high_potential") {
+        state.statusFilter = "verified_high";
+      } else {
+        state.statusFilter = s && VALID_DISCOVERY_STATUSES.includes(s as any) ? (s as any) : "all";
+      }
     }
 
     return state;
@@ -197,18 +204,18 @@ function syncDiscoveryStateToUrl(state: {
 }
 
 export default function DiscoveryPage() {
-  const [initialLoaded] = useState(() => getInitialDiscoveryState());
+  const [mounted, setMounted] = useState(false);
 
   const [runs, setRuns] = useState<DiscoveryRun[]>([]);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(initialLoaded.selectedRunId);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [pages, setPages] = useState<DiscoveredPage[]>([]);
   const [isLoadingRuns, setIsLoadingRuns] = useState(true);
   const [isLoadingPages, setIsLoadingPages] = useState(false);
   const [isLaunchingScan, setIsLaunchingScan] = useState(false);
 
   // Filter Form State
-  const [country, setCountry] = useState(initialLoaded.country);
-  const [mediaType, setMediaType] = useState(initialLoaded.mediaType);
+  const [country, setCountry] = useState("TN");
+  const [mediaType, setMediaType] = useState<(typeof VALID_DISCOVERY_MEDIA)[number]>("video");
   const [selectedKeyword, setSelectedKeyword] = useState("\u200D");
   const [isCustomKeyword, setIsCustomKeyword] = useState(false);
   const [customKeywordText, setCustomKeywordText] = useState("");
@@ -228,11 +235,23 @@ export default function DiscoveryPage() {
   const [activeDatePreset, setActiveDatePreset] = useState<"last7" | "last30" | "today" | "custom">("last7");
 
   // Table Filter, Sorting & Selection State
-  const [searchFilter, setSearchFilter] = useState(initialLoaded.searchFilter);
-  const [statusFilter, setStatusFilter] = useState<"all" | "discovered" | "verified" | "verifying" | "imported" | "ignored">(initialLoaded.statusFilter);
+  const [searchFilter, setSearchFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<(typeof VALID_DISCOVERY_STATUSES)[number]>("all");
 
-  // Sync state to URL and session storage
+  // Load saved state on client mount to guarantee 100% hydration match
   useEffect(() => {
+    const init = getInitialDiscoveryState();
+    if (init.selectedRunId) setSelectedRunId(init.selectedRunId);
+    if (init.country) setCountry(init.country);
+    if (init.mediaType) setMediaType(init.mediaType);
+    if (init.searchFilter) setSearchFilter(init.searchFilter);
+    if (init.statusFilter) setStatusFilter(init.statusFilter);
+    setMounted(true);
+  }, []);
+
+  // Sync state to URL and session storage only after client has mounted
+  useEffect(() => {
+    if (!mounted) return;
     syncDiscoveryStateToUrl({
       selectedRunId,
       country,
@@ -240,7 +259,7 @@ export default function DiscoveryPage() {
       searchFilter,
       statusFilter,
     });
-  }, [selectedRunId, country, mediaType, searchFilter, statusFilter]);
+  }, [selectedRunId, country, mediaType, searchFilter, statusFilter, mounted]);
 
   // Sync on browser back/forward buttons
   useEffect(() => {
@@ -578,6 +597,7 @@ export default function DiscoveryPage() {
   const untrackedCount = pages.filter((p) => !p.isTracked && p.status !== "ignored").length;
   const newDiscoveredCount = pages.filter((p) => !p.isTracked && p.status === "discovered").length;
   const verifiedCount = pages.filter((p) => !p.isTracked && p.status !== "imported" && p.status !== "ignored" && p.verifiedAdCount !== null).length;
+  const verifiedHighCount = pages.filter((p) => !p.isTracked && p.status !== "imported" && p.status !== "ignored" && p.verifiedAdCount !== null && p.verifiedAdCount >= 10).length;
   const ignoredCount = pages.filter((p) => p.status === "ignored").length;
   const dismissableRemainingCount = pages.filter((p) => !p.isTracked && p.status !== "imported" && p.status !== "ignored").length;
 
@@ -644,6 +664,7 @@ export default function DiscoveryPage() {
     if (statusFilter === "all") return true;
     if (statusFilter === "discovered") return !p.isTracked && p.status !== "imported" && p.status !== "ignored";
     if (statusFilter === "verified") return !p.isTracked && p.status !== "imported" && p.status !== "ignored" && p.verifiedAdCount !== null;
+    if (statusFilter === "verified_high") return !p.isTracked && p.status !== "imported" && p.status !== "ignored" && p.verifiedAdCount !== null && p.verifiedAdCount >= 10;
     if (statusFilter === "verifying") return p.status === "verifying";
     if (statusFilter === "imported") return (p.isTracked || p.status === "imported") && p.status !== "ignored";
     if (statusFilter === "ignored") return p.status === "ignored";
@@ -1018,6 +1039,24 @@ export default function DiscoveryPage() {
                   {activeRun.totalPagesDiscovered.toLocaleString()}
                 </span>
               </div>
+              {verifiedHighCount > 0 && (
+                <>
+                  <div className="h-6 w-[1px] bg-slate-200 dark:bg-slate-800" />
+                  <button
+                    onClick={() => setStatusFilter("verified_high")}
+                    className="text-left group cursor-pointer transition hover:opacity-80"
+                    title="Click to filter 10+ verified ads"
+                  >
+                    <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase font-bold flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-amber-500 fill-amber-400" />
+                      High Potential (10+)
+                    </span>
+                    <span className="font-extrabold text-amber-600 dark:text-amber-400 text-sm">
+                      {verifiedHighCount.toLocaleString()}
+                    </span>
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Batch Selection & Action Buttons */}
@@ -1119,23 +1158,44 @@ export default function DiscoveryPage() {
               </div>
               {/* Status filter tabs */}
               <div className="flex items-center gap-1 shrink-0 flex-wrap">
-                {(["all", "discovered", "verified", "verifying", "imported", "ignored"] as const).map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setStatusFilter(f)}
-                    className={`px-2 py-1 rounded text-[10px] font-bold border transition cursor-pointer capitalize ${statusFilter === f
-                        ? "bg-indigo-600 text-white border-indigo-600"
-                        : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+                {VALID_DISCOVERY_STATUSES.map((f) => {
+                  const isSelected = statusFilter === f;
+                  return (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setStatusFilter(f)}
+                      className={`px-2.5 py-1 rounded text-[10px] font-bold border transition cursor-pointer flex items-center gap-1.5 ${
+                        isSelected
+                          ? f === "verified_high"
+                            ? "bg-amber-600 dark:bg-amber-500 text-white border-amber-600 dark:border-amber-500 shadow-sm"
+                            : "bg-indigo-600 text-white border-indigo-600"
+                          : f === "verified_high" && verifiedHighCount > 0
+                            ? "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700/60 hover:bg-amber-100 dark:hover:bg-amber-900/50"
+                            : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
                       }`}
-                  >
-                    {f === "all" ? `All (${pages.length})` :
-                      f === "discovered" ? `New (${newDiscoveredCount})` :
-                        f === "verified" ? `Verified (${verifiedCount})` :
-                          f === "verifying" ? `Verifying` :
-                            f === "imported" ? `Merged` :
-                              `Ignored (${ignoredCount})`}
-                  </button>
-                ))}
+                    >
+                      {f === "all" ? (
+                        `All (${pages.length})`
+                      ) : f === "discovered" ? (
+                        `New (${newDiscoveredCount})`
+                      ) : f === "verified" ? (
+                        `Verified (${verifiedCount})`
+                      ) : f === "verified_high" ? (
+                        <>
+                          <Sparkles className={`w-3 h-3 ${isSelected ? "text-amber-200 fill-amber-200" : "text-amber-500 fill-amber-400"}`} />
+                          <span>Verified 10+ ({verifiedHighCount})</span>
+                        </>
+                      ) : f === "verifying" ? (
+                        `Verifying`
+                      ) : f === "imported" ? (
+                        `Merged`
+                      ) : (
+                        `Ignored (${ignoredCount})`
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <div className="text-xs text-slate-500 dark:text-slate-400 shrink-0">
@@ -1176,6 +1236,8 @@ export default function DiscoveryPage() {
                     <td colSpan={6} className="p-12 text-center text-slate-500 dark:text-slate-400">
                       {pages.length === 0
                         ? "No discovered pages found for this scan run yet. Launch a new country scan above!"
+                        : statusFilter === "verified_high"
+                        ? "No verified pages with 10+ ads found yet in this run. Verify more pages to find high-potential brands!"
                         : `No pages match the "${statusFilter}" filter.`}
                     </td>
                   </tr>

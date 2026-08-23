@@ -15,11 +15,11 @@ export const metadata: Metadata = {
   description: "Monitor Meta Ad Library search URLs and track active ad result counts over time.",
   icons: {
     icon: [
+      { url: "/icon.png", type: "image/png", sizes: "512x512" },
       { url: "/favicon.ico", sizes: "any" },
       { url: "/favicon.png", type: "image/png", sizes: "32x32" },
-      { url: "/icon.png", type: "image/png", sizes: "512x512" },
     ],
-    shortcut: "/favicon.png",
+    shortcut: "/icon.png",
     apple: "/apple-touch-icon.png",
   },
 };

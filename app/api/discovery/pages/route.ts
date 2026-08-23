@@ -49,7 +49,13 @@ export async function GET(req: Request) {
       );
     }
 
-    if (status !== "all") {
+    if (status === "verified") {
+      whereConditions.push(sql`${discoveredPages.verifiedAdCount} IS NOT NULL`);
+      whereConditions.push(sql`${discoveredPages.status} != 'ignored'`);
+    } else if (status === "verified_high" || status === "high_potential") {
+      whereConditions.push(sql`${discoveredPages.verifiedAdCount} >= 10`);
+      whereConditions.push(sql`${discoveredPages.status} != 'ignored'`);
+    } else if (status !== "all") {
       whereConditions.push(eq(discoveredPages.status, status));
     }
 
