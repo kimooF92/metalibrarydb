@@ -11,36 +11,78 @@ async function main() {
 
   let count = 0;
   for (const dp of unimported) {
-    const pageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${
-      dp.country || "TN"
-    }&view_all_page_id=${dp.pageId}&search_type=page&media_type=all`;
+    let tpId: string | undefined = undefined;
 
-    const [tp] = await db
-      .insert(trackedPages)
-      .values({
-        url: pageUrl,
-        displayName: dp.displayName || `Page ${dp.pageId}`,
-        pageId: dp.pageId,
-        searchType: "page",
-        country: dp.country || "TN",
-        adCount: dp.matchingAdCount,
-        currentResults: dp.verifiedAdCount || dp.matchingAdCount,
-        status: "pending",
-      })
-      .onConflictDoUpdate({
-        target: trackedPages.url,
-        set: {
-          displayName: dp.displayName || trackedPages.displayName,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
+    if (dp.trackedPageId) {
+      const parentTrackedPage = await db.query.trackedPages.findFirst({
+        where: eq(trackedPages.id, dp.trackedPageId),
+      });
+
+      if (parentTrackedPage && parentTrackedPage.searchType !== "page") {
+        const { mergeExactMatchWithPageId } = await import("../actions/merge-pages");
+        const mergeResult = await mergeExactMatchWithPageId(
+          dp.trackedPageId,
+          dp.pageId,
+          dp.displayName
+        );
+        if (mergeResult.success && mergeResult.mergedPageId) {
+          tpId = mergeResult.mergedPageId;
+        }
+      }
+    }
+
+    if (!tpId) {
+      const pageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${
+        dp.country || "TN"
+      }&view_all_page_id=${dp.pageId}&search_type=page&media_type=all`;
+
+      const existingByPageId = await db.query.trackedPages.findFirst({
+        where: eq(trackedPages.pageId, dp.pageId),
+      });
+
+      if (existingByPageId) {
+        tpId = existingByPageId.id;
+        await db
+          .update(trackedPages)
+          .set({
+            url: pageUrl,
+            displayName: dp.displayName || existingByPageId.displayName,
+            searchType: "page",
+            updatedAt: new Date(),
+          })
+          .where(eq(trackedPages.id, existingByPageId.id));
+      } else {
+        const [tp] = await db
+          .insert(trackedPages)
+          .values({
+            url: pageUrl,
+            displayName: dp.displayName || `Page ${dp.pageId}`,
+            pageId: dp.pageId,
+            searchType: "page",
+            country: dp.country || "TN",
+            adCount: dp.matchingAdCount,
+            currentResults: dp.verifiedAdCount || dp.matchingAdCount,
+            status: "pending",
+          })
+          .onConflictDoUpdate({
+            target: trackedPages.url,
+            set: {
+              displayName: dp.displayName || trackedPages.displayName,
+              pageId: dp.pageId,
+              searchType: "page",
+              updatedAt: new Date(),
+            },
+          })
+          .returning();
+        tpId = tp.id;
+      }
+    }
 
     // Check if count job is queued
     const existingQueueJob = await db.query.queue.findFirst({
       where: (q, { and, eq, inArray }) =>
         and(
-          eq(q.trackedPageId, tp.id),
+          eq(q.trackedPageId, tpId!),
           eq(q.jobType, "count"),
           inArray(q.status, ["pending", "running"])
         ),
@@ -48,7 +90,7 @@ async function main() {
 
     if (!existingQueueJob) {
       await db.insert(queue).values({
-        trackedPageId: tp.id,
+        trackedPageId: tpId!,
         jobType: "count",
         status: "pending",
       });
@@ -58,7 +100,7 @@ async function main() {
       .update(discoveredPages)
       .set({
         status: "imported",
-        trackedPageId: tp.id,
+        trackedPageId: tpId!,
         updatedAt: new Date(),
       })
       .where(eq(discoveredPages.id, dp.id));

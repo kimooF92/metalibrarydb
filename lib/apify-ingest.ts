@@ -532,6 +532,49 @@ export async function ingestApifyDatasetItems(
     }
   }
 
+  // Update tracked page ad count & record scan history entry from verified Apify results
+  try {
+    const { scanHistory } = await import("@/db/schema");
+    const [activeCountRes] = await db
+      .select({ count: sql<number>`count(distinct ${adObservations.adId})` })
+      .from(adObservations)
+      .where(
+        and(
+          eq(adObservations.trackedPageId, finalTrackedPageId),
+          eq(adObservations.isActive, true)
+        )
+      );
+
+    const activeAdCount = Number(activeCountRes?.count || 0);
+
+    if (activeAdCount > 0 || isFullScan) {
+      const prevResults = pageRecord?.currentResults ?? null;
+      const difference = prevResults !== null ? activeAdCount - prevResults : null;
+
+      await db
+        .update(trackedPages)
+        .set({
+          currentResults: activeAdCount,
+          adCount: activeAdCount,
+          lastChecked: now,
+          lastSuccessAt: now,
+          status: "success",
+          updatedAt: now,
+        })
+        .where(eq(trackedPages.id, finalTrackedPageId));
+
+      await db.insert(scanHistory).values({
+        trackedPageId: finalTrackedPageId,
+        results: activeAdCount,
+        difference,
+        checkedAt: now,
+        status: "success",
+      });
+    }
+  } catch (err) {
+    console.error("[Apify Ingest] Error updating ad count and scan history:", err);
+  }
+
   // Log central Ad Spy notification
   const { logAdSpyNotification } = await import("@/lib/notifications");
   await logAdSpyNotification({

@@ -6,6 +6,7 @@ import {
   creativeScans,
   queue,
   discoveredPages,
+  activityNotifications,
 } from "@/db/schema";
 import { eq, or, sql } from "drizzle-orm";
 
@@ -61,7 +62,8 @@ export async function mergeExactMatchWithPageId(
     const existingTargetPage = await db.query.trackedPages.findFirst({
       where: or(
         eq(trackedPages.pageId, cleanPageId),
-        eq(trackedPages.url, newPageUrl)
+        eq(trackedPages.url, newPageUrl),
+        sql`${trackedPages.url} LIKE ${`%view_all_page_id=${cleanPageId}%`}`
       ),
     });
 
@@ -97,6 +99,15 @@ export async function mergeExactMatchWithPageId(
         .set({ trackedPageId: existingTargetPage.id })
         .where(eq(scanHistory.trackedPageId, exactMatchTrackedPageId));
 
+      // De-duplicate adObservations before re-pointing to prevent duplicate (tracked_page_id, ad_id) pairs
+      await db.execute(sql`
+        DELETE FROM ad_observations
+        WHERE tracked_page_id = ${exactMatchTrackedPageId}
+          AND ad_id IN (
+            SELECT ad_id FROM ad_observations WHERE tracked_page_id = ${existingTargetPage.id}
+          )
+      `);
+
       await db
         .update(adObservations)
         .set({ trackedPageId: existingTargetPage.id })
@@ -116,6 +127,11 @@ export async function mergeExactMatchWithPageId(
         .update(discoveredPages)
         .set({ trackedPageId: existingTargetPage.id })
         .where(eq(discoveredPages.trackedPageId, exactMatchTrackedPageId));
+
+      await db
+        .update(activityNotifications)
+        .set({ trackedPageId: existingTargetPage.id })
+        .where(eq(activityNotifications.trackedPageId, exactMatchTrackedPageId));
 
       // Update existingTargetPage metadata and ensure official Page ID URL and searchType
       await db
