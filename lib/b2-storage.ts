@@ -1,5 +1,6 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { uploadMediaFromUrlToCatbox } from "./catbox-storage";
+import { computeSha256, computeDHash } from "./media-hasher";
 
 export function isB2Configured(): boolean {
   const keyId = process.env.B2_KEY_ID?.trim();
@@ -9,6 +10,7 @@ export function isB2Configured(): boolean {
 }
 
 let cachedS3Client: S3Client | null = null;
+const knownUploadedKeys = new Set<string>();
 
 function getS3Client(): S3Client | null {
   if (!isB2Configured()) return null;
@@ -47,6 +49,11 @@ export async function uploadBufferToB2(
     return null;
   }
 
+  // If already uploaded in this runtime session, return internal streaming path immediately
+  if (knownUploadedKeys.has(key)) {
+    return `/api/spy/b2-media?key=${encodeURIComponent(key)}`;
+  }
+
   try {
     await client.send(
       new PutObjectCommand({
@@ -57,6 +64,8 @@ export async function uploadBufferToB2(
       })
     );
 
+    knownUploadedKeys.add(key);
+
     // Return internal streaming route URL which streams directly from B2
     return `/api/spy/b2-media?key=${encodeURIComponent(key)}`;
   } catch (err: any) {
@@ -65,27 +74,36 @@ export async function uploadBufferToB2(
   }
 }
 
+export interface MediaUploadResult {
+  url: string | null;
+  mediaHash: string | null;
+  perceptualHash: string | null;
+  wasReused: boolean;
+}
+
 /**
- * Downloads a video or image from a remote URL and uploads it to Backblaze B2.
- * If Backblaze B2 fails or hits storage capacity, automatically falls back to Catbox.moe.
+ * Downloads a video or image from a remote URL, computes SHA-256 and Perceptual dHash,
+ * and uploads to Backblaze B2 using Content-Addressable Storage (deduplicated by content hash).
  */
-export async function uploadMediaFromUrlToB2(
+export async function uploadMediaWithHashing(
   sourceUrl: string,
   keyPrefix: "videos" | "thumbnails",
-  filename: string
-): Promise<string | null> {
-  if (!sourceUrl) return null;
+  fallbackFilename?: string
+): Promise<MediaUploadResult> {
+  if (!sourceUrl) {
+    return { url: null, mediaHash: null, perceptualHash: null, wasReused: false };
+  }
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
 
     const res = await fetch(sourceUrl, {
       signal: controller.signal,
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": "https://www.facebook.com/",
+        Referer: "https://www.facebook.com/",
       },
     });
 
@@ -93,13 +111,24 @@ export async function uploadMediaFromUrlToB2(
 
     if (!res.ok) {
       console.warn(`[B2 Storage] Failed to fetch source media ${sourceUrl}: status ${res.status}`);
-      return null;
+      return { url: null, mediaHash: null, perceptualHash: null, wasReused: false };
     }
 
     const arrayBuf = await res.arrayBuffer();
     const buffer = Buffer.from(arrayBuf);
 
-    if (buffer.length === 0) return null;
+    if (buffer.length === 0) {
+      return { url: null, mediaHash: null, perceptualHash: null, wasReused: false };
+    }
+
+    // 1. Compute SHA-256 binary hash
+    const mediaHash = computeSha256(buffer);
+
+    // 2. Compute 64-bit Perceptual dHash for thumbnails and images
+    let perceptualHash: string | null = null;
+    if (keyPrefix === "thumbnails" || !sourceUrl.includes(".mp4")) {
+      perceptualHash = await computeDHash(buffer);
+    }
 
     let contentType = res.headers.get("content-type") || "application/octet-stream";
     let ext = ".jpg";
@@ -108,19 +137,50 @@ export async function uploadMediaFromUrlToB2(
       if (!contentType.includes("video")) contentType = "video/mp4";
     }
 
-    const cleanFilename = filename.endsWith(ext) ? filename : `${filename}${ext}`;
-    const key = `${keyPrefix}/${cleanFilename}`;
+    // Content-Addressable Storage Key (deduplicates identical files)
+    const contentKey = `${keyPrefix}/${mediaHash}${ext}`;
+    const wasAlreadyKnown = knownUploadedKeys.has(contentKey);
 
-    // 1. Try Primary Upload to Backblaze B2
-    const b2Url = await uploadBufferToB2(buffer, key, contentType);
-    if (b2Url) return b2Url;
+    // 3. Try Primary Upload to Backblaze B2
+    const b2Url = await uploadBufferToB2(buffer, contentKey, contentType);
+    if (b2Url) {
+      return {
+        url: b2Url,
+        mediaHash,
+        perceptualHash,
+        wasReused: wasAlreadyKnown,
+      };
+    }
 
-    // 2. Secondary Fallback to Catbox.moe (if B2 is full or unavailable)
-    console.warn(`[B2 Storage] Backblaze upload returned null. Falling back to Catbox.moe for ${filename}...`);
-    const catboxUrl = await uploadMediaFromUrlToCatbox(sourceUrl, cleanFilename);
-    return catboxUrl;
+    // 4. Secondary Fallback to Catbox.moe
+    console.warn(`[B2 Storage] Backblaze upload returned null. Falling back to Catbox.moe for ${contentKey}...`);
+    const catboxUrl = await uploadMediaFromUrlToCatbox(sourceUrl, `${mediaHash}${ext}`);
+    return {
+      url: catboxUrl,
+      mediaHash,
+      perceptualHash,
+      wasReused: false,
+    };
   } catch (err: any) {
-    console.error(`[B2 Storage] Primary B2 upload error for ${sourceUrl}, trying Catbox fallback:`, err.message);
-    return await uploadMediaFromUrlToCatbox(sourceUrl, filename);
+    console.error(`[B2 Storage] Primary B2 upload error for ${sourceUrl}:`, err.message);
+    const catboxUrl = await uploadMediaFromUrlToCatbox(sourceUrl, fallbackFilename || "media");
+    return {
+      url: catboxUrl,
+      mediaHash: null,
+      perceptualHash: null,
+      wasReused: false,
+    };
   }
+}
+
+/**
+ * Backward-compatible helper for existing callers.
+ */
+export async function uploadMediaFromUrlToB2(
+  sourceUrl: string,
+  keyPrefix: "videos" | "thumbnails",
+  filename: string
+): Promise<string | null> {
+  const result = await uploadMediaWithHashing(sourceUrl, keyPrefix, filename);
+  return result.url;
 }

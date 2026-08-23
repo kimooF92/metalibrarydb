@@ -149,6 +149,35 @@ export interface Ad {
   trackedPageId?: string;
   signedThumbnailUrl?: string | null;
 
+  // Media Hashing & Creative Clustering Intelligence
+  mediaHash?: string | null;
+  perceptualHash?: string | null;
+  creativeClusterKey?: string;
+  creativeMetrics?: {
+    clusterKey: string;
+    totalAdSets: number;
+    distinctBrandsCount: number;
+    brands: Array<{
+      pageId: string;
+      pageName: string;
+      firstSeenAt: string | Date | null;
+      adCount: number;
+    }>;
+    originalCreator: {
+      pageId: string;
+      pageName: string;
+      firstSeenAt: string | Date | null;
+      adCount: number;
+    } | null;
+    isCrossBrand: boolean;
+    isScalingWinner: boolean;
+    firstSeenAt: Date | string | null;
+    lastSeenAt: Date | string | null;
+    activeAdsCount: number;
+    mediaType: string;
+  };
+  creativeVariants?: any[];
+
   // Winner Score & Breakout Intelligence
   winnerScore?: number;
   winnerTier?: "super" | "high" | "promising" | "testing";
@@ -222,6 +251,7 @@ export interface AdFilterParams {
   isWatchlisted?: boolean;
   excludePageIds?: string[];
   smartPreset?: string;
+  groupBy?: "none" | "creative";
   sortBy?:
     | "started_running_on"
     | "oldest"

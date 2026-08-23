@@ -7,6 +7,7 @@ import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
 import { calculateWinnerScore } from "@/lib/winner-score";
 import { ImagePreviewModal } from "./image-preview-modal";
 import { ProductClusterModal } from "./product-cluster-modal";
+import { CreativeClusterModal } from "./creative-cluster-modal";
 import { useToast } from "@/components/toast-context";
 import {
   Calendar,
@@ -55,6 +56,7 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
   const [videoError, setVideoError] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isClusterModalOpen, setIsClusterModalOpen] = useState(false);
+  const [isCreativeClusterModalOpen, setIsCreativeClusterModalOpen] = useState(false);
   const [isArchived, setIsArchived] = useState(Boolean(ad.isArchived));
   const [isArchiving, setIsArchiving] = useState(false);
   const [isRefreshingMedia, setIsRefreshingMedia] = useState(false);
@@ -450,6 +452,27 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
               </button>
             )}
 
+            {/* Creative Scale & Copycat Saturation Pill */}
+            {currentAd.creativeMetrics && (currentAd.creativeMetrics.totalAdSets > 1 || currentAd.creativeMetrics.isCrossBrand) && (
+              <button
+                type="button"
+                onClick={() => setIsCreativeClusterModalOpen(true)}
+                title="Click to view all copycats, ad variations, and brands running this visual creative"
+                className={`inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[9px] font-extrabold cursor-pointer transition shadow-sm ${
+                  currentAd.creativeMetrics.isCrossBrand
+                    ? "bg-purple-50 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-100"
+                    : "bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100"
+                }`}
+              >
+                <Zap className={`w-2.5 h-2.5 ${currentAd.creativeMetrics.isCrossBrand ? "text-purple-500 fill-purple-500/20" : "text-amber-500 fill-amber-500/20"}`} />
+                <span>
+                  {currentAd.creativeMetrics.isCrossBrand
+                    ? `${currentAd.creativeMetrics.totalAdSets} Ads (${currentAd.creativeMetrics.distinctBrandsCount} Brands)`
+                    : `${currentAd.creativeMetrics.totalAdSets} Scaled Sets`}
+                </span>
+              </button>
+            )}
+
             {/* Evergreen Badge */}
             {winnerMetrics.isEvergreen && !winnerMetrics.isBreakout && (
               <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.2 rounded-full">
@@ -669,6 +692,16 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
         adId={currentAd.id}
         pageId={currentAd.pageId}
         productKey={currentAd.productKey}
+      />
+
+      {/* Visual Creative Saturation & Copycat Modal */}
+      <CreativeClusterModal
+        isOpen={isCreativeClusterModalOpen}
+        onClose={() => setIsCreativeClusterModalOpen(false)}
+        initialAd={currentAd}
+        adId={currentAd.id}
+        clusterKey={currentAd.creativeClusterKey}
+        mediaHash={currentAd.mediaHash || undefined}
       />
     </div>
   );

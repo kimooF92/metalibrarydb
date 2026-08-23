@@ -28,6 +28,7 @@ import {
   Target,
   Sparkles,
   Flame,
+  Zap,
 } from "lucide-react";
 
 interface SpyFiltersProps {
@@ -320,8 +321,28 @@ export function SpyFilters({
           )}
         </div>
 
-        {/* Global Toolbar: Vault + View Switcher + Sort Selector */}
+        {/* Global Toolbar: Group Creatives + Vault + View Switcher + Sort Selector */}
         <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+          {/* Group Duplicate Creatives Toggle Button */}
+          <button
+            type="button"
+            onClick={() => {
+              const isCurrentlyGrouped = filters.groupBy === "creative";
+              onFilterChange({
+                groupBy: isCurrentlyGrouped ? "none" : "creative",
+              });
+            }}
+            title="Collapse duplicate video & image creatives into single Hero Cards"
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+              filters.groupBy === "creative"
+                ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white border-amber-400 shadow-md shadow-amber-500/20 font-bold"
+                : "bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-amber-400/60 dark:hover:border-amber-500/40"
+            }`}
+          >
+            <Zap className={`w-3.5 h-3.5 ${filters.groupBy === "creative" ? "fill-white text-white" : "text-amber-500"}`} />
+            <span>{filters.groupBy === "creative" ? "Unique Creatives" : "Group Creatives"}</span>
+          </button>
+
           {/* Quick Archive Vault Toggle Button */}
           <button
             type="button"

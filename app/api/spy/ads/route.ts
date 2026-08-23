@@ -6,6 +6,7 @@ import { validateApiSecret } from "@/lib/api-guard";
 import { syncApifyRuns } from "@/lib/apify-sync";
 import { calculateWinnerScore } from "@/lib/winner-score";
 import { enrichAdsWithProductClusters } from "@/lib/product-clustering";
+import { enrichAdsWithCreativeClusters, getDeduplicatedCreativeHeroAds } from "@/lib/creative-clustering";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -38,6 +39,7 @@ export async function GET(req: NextRequest) {
     const productId = searchParams.get("productId");
     let sortBy = searchParams.get("sortBy") || "started_running_on";
     const sortOrder = searchParams.get("sortOrder") || "desc";
+    const groupBy = searchParams.get("groupBy") || (searchParams.get("groupByCreative") === "true" ? "creative" : "none");
 
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "24", 10)));
@@ -270,6 +272,8 @@ export async function GET(req: NextRequest) {
         mediaUrls: ads.mediaUrls,
         thumbnailUrl: ads.thumbnailUrl,
         thumbnailStoragePath: ads.thumbnailStoragePath,
+        mediaHash: ads.mediaHash,
+        perceptualHash: ads.perceptualHash,
         firstSeenAt: ads.firstSeenAt,
         lastSeenAt: ads.lastSeenAt,
         isArchived: ads.isArchived,
@@ -461,6 +465,8 @@ export async function GET(req: NextRequest) {
         mediaUrls: row.mediaUrls,
         thumbnailUrl: row.thumbnailUrl,
         thumbnailStoragePath: row.thumbnailStoragePath,
+        mediaHash: row.mediaHash,
+        perceptualHash: row.perceptualHash,
         firstSeenAt: row.firstSeenAt,
         lastSeenAt: row.lastSeenAt,
         createdAt: row.createdAt,
@@ -497,7 +503,15 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    let finalItems = items;
+    // Run Visual Creative Clustering across returned items
+    let enrichedItems = enrichAdsWithCreativeClusters(items);
+
+    // Apply Group by Creative filter if requested
+    if (groupBy === "creative") {
+      enrichedItems = getDeduplicatedCreativeHeroAds(enrichedItems);
+    }
+
+    let finalItems = enrichedItems;
 
     if (minProductCreatives > 0) {
       finalItems = finalItems.filter((i) => (i.productCreativeCount || 1) >= minProductCreatives);
@@ -521,8 +535,8 @@ export async function GET(req: NextRequest) {
         pagination: {
           page,
           limit,
-          total: minProductCreatives > 0 || productKey ? finalItems.length : total,
-          totalPages: Math.ceil((minProductCreatives > 0 || productKey ? finalItems.length : total) / limit),
+          total: minProductCreatives > 0 || productKey || groupBy === "creative" ? finalItems.length : total,
+          totalPages: Math.ceil((minProductCreatives > 0 || productKey || groupBy === "creative" ? finalItems.length : total) / limit),
         },
       },
       {

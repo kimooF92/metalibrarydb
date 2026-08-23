@@ -98,6 +98,10 @@ function getInitialSpyParams(initialParams?: AdFilterParams): AdFilterParams {
     if (urlParams.has("minWinnerScore")) state.minWinnerScore = Number(urlParams.get("minWinnerScore")) || 0;
     if (urlParams.has("minProductCreatives")) state.minProductCreatives = Number(urlParams.get("minProductCreatives")) || 0;
     if (urlParams.has("productKey")) state.productKey = urlParams.get("productKey") || undefined;
+    if (urlParams.has("groupBy")) {
+      const gb = urlParams.get("groupBy");
+      state.groupBy = gb === "creative" ? "creative" : "none";
+    }
     if (urlParams.has("isWatchlisted")) state.isWatchlisted = urlParams.get("isWatchlisted") === "true";
     if (urlParams.has("sortBy")) {
       const sb = urlParams.get("sortBy");
@@ -140,6 +144,7 @@ function syncSpyParamsToUrlAndStorage(params: AdFilterParams) {
     if (params.minWinnerScore && params.minWinnerScore > 0) query.set("minWinnerScore", String(params.minWinnerScore));
     if (params.minProductCreatives && params.minProductCreatives > 0) query.set("minProductCreatives", String(params.minProductCreatives));
     if (params.productKey) query.set("productKey", params.productKey);
+    if (params.groupBy && params.groupBy !== "none") query.set("groupBy", params.groupBy);
     if (params.isWatchlisted) query.set("isWatchlisted", "true");
     if (params.dateFrom) query.set("dateFrom", params.dateFrom);
     if (params.dateTo) query.set("dateTo", params.dateTo);
@@ -161,6 +166,7 @@ function syncSpyParamsToUrlAndStorage(params: AdFilterParams) {
       minDaysRunning: params.minDaysRunning,
       minDuplications: params.minDuplications,
       minWinnerScore: params.minWinnerScore,
+      groupBy: params.groupBy,
       isWatchlisted: params.isWatchlisted,
       dateFrom: params.dateFrom,
       dateTo: params.dateTo,
@@ -208,6 +214,7 @@ export function useAdFeed(initialParams?: AdFilterParams) {
           prev.minWinnerScore !== initialParams.minWinnerScore ||
           prev.minProductCreatives !== initialParams.minProductCreatives ||
           prev.productKey !== initialParams.productKey ||
+          prev.groupBy !== initialParams.groupBy ||
           JSON.stringify(prev.excludePageIds) !== JSON.stringify(initialParams.excludePageIds);
 
         if (hasChanged) {
@@ -235,6 +242,7 @@ export function useAdFeed(initialParams?: AdFilterParams) {
     initialParams?.minWinnerScore,
     initialParams?.minProductCreatives,
     initialParams?.productKey,
+    initialParams?.groupBy,
     initialParams?.excludePageIds,
   ]);
 
@@ -294,6 +302,7 @@ export function useAdFeed(initialParams?: AdFilterParams) {
         query.set("minProductCreatives", params.minProductCreatives.toString());
       }
       if (params.productKey) query.set("productKey", params.productKey);
+      if (params.groupBy && params.groupBy !== "none") query.set("groupBy", params.groupBy);
       if (params.mediaType && params.mediaType !== "all") query.set("mediaType", params.mediaType);
       if (params.status && params.status !== "all") query.set("status", params.status);
       if (params.ctaText && params.ctaText !== "all") query.set("ctaText", params.ctaText);

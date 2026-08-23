@@ -161,6 +161,9 @@ export const ads = pgTable(
     mediaUrls: text("media_urls").array(),
     thumbnailUrl: text("thumbnail_url"),
     thumbnailStoragePath: text("thumbnail_storage_path"),
+    mediaHash: text("media_hash"), // SHA-256 binary hash (exact content-addressable key)
+    perceptualHash: text("perceptual_hash"), // 64-bit Hex dHash (visual structure fingerprint)
+    creativeClusterId: uuid("creative_cluster_id"), // Linked creative cluster identifier
     firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).defaultNow().notNull(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),
     isArchived: boolean("is_archived").default(false),
@@ -175,6 +178,9 @@ export const ads = pgTable(
     index("idx_ads_media_type").on(table.mediaType),
     index("idx_ads_is_archived").on(table.isArchived),
     index("idx_ads_product_id").on(table.productId),
+    index("idx_ads_media_hash").on(table.mediaHash),
+    index("idx_ads_perceptual_hash").on(table.perceptualHash),
+    index("idx_ads_creative_cluster_id").on(table.creativeClusterId),
   ]
 );
 

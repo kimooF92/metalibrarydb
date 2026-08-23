@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { ads, adObservations, creativeScans, trackedPages } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
-import { uploadMediaFromUrlToB2, isB2Configured } from "@/lib/b2-storage";
+import { uploadMediaFromUrlToB2, uploadMediaWithHashing, isB2Configured } from "@/lib/b2-storage";
 
 /**
  * Robustly extracts adArchiveId from multiple candidate fields & URL parameters.
@@ -344,32 +344,51 @@ export async function ingestApifyDatasetItems(
         try {
           let updatedMediaUrls = rawMediaUrls;
           let updatedThumb = rawThumbnailUrl;
+          let detectedMediaHash: string | null = null;
+          let detectedPerceptualHash: string | null = null;
           let hasChange = false;
 
+          // 1. Process Video media
           if (mediaType === "video" && rawMediaUrls.length > 0) {
             const b2VideoUrls = await Promise.all(
               rawMediaUrls.map(async (url, idx) => {
                 if (url.includes("backblazeb2.com") || url.includes("/api/spy/b2-media")) return url;
-                const b2Url = await uploadMediaFromUrlToB2(url, "videos", `${adArchiveId}_${idx}`).catch(() => null);
-                if (b2Url) hasChange = true;
-                return b2Url || url;
+                const uploadRes = await uploadMediaWithHashing(url, "videos", `${adArchiveId}_${idx}`).catch(() => null);
+                if (uploadRes?.url) {
+                  hasChange = true;
+                  if (uploadRes.mediaHash && !detectedMediaHash) detectedMediaHash = uploadRes.mediaHash;
+                  return uploadRes.url;
+                }
+                return url;
               })
             );
             updatedMediaUrls = b2VideoUrls;
           }
 
-          if (rawThumbnailUrl && !rawThumbnailUrl.includes("backblazeb2.com") && !rawThumbnailUrl.includes("/api/spy/b2-media")) {
-            const b2Thumb = await uploadMediaFromUrlToB2(rawThumbnailUrl, "thumbnails", adArchiveId).catch(() => null);
-            if (b2Thumb) {
-              updatedThumb = b2Thumb;
-              hasChange = true;
+          // 2. Process Thumbnail / Image media
+          if (rawThumbnailUrl) {
+            if (!rawThumbnailUrl.includes("backblazeb2.com") && !rawThumbnailUrl.includes("/api/spy/b2-media")) {
+              const thumbRes = await uploadMediaWithHashing(rawThumbnailUrl, "thumbnails", adArchiveId).catch(() => null);
+              if (thumbRes?.url) {
+                updatedThumb = thumbRes.url;
+                if (thumbRes.mediaHash && !detectedMediaHash) detectedMediaHash = thumbRes.mediaHash;
+                if (thumbRes.perceptualHash) detectedPerceptualHash = thumbRes.perceptualHash;
+                hasChange = true;
+              }
             }
           }
 
-          if (hasChange) {
+          if (hasChange || detectedMediaHash || detectedPerceptualHash) {
+            const updatePayload: Record<string, any> = {
+              mediaUrls: updatedMediaUrls,
+              thumbnailUrl: updatedThumb,
+            };
+            if (detectedMediaHash) updatePayload.mediaHash = detectedMediaHash;
+            if (detectedPerceptualHash) updatePayload.perceptualHash = detectedPerceptualHash;
+
             await db
               .update(ads)
-              .set({ mediaUrls: updatedMediaUrls, thumbnailUrl: updatedThumb })
+              .set(updatePayload)
               .where(eq(ads.adArchiveId, adArchiveId));
           }
         } catch {}
