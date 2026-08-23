@@ -280,9 +280,13 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
         <div className="flex items-start justify-between gap-2 mb-2.5">
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
-              <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+              <Link
+                href={`/spy/brand/${encodeURIComponent(currentAd.pageId || currentAd.trackedPageId || "")}`}
+                className="text-xs font-bold text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline transition-colors truncate"
+                title={`Open ${currentAd.pageName || currentAd.pageId} Analytics & Ad Library`}
+              >
                 {currentAd.pageName || `Page ${currentAd.pageId}`}
-              </span>
+              </Link>
               {currentAd.brandProductCount && currentAd.brandProductCount > 1 && (
                 <span
                   title={`Brand tested ${currentAd.brandProductCount} distinct products (${currentAd.productSharePercent || 100}% creatives dedicated to this product)`}

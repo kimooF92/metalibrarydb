@@ -372,9 +372,13 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
           {/* Header Row: Page Name, Winner Score, Status */}
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1 min-w-0">
-              <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+              <Link
+                href={`/spy/brand/${encodeURIComponent(currentAd.pageId || currentAd.trackedPageId || "")}`}
+                className="text-xs font-bold text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline transition-colors truncate"
+                title={`Open ${currentAd.pageName || currentAd.pageId} Analytics & Ad Library`}
+              >
                 {currentAd.pageName || `Page ${currentAd.pageId}`}
-              </span>
+              </Link>
               {currentAd.brandProductCount && currentAd.brandProductCount > 1 && (
                 <span
                   title={`Brand tested ${currentAd.brandProductCount} products`}

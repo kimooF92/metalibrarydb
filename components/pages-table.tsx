@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import Link from "next/link";
 import { TrackedPage, DashboardStats } from "@/types";
 import { HistoryModal } from "./history-modal";
 import { DeleteConfirmModal } from "./delete-confirm-modal";
-import { PageAdLibraryDrawer } from "./spy/page-ad-library-drawer";
 import { ScanRunnerModal } from "./scan-runner-modal";
 import { ResolveBrandModal } from "./resolve-brand-modal";
 import {
@@ -18,6 +18,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Minus,
+  ExternalLink,
   Loader2,
   ShieldAlert,
   Pencil,
@@ -925,15 +926,22 @@ export function PagesTable({
                             </button>
                           </div>
                         ) : (
-                          <div className="flex items-center space-x-1.5">
+                          <div className="flex items-center space-x-1.5 min-w-0">
+                            <Link
+                              href={`/spy/brand/${encodeURIComponent(p.id || p.pageId || "")}`}
+                              title={`Open ${p.displayName || "brand"} Analytics & Ad Library`}
+                              className="font-semibold text-slate-800 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-300 underline-offset-2 hover:underline transition-colors truncate max-w-[180px]"
+                            >
+                              {p.displayName || "Meta Ad Search"}
+                            </Link>
                             <a
                               href={p.url}
                               target="_blank"
                               rel="noreferrer"
-                              title={p.url}
-                              className="font-semibold text-slate-800 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-300 underline-offset-2 hover:underline transition-colors truncate max-w-[180px]"
+                              title="Open Meta Ad Library in new tab"
+                              className="text-slate-400 hover:text-indigo-500 transition-colors p-0.5 shrink-0"
                             >
-                              {p.displayName || "Meta Ad Search"}
+                              <ExternalLink className="w-3 h-3" />
                             </a>
                             <button
                               onClick={() => startEditing(p)}
@@ -1153,17 +1161,14 @@ export function PagesTable({
                             <Sparkles className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
                           </button>
 
-                          <button
-                            onClick={() => {
-                              setSelectedDrawerPage(p);
-                              setDrawerOpen(true);
-                            }}
-                            className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer"
-                            title="View extracted ads"
-                            aria-label={`View extracted ads for ${p.displayName || "tracked page"}`}
+                          <Link
+                            href={`/spy/brand/${encodeURIComponent(p.id || p.pageId || "")}`}
+                            className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer inline-flex items-center justify-center"
+                            title="Open Brand Deep-Dive & Analytics"
+                            aria-label={`Open Brand Deep-Dive & Analytics for ${p.displayName || "tracked page"}`}
                           >
                             <Eye className="w-3.5 h-3.5" />
-                          </button>
+                          </Link>
 
                           <button
                             onClick={() => onRefresh([p.id])}
@@ -1366,18 +1371,6 @@ export function PagesTable({
         onClose={() => setPageToDelete(null)}
         onConfirm={confirmDelete}
         loading={deleting}
-      />
-
-      {/* Per-Page Ad Library Drawer */}
-      <PageAdLibraryDrawer
-        isOpen={drawerOpen}
-        onClose={() => {
-          setDrawerOpen(false);
-          setSelectedDrawerPage(null);
-        }}
-        trackedPageId={selectedDrawerPage?.id || null}
-        displayName={selectedDrawerPage?.displayName || selectedDrawerPage?.pageId || null}
-        currentResults={selectedDrawerPage?.currentResults}
       />
 
       {/* Animated Toast Notification Popup */}
