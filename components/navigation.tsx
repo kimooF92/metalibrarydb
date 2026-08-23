@@ -3,9 +3,18 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, UploadCloud, BarChart3, Eye, Compass, Globe, ShoppingBag, Menu, X, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  LayoutDashboard,
+  BarChart3,
+  Eye,
+  Globe,
+  ShoppingBag,
+  Menu,
+  X,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { NotificationCenter } from "./notification-center";
-import { WorkerStatus } from "./worker-status";
 import { ThemeToggle } from "./theme-toggle";
 import { useSidebar } from "@/components/sidebar-context";
 
@@ -13,6 +22,14 @@ export function Navigation() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const { isCollapsed, toggleSidebar } = useSidebar();
+
+  const navItems = [
+    { href: "/", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/discovery", label: "Discover Pages", icon: Globe },
+    { href: "/spy", label: "Ad Spy Feed", icon: Eye },
+    { href: "/products", label: "Products", icon: ShoppingBag },
+    { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  ];
 
   return (
     <>
@@ -62,16 +79,10 @@ export function Navigation() {
 
           {/* Navigation Links */}
           <nav className="flex flex-col space-y-1.5">
-            {[
-              { href: "/", label: "Dashboard", icon: LayoutDashboard },
-              { href: "/discovery", label: "Discover Pages", icon: Globe },
-              { href: "/spy", label: "Ad Spy Feed", icon: Eye },
-              { href: "/products", label: "Products", icon: ShoppingBag },
-              { href: "/analytics", label: "Analytics", icon: BarChart3 },
-            ].map((item) => {
+            {navItems.map((item) => {
               const Icon = item.icon;
               const active = pathname === item.href;
-              
+
               if (isCollapsed) {
                 return (
                   <Link
@@ -84,7 +95,11 @@ export function Navigation() {
                         : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
                     }`}
                   >
-                    <Icon className={`w-4 h-4 ${active ? "text-indigo-650 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"}`} />
+                    <Icon
+                      className={`w-4 h-4 ${
+                        active ? "text-indigo-650 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
+                      }`}
+                    />
                   </Link>
                 );
               }
@@ -99,7 +114,11 @@ export function Navigation() {
                       : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
                   }`}
                 >
-                  <Icon className={`w-4 h-4 ${active ? "text-indigo-650 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"}`} />
+                  <Icon
+                    className={`w-4 h-4 ${
+                      active ? "text-indigo-650 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
+                    }`}
+                  />
                   <span className="truncate">{item.label}</span>
                 </Link>
               );
@@ -107,20 +126,18 @@ export function Navigation() {
           </nav>
         </div>
 
-        {/* System Status Section at Bottom of Sidebar */}
+        {/* Clean Sidebar Footer */}
         {isCollapsed ? (
           <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 flex flex-col items-center space-y-3">
-            <WorkerStatus layout="collapsed" />
+            <NotificationCenter layout="collapsed" />
+            <ThemeToggle size="sm" />
           </div>
         ) : (
           <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 space-y-3">
-            <div>
-              <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest block mb-2 px-1">
-                System Status
-              </span>
-              <div className="bg-slate-100 dark:bg-slate-950/40 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800/60 overflow-hidden">
-                <WorkerStatus layout="vertical" />
-              </div>
+            <NotificationCenter layout="sidebar" />
+            <div className="flex items-center justify-between px-2 pt-1 text-slate-400 text-xs">
+              <span className="text-[10px] font-medium text-slate-400">Theme</span>
+              <ThemeToggle size="sm" />
             </div>
           </div>
         )}
@@ -156,13 +173,7 @@ export function Navigation() {
       {isOpen && (
         <div className="fixed inset-x-0 bottom-0 top-14 z-40 bg-white/98 dark:bg-[#0b0f19]/98 backdrop-blur-md md:hidden flex flex-col p-6 space-y-6 animate-in slide-in-from-top-5 duration-200">
           <nav className="flex flex-col space-y-2">
-            {[
-              { href: "/", label: "Dashboard", icon: LayoutDashboard },
-              { href: "/discovery", label: "Discover Pages", icon: Globe },
-              { href: "/spy", label: "Ad Spy Feed", icon: Eye },
-              { href: "/products", label: "Products", icon: ShoppingBag },
-              { href: "/analytics", label: "Analytics", icon: BarChart3 },
-            ].map((item) => {
+            {navItems.map((item) => {
               const Icon = item.icon;
               const active = pathname === item.href;
               return (
@@ -183,15 +194,9 @@ export function Navigation() {
             })}
           </nav>
 
-          <div className="pt-6 border-t border-slate-200 dark:border-slate-800/80 mt-auto flex flex-col space-y-4">
-            <div>
-              <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest block mb-2 px-1">
-                System Status
-              </span>
-              <div className="bg-slate-100 dark:bg-slate-950/40 p-3 rounded-xl border border-slate-200 dark:border-slate-800/60 overflow-hidden">
-                <WorkerStatus layout="vertical" />
-              </div>
-            </div>
+          <div className="pt-6 border-t border-slate-200 dark:border-slate-800/80 mt-auto flex items-center justify-between">
+            <span className="text-xs text-slate-500 font-medium">Appearance</span>
+            <ThemeToggle size="sm" />
           </div>
         </div>
       )}

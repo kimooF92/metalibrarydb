@@ -20,7 +20,7 @@ export async function checkRateCaps(): Promise<{ allowed: boolean; reason?: stri
   const state = await getWorkerState();
   const now = new Date();
 
-  const maxHour = parseInt(process.env.MAX_SCANS_PER_HOUR || "100", 10);
+  const maxHour = parseInt(process.env.MAX_SCANS_PER_HOUR || "0", 10);
   const maxDay = parseInt(process.env.MAX_SCANS_PER_DAY || "0", 10);
 
   // Check hourly window
