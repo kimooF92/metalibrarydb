@@ -64,6 +64,7 @@ export async function GET(request: Request) {
       displayName: trackedPages.displayName,
       currentResults: trackedPages.currentResults,
       lastChecked: trackedPages.lastChecked,
+      lastCreativeScan: trackedPages.lastCreativeScan,
       status: trackedPages.status,
       createdAt: trackedPages.createdAt,
     };

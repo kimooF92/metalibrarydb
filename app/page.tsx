@@ -11,7 +11,7 @@ import { RefreshCw, X, Plus, UploadCloud } from "lucide-react";
 const VALID_STATUSES = ["all", "success", "pending", "scanning", "failed", "unclear"] as const;
 const VALID_SEARCH_TYPES = ["all", "page", "keyword_exact_phrase", "keyword_unordered"] as const;
 const VALID_TABS = ["all", "watchlist", "high_volume", "attention", "zero_ads", "needs_review"] as const;
-const VALID_SORT_COLS = ["createdAt", "displayName", "currentResults", "lastChecked", "status", "difference"] as const;
+const VALID_SORT_COLS = ["createdAt", "displayName", "currentResults", "lastChecked", "lastCreativeScan", "status", "difference"] as const;
 const VALID_PAGE_SIZES = [25, 50, 100] as const;
 
 function getInitialDashboardState() {

@@ -715,7 +715,7 @@ export function PagesTable({
                 <th className="px-3 py-1.5 whitespace-nowrap text-slate-400 font-medium">Prev Ads</th>
                 <SortHeader col="difference" label="Difference" className="w-32" />
                 <SortHeader col="status" label="Status" className="w-28" />
-                <SortHeader col="lastChecked" label="Last Checked" className="w-32" />
+                <SortHeader col="lastChecked" label="Last Checked" className="w-36" />
                 <th className="px-3 py-1.5 text-right whitespace-nowrap text-slate-400 font-medium">Actions</th>
               </tr>
             </thead>
@@ -1091,9 +1091,32 @@ export function PagesTable({
                         </div>
                       </td>
 
-                      {/* Last Checked */}
-                      <td className="px-3 py-1.5 text-slate-500 dark:text-slate-400 font-mono text-[11px]" title={p.lastChecked ? new Date(p.lastChecked).toLocaleString() : undefined}>
-                        {formatRelativeTime(p.lastChecked)}
+                      {/* Last Checked (Count & Spy) */}
+                      <td className="px-3 py-1.5 text-slate-500 dark:text-slate-400 font-mono text-[11px]">
+                        <div className="flex flex-col gap-0.5 whitespace-nowrap">
+                          {/* Ad Count Check */}
+                          <div
+                            className="flex items-center gap-1.5 text-[11px] text-slate-700 dark:text-slate-300 font-medium"
+                            title={p.lastChecked ? `Ad Count checked: ${new Date(p.lastChecked).toLocaleString()}` : "Count never checked"}
+                          >
+                            <span className="text-[9.5px] uppercase tracking-wider text-slate-400 font-sans font-semibold">Count:</span>
+                            <span>{formatRelativeTime(p.lastChecked)}</span>
+                          </div>
+
+                          {/* Ad Spy Scan */}
+                          <div
+                            className={`flex items-center gap-1.5 text-[10.5px] ${
+                              p.lastCreativeScan ? "text-purple-600 dark:text-purple-400 font-medium" : "text-slate-400 dark:text-slate-500"
+                            }`}
+                            title={p.lastCreativeScan ? `Ad Spy scan: ${new Date(p.lastCreativeScan).toLocaleString()}` : "Ad Spy never scanned"}
+                          >
+                            <span className="text-[9.5px] uppercase tracking-wider text-slate-400 dark:text-slate-500 font-sans font-semibold">Spy:</span>
+                            <span className="inline-flex items-center gap-1">
+                              <Sparkles className={`w-2.5 h-2.5 shrink-0 ${p.lastCreativeScan ? "text-purple-500 dark:text-purple-400" : "text-slate-400 opacity-60"}`} />
+                              {formatRelativeTime(p.lastCreativeScan)}
+                            </span>
+                          </div>
+                        </div>
                       </td>
 
                       {/* Actions */}
