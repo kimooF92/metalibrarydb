@@ -30,6 +30,7 @@ interface TrackedPageInfo {
   displayName: string | null;
   url: string;
   pageId: string | null;
+  country?: string | null;
   searchType: string | null;
   discoveredPagesCount: number;
 }
@@ -128,7 +129,15 @@ export function ResolveBrandModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          discoveredPageIds: [candidate.id],
+          discoveredPageIds: candidate.id.startsWith("cand_") ? [] : [candidate.id],
+          pages: [
+            {
+              pageId: candidate.pageId,
+              displayName: candidate.displayName || `Page ${candidate.pageId}`,
+              country: trackedPage?.country || "TN",
+              matchingAdCount: candidate.matchingAdCount,
+            },
+          ],
         }),
       });
 

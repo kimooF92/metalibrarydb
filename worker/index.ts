@@ -432,6 +432,11 @@ async function runWorker() {
                 console.log(
                   `[Local Multi-Page Conflict] Detected ${pageCandidates.length} candidate Facebook Pages for "${targetDisplayName}". Posting notification for user review.`
                 );
+                await db
+                  .update(trackedPages)
+                  .set({ discoveredPagesCount: pageCandidates.length })
+                  .where(eq(trackedPages.id, trackedPage.id));
+
                 const { logMultiPageDetectedNotification } = await import("../lib/notifications");
                 await logMultiPageDetectedNotification({
                   trackedPageId: trackedPage.id,
