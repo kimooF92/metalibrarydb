@@ -200,9 +200,8 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
         >
           <Bell className="w-4 h-4" />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500 ring-2 ring-white dark:ring-slate-900"></span>
+            <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9.5px] font-black leading-none shadow-sm ring-2 ring-white dark:ring-slate-900 animate-in zoom-in-75">
+              {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           )}
         </button>

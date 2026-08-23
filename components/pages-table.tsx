@@ -468,8 +468,21 @@ export function PagesTable({
 
       {/* Search, Tabs, & Filters Combined Toolbar */}
       <div className={`${showMobileFilters ? "flex" : "hidden lg:flex"} flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800/40`}>
-        {/* Left Side: Smart Tabs */}
-        <div className="flex flex-wrap items-center gap-1">
+        {/* Left Side: Global Search Bar */}
+        <div className="relative w-full sm:w-64 md:w-72">
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500 dark:text-slate-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Search brand, page ID, or keyword..."
+            className="w-full bg-white dark:bg-slate-950/80 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-lg pl-8 pr-3 py-2 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 transition-all"
+          />
+        </div>
+
+        {/* Right Side: 1-Click Smart Tabs & Filter Controls */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* Smart Tabs */}
           {[
             { id: "all", label: "All Pages", icon: null },
             { id: "watchlist", label: "Watchlist", icon: Star, iconColor: "text-yellow-500 dark:text-yellow-400 fill-yellow-500/10 dark:fill-yellow-400/20" },
@@ -482,7 +495,7 @@ export function PagesTable({
               <button
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
-                className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${active
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${active
                     ? "bg-indigo-655/10 dark:bg-indigo-600/20 border-indigo-400/40 dark:border-indigo-500/40 text-indigo-650 dark:text-indigo-300 shadow-md shadow-indigo-600/10"
                     : "bg-white dark:bg-slate-900/60 border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                   }`}
@@ -492,28 +505,13 @@ export function PagesTable({
               </button>
             );
           })}
-        </div>
-
-        {/* Right Side: Search & Filter Popover */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-          {/* Global Search Bar */}
-          <div className="relative w-full sm:w-56 md:w-64">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500 dark:text-slate-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Search..."
-              className="w-full bg-white dark:bg-slate-950/80 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-lg pl-8 pr-3 py-2 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 transition-all"
-            />
-          </div>
 
           {/* Consolidated ⚙ Filters Popover */}
           <div className="relative" ref={filterPopoverRef}>
             <button
               type="button"
               onClick={() => setShowFilterPopover((prev) => !prev)}
-              className={`flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
                 statusFilter !== "all" || searchTypeFilter !== "all"
                   ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800 shadow-sm"
                   : "bg-white dark:bg-slate-950/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
@@ -604,7 +602,7 @@ export function PagesTable({
           {(search !== "" || statusFilter !== "all" || searchTypeFilter !== "all" || activeTab !== "all" || page > 1) && onResetFilters && (
             <button
               onClick={onResetFilters}
-              className="flex items-center space-x-1 text-[11px] font-semibold px-2.5 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer whitespace-nowrap shrink-0"
+              className="flex items-center space-x-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer whitespace-nowrap shrink-0"
               title="Reset all filters and search to default"
             >
               <X className="w-3 h-3 text-slate-500 dark:text-slate-400" />
@@ -616,7 +614,7 @@ export function PagesTable({
           {((stats?.failed ?? 0) > 0 || pages.some((p) => p.status === "failed")) && (
             <button
               onClick={() => onRetry()}
-              className="flex items-center space-x-1 text-[11px] font-semibold px-2.5 py-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 transition-all cursor-pointer whitespace-nowrap shrink-0 animate-in fade-in"
+              className="flex items-center space-x-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 transition-all cursor-pointer whitespace-nowrap shrink-0 animate-in fade-in"
               title="Retry failed scan jobs"
             >
               <RotateCcw className="w-3 h-3 text-amber-600 dark:text-amber-400" />
