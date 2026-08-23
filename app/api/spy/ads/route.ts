@@ -7,8 +7,11 @@ import { syncApifyRuns } from "@/lib/apify-sync";
 import { calculateWinnerScore } from "@/lib/winner-score";
 import { enrichAdsWithProductClusters } from "@/lib/product-clustering";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET(req: NextRequest) {
-  const authError = validateApiSecret(req);
+  const authError = await validateApiSecret(req);
   if (authError) return authError;
 
   try {
@@ -469,15 +472,22 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    return NextResponse.json({
-      items: finalItems,
-      pagination: {
-        page,
-        limit,
-        total: minProductCreatives > 0 || productKey ? finalItems.length : total,
-        totalPages: Math.ceil((minProductCreatives > 0 || productKey ? finalItems.length : total) / limit),
+    return NextResponse.json(
+      {
+        items: finalItems,
+        pagination: {
+          page,
+          limit,
+          total: minProductCreatives > 0 || productKey ? finalItems.length : total,
+          totalPages: Math.ceil((minProductCreatives > 0 || productKey ? finalItems.length : total) / limit),
+        },
       },
-    });
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      }
+    );
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || "Failed to fetch ad creatives" },

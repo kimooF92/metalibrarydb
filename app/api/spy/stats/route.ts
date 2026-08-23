@@ -4,8 +4,11 @@ import { ads, adObservations } from "@/db/schema";
 import { sql, gte, eq } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET(req: NextRequest) {
-  const authError = validateApiSecret(req);
+  const authError = await validateApiSecret(req);
   if (authError) return authError;
 
   try {
@@ -60,12 +63,19 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({
-      totalAdsCaptured,
-      launchedLast7Days,
-      scaledAdsCount,
-      mediaDistribution,
-    });
+    return NextResponse.json(
+      {
+        totalAdsCaptured,
+        launchedLast7Days,
+        scaledAdsCount,
+        mediaDistribution,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      }
+    );
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || "Failed to fetch ad spy stats" },

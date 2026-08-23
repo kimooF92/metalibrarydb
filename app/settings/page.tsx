@@ -133,7 +133,7 @@ export default function SettingsPage() {
       const res = await fetch("/api/pages?limit=1000");
       if (res.ok) {
         const data = await res.json();
-        const pages = data.pages || [];
+        const pages = data.data || data.pages || [];
 
         const headers = ["Brand Name", "Search Type", "Page ID", "Active Ads", "Difference", "Country", "Last Checked", "URL"];
         const rows = pages.map((p: any) => [

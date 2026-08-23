@@ -5,7 +5,7 @@ import { eq, ilike, and, sql, desc, asc, or, count } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 
 export async function GET(req: NextRequest) {
-  const authError = validateApiSecret(req);
+  const authError = await validateApiSecret(req);
   if (authError) return authError;
 
   try {
@@ -148,7 +148,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const authError = validateApiSecret(req);
+  const authError = await validateApiSecret(req);
   if (authError) return authError;
 
   try {

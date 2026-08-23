@@ -247,17 +247,22 @@ export function useAdFeed(initialParams?: AdFilterParams) {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchFeed = useCallback(async () => {
+  const fetchFeed = useCallback(async (isManualRefresh = false) => {
     if (params.enabled === false) {
       setIsLoading(false);
       setIsFetchingMore(false);
+      setIsRefreshing(false);
       return;
     }
 
-    const currentPage = params.page || 1;
-    if (ads.length === 0 || currentPage === 1) {
+    const currentPage = isManualRefresh ? 1 : (params.page || 1);
+    if (isManualRefresh) {
+      setIsRefreshing(true);
+      setIsLoading(true);
+    } else if (ads.length === 0 || currentPage === 1) {
       setIsLoading(ads.length === 0);
       setIsFetchingMore(ads.length > 0);
     } else {
@@ -266,6 +271,11 @@ export function useAdFeed(initialParams?: AdFilterParams) {
     setError(null);
 
     try {
+      // If manual refresh, asynchronously trigger background Apify run check
+      if (isManualRefresh) {
+        fetch("/api/spy/scans/sync", { method: "POST" }).catch(() => {});
+      }
+
       const query = new URLSearchParams();
       if (params.trackedPageId) query.set("trackedPageId", params.trackedPageId);
       if (params.search) query.set("search", params.search);
@@ -296,8 +306,12 @@ export function useAdFeed(initialParams?: AdFilterParams) {
       if (params.sortOrder) query.set("sortOrder", params.sortOrder);
       query.set("page", currentPage.toString());
       query.set("limit", (params.limit || 24).toString());
+      query.set("_t", Date.now().toString()); // Cache buster
 
-      const res = await fetch(`/api/spy/ads?${query.toString()}`);
+      const res = await fetch(`/api/spy/ads?${query.toString()}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       const data = await res.json();
 
       if (!res.ok) {
@@ -305,7 +319,7 @@ export function useAdFeed(initialParams?: AdFilterParams) {
       }
 
       const newItems = data.items || [];
-      if (currentPage > 1) {
+      if (currentPage > 1 && !isManualRefresh) {
         setAds((prev) => {
           const existingIds = new Set(prev.map((item) => item.id));
           const filteredNew = newItems.filter((item: Ad) => !existingIds.has(item.id));
@@ -320,11 +334,12 @@ export function useAdFeed(initialParams?: AdFilterParams) {
     } finally {
       setIsLoading(false);
       setIsFetchingMore(false);
+      setIsRefreshing(false);
     }
-  }, [params]);
+  }, [params, ads.length]);
 
   useEffect(() => {
-    fetchFeed();
+    fetchFeed(false);
   }, [fetchFeed]);
 
   const updateFilters = useCallback((newParams: Partial<AdFilterParams>) => {
@@ -343,16 +358,21 @@ export function useAdFeed(initialParams?: AdFilterParams) {
     setAds((prev) => prev.map((item) => (item.id === updatedAd.id ? { ...item, ...updatedAd } : item)));
   }, []);
 
+  const refetch = useCallback(() => {
+    return fetchFeed(true);
+  }, [fetchFeed]);
+
   return {
     ads,
     pagination,
     isLoading,
     isFetchingMore,
+    isRefreshing,
     error,
     params,
     updateFilters,
     updateAdInFeed,
-    refetch: fetchFeed,
+    refetch,
   };
 }
 
@@ -370,7 +390,10 @@ export function useAdStats() {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/spy/stats");
+      const res = await fetch(`/api/spy/stats?_t=${Date.now()}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || "Failed to fetch ad stats");

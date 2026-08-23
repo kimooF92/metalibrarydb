@@ -672,12 +672,18 @@ export default function DiscoveryPage() {
         </div>
 
         <button
-          onClick={fetchRuns}
-          title="Refresh Scans"
-          className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shrink-0"
+          onClick={async () => {
+            await fetchRuns();
+            if (selectedRunId) {
+              await fetchPages(selectedRunId);
+            }
+          }}
+          disabled={isLoadingRuns || isLoadingPages}
+          title="Refresh Scans & Pages"
+          className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shrink-0 disabled:opacity-60"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoadingRuns ? "animate-spin text-indigo-500" : ""}`} />
-          <span>Refresh</span>
+          <RefreshCw className={`w-3.5 h-3.5 ${isLoadingRuns || isLoadingPages ? "animate-spin text-indigo-500" : ""}`} />
+          <span>{isLoadingRuns || isLoadingPages ? "Refreshing..." : "Refresh"}</span>
         </button>
       </div>
 

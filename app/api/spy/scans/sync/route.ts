@@ -3,7 +3,7 @@ import { syncApifyRuns } from "@/lib/apify-sync";
 import { validateApiSecret } from "@/lib/api-guard";
 
 export async function POST(req: NextRequest) {
-  const authError = validateApiSecret(req);
+  const authError = await validateApiSecret(req);
   if (authError) return authError;
 
   try {

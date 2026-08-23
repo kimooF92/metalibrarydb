@@ -213,7 +213,10 @@ export default function DashboardPage() {
   const fetchStats = useCallback(async (silent = false) => {
     if (!silent) setStatsLoading(true);
     try {
-      const res = await fetch("/api/stats");
+      const res = await fetch(`/api/stats?_t=${Date.now()}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -239,8 +242,12 @@ export default function DashboardPage() {
       if (activeTab !== "all") params.set("tab", activeTab);
       params.set("sortBy", sortBy);
       params.set("sortOrder", sortOrder);
+      params.set("_t", String(Date.now()));
 
-      const res = await fetch(`/api/pages?${params.toString()}`);
+      const res = await fetch(`/api/pages?${params.toString()}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       if (res.ok) {
         const data = await res.json();
         setPages(data.data || []);

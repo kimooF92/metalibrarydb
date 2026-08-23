@@ -5,7 +5,7 @@ import { asc, desc, isNotNull, sql } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 
 export async function GET(req: Request) {
-  const authError = validateApiSecret(req);
+  const authError = await validateApiSecret(req);
   if (authError) return authError;
 
   try {

@@ -7,7 +7,7 @@ import { findCompetitorMatches } from "@/lib/product-matcher";
 import { ScrapedProduct } from "@/types";
 
 export async function GET(req: NextRequest) {
-  const authError = validateApiSecret(req);
+  const authError = await validateApiSecret(req);
   if (authError) return authError;
 
   try {

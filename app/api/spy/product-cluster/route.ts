@@ -7,7 +7,7 @@ import { extractProductClusterKey, enrichAdsWithProductClusters } from "@/lib/pr
 import { calculateWinnerScore } from "@/lib/winner-score";
 
 export async function GET(req: NextRequest) {
-  const authError = validateApiSecret(req);
+  const authError = await validateApiSecret(req);
   if (authError) return authError;
 
   try {

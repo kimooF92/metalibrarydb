@@ -7,7 +7,7 @@ import { validateApiSecret } from "@/lib/api-guard";
 import { extractUrlMetadata } from "@/lib/url-parser";
 
 export async function POST(req: NextRequest) {
-  const authError = validateApiSecret(req);
+  const authError = await validateApiSecret(req);
   if (authError) return authError;
 
   try {

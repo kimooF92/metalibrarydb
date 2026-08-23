@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateApiSecret } from "@/lib/api-guard";
 
 export async function GET(req: NextRequest) {
-  const authError = validateApiSecret(req);
+  const authError = await validateApiSecret(req);
   if (authError) return authError;
 
   const urlStr = req.nextUrl.searchParams.get("url");

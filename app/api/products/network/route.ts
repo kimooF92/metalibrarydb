@@ -6,7 +6,7 @@ import { validateApiSecret } from "@/lib/api-guard";
 import { formatTunisianPhone } from "@/lib/network-extractor";
 
 export async function GET(req: NextRequest) {
-  const authError = validateApiSecret(req);
+  const authError = await validateApiSecret(req);
   if (authError) return authError;
 
   try {

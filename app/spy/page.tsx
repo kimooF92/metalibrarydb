@@ -6,13 +6,16 @@ import { AdCard } from "@/components/spy/ad-card";
 import { AdRow } from "@/components/spy/ad-row";
 import { SpyFilters } from "@/components/spy/spy-filters";
 import { ApifyCreditBadge } from "@/components/apify-credit-badge";
+import { useToast } from "@/components/toast-context";
 import { Layers, Calendar, Video, Image as ImageIcon, RefreshCw, Eye, ArrowUp } from "lucide-react";
 
 export default function AdSpyPage() {
-  const { ads, pagination, isLoading, isFetchingMore, error, params, updateFilters, updateAdInFeed, refetch } = useAdFeed();
-  const { stats } = useAdStats();
+  const { ads, pagination, isLoading, isFetchingMore, isRefreshing, error, params, updateFilters, updateAdInFeed, refetch } = useAdFeed();
+  const { stats, refetch: refetchStats } = useAdStats();
+  const { showToast } = useToast();
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [showBackToTop, setShowBackToTop] = useState(false);
+  const [manualRefreshing, setManualRefreshing] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   // Scroll listener for back to top button
@@ -84,6 +87,30 @@ export default function AdSpyPage() {
     }
   };
 
+  const handleRefreshFeed = async () => {
+    if (manualRefreshing) return;
+    setManualRefreshing(true);
+    try {
+      await Promise.all([
+        refetch(),
+        refetchStats(),
+      ]);
+      showToast({
+        type: "success",
+        title: "Feed Refreshed",
+        message: "Latest ad creatives, stats, and Apify cloud sync completed.",
+      });
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Refresh Error",
+        message: err.message || "Failed to refresh feed.",
+      });
+    } finally {
+      setManualRefreshing(false);
+    }
+  };
+
   // IntersectionObserver for continuous infinite scroll
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -93,6 +120,7 @@ export default function AdSpyPage() {
           first.isIntersecting &&
           !isLoading &&
           !isFetchingMore &&
+          !manualRefreshing &&
           pagination.page < pagination.totalPages
         ) {
           updateFilters({ page: pagination.page + 1 });
@@ -111,7 +139,9 @@ export default function AdSpyPage() {
         observer.unobserve(currentSentinel);
       }
     };
-  }, [isLoading, isFetchingMore, pagination.page, pagination.totalPages, updateFilters]);
+  }, [isLoading, isFetchingMore, manualRefreshing, pagination.page, pagination.totalPages, updateFilters]);
+
+  const isSpinning = manualRefreshing || isRefreshing || isLoading || isFetchingMore;
 
   return (
     <div className="h-full overflow-y-auto bg-background text-foreground space-y-4">
@@ -130,11 +160,12 @@ export default function AdSpyPage() {
         <div className="flex items-center space-x-2">
           <ApifyCreditBadge />
           <button
-            onClick={() => refetch()}
-            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shrink-0"
+            onClick={handleRefreshFeed}
+            disabled={manualRefreshing}
+            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shrink-0 disabled:opacity-60"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading || isFetchingMore ? "animate-spin text-indigo-500" : ""}`} />
-            <span>Refresh Feed</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${isSpinning ? "animate-spin text-indigo-500" : ""}`} />
+            <span>{manualRefreshing ? "Refreshing..." : "Refresh Feed"}</span>
           </button>
         </div>
       </div>
