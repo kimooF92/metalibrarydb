@@ -25,6 +25,7 @@ import {
   RotateCcw,
   Trash2,
   XCircle,
+  X,
 } from "lucide-react";
 
 interface DiscoveryRun {
@@ -804,13 +805,25 @@ export default function DiscoveryPage() {
             </label>
             {isCustomKeyword ? (
               <div className="flex items-center space-x-1">
-                <input
-                  type="text"
-                  placeholder='e.g. "شحن مجاني"'
-                  value={customKeywordText}
-                  onChange={(e) => setCustomKeywordText(e.target.value)}
-                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:border-indigo-500 text-xs"
-                />
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    placeholder='e.g. "شحن مجاني"'
+                    value={customKeywordText}
+                    onChange={(e) => setCustomKeywordText(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-2.5 pr-7 py-1.5 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:border-indigo-500 text-xs"
+                  />
+                  {customKeywordText && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomKeywordText("")}
+                      className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded-full cursor-pointer transition-colors"
+                      title="Clear keyword"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={() => {
@@ -1153,8 +1166,18 @@ export default function DiscoveryPage() {
                   placeholder="Filter by page name..."
                   value={searchFilter}
                   onChange={(e) => setSearchFilter(e.target.value)}
-                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-8 pr-8 py-1.5 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
                 />
+                {searchFilter && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchFilter("")}
+                    className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded-full cursor-pointer transition-colors"
+                    title="Clear filter"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
               {/* Status filter tabs */}
               <div className="flex items-center gap-1 shrink-0 flex-wrap">

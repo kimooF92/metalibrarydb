@@ -43,6 +43,7 @@ import {
   Rocket,
   Target,
   ArrowUpRight,
+  X,
 } from "lucide-react";
 
 interface BrandAnalyticsData {
@@ -819,8 +820,21 @@ export default function BrandDeepDivePage({
                   setFeedSearch(e.target.value);
                   updateFilters({ search: e.target.value, page: 1 });
                 }}
-                className="w-full bg-slate-50 dark:bg-slate-900 text-xs rounded-lg pl-9 pr-3 py-1.5 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500"
+                className="w-full bg-slate-50 dark:bg-slate-900 text-xs rounded-lg pl-9 pr-8 py-1.5 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500"
               />
+              {feedSearch && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFeedSearch("");
+                    updateFilters({ search: "", page: 1 });
+                  }}
+                  className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded-full cursor-pointer transition-colors"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
             {/* Quick Controls */}

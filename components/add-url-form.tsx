@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PlusCircle, Loader2, Link2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { PlusCircle, Loader2, Link2, AlertCircle, CheckCircle2, X } from "lucide-react";
 
 interface AddUrlFormProps {
   onSuccess?: () => void;
@@ -108,9 +108,19 @@ export function AddUrlForm({ onSuccess }: AddUrlFormProps) {
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="website domain or Meta Ad Library link"
-            className="w-full bg-white dark:bg-slate-950/80 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-lg px-4 py-2.5 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all"
+            className="w-full bg-white dark:bg-slate-950/80 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-lg pl-4 pr-10 py-2.5 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all"
             disabled={loading}
           />
+          {url && !loading && (
+            <button
+              type="button"
+              onClick={() => setUrl("")}
+              className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded-full cursor-pointer transition-colors"
+              title="Clear input"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
           <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
             Enter a website domain or paste the full Meta Ad Library link directly.
           </p>

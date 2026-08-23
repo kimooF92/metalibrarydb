@@ -817,8 +817,18 @@ export function SpyFilters({
                 placeholder="Search brands to exclude..."
                 value={brandSearch}
                 onChange={(e) => setBrandSearch(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-950 text-xs rounded-xl pl-9 pr-3 py-2 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-rose-500 text-slate-900 dark:text-slate-100 font-medium"
+                className="w-full bg-slate-50 dark:bg-slate-950 text-xs rounded-xl pl-9 pr-8 py-2 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-rose-500 text-slate-900 dark:text-slate-100 font-medium"
               />
+              {brandSearch && (
+                <button
+                  type="button"
+                  onClick={() => setBrandSearch("")}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded-full cursor-pointer transition-colors"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
             {/* Scrollable brand list */}
