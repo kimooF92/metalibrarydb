@@ -20,9 +20,8 @@ export const metadata: Metadata = {
   },
 };
 
-import { SidebarProvider } from "@/components/sidebar-context";
 import { ToastProvider } from "@/components/toast-context";
-import { TopBar } from "@/components/top-bar";
+import { AppShell } from "@/components/app-shell";
 import { Analytics } from "@vercel/analytics/react";
 
 export default function RootLayout({
@@ -52,15 +51,9 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} bg-background text-foreground h-screen w-screen flex flex-col md:flex-row antialiased overflow-hidden`}>
         <ToastProvider>
-          <SidebarProvider>
-            <Navigation />
-            <div className="flex-1 min-w-0 h-full flex flex-col overflow-hidden bg-background">
-              <TopBar />
-              <main className="flex-1 min-w-0 overflow-y-auto flex flex-col p-4 md:px-6 md:py-5 bg-background">
-                {children}
-              </main>
-            </div>
-          </SidebarProvider>
+          <AppShell>
+            {children}
+          </AppShell>
         </ToastProvider>
         <Analytics />
       </body>

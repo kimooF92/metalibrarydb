@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Settings,
   Cpu,
@@ -13,16 +14,21 @@ import {
   AlertCircle,
   Download,
   Shield,
+  ShieldCheck,
   Key,
   Layers,
   Clock,
   HardDrive,
   Check,
+  Lock,
+  LogOut,
+  Radio,
 } from "lucide-react";
 import { useToast } from "@/components/toast-context";
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<"general" | "spy" | "discovery" | "maintenance">("general");
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<"general" | "spy" | "discovery" | "maintenance" | "security">("general");
   const [saving, setSaving] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [pruneEligible, setPruneEligible] = useState<number | null>(null);
@@ -200,6 +206,7 @@ export default function SettingsPage() {
           { id: "spy", label: "Ad Spy & Cloud", icon: Sparkles },
           { id: "discovery", label: "Discovery Engine", icon: Globe },
           { id: "maintenance", label: "Database & Queue", icon: Database },
+          { id: "security", label: "Security & Access", icon: Shield },
         ].map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
@@ -464,6 +471,89 @@ export default function SettingsPage() {
                   <Download className="w-3.5 h-3.5" />
                   <span>Export CSV</span>
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 5: Security & Access Gate */}
+      {activeTab === "security" && (
+        <div className="space-y-6 animate-in fade-in duration-150">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Gate Status */}
+            <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 space-y-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Master Password Gate</h3>
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Active & Edge Protected</p>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                All pages, competitor databases, and API routes are guarded by cryptographic HMAC-SHA256 session signatures.
+              </p>
+              <div className="space-y-2 pt-1 border-t border-slate-100 dark:border-slate-800 text-xs">
+                <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                  <span>Session Length:</span>
+                  <span className="font-semibold text-slate-900 dark:text-white">30 Days (Rolling)</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                  <span>Cookie Security:</span>
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">HttpOnly + SameSite</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                  <span>Brute-Force Guard:</span>
+                  <span className="font-semibold text-slate-900 dark:text-white">5 Attempts / Lockout</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Session Management */}
+            <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 space-y-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Session Controls</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Manage your active authentication session</p>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                Lock your session immediately on this device, or update your password in <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px] font-mono">.env.local</code>.
+              </p>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await fetch("/api/auth/logout", { method: "POST" });
+                    } catch {}
+                    router.push("/login");
+                    router.refresh();
+                  }}
+                  className="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-xs font-bold transition-all cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Lock Session / Sign Out</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Background Workers & API Key Access */}
+            <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 space-y-3 md:col-span-2">
+              <div className="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400">
+                <Key className="w-4 h-4" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Automated Workers & API Access</h3>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                Background scraping cron jobs and external scripts can bypass UI cookies by supplying the <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px] font-mono">x-api-secret</code> header or a Bearer token matching <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px] font-mono">API_SECRET</code> or <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px] font-mono">APP_PASSWORD</code>.
+              </p>
+              <div className="p-3 rounded-xl bg-slate-900 text-slate-200 font-mono text-[11px] overflow-x-auto">
+                <code>curl -H &quot;x-api-secret: YOUR_PASSWORD&quot; https://your-domain.com/api/spy/scans/sync</code>
               </div>
             </div>
           </div>

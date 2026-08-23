@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   BarChart3,
@@ -14,6 +14,7 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  LogOut,
 } from "lucide-react";
 import { NotificationCenter } from "./notification-center";
 import { ThemeToggle } from "./theme-toggle";
@@ -21,8 +22,17 @@ import { useSidebar } from "@/components/sidebar-context";
 
 export function Navigation() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const { isCollapsed, toggleSidebar } = useSidebar();
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {}
+    router.push("/login");
+    router.refresh();
+  };
 
   const navItems = [
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -127,6 +137,27 @@ export function Navigation() {
             })}
           </nav>
         </div>
+
+        {/* Sidebar Bottom Footer — Lock / Sign Out */}
+        <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80">
+          {isCollapsed ? (
+            <button
+              onClick={handleLogout}
+              title="Lock Session / Log Out"
+              className="flex items-center justify-center w-10 h-10 mx-auto rounded-lg text-slate-500 hover:text-rose-500 hover:bg-rose-500/10 transition-colors border border-transparent hover:border-rose-500/20"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          ) : (
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 transition-all border border-transparent hover:border-rose-500/20 group"
+            >
+              <LogOut className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+              <span>Lock Session</span>
+            </button>
+          )}
+        </div>
       </header>
 
       {/* Mobile Top Bar */}
@@ -157,7 +188,7 @@ export function Navigation() {
 
       {/* Mobile Drawer Menu Overlay */}
       {isOpen && (
-        <div className="fixed inset-x-0 bottom-0 top-14 z-40 bg-white/98 dark:bg-[#0b0f19]/98 backdrop-blur-md md:hidden flex flex-col p-6 space-y-6 animate-in slide-in-from-top-5 duration-200">
+        <div className="fixed inset-x-0 bottom-0 top-14 z-40 bg-white/98 dark:bg-[#0b0f19]/98 backdrop-blur-md md:hidden flex flex-col p-6 space-y-6 animate-in slide-in-from-top-5 duration-200 justify-between">
           <nav className="flex flex-col space-y-2">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -179,6 +210,16 @@ export function Navigation() {
               );
             })}
           </nav>
+
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 rounded-xl text-sm font-semibold text-rose-500 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-all"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Lock Session / Sign Out</span>
+            </button>
+          </div>
         </div>
       )}
     </>
