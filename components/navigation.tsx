@@ -9,6 +9,7 @@ import {
   Eye,
   Globe,
   ShoppingBag,
+  Settings,
   Menu,
   X,
   ChevronLeft,
@@ -29,6 +30,7 @@ export function Navigation() {
     { href: "/spy", label: "Ad Spy Feed", icon: Eye },
     { href: "/products", label: "Products", icon: ShoppingBag },
     { href: "/analytics", label: "Analytics", icon: BarChart3 },
+    { href: "/settings", label: "Settings", icon: Settings },
   ];
 
   return (
@@ -125,22 +127,6 @@ export function Navigation() {
             })}
           </nav>
         </div>
-
-        {/* Clean Sidebar Footer */}
-        {isCollapsed ? (
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 flex flex-col items-center space-y-3">
-            <NotificationCenter layout="collapsed" />
-            <ThemeToggle size="sm" />
-          </div>
-        ) : (
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 space-y-3">
-            <NotificationCenter layout="sidebar" />
-            <div className="flex items-center justify-between px-2 pt-1 text-slate-400 text-xs">
-              <span className="text-[10px] font-medium text-slate-400">Theme</span>
-              <ThemeToggle size="sm" />
-            </div>
-          </div>
-        )}
       </header>
 
       {/* Mobile Top Bar */}
@@ -193,11 +179,6 @@ export function Navigation() {
               );
             })}
           </nav>
-
-          <div className="pt-6 border-t border-slate-200 dark:border-slate-800/80 mt-auto flex items-center justify-between">
-            <span className="text-xs text-slate-500 font-medium">Appearance</span>
-            <ThemeToggle size="sm" />
-          </div>
         </div>
       )}
     </>

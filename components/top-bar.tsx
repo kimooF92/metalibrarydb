@@ -8,6 +8,7 @@ import {
   ShoppingBag,
   BarChart3,
   UploadCloud,
+  Settings,
 } from "lucide-react";
 import { NotificationCenter } from "./notification-center";
 import { ThemeToggle } from "./theme-toggle";
@@ -21,6 +22,7 @@ const ROUTE_INFO: Record<
   "/spy": { label: "Ad Spy Feed", icon: Eye },
   "/products": { label: "Product Intelligence", icon: ShoppingBag },
   "/analytics": { label: "Analytics", icon: BarChart3 },
+  "/settings": { label: "Settings", icon: Settings },
   "/import": { label: "Import Pages", icon: UploadCloud },
 };
 

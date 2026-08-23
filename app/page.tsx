@@ -394,31 +394,46 @@ export default function DashboardPage() {
           <span>{toast.message}</span>
         </div>
       )}
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800/40">
+      {/* Page Header (Line 2) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200 dark:border-slate-800/40">
         <div className="flex items-center flex-wrap gap-2">
-          <div className="flex items-center space-x-2">
-            <h1 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight">
-              Dashboard
-            </h1>
-          </div>
+          <h1 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight">
+            Dashboard
+          </h1>
+
           {stats && (
-            <span className="text-[10px] bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full font-medium hidden md:inline-block">
-              {stats.totalPages} monitored • {stats.completed} completed • {stats.failed} failed
-            </span>
-          )}
-          {stats && stats.scanning > 0 && (
-            <span className="flex items-center space-x-1.5 text-[10px] bg-cyan-50 dark:bg-cyan-950/80 border border-cyan-200 dark:border-cyan-500/30 text-cyan-700 dark:text-cyan-300 px-2 py-0.5 rounded-full font-semibold animate-pulse shrink-0">
-              <RefreshCw className="w-2.5 h-2.5 animate-spin text-cyan-500 dark:text-cyan-400" />
-              <span>Scanning {stats.scanning} {stats.scanning === 1 ? "page" : "pages"}...</span>
-            </span>
+            <div className="flex items-center gap-1.5 ml-1">
+              <span className="inline-flex items-center gap-1 text-[11px] bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md font-semibold">
+                <span className="text-slate-400 font-normal">Monitored:</span>
+                <span>{stats.totalPages}</span>
+              </span>
+
+              <span className="inline-flex items-center gap-1 text-[11px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-md font-semibold">
+                <span className="text-emerald-600/70 dark:text-emerald-400/70 font-normal">Completed:</span>
+                <span>{stats.completed}</span>
+              </span>
+
+              {stats.failed > 0 && (
+                <span className="inline-flex items-center gap-1 text-[11px] bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-300 px-2 py-0.5 rounded-md font-semibold">
+                  <span className="text-rose-600/70 dark:text-rose-400/70 font-normal">Failed:</span>
+                  <span>{stats.failed}</span>
+                </span>
+              )}
+
+              {stats.scanning > 0 && (
+                <span className="flex items-center space-x-1 text-[11px] bg-cyan-50 dark:bg-cyan-950/80 border border-cyan-200 dark:border-cyan-500/30 text-cyan-700 dark:text-cyan-300 px-2 py-0.5 rounded-md font-semibold animate-pulse shrink-0">
+                  <RefreshCw className="w-2.5 h-2.5 animate-spin text-cyan-500 dark:text-cyan-400" />
+                  <span>Scanning {stats.scanning}...</span>
+                </span>
+              )}
+            </div>
           )}
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
+            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Track URL</span>
@@ -434,9 +449,6 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
-
-      {/* Inline Dashboard Key Stats */}
-      <StatsCards stats={stats} loading={statsLoading} />
 
       {/* Main Tracked Pages Table */}
       <PagesTable
