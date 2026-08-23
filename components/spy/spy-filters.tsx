@@ -160,6 +160,13 @@ export function SpyFilters({
     (isStatusActive ? 1 : 0) +
     (isExcludedActive ? 1 : 0);
 
+  const hasAnyActiveFilter = Boolean(
+    (filters.smartPreset && filters.smartPreset !== "all") ||
+    totalActiveAdvancedCount > 0 ||
+    searchValue.trim() !== "" ||
+    (filters.status && filters.status === "archived")
+  );
+
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(totalActiveAdvancedCount > 0);
 
   // Close modals on click outside
@@ -425,9 +432,9 @@ export function SpyFilters({
           })}
         </div>
 
-        {/* More Filters Button */}
+        {/* Actions Cluster: Reset Filters Button + More Filters Toggle */}
         <div className="shrink-0 ml-auto flex items-center gap-2">
-          {totalActiveAdvancedCount > 0 && !showAdvancedFilters && (
+          {hasAnyActiveFilter && (
             <button
               type="button"
               onClick={() => {
@@ -436,9 +443,11 @@ export function SpyFilters({
                 setSearchValue("");
                 onReset();
               }}
-              className="text-xs text-rose-500 hover:underline font-semibold cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 transition cursor-pointer shadow-2xs"
+              title="Reset all search queries, quick presets, and custom filters"
             >
-              Reset all ({totalActiveAdvancedCount})
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Clear Filters</span>
             </button>
           )}
 
