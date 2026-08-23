@@ -337,15 +337,15 @@ export function SpyFilters({
           <select
             value={filters.sortBy || "started_running_on"}
             onChange={(e) => onFilterChange({ sortBy: e.target.value as any })}
-            className="bg-white dark:bg-slate-950/80 text-slate-800 dark:text-slate-200 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-3 py-1.5 focus:outline-none focus:border-indigo-500 cursor-pointer"
+            className="bg-white dark:bg-slate-950/80 text-slate-800 dark:text-slate-200 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-3 py-1.5 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-sm"
           >
-            <option value="winner_score" className="bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 font-bold">🏆 Sort: Winner Score (Highest First)</option>
-            <option value="product_creatives" className="bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 font-bold">🎯 Sort: Most Creative Angles (Product Depth)</option>
-            <option value="started_running_on" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Sort: Newest Launched</option>
-            <option value="oldest" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Sort: Oldest / Longest Running</option>
-            <option value="duplication_count" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Sort: Most Scaled (Copies)</option>
-            <option value="recently_observed" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Sort: Recently Observed</option>
-            <option value="first_seen_at" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Sort: First Discovered</option>
+            <option value="winner_score" className="bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 font-bold">🏆 Winner Score (Highest First)</option>
+            <option value="duplication_count" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">🔥 Most Scaled (Active Copies)</option>
+            <option value="started_running_on" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">⚡ Newest Launched (Meta Date)</option>
+            <option value="oldest" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">⏳ Longest Running (Evergreen)</option>
+            <option value="product_creatives" className="bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 font-bold">🎯 Most Creative Angles (Product Depth)</option>
+            <option value="recently_observed" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">👁️ Recently Active (Last Verified)</option>
+            <option value="first_seen_at" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">📅 Newly Indexed (First Found)</option>
           </select>
         </div>
       </div>

@@ -864,10 +864,12 @@ export default function BrandDeepDivePage({
                 }}
                 className="bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-2.5 py-1.5"
               >
-                <option value="winner_score">🏆 Winner Score</option>
-                <option value="duplication_count">🔥 Most Scaled (Copies)</option>
-                <option value="started_running_on">Newest Launched</option>
-                <option value="oldest">Longest Running</option>
+                <option value="winner_score">🏆 Winner Score (Highest First)</option>
+                <option value="duplication_count">🔥 Most Scaled (Active Copies)</option>
+                <option value="started_running_on">⚡ Newest Launched (Meta Date)</option>
+                <option value="oldest">⏳ Longest Running (Evergreen)</option>
+                <option value="recently_observed">👁️ Recently Active (Last Verified)</option>
+                <option value="first_seen_at">📅 Newly Indexed (First Found)</option>
               </select>
 
               {/* Grid / List Switcher */}
