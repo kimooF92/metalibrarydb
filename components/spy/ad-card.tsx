@@ -87,10 +87,24 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
     };
   }, []);
 
-  const displayImage = currentAd.signedThumbnailUrl || currentAd.thumbnailUrl || currentAd.mediaUrls?.[0];
-  const previewImages = currentAd.mediaUrls && currentAd.mediaUrls.length > 0 ? currentAd.mediaUrls : displayImage ? [displayImage] : [];
-  const isCarousel = currentAd.mediaType === "carousel" || previewImages.length > 1;
-  const activeSlideUrl = previewImages.length > 0 ? previewImages[carouselIndex % previewImages.length] : displayImage;
+  const firstVideoUrl = currentAd.mediaUrls?.find(
+    (url) => url.includes(".mp4") || url.includes("/videos/") || currentAd.mediaType === "video"
+  );
+  const imageSlides = currentAd.mediaUrls?.filter(
+    (url) => !url.includes(".mp4") && !url.includes("/videos/")
+  ) || [];
+
+  const displayThumbnail = currentAd.signedThumbnailUrl || currentAd.thumbnailUrl || (imageSlides.length > 0 ? imageSlides[0] : null);
+  const isCarousel = currentAd.mediaType === "carousel" || imageSlides.length > 1;
+  const previewImages = isCarousel && imageSlides.length > 0
+    ? imageSlides
+    : displayThumbnail
+    ? [displayThumbnail]
+    : imageSlides;
+
+  const activeSlideUrl = isCarousel && previewImages.length > 0
+    ? previewImages[carouselIndex % previewImages.length]
+    : displayThumbnail;
 
   const activeImageSrc = isProxied && activeSlideUrl && activeSlideUrl.startsWith("http")
     ? `/api/spy/image-proxy?url=${encodeURIComponent(activeSlideUrl)}`
@@ -254,9 +268,6 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
     productCreativeCount: currentAd.productCreativeCount || 1,
   });
 
-  const firstVideoUrl = currentAd.mediaUrls?.find(
-    (url) => url.includes(".mp4") || url.includes("video") || currentAd.mediaType === "video"
-  );
   const destinationUrl = resolveDestinationUrl(currentAd.linkUrl);
   const targetDomain = getCleanDomain(currentAd.linkUrl);
 
@@ -789,9 +800,9 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
               {isArchived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
             </button>
 
-            {(firstVideoUrl || displayImage) && (
+            {(firstVideoUrl || displayThumbnail) && (
               <a
-                href={firstVideoUrl || displayImage}
+                href={firstVideoUrl || displayThumbnail || undefined}
                 target="_blank"
                 rel="noopener noreferrer"
                 download

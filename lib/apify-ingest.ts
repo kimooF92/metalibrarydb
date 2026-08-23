@@ -107,10 +107,11 @@ export function extractMedia(item: any): {
     mediaType = "image";
   }
 
-  // Thumbnail fallback
+  // Thumbnail fallback (always prioritize image over video file)
+  const firstNonVideoUrl = urls.find((u) => !u.includes(".mp4") && !u.includes("/videos/"));
   const thumbnailUrl =
     preferredThumbnail ||
-    urls[0] ||
+    firstNonVideoUrl ||
     item.snapshot?.page_profile_picture_url ||
     item.pageProfilePictureUrl ||
     null;

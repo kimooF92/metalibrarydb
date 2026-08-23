@@ -599,9 +599,12 @@ export async function scanAdCreatives(
           );
           finalMediaUrls = b2MediaUrls;
 
-          // If thumbnail was missing or null, pick first cached media URL
+          // If thumbnail was missing or null, pick first image URL (never an MP4 video)
           if (!finalThumbnailUrl && finalMediaUrls.length > 0) {
-            finalThumbnailUrl = finalMediaUrls[0];
+            const firstImage = finalMediaUrls.find((u) => !u.includes(".mp4") && !u.includes("/videos/"));
+            if (firstImage) {
+              finalThumbnailUrl = firstImage;
+            }
           }
         }
       } else {

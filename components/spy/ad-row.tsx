@@ -81,13 +81,22 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
     };
   }, []);
 
-  const displayImage = currentAd.signedThumbnailUrl || currentAd.thumbnailUrl || currentAd.mediaUrls?.[0];
-  const activeImageSrc = isProxied && displayImage && displayImage.startsWith("http")
-    ? `/api/spy/image-proxy?url=${encodeURIComponent(displayImage)}`
-    : displayImage;
+  const firstVideoUrl = currentAd.mediaUrls?.find(
+    (url: string) => url.includes(".mp4") || url.includes("/videos/") || currentAd.mediaType === "video"
+  );
+  const imageSlides = currentAd.mediaUrls?.filter(
+    (url: string) => !url.includes(".mp4") && !url.includes("/videos/")
+  ) || [];
+
+  const displayThumbnail = currentAd.signedThumbnailUrl || currentAd.thumbnailUrl || (imageSlides.length > 0 ? imageSlides[0] : null);
+  const previewImages = imageSlides.length > 0 ? imageSlides : displayThumbnail ? [displayThumbnail] : [];
+
+  const activeImageSrc = isProxied && displayThumbnail && displayThumbnail.startsWith("http")
+    ? `/api/spy/image-proxy?url=${encodeURIComponent(displayThumbnail)}`
+    : displayThumbnail;
 
   const handleImageError = () => {
-    if (!isProxied && displayImage && displayImage.startsWith("http")) {
+    if (!isProxied && displayThumbnail && displayThumbnail.startsWith("http")) {
       setIsProxied(true);
     } else {
       setImgError(true);
@@ -238,13 +247,8 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
     productCreativeCount: currentAd.productCreativeCount || 1,
   });
 
-  const firstVideoUrl = currentAd.mediaUrls?.find(
-    (url: string) => url.includes(".mp4") || url.includes("video") || currentAd.mediaType === "video"
-  );
   const destinationUrl = resolveDestinationUrl(currentAd.linkUrl);
   const targetDomain = getCleanDomain(currentAd.linkUrl);
-
-  const previewImages = currentAd.mediaUrls && currentAd.mediaUrls.length > 0 ? currentAd.mediaUrls : displayImage ? [displayImage] : [];
 
   const handleMouseEnter = () => {
     if (!firstVideoUrl || isPlayingVideo || videoError) return;
@@ -645,9 +649,9 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
             {isArchived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
           </button>
 
-          {(firstVideoUrl || displayImage) && (
+          {(firstVideoUrl || displayThumbnail) && (
             <a
-              href={firstVideoUrl || displayImage}
+              href={firstVideoUrl || displayThumbnail || undefined}
               target="_blank"
               rel="noopener noreferrer"
               download
