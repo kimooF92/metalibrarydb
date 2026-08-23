@@ -5,14 +5,33 @@
 @custom-variant dark (&:is(.dark *));
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
+  *,
+  *::before,
+  *::after {
+    @apply border-border;
+    -webkit-tap-highlight-color: transparent;
+  }
+  *:focus:not(:focus-visible) {
+    outline: none;
+    box-shadow: none;
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-tap-highlight-color: transparent;
   }
   html {
     @apply font-sans;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role="button"],
+  [role="tab"],
+  [tabindex] {
+    -webkit-tap-highlight-color: transparent;
   }
 }
 
