@@ -69,7 +69,7 @@ export async function GET(request: Request) {
       createdAt: trackedPages.createdAt,
     };
 
-    let orderClause;
+    let orderClauses: any[] = [];
     if (sortBy === "difference") {
       const differenceSql = sql`(
         SELECT s.difference
@@ -78,12 +78,20 @@ export async function GET(request: Request) {
         ORDER BY s.checked_at DESC
         LIMIT 1
       )`;
-      orderClause = sortOrder === "asc"
-        ? sql`${differenceSql} ASC NULLS LAST`
-        : sql`${differenceSql} DESC NULLS LAST`;
+      orderClauses.push(
+        sortOrder === "asc"
+          ? sql`${differenceSql} ASC NULLS LAST`
+          : sql`${differenceSql} DESC NULLS LAST`
+      );
+      orderClauses.push(desc(trackedPages.createdAt));
+      orderClauses.push(desc(trackedPages.id));
     } else {
       const targetSortCol = sortColumns[sortBy] || trackedPages.createdAt;
-      orderClause = sortOrder === "asc" ? asc(targetSortCol) : desc(targetSortCol);
+      orderClauses.push(sortOrder === "asc" ? asc(targetSortCol) : desc(targetSortCol));
+      if (sortBy !== "createdAt") {
+        orderClauses.push(desc(trackedPages.createdAt));
+      }
+      orderClauses.push(desc(trackedPages.id));
     }
 
     // Total count query
@@ -100,7 +108,7 @@ export async function GET(request: Request) {
     // Fetch pages
     const pages = await db.query.trackedPages.findMany({
       ...(whereClause ? { where: whereClause } : {}),
-      orderBy: [orderClause],
+      orderBy: orderClauses,
       limit,
       offset: effectiveOffset,
     });

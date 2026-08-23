@@ -262,9 +262,9 @@ export function useAdFeed(initialParams?: AdFilterParams) {
     if (isManualRefresh) {
       setIsRefreshing(true);
       setIsLoading(true);
-    } else if (ads.length === 0 || currentPage === 1) {
-      setIsLoading(ads.length === 0);
-      setIsFetchingMore(ads.length > 0);
+    } else if (currentPage === 1) {
+      setIsLoading(true);
+      setIsFetchingMore(false);
     } else {
       setIsFetchingMore(true);
     }
@@ -336,7 +336,7 @@ export function useAdFeed(initialParams?: AdFilterParams) {
       setIsFetchingMore(false);
       setIsRefreshing(false);
     }
-  }, [params, ads.length]);
+  }, [params]);
 
   useEffect(() => {
     fetchFeed(false);

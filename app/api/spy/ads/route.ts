@@ -220,7 +220,14 @@ export async function GET(req: NextRequest) {
           WHEN EXTRACT(DAY FROM NOW() - ${ads.startedRunningOn}) <= 90 THEN 40
           ELSE 38
         END) +
-        (CASE WHEN ${adObservations.isActive} = true THEN 15 ELSE 2 END)
+        (CASE 
+          WHEN ${adObservations.isActive} = true AND (${ads.lastSeenAt} IS NULL OR EXTRACT(EPOCH FROM (NOW() - ${ads.lastSeenAt})) / 3600 <= 48) THEN 15
+          WHEN ${adObservations.isActive} = true AND EXTRACT(EPOCH FROM (NOW() - ${ads.lastSeenAt})) / 3600 <= 168 THEN 10
+          WHEN ${adObservations.isActive} = true THEN 6
+          ELSE 2
+        END) +
+        (CASE WHEN ${ads.mediaType} = 'video' THEN 1 ELSE 0 END) +
+        (CASE WHEN ${adObservations.isActive} = true AND ${adObservations.duplicationCount} >= 3 AND (${ads.startedRunningOn} IS NOT NULL AND EXTRACT(DAY FROM NOW() - ${ads.startedRunningOn}) <= 7) THEN 3 ELSE 0 END)
       )`;
       conditions.push(gte(winnerScoreSql, minWinnerScore));
     }
@@ -246,7 +253,7 @@ export async function GET(req: NextRequest) {
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     // Build CTE subquery — innerJoin on adObservations so we always have duplication/active metadata.
-    // DISTINCT ON (ads.id) keeps the latest observation per ad.
+    // DISTINCT ON (ads.id) keeps the latest observation per ad deterministically.
     const subquery = db
       .selectDistinctOn([ads.id], {
         id: ads.id,
@@ -281,8 +288,8 @@ export async function GET(req: NextRequest) {
       .orderBy(ads.id, desc(adObservations.observedAt))
       .as("distinct_ads");
 
-    // Outer sorting order
-    let outerOrderBy: any = desc(subquery.startedRunningOn);
+    // Outer sorting order with multi-tiered deterministic tie-breakers
+    let outerOrderBy: any[] = [];
 
     if (sortBy === "winner_score" || sortBy === "winner") {
       const winnerScoreSql = sql`(
@@ -303,26 +310,62 @@ export async function GET(req: NextRequest) {
           WHEN EXTRACT(DAY FROM NOW() - ${subquery.startedRunningOn}) <= 90 THEN 40
           ELSE 38
         END) +
-        (CASE WHEN ${subquery.isActive} = true THEN 15 ELSE 2 END)
+        (CASE 
+          WHEN ${subquery.isActive} = true AND (${subquery.lastSeenAt} IS NULL OR EXTRACT(EPOCH FROM (NOW() - ${subquery.lastSeenAt})) / 3600 <= 48) THEN 15
+          WHEN ${subquery.isActive} = true AND EXTRACT(EPOCH FROM (NOW() - ${subquery.lastSeenAt})) / 3600 <= 168 THEN 10
+          WHEN ${subquery.isActive} = true THEN 6
+          ELSE 2
+        END) +
+        (CASE WHEN ${subquery.mediaType} = 'video' THEN 1 ELSE 0 END) +
+        (CASE WHEN ${subquery.isActive} = true AND ${subquery.duplicationCount} >= 3 AND (${subquery.startedRunningOn} IS NOT NULL AND EXTRACT(DAY FROM NOW() - ${subquery.startedRunningOn}) <= 7) THEN 3 ELSE 0 END)
       )`;
-      outerOrderBy = sortOrder === "asc" ? asc(winnerScoreSql) : desc(winnerScoreSql);
+      outerOrderBy = [
+        sortOrder === "asc" ? asc(winnerScoreSql) : desc(winnerScoreSql),
+        desc(subquery.duplicationCount),
+        desc(subquery.startedRunningOn),
+        desc(subquery.createdAt),
+        desc(subquery.id),
+      ];
     } else if (sortBy === "oldest") {
-      outerOrderBy = asc(subquery.startedRunningOn);
+      outerOrderBy = [
+        asc(subquery.startedRunningOn),
+        desc(subquery.duplicationCount),
+        asc(subquery.createdAt),
+        asc(subquery.id),
+      ];
     } else if (sortBy === "duplication_count" || sortBy === "scale" || sortBy === "most_duplicated") {
-      outerOrderBy = sortOrder === "asc" ? asc(subquery.duplicationCount) : desc(subquery.duplicationCount);
+      outerOrderBy = [
+        sortOrder === "asc" ? asc(subquery.duplicationCount) : desc(subquery.duplicationCount),
+        desc(subquery.startedRunningOn),
+        desc(subquery.createdAt),
+        desc(subquery.id),
+      ];
     } else if (sortBy === "recently_observed" || sortBy === "last_seen_at") {
-      outerOrderBy = sortOrder === "asc" ? asc(subquery.lastSeenAt) : desc(subquery.lastSeenAt);
+      outerOrderBy = [
+        sortOrder === "asc" ? asc(subquery.lastSeenAt) : desc(subquery.lastSeenAt),
+        desc(subquery.startedRunningOn),
+        desc(subquery.id),
+      ];
     } else if (sortBy === "first_seen_at") {
-      outerOrderBy = sortOrder === "asc" ? asc(subquery.firstSeenAt) : desc(subquery.firstSeenAt);
+      outerOrderBy = [
+        sortOrder === "asc" ? asc(subquery.firstSeenAt) : desc(subquery.firstSeenAt),
+        desc(subquery.startedRunningOn),
+        desc(subquery.id),
+      ];
     } else {
       // Default: newest started_running_on
-      outerOrderBy = sortOrder === "asc" ? asc(subquery.startedRunningOn) : desc(subquery.startedRunningOn);
+      outerOrderBy = [
+        sortOrder === "asc" ? asc(subquery.startedRunningOn) : desc(subquery.startedRunningOn),
+        desc(subquery.duplicationCount),
+        desc(subquery.createdAt),
+        desc(subquery.id),
+      ];
     }
 
     const rows = await db
       .select()
       .from(subquery)
-      .orderBy(outerOrderBy)
+      .orderBy(...outerOrderBy)
       .limit(limit)
       .offset(offset);
 

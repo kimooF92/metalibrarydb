@@ -92,21 +92,32 @@ export async function GET(req: NextRequest) {
       .leftJoin(adCountsSubquery, eq(scrapedProducts.id, adCountsSubquery.productId))
       .where(whereClause);
 
-    // Sorting
-    let orderByClause;
+    // Sorting with multi-tiered deterministic tie-breakers
+    let orderByClauses: any[] = [];
     if (sortBy === "ads") {
-      orderByClause = sortOrder === "asc"
-        ? asc(sql`COALESCE(${adCountsSubquery.linkedAdsCount}, 0)`)
-        : desc(sql`COALESCE(${adCountsSubquery.linkedAdsCount}, 0)`);
+      orderByClauses.push(
+        sortOrder === "asc"
+          ? asc(sql`COALESCE(${adCountsSubquery.linkedAdsCount}, 0)`)
+          : desc(sql`COALESCE(${adCountsSubquery.linkedAdsCount}, 0)`)
+      );
+      orderByClauses.push(desc(scrapedProducts.createdAt));
+      orderByClauses.push(desc(scrapedProducts.id));
     } else if (sortBy === "title") {
-      orderByClause = sortOrder === "asc" ? asc(scrapedProducts.title) : desc(scrapedProducts.title);
+      orderByClauses.push(
+        sortOrder === "asc" ? asc(scrapedProducts.title) : desc(scrapedProducts.title)
+      );
+      orderByClauses.push(desc(scrapedProducts.createdAt));
+      orderByClauses.push(desc(scrapedProducts.id));
     } else {
       // Default: latest
-      orderByClause = sortOrder === "asc" ? asc(scrapedProducts.createdAt) : desc(scrapedProducts.createdAt);
+      orderByClauses.push(
+        sortOrder === "asc" ? asc(scrapedProducts.createdAt) : desc(scrapedProducts.createdAt)
+      );
+      orderByClauses.push(desc(scrapedProducts.id));
     }
 
     const [rows, totalResult, statsResult] = await Promise.all([
-      baseQuery.orderBy(orderByClause).limit(limit).offset(offset),
+      baseQuery.orderBy(...orderByClauses).limit(limit).offset(offset),
       db
         .select({ count: count() })
         .from(scrapedProducts)

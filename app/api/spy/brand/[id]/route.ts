@@ -327,7 +327,13 @@ export async function GET(
 
     // Top 3 Winner Creatives Spotlight
     const topWinners = [...allEnrichedAds]
-      .sort((a, b) => b.winnerScore - a.winnerScore || (b.duplicationCount || 0) - (a.duplicationCount || 0))
+      .sort(
+        (a, b) =>
+          b.winnerScore - a.winnerScore ||
+          (b.duplicationCount || 0) - (a.duplicationCount || 0) ||
+          new Date(b.startedRunningOn || 0).getTime() - new Date(a.startedRunningOn || 0).getTime() ||
+          b.id.localeCompare(a.id)
+      )
       .slice(0, 3);
 
     // 7. Historical Scan Trajectory (if tracked)

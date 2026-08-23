@@ -124,7 +124,7 @@ export async function GET(req: Request) {
 
       if (valA < valB) return sortOrder === "asc" ? -1 : 1;
       if (valA > valB) return sortOrder === "asc" ? 1 : -1;
-      return 0;
+      return (a.id || "").localeCompare(b.id || "");
     });
 
     return NextResponse.json({
