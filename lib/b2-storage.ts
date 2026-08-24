@@ -1,6 +1,13 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { uploadMediaFromUrlToCatbox } from "./catbox-storage";
+import { uploadBufferToSupabase } from "./supabase-storage";
 import { computeSha256, computeDHash } from "./media-hasher";
+
+const BROWSER_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+// Max buffer size to store in Supabase Storage (1.5MB) to protect the 1GB free tier quota
+const MAX_SUPABASE_STORAGE_BYTES = 1.5 * 1024 * 1024;
 
 export function isB2Configured(): boolean {
   const keyId = process.env.B2_KEY_ID?.trim();
@@ -69,7 +76,7 @@ export async function uploadBufferToB2(
     // Return internal streaming route URL which streams directly from B2
     return `/api/spy/b2-media?key=${encodeURIComponent(key)}`;
   } catch (err: any) {
-    console.error(`[B2 Storage] Failed to upload ${key} to B2:`, err.message);
+    console.warn(`[B2 Storage] B2 upload skipped/failed (${err.message}). Trying alternative storage...`);
     return null;
   }
 }
@@ -83,7 +90,12 @@ export interface MediaUploadResult {
 
 /**
  * Downloads a video or image from a remote URL, computes SHA-256 and Perceptual dHash,
- * and uploads to Backblaze B2 using Content-Addressable Storage (deduplicated by content hash).
+ * and uploads using a Quota-Protective Strategy:
+ *
+ * 1. Backblaze B2 (if configured and quota allows)
+ * 2. Catbox.moe / Litterbox (100% free, unlimited storage, 200MB max per video)
+ * 3. Supabase Storage (ONLY for lightweight thumbnails < 1.5MB to preserve the 1GB quota)
+ * 4. Original Meta CDN URL fallback
  */
 export async function uploadMediaWithHashing(
   sourceUrl: string,
@@ -95,30 +107,38 @@ export async function uploadMediaWithHashing(
   }
 
   try {
+    const isVideo = keyPrefix === "videos" || sourceUrl.includes(".mp4");
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const timeoutId = setTimeout(() => controller.abort(), isVideo ? 45000 : 25000);
 
     const res = await fetch(sourceUrl, {
       signal: controller.signal,
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": BROWSER_USER_AGENT,
         Referer: "https://www.facebook.com/",
+        Accept: "*/*",
       },
     });
 
     clearTimeout(timeoutId);
 
     if (!res.ok) {
-      console.warn(`[B2 Storage] Failed to fetch source media ${sourceUrl}: status ${res.status}`);
-      return { url: null, mediaHash: null, perceptualHash: null, wasReused: false };
+      console.warn(`[Storage Engine] Failed to fetch source media ${sourceUrl}: status ${res.status}`);
+      // Try Catbox direct URL upload as an alternative
+      const catboxFallbackUrl = await uploadMediaFromUrlToCatbox(sourceUrl, fallbackFilename || "media");
+      return {
+        url: catboxFallbackUrl || sourceUrl,
+        mediaHash: null,
+        perceptualHash: null,
+        wasReused: false,
+      };
     }
 
     const arrayBuf = await res.arrayBuffer();
     const buffer = Buffer.from(arrayBuf);
 
     if (buffer.length === 0) {
-      return { url: null, mediaHash: null, perceptualHash: null, wasReused: false };
+      return { url: sourceUrl, mediaHash: null, perceptualHash: null, wasReused: false };
     }
 
     // 1. Compute SHA-256 binary hash
@@ -126,13 +146,15 @@ export async function uploadMediaWithHashing(
 
     // 2. Compute 64-bit Perceptual dHash for thumbnails and images
     let perceptualHash: string | null = null;
-    if (keyPrefix === "thumbnails" || !sourceUrl.includes(".mp4")) {
-      perceptualHash = await computeDHash(buffer);
+    if (keyPrefix === "thumbnails" || !isVideo) {
+      try {
+        perceptualHash = await computeDHash(buffer);
+      } catch {}
     }
 
     let contentType = res.headers.get("content-type") || "application/octet-stream";
     let ext = ".jpg";
-    if (keyPrefix === "videos" || contentType.includes("video") || sourceUrl.includes(".mp4")) {
+    if (isVideo || contentType.includes("video")) {
       ext = ".mp4";
       if (!contentType.includes("video")) contentType = "video/mp4";
     }
@@ -141,7 +163,7 @@ export async function uploadMediaWithHashing(
     const contentKey = `${keyPrefix}/${mediaHash}${ext}`;
     const wasAlreadyKnown = knownUploadedKeys.has(contentKey);
 
-    // 3. Try Primary Upload to Backblaze B2
+    // Tier 1: Try Backblaze B2
     const b2Url = await uploadBufferToB2(buffer, contentKey, contentType);
     if (b2Url) {
       return {
@@ -152,20 +174,44 @@ export async function uploadMediaWithHashing(
       };
     }
 
-    // 4. Secondary Fallback to Catbox.moe
-    console.warn(`[B2 Storage] Backblaze upload returned null. Falling back to Catbox.moe for ${contentKey}...`);
+    // Tier 2: Catbox.moe / Litterbox (Unlimited Free Storage for heavy videos & images)
+    console.log(`[Storage Engine] Uploading ${contentKey} (${(buffer.length / 1024 / 1024).toFixed(2)} MB) to Catbox...`);
     const catboxUrl = await uploadMediaFromUrlToCatbox(sourceUrl, `${mediaHash}${ext}`);
+    if (catboxUrl) {
+      return {
+        url: catboxUrl,
+        mediaHash,
+        perceptualHash,
+        wasReused: false,
+      };
+    }
+
+    // Tier 3: Supabase Storage (STRICTLY for small thumbnails < 1.5MB to protect Supabase quota)
+    if (!isVideo && buffer.length <= MAX_SUPABASE_STORAGE_BYTES) {
+      const supabaseUrl = await uploadBufferToSupabase(buffer, contentKey, contentType);
+      if (supabaseUrl) {
+        console.log(`[Storage Engine] Stored thumbnail to Supabase Storage: ${supabaseUrl}`);
+        return {
+          url: supabaseUrl,
+          mediaHash,
+          perceptualHash,
+          wasReused: false,
+        };
+      }
+    }
+
+    // Tier 4: Fallback to source URL
     return {
-      url: catboxUrl,
+      url: sourceUrl,
       mediaHash,
       perceptualHash,
       wasReused: false,
     };
   } catch (err: any) {
-    console.error(`[B2 Storage] Primary B2 upload error for ${sourceUrl}:`, err.message);
+    console.error(`[Storage Engine] Primary upload error for ${sourceUrl}:`, err.message);
     const catboxUrl = await uploadMediaFromUrlToCatbox(sourceUrl, fallbackFilename || "media");
     return {
-      url: catboxUrl,
+      url: catboxUrl || sourceUrl,
       mediaHash: null,
       perceptualHash: null,
       wasReused: false,

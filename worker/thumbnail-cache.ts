@@ -5,9 +5,9 @@ import { uploadMediaFromUrlToB2, isB2Configured } from "../lib/b2-storage";
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-const BUCKET_NAME = "ad-thumbnails";
-const MAX_BYTE_SIZE = 5 * 1024 * 1024; // 5MB limit
-const FETCH_TIMEOUT_MS = 8000;
+const BUCKET_NAME = "ad-media";
+const MAX_BYTE_SIZE = 15 * 1024 * 1024; // 15MB limit
+const FETCH_TIMEOUT_MS = 25000;
 
 let supabaseClient: ReturnType<typeof createClient> | null = null;
 
