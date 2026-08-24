@@ -96,6 +96,7 @@ export async function GET(
         mediaUrls: ads.mediaUrls,
         thumbnailUrl: ads.thumbnailUrl,
         thumbnailStoragePath: ads.thumbnailStoragePath,
+        storyboardUrls: ads.storyboardUrls,
         firstSeenAt: ads.firstSeenAt,
         lastSeenAt: ads.lastSeenAt,
         isArchived: ads.isArchived,

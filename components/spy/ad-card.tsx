@@ -9,6 +9,7 @@ import { calculateWinnerScore } from "@/lib/winner-score";
 import { ImagePreviewModal } from "./image-preview-modal";
 import { ProductClusterModal } from "./product-cluster-modal";
 import { CreativeClusterModal } from "./creative-cluster-modal";
+import { VideoHoverScrubber } from "./video-hover-scrubber";
 import { useToast } from "@/components/toast-context";
 import {
   Calendar,
@@ -87,11 +88,23 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
     };
   }, []);
 
+  const hasStoryboard = Boolean(currentAd.storyboardUrls && currentAd.storyboardUrls.length > 0);
   const firstVideoUrl = currentAd.mediaUrls?.find(
-    (url) => url.includes(".mp4") || url.includes("/videos/") || currentAd.mediaType === "video"
-  );
+    (url) =>
+      url.includes(".mp4") ||
+      url.includes("/videos/") ||
+      url.includes("video.") ||
+      url.includes("fbcdn.net/o1/v/")
+  ) || (currentAd.mediaType === "video" && currentAd.mediaUrls?.[0]?.includes("http") ? currentAd.mediaUrls[0] : null);
+
+  const isVideoAd = currentAd.mediaType === "video" || hasStoryboard || Boolean(firstVideoUrl);
+
   const imageSlides = currentAd.mediaUrls?.filter(
-    (url) => !url.includes(".mp4") && !url.includes("/videos/")
+    (url) =>
+      !url.includes(".mp4") &&
+      !url.includes("/videos/") &&
+      !url.includes("video.") &&
+      !url.includes("fbcdn.net/o1/v/")
   ) || [];
 
   const displayThumbnail = currentAd.signedThumbnailUrl || currentAd.thumbnailUrl || (imageSlides.length > 0 ? imageSlides[0] : null);
@@ -547,37 +560,14 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             </div>
-          ) : isHovered && firstVideoUrl && !videoError ? (
-            <div
-              className="relative w-full h-full bg-black rounded-xl overflow-hidden flex items-center justify-center cursor-pointer group/hovervid"
-              onClick={() => setIsPlayingVideo(true)}
-            >
-              <video
-                src={firstVideoUrl}
-                muted
-                loop
-                playsInline
-                autoPlay
-                preload="metadata"
-                {...({ referrerPolicy: "no-referrer" } as any)}
-                onError={() => {
-                  setIsHovered(false);
-                  setVideoError(true);
-                }}
-                className="w-full h-full object-contain bg-black rounded-xl select-none"
-              />
-              {/* Subtle Muted Preview Badge */}
-              <div className="absolute top-2 left-2 z-20 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/80 border border-white/15 text-[10px] font-semibold text-white pointer-events-none shadow-md">
-                <VolumeX className="w-3 h-3 text-indigo-400" />
-                <span>Preview</span>
-              </div>
-
-              {/* Click to Play with Sound Indicator */}
-              <div className="absolute bottom-2 right-2 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-600/90 text-white text-[11px] font-bold shadow-lg hover:bg-indigo-500 transition-all">
-                <Play className="w-3 h-3 fill-current" />
-                <span>Play Sound</span>
-              </div>
-            </div>
+          ) : isVideoAd ? (
+            <VideoHoverScrubber
+              storyboardUrls={currentAd.storyboardUrls}
+              fallbackThumbnailUrl={displayThumbnail}
+              videoUrl={firstVideoUrl}
+              adArchiveId={currentAd.adArchiveId}
+              onPlayClick={() => setIsPlayingVideo(true)}
+            />
           ) : (
             <div className="relative w-full h-full group/media cursor-pointer flex items-center justify-center" onClick={() => setIsPreviewOpen(true)}>
               {activeImageSrc && !imgError ? (

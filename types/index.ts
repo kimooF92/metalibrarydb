@@ -136,6 +136,7 @@ export interface Ad {
   mediaUrls: string[] | null;
   thumbnailUrl: string | null;
   thumbnailStoragePath: string | null;
+  storyboardUrls?: string[] | null;
   firstSeenAt: string;
   lastSeenAt: string;
   createdAt: string;

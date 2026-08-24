@@ -218,6 +218,52 @@ export async function uploadMediaWithHashing(
 }
 
 /**
+ * Uploads a list of 5 storyboard frame buffers to persistent storage.
+ * Returns an array of public URLs for hover-scrubbing.
+ */
+export async function uploadStoryboardFrames(
+  frames: Buffer[],
+  adArchiveId: string
+): Promise<string[]> {
+  if (!frames || frames.length === 0) return [];
+
+  const urls: string[] = [];
+
+  for (let idx = 0; idx < frames.length; idx++) {
+    const frame = frames[idx];
+    const key = `storyboard/${adArchiveId}_f${idx}.jpg`;
+    const contentType = "image/jpeg";
+
+    try {
+      // 1. Try B2
+      const b2Url = await uploadBufferToB2(frame, key, contentType);
+      if (b2Url) {
+        urls.push(b2Url);
+        continue;
+      }
+
+      // 2. Try Catbox
+      const catboxUrl = await uploadBufferToCatbox(frame, `${adArchiveId}_f${idx}.jpg`, contentType);
+      if (catboxUrl) {
+        urls.push(catboxUrl);
+        continue;
+      }
+
+      // 3. Try Supabase Storage (each frame is ~10KB, 5 frames = ~50KB total)
+      const supabaseUrl = await uploadBufferToSupabase(frame, key, contentType);
+      if (supabaseUrl) {
+        urls.push(supabaseUrl);
+        continue;
+      }
+    } catch (e: any) {
+      console.warn(`[Storage Engine] Failed to upload storyboard frame ${idx} for ${adArchiveId}:`, e.message);
+    }
+  }
+
+  return urls;
+}
+
+/**
  * Backward-compatible helper for existing callers.
  */
 export async function uploadMediaFromUrlToB2(
@@ -228,3 +274,4 @@ export async function uploadMediaFromUrlToB2(
   const result = await uploadMediaWithHashing(sourceUrl, keyPrefix, filename);
   return result.url;
 }
+

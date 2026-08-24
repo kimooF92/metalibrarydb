@@ -4,7 +4,8 @@ import { ads, adObservations, creativeScans, trackedPages, scanHistory } from ".
 import { eq, sql } from "drizzle-orm";
 import { cacheThumbnail } from "./thumbnail-cache";
 import { extractAdsFromDOM, extractPageIdsFromPage } from "./dom-scanner";
-import { uploadMediaFromUrlToB2, uploadMediaWithHashing, isB2Configured } from "../lib/b2-storage";
+import { uploadMediaFromUrlToB2, uploadMediaWithHashing, uploadStoryboardFrames, isB2Configured } from "../lib/b2-storage";
+import { extractStoryboardFrames } from "../lib/video-storyboard";
 import { extractMedia } from "../lib/apify-ingest";
 import { parseResultCountFromText } from "./scanner";
 import { resolveDestinationUrl } from "../lib/utils";
@@ -399,7 +400,16 @@ export async function scanAdCreatives(
       console.warn("[Spy Scanner] Pre-scan live result count extraction failed, continuing creative extraction:", countErr);
     }
 
-    // 3. Scroll loop to trigger infinite loading payloads
+    // 3. Query tracked page record to get the official numeric pageId if present
+    const trackedPageRecord = await db.query.trackedPages.findFirst({
+      where: eq(trackedPages.id, trackedPageId),
+      columns: { pageId: true, displayName: true, searchType: true },
+    });
+    const fallbackNumericPageId = (trackedPageRecord?.pageId && trackedPageRecord.pageId !== "0" && !trackedPageRecord.pageId.includes("-"))
+      ? trackedPageRecord.pageId
+      : "0";
+
+    // Scroll loop to trigger infinite loading payloads
     let lastSize = collectedAds.size;
     let noProgressCount = 0;
 
@@ -438,7 +448,7 @@ export async function scanAdCreatives(
 
       // Interleaved DOM extraction every 5 scroll iterations to catch virtualized cards
       if (i % 5 === 4) {
-        const tempDomAds = await extractAdsFromDOM(page, trackedPageId);
+        const tempDomAds = await extractAdsFromDOM(page, fallbackNumericPageId);
         for (const ad of tempDomAds) {
           if (!collectedAds.has(ad.adArchiveId)) {
             collectedAds.set(ad.adArchiveId, ad);
@@ -465,28 +475,19 @@ export async function scanAdCreatives(
       };
     }
 
-    // 4. ALWAYS run final DOM deep scan alongside GraphQL extraction to capture all visible cards
-    console.log(`[Spy Scanner] GraphQL captured ${collectedAds.size} items. Executing final DOM deep scan to merge visible cards...`);
-    const domAds = await extractAdsFromDOM(page, trackedPageId);
-    let domMergedCount = 0;
-
-    for (const ad of domAds) {
-      if (!collectedAds.has(ad.adArchiveId)) {
-        collectedAds.set(ad.adArchiveId, ad);
-        domMergedCount++;
-      } else {
-        // Enrich existing GraphQL node with DOM attributes if missing
-        const isLogoUrl = (url: string | null) =>
-          url ? /_s60x60|_s50x50|_s100x100|_p60x60|_p50x50|s60x60|p60x60|s50x50|s100x100/i.test(url) || url.includes("profile") || url.includes("avatar") : false;
-
-        const existing = collectedAds.get(ad.adArchiveId)!;
-        if (!existing.caption && ad.caption) existing.caption = ad.caption;
-        if (!existing.linkUrl && ad.linkUrl) existing.linkUrl = ad.linkUrl;
-        if ((!existing.thumbnailUrl || isLogoUrl(existing.thumbnailUrl)) && ad.thumbnailUrl && !isLogoUrl(ad.thumbnailUrl)) {
-          existing.thumbnailUrl = ad.thumbnailUrl;
+    // 4. Fallback DOM deep scan only if GraphQL captured 0 items
+    if (collectedAds.size === 0) {
+      console.log(`[Spy Scanner] GraphQL captured 0 items. Executing DOM deep scan fallback...`);
+      const domAds = await extractAdsFromDOM(page, fallbackNumericPageId);
+      for (const ad of domAds) {
+        if (!collectedAds.has(ad.adArchiveId)) {
+          collectedAds.set(ad.adArchiveId, ad);
         }
       }
+    } else {
+      console.log(`[Spy Scanner] ⚡ GraphQL successfully captured ${collectedAds.size} items directly! Skipping redundant DOM scan.`);
     }
+
     // Collect unique Facebook Page IDs found during scan (from GraphQL ads & deep DOM inspection)
     const extractedPageIdsSet = new Set<string>();
     for (const adData of collectedAds.values()) {
@@ -495,7 +496,7 @@ export async function scanAdCreatives(
       }
     }
 
-    const pageInfos = await extractPageIdsFromPage(page);
+    const pageInfos = await extractPageIdsFromPage(page).catch(() => []);
     for (const pInfo of pageInfos) {
       if (pInfo.pageId && pInfo.pageId !== "0") {
         extractedPageIdsSet.add(pInfo.pageId.trim());
@@ -519,6 +520,9 @@ export async function scanAdCreatives(
           !/security check|confirm it'?s you/i.test(text)
         );
       });
+
+      // Close heavy browser page now that scraping is finished
+      await page.close().catch(() => {});
 
       if (isVerifiedZeroState) {
         console.log(`[Spy Scanner] 🟢 Verified ZERO active ads for tracked page ${trackedPageId}. Running reconciliation...`);
@@ -551,6 +555,10 @@ export async function scanAdCreatives(
       };
     }
 
+    // Close the heavy Facebook Ad Library browser tab immediately to release 1.5GB+ RAM
+    console.log(`[Spy Scanner] 🧹 Closing heavy Facebook browser tab to free RAM before frame extraction...`);
+    await page.close().catch(() => {});
+
     // 4. Save extracted ads and observations transactionally
     let savedCount = 0;
 
@@ -560,6 +568,7 @@ export async function scanAdCreatives(
       let storagePath: string | null = null;
       let mediaHash: string | null = null;
       let perceptualHash: string | null = null;
+      let storyboardUrls: string[] | null = null;
 
       if (isB2Configured()) {
         // 1. Best-effort B2 thumbnail caching & perceptual hash
@@ -579,20 +588,42 @@ export async function scanAdCreatives(
 
         // 2. Best-effort B2 media caching for all types (video, image, carousel slides)
         if (finalMediaUrls.length > 0) {
+          const isVid = adData.mediaType === "video" || finalMediaUrls.some((u) => u.includes(".mp4"));
+          const firstVid = finalMediaUrls.find((u) => u.includes(".mp4") || u.includes("/videos/"));
+
+          // 2a. Extract 5-shot storyboard frames for video ad hover scrubbing
+          if (isVid && firstVid) {
+            try {
+              const frames = await extractStoryboardFrames(firstVid, 5);
+              if (frames.length > 0) {
+                const uploaded = await uploadStoryboardFrames(frames, adData.adArchiveId);
+                if (uploaded.length > 0) {
+                  storyboardUrls = uploaded;
+                }
+              }
+            } catch (e: any) {
+              console.warn(`[Spy Scanner] Storyboard extraction error for ${adData.adArchiveId}:`, e.message);
+            }
+          }
+
           const b2MediaUrls = await Promise.all(
             finalMediaUrls.map(async (url, idx) => {
-              if (url.includes("backblazeb2.com") || url.includes("/api/spy/b2-media")) return url;
-              const isVid = adData.mediaType === "video" || url.includes(".mp4");
-              const folder = isVid ? "videos" : "images";
+              if (url.includes("backblazeb2.com") || url.includes("/api/spy/b2-media") || url.includes("files.catbox.moe")) return url;
+              const isUrlVid = adData.mediaType === "video" || url.includes(".mp4");
+              
+              // Skip uploading heavy full MP4 to storage to save 99.8% bandwidth & storage
+              if (isUrlVid) return url;
+
+              // Upload image assets & carousel slides
               try {
-                const res = await uploadMediaWithHashing(url, folder as any, `${adData.adArchiveId}_${idx}`);
+                const res = await uploadMediaWithHashing(url, "images", `${adData.adArchiveId}_${idx}`);
                 if (res && res.url) {
                   if (!mediaHash) mediaHash = res.mediaHash;
                   if (!perceptualHash) perceptualHash = res.perceptualHash;
                   return res.url;
                 }
               } catch (e: any) {
-                console.warn(`[Spy Scanner] Media B2 upload error for ${adData.adArchiveId}_${idx}:`, e.message);
+                console.warn(`[Spy Scanner] Media upload error for ${adData.adArchiveId}_${idx}:`, e.message);
               }
               return url;
             })
@@ -624,7 +655,7 @@ export async function scanAdCreatives(
         .insert(ads)
         .values({
           adArchiveId: adData.adArchiveId,
-          pageId: adData.pageId,
+          pageId: (adData.pageId && !adData.pageId.includes("-")) ? adData.pageId : (extractedPageIds[0] || "0"),
           pageName: adData.pageName,
           startedRunningOn: adData.startedRunningOn,
           caption: adData.caption,
@@ -635,6 +666,7 @@ export async function scanAdCreatives(
           mediaUrls: finalMediaUrls,
           thumbnailUrl: finalThumbnailUrl,
           thumbnailStoragePath: storagePath,
+          storyboardUrls: storyboardUrls,
           mediaHash,
           perceptualHash,
           firstSeenAt: now,
@@ -654,6 +686,7 @@ export async function scanAdCreatives(
             mediaUrls: finalMediaUrls,
             thumbnailUrl: finalThumbnailUrl || ads.thumbnailUrl,
             thumbnailStoragePath: storagePath || ads.thumbnailStoragePath,
+            ...(storyboardUrls && storyboardUrls.length > 0 ? { storyboardUrls } : {}),
             ...(mediaHash ? { mediaHash } : {}),
             ...(perceptualHash ? { perceptualHash } : {}),
             lastSeenAt: now,

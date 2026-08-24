@@ -1,7 +1,8 @@
 import { db } from "@/db";
 import { ads, adObservations, creativeScans, trackedPages } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
-import { uploadMediaFromUrlToB2, uploadMediaWithHashing, isB2Configured } from "@/lib/b2-storage";
+import { uploadMediaFromUrlToB2, uploadMediaWithHashing, uploadStoryboardFrames, isB2Configured } from "@/lib/b2-storage";
+import { extractStoryboardFrames } from "@/lib/video-storyboard";
 
 /**
  * Robustly extracts adArchiveId from multiple candidate fields & URL parameters.
@@ -84,12 +85,12 @@ export function extractMedia(item: any): {
   let hasVideoSource = Boolean(topVideo);
   if (Array.isArray(videos)) {
     for (const vid of videos) {
-      const previewImg = vid.video_preview_image_url;
+      const previewImg = vid.video_preview_image_url || vid.preview_url;
       if (previewImg && typeof previewImg === "string" && !preferredThumbnail) {
         preferredThumbnail = previewImg;
       }
 
-      const vidUrl = vid.video_hd_url || vid.video_sd_url || previewImg;
+      const vidUrl = vid.video_hd_url || vid.video_sd_url || vid.url;
       if (vidUrl && typeof vidUrl === "string") {
         hasVideoSource = true;
         if (!urls.includes(vidUrl)) urls.push(vidUrl);
@@ -99,7 +100,7 @@ export function extractMedia(item: any): {
 
   // Determine media type
   let mediaType: "image" | "video" | "carousel" | "unknown" = "unknown";
-  if (hasVideoSource || item.video_hd_url) {
+  if (hasVideoSource || item.video_hd_url || urls.some((u) => u.includes(".mp4") || u.includes("/videos/") || u.includes("video."))) {
     mediaType = "video";
   } else if (urls.length > 1) {
     mediaType = "carousel";
@@ -347,16 +348,39 @@ export async function ingestApifyDatasetItems(
           let updatedThumb = rawThumbnailUrl;
           let detectedMediaHash: string | null = null;
           let detectedPerceptualHash: string | null = null;
+          let detectedStoryboardUrls: string[] | null = null;
           let hasChange = false;
 
           // 1. Process all media assets (Videos, Image Ads, Carousel cards)
           if (rawMediaUrls.length > 0) {
-            const isVideo = mediaType === "video";
+            const isVideo = mediaType === "video" || rawMediaUrls.some((u) => u.includes(".mp4") || u.includes("/videos/") || u.includes("video.") || u.includes("fbcdn.net/o1/v/"));
+            const firstVid = rawMediaUrls.find((u) => u.includes(".mp4") || u.includes("/videos/") || u.includes("video.") || u.includes("fbcdn.net/o1/v/"));
+
+            // 1a. Extract 5-shot storyboard frames for video ad hover scrubbing
+            if (isVideo && firstVid) {
+              try {
+                const frames = await extractStoryboardFrames(firstVid, 5);
+                if (frames.length > 0) {
+                  const uploaded = await uploadStoryboardFrames(frames, adArchiveId);
+                  if (uploaded.length > 0) {
+                    detectedStoryboardUrls = uploaded;
+                    hasChange = true;
+                  }
+                }
+              } catch (e: any) {
+                console.warn(`[Apify Ingest] Storyboard extraction error for ${adArchiveId}:`, e.message);
+              }
+            }
+
             const storedMediaUrls = await Promise.all(
               rawMediaUrls.map(async (url, idx) => {
                 if (url.includes("backblazeb2.com") || url.includes("/api/spy/b2-media") || url.includes("files.catbox.moe")) return url;
-                const folder = isVideo || url.includes(".mp4") ? "videos" : "images";
-                const uploadRes = await uploadMediaWithHashing(url, folder as any, `${adArchiveId}_${idx}`).catch(() => null);
+                const isUrlVid = isVideo || url.includes(".mp4");
+                
+                // Skip uploading heavy full MP4 to storage to save 99.8% bandwidth & storage
+                if (isUrlVid) return url;
+
+                const uploadRes = await uploadMediaWithHashing(url, "images", `${adArchiveId}_${idx}`).catch(() => null);
                 if (uploadRes?.url) {
                   hasChange = true;
                   if (uploadRes.mediaHash && !detectedMediaHash) detectedMediaHash = uploadRes.mediaHash;
@@ -382,13 +406,14 @@ export async function ingestApifyDatasetItems(
             }
           }
 
-          if (hasChange || detectedMediaHash || detectedPerceptualHash) {
+          if (hasChange || detectedMediaHash || detectedPerceptualHash || detectedStoryboardUrls) {
             const updatePayload: Record<string, any> = {
               mediaUrls: updatedMediaUrls,
               thumbnailUrl: updatedThumb,
             };
             if (detectedMediaHash) updatePayload.mediaHash = detectedMediaHash;
             if (detectedPerceptualHash) updatePayload.perceptualHash = detectedPerceptualHash;
+            if (detectedStoryboardUrls) updatePayload.storyboardUrls = detectedStoryboardUrls;
 
             await db
               .update(ads)

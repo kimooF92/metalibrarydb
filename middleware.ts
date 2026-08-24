@@ -8,6 +8,8 @@ const PUBLIC_PATHS = [
   "/api/auth/login",
   "/api/auth/logout",
   "/api/auth/status",
+  "/api/spy/b2-media",
+  "/api/spy/image-proxy",
   "/favicon.ico",
   "/icon.png",
   "/apple-icon.png",
@@ -16,10 +18,12 @@ const PUBLIC_PATHS = [
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
-  // 1. Skip static assets, Next.js system routes, and public paths
+  // 1. Skip static assets, Next.js system routes, and public media paths
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/static") ||
+    pathname.startsWith("/api/spy/b2-media") ||
+    pathname.startsWith("/api/spy/image-proxy") ||
     PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith("/api/auth/"))
   ) {
     return NextResponse.next();

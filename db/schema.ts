@@ -161,6 +161,7 @@ export const ads = pgTable(
     mediaUrls: text("media_urls").array(),
     thumbnailUrl: text("thumbnail_url"),
     thumbnailStoragePath: text("thumbnail_storage_path"),
+    storyboardUrls: text("storyboard_urls").array(), // 5-shot timestamp hover preview frames
     mediaHash: text("media_hash"), // SHA-256 binary hash (exact content-addressable key)
     perceptualHash: text("perceptual_hash"), // 64-bit Hex dHash (visual structure fingerprint)
     creativeClusterId: uuid("creative_cluster_id"), // Linked creative cluster identifier

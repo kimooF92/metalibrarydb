@@ -53,19 +53,24 @@ export async function reconcileArchivedAds(
     const obsAdIds = Array.from(new Set(previousObservations.map((o) => o.adId)));
 
     // 2. Efficiently fetch canonical ads associated with this page that are currently ACTIVE (isArchived = false)
-    // Strictly isolate reconciliation to ads belonging to this official Meta Page ID
+    // Strictly isolate reconciliation to ads belonging to this official Meta Page ID or previously observed for this tracked page
     const targetPageId = trackedPage?.pageId && trackedPage.pageId !== "0" ? trackedPage.pageId : null;
-    if (!targetPageId) {
+
+    const pageIdMatch = [
+      targetPageId ? eq(ads.pageId, targetPageId) : undefined,
+      eq(ads.pageId, trackedPageId),
+      obsAdIds.length > 0 ? inArray(ads.id, obsAdIds) : undefined,
+    ].filter(Boolean) as any[];
+
+    if (pageIdMatch.length === 0) {
       return { archivedCount: 0 };
     }
 
-    const adConditions = [
-      eq(ads.isArchived, false),
-      eq(ads.pageId, targetPageId),
-    ];
-
     const activeAds = await db.query.ads.findMany({
-      where: and(...adConditions),
+      where: and(
+        eq(ads.isArchived, false),
+        pageIdMatch.length === 1 ? pageIdMatch[0] : or(...pageIdMatch)
+      ),
       columns: { id: true, adArchiveId: true },
     });
 
@@ -110,7 +115,12 @@ export async function reconcileArchivedAds(
     // 5. Batch update canonical ads to archived status in a single query
     await db
       .update(ads)
-      .set({ isArchived: true, archivedAt: now, updatedAt: now })
+      .set({
+        isArchived: true,
+        archivedAt: now,
+        updatedAt: now,
+        ...(targetPageId ? { pageId: targetPageId } : {}),
+      })
       .where(inArray(ads.id, adIdsToArchive));
 
     // 6. Update or insert observations for this scan and mark previous observations as inactive

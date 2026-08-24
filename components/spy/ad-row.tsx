@@ -8,6 +8,7 @@ import { calculateWinnerScore } from "@/lib/winner-score";
 import { ImagePreviewModal } from "./image-preview-modal";
 import { ProductClusterModal } from "./product-cluster-modal";
 import { CreativeClusterModal } from "./creative-cluster-modal";
+import { VideoHoverScrubber } from "./video-hover-scrubber";
 import { useToast } from "@/components/toast-context";
 import {
   Calendar,
@@ -81,11 +82,23 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
     };
   }, []);
 
+  const hasStoryboard = Boolean(currentAd.storyboardUrls && currentAd.storyboardUrls.length > 0);
   const firstVideoUrl = currentAd.mediaUrls?.find(
-    (url: string) => url.includes(".mp4") || url.includes("/videos/") || currentAd.mediaType === "video"
-  );
+    (url: string) =>
+      url.includes(".mp4") ||
+      url.includes("/videos/") ||
+      url.includes("video.") ||
+      url.includes("fbcdn.net/o1/v/")
+  ) || (currentAd.mediaType === "video" && currentAd.mediaUrls?.[0]?.includes("http") ? currentAd.mediaUrls[0] : null);
+
+  const isVideoAd = currentAd.mediaType === "video" || hasStoryboard || Boolean(firstVideoUrl);
+
   const imageSlides = currentAd.mediaUrls?.filter(
-    (url: string) => !url.includes(".mp4") && !url.includes("/videos/")
+    (url: string) =>
+      !url.includes(".mp4") &&
+      !url.includes("/videos/") &&
+      !url.includes("video.") &&
+      !url.includes("fbcdn.net/o1/v/")
   ) || [];
 
   const displayThumbnail = currentAd.signedThumbnailUrl || currentAd.thumbnailUrl || (imageSlides.length > 0 ? imageSlides[0] : null);
@@ -311,30 +324,14 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
               <Play className="w-5 h-5 text-indigo-400" />
               <span className="text-[9px] font-semibold">Meta Library</span>
             </a>
-          ) : isHovered && firstVideoUrl && !videoError ? (
-            <div
-              className="relative w-full h-full bg-black flex items-center justify-center cursor-pointer group/hovervid"
-              onClick={() => setIsPlayingVideo(true)}
-            >
-              <video
-                src={firstVideoUrl}
-                muted
-                loop
-                playsInline
-                autoPlay
-                preload="metadata"
-                {...({ referrerPolicy: "no-referrer" } as any)}
-                onError={() => {
-                  setIsHovered(false);
-                  setVideoError(true);
-                }}
-                className="w-full h-full object-contain bg-black select-none"
-              />
-              <div className="absolute top-1 left-1 z-20 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-black/80 border border-white/15 text-[9px] font-semibold text-white pointer-events-none shadow-sm">
-                <VolumeX className="w-2.5 h-2.5 text-indigo-400" />
-                <span>Muted</span>
-              </div>
-            </div>
+          ) : isVideoAd ? (
+            <VideoHoverScrubber
+              storyboardUrls={currentAd.storyboardUrls}
+              fallbackThumbnailUrl={displayThumbnail}
+              videoUrl={firstVideoUrl}
+              adArchiveId={currentAd.adArchiveId}
+              onPlayClick={() => setIsPlayingVideo(true)}
+            />
           ) : (
             <div className="relative w-full h-full group/media cursor-pointer flex items-center justify-center bg-slate-900 overflow-hidden" onClick={() => setIsPreviewOpen(true)}>
               {activeImageSrc && !imgError ? (
@@ -354,19 +351,6 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
                     <ImageIcon className="w-6 h-6 opacity-50" />
                   )}
                 </div>
-              )}
-
-              {firstVideoUrl && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsPlayingVideo(true);
-                  }}
-                  className="absolute inset-0 m-auto w-8 h-8 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-lg hover:bg-indigo-500 hover:scale-110 transition-all cursor-pointer z-10"
-                  title="Play Video"
-                >
-                  <Play className="w-4 h-4 fill-current ml-0.5" />
-                </button>
               )}
             </div>
           )}
