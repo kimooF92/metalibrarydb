@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Ad } from "@/types";
 import { useAdFeed } from "@/hooks/use-spy";
 import { AdCard } from "./ad-card";
 import { X, RefreshCw, Eye, Info, Layers, Sparkles, CheckCircle2 } from "lucide-react";
@@ -33,7 +34,7 @@ export function PageAdLibraryDrawer({
 
   if (!isOpen || !trackedPageId) return null;
 
-  const totalCopies = ads.reduce((acc, ad) => acc + (ad.duplicationCount || 1), 0);
+  const totalCopies = ads.reduce((acc: number, ad: Ad) => acc + (ad.duplicationCount || 1), 0);
 
   const handleBulkRefreshMedia = async () => {
     if (!trackedPageId || isBulkRefreshing) return;
@@ -205,7 +206,7 @@ export function PageAdLibraryDrawer({
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {ads.map((ad) => (
+              {ads.map((ad: Ad) => (
                 <AdCard key={ad.id} ad={ad} onArchiveToggle={() => refetch()} />
               ))}
             </div>

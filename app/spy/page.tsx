@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
+import { Ad } from "@/types";
 import { useAdFeed, useAdStats } from "@/hooks/use-spy";
 import { AdCard } from "@/components/spy/ad-card";
 import { AdRow } from "@/components/spy/ad-row";
@@ -249,8 +251,27 @@ export default function AdSpyPage() {
           <span className="text-xs font-semibold">Loading ad creatives feed...</span>
         </div>
       ) : error ? (
-        <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs">
-          Error loading ad feed: {error}
+        <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="font-bold">Error loading ad feed:</span>
+            <span>{error}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => refetch()}
+              className="px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-bold text-xs cursor-pointer transition-colors"
+            >
+              Retry
+            </button>
+            {error.toLowerCase().includes("session") || error.toLowerCase().includes("auth") ? (
+              <Link
+                href="/login"
+                className="px-3 py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 rounded-lg font-bold text-xs cursor-pointer"
+              >
+                Log In
+              </Link>
+            ) : null}
+          </div>
         </div>
       ) : ads.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center">

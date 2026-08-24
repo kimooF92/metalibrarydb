@@ -1313,7 +1313,7 @@ export default function BrandDeepDivePage({
             <>
               {viewMode === "grid" ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5">
-                  {ads.map((ad) => (
+                  {ads.map((ad: Ad) => (
                     <AdCard
                       key={ad.id}
                       ad={ad}
@@ -1324,7 +1324,7 @@ export default function BrandDeepDivePage({
                 </div>
               ) : (
                 <div className="flex flex-col gap-2.5">
-                  {ads.map((ad) => (
+                  {ads.map((ad: Ad) => (
                     <AdRow
                       key={ad.id}
                       ad={ad}

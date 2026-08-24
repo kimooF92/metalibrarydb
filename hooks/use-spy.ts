@@ -18,6 +18,38 @@ const VALID_SPY_SORTS = [
   "page_name",
 ] as const;
 
+async function parseJsonResponse<T = any>(res: Response, fallbackMessage: string): Promise<T> {
+  const contentType = res.headers.get("content-type") || "";
+
+  if (res.status === 401 || res.status === 403) {
+    if (typeof window !== "undefined") {
+      window.location.href = `/login?from=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+    }
+    throw new Error("Authentication required. Redirecting to login...");
+  }
+
+  if (contentType.includes("application/json")) {
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.error || data?.message || `${fallbackMessage} (Status ${res.status})`);
+    }
+    return data;
+  }
+
+  const text = await res.text();
+  if (text.includes("<!DOCTYPE") || text.includes("<html")) {
+    if (text.includes("login") || res.status === 401) {
+      if (typeof window !== "undefined") {
+        window.location.href = `/login?from=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+      }
+      throw new Error("Session expired. Redirecting to login...");
+    }
+    throw new Error(`Server returned HTML error (${res.status} ${res.statusText || ""}). Please reload the page.`);
+  }
+
+  throw new Error(`${fallbackMessage} (${res.status}): ${text.slice(0, 100)}`);
+}
+
 function getInitialSpyParams(initialParams?: AdFilterParams): AdFilterParams {
   const defaults: AdFilterParams = {
     page: 1,
@@ -49,194 +81,230 @@ function getInitialSpyParams(initialParams?: AdFilterParams): AdFilterParams {
       } catch {}
     }
 
-    if (saved.status && !VALID_SPY_STATUSES.includes(saved.status as any)) {
-      delete saved.status;
-    }
-    if (saved.mediaType && !VALID_SPY_MEDIA.includes(saved.mediaType as any)) {
-      delete saved.mediaType;
-    }
-    if (saved.sortBy && !VALID_SPY_SORTS.includes(saved.sortBy as any)) {
-      delete saved.sortBy;
-    }
-    if (saved.sortOrder && saved.sortOrder !== "asc" && saved.sortOrder !== "desc") {
-      delete saved.sortOrder;
-    }
+    // 2. Read URL Search Parameters (URL takes highest priority)
+    const url = new URL(window.location.href);
+    const searchParams = url.searchParams;
 
-    // Check dedicated brand exclusions storage for robust cross-tab persistence
-    const savedExcluded = localStorage.getItem("spy_excluded_brands");
-    if (savedExcluded) {
-      try {
-        const parsed = JSON.parse(savedExcluded);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          saved.excludePageIds = parsed;
-        }
-      } catch {}
-    }
+    const trackedPageId = searchParams.get("trackedPageId") || searchParams.get("pageId") || saved.trackedPageId;
+    const search = searchParams.get("search") || searchParams.get("q") || saved.search;
+    const dateFrom = searchParams.get("dateFrom") || saved.dateFrom;
+    const dateTo = searchParams.get("dateTo") || saved.dateTo;
+    const minDays = searchParams.get("minDaysRunning")
+      ? parseInt(searchParams.get("minDaysRunning")!, 10)
+      : saved.minDaysRunning;
+    const minDups = searchParams.get("minDuplications")
+      ? parseInt(searchParams.get("minDuplications")!, 10)
+      : saved.minDuplications;
+    const minWinner = searchParams.get("minWinnerScore")
+      ? parseInt(searchParams.get("minWinnerScore")!, 10)
+      : saved.minWinnerScore;
+    const minCreatives = searchParams.get("minProductCreatives")
+      ? parseInt(searchParams.get("minProductCreatives")!, 10)
+      : saved.minProductCreatives;
+    const prodKey = searchParams.get("productKey") || saved.productKey;
+    const prodId = searchParams.get("productId") || saved.productId;
+    const rawMediaType = searchParams.get("mediaType") || saved.mediaType;
+    const rawStatus = searchParams.get("status") || saved.status;
+    const cta = searchParams.get("ctaText") || saved.ctaText;
+    const watchlisted =
+      searchParams.get("isWatchlisted") === "true" ||
+      searchParams.get("watchlist") === "true" ||
+      saved.isWatchlisted;
+    const rawPreset = searchParams.get("smartPreset") || searchParams.get("preset") || saved.smartPreset;
+    const rawSort = searchParams.get("sortBy") || saved.sortBy;
+    const rawOrder = (searchParams.get("sortOrder") as "asc" | "desc") || saved.sortOrder;
+    const rawGroupBy = searchParams.get("groupBy") as "none" | "creative" | undefined;
+    const rawExclude = searchParams.get("excludePageIds");
 
-    // Merge defaults + saved
-    const state: AdFilterParams = {
+    return {
       ...defaults,
       ...saved,
-      ...initialParams,
+      page: searchParams.get("page") ? parseInt(searchParams.get("page")!, 10) : 1,
+      limit: searchParams.get("limit") ? parseInt(searchParams.get("limit")!, 10) : defaults.limit,
+      trackedPageId: trackedPageId || undefined,
+      search: search || undefined,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+      minDaysRunning: typeof minDays === "number" && !isNaN(minDays) ? minDays : defaults.minDaysRunning,
+      minDuplications: typeof minDups === "number" && !isNaN(minDups) ? minDups : defaults.minDuplications,
+      minWinnerScore: typeof minWinner === "number" && !isNaN(minWinner) ? minWinner : defaults.minWinnerScore,
+      minProductCreatives: typeof minCreatives === "number" && !isNaN(minCreatives) ? minCreatives : defaults.minProductCreatives,
+      productKey: prodKey || undefined,
+      productId: prodId || undefined,
+      mediaType: VALID_SPY_MEDIA.includes(rawMediaType as any) ? (rawMediaType as any) : defaults.mediaType,
+      status: VALID_SPY_STATUSES.includes(rawStatus as any) ? (rawStatus as any) : defaults.status,
+      ctaText: cta || undefined,
+      isWatchlisted: typeof watchlisted === "boolean" ? watchlisted : defaults.isWatchlisted,
+      smartPreset: (rawPreset as any) || defaults.smartPreset,
+      sortBy: VALID_SPY_SORTS.includes(rawSort as any) ? (rawSort as any) : defaults.sortBy,
+      sortOrder: rawOrder === "asc" || rawOrder === "desc" ? rawOrder : defaults.sortOrder,
+      groupBy: rawGroupBy || (saved.groupBy as any) || "none",
+      excludePageIds: rawExclude ? rawExclude.split(",").map((s) => s.trim()).filter(Boolean) : (saved.excludePageIds || []),
     };
-
-    // 2. Overlay individual URL query parameters if present
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has("search")) state.search = urlParams.get("search") || "";
-    if (urlParams.has("smartPreset")) state.smartPreset = urlParams.get("smartPreset") || undefined;
-    if (urlParams.has("mediaType")) {
-      const mt = urlParams.get("mediaType");
-      state.mediaType = mt && VALID_SPY_MEDIA.includes(mt as any) ? (mt as any) : "all";
-    }
-    if (urlParams.has("status")) {
-      const s = urlParams.get("status");
-      state.status = s && VALID_SPY_STATUSES.includes(s as any) ? (s as any) : "all";
-    }
-    if (urlParams.has("ctaText")) state.ctaText = urlParams.get("ctaText") || undefined;
-    if (urlParams.has("minDaysRunning")) state.minDaysRunning = Number(urlParams.get("minDaysRunning")) || 0;
-    if (urlParams.has("minDuplications")) state.minDuplications = Number(urlParams.get("minDuplications")) || 1;
-    if (urlParams.has("minWinnerScore")) state.minWinnerScore = Number(urlParams.get("minWinnerScore")) || 0;
-    if (urlParams.has("minProductCreatives")) state.minProductCreatives = Number(urlParams.get("minProductCreatives")) || 0;
-    if (urlParams.has("productKey")) state.productKey = urlParams.get("productKey") || undefined;
-    if (urlParams.has("groupBy")) {
-      const gb = urlParams.get("groupBy");
-      state.groupBy = gb === "creative" ? "creative" : "none";
-    }
-    if (urlParams.has("isWatchlisted")) state.isWatchlisted = urlParams.get("isWatchlisted") === "true";
-    if (urlParams.has("sortBy")) {
-      const sb = urlParams.get("sortBy");
-      state.sortBy = sb && VALID_SPY_SORTS.includes(sb as any) ? (sb as any) : "started_running_on";
-    }
-    if (urlParams.has("sortOrder")) {
-      const so = urlParams.get("sortOrder");
-      state.sortOrder = so === "asc" ? "asc" : "desc";
-    }
-    if (urlParams.has("dateFrom")) state.dateFrom = urlParams.get("dateFrom") || undefined;
-    if (urlParams.has("dateTo")) state.dateTo = urlParams.get("dateTo") || undefined;
-    if (urlParams.has("excludePageIds")) {
-      state.excludePageIds = urlParams
-        .get("excludePageIds")!
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-    }
-    if (urlParams.has("page")) state.page = Math.max(1, Number(urlParams.get("page")) || 1);
-
-    return state;
   } catch (e) {
-    console.error("Error reading initial spy params:", e);
+    console.error("Failed to parse initial spy params:", e);
+    return defaults;
   }
-
-  return defaults;
 }
 
 function syncSpyParamsToUrlAndStorage(params: AdFilterParams) {
   if (typeof window === "undefined") return;
+
   try {
-    const query = new URLSearchParams();
-    if (params.search) query.set("search", params.search);
-    if (params.smartPreset && params.smartPreset !== "all") query.set("smartPreset", params.smartPreset);
-    if (params.mediaType && params.mediaType !== "all") query.set("mediaType", params.mediaType);
-    if (params.status && params.status !== "all") query.set("status", params.status);
-    if (params.ctaText && params.ctaText !== "all") query.set("ctaText", params.ctaText);
-    if (params.minDaysRunning && params.minDaysRunning > 0) query.set("minDaysRunning", String(params.minDaysRunning));
-    if (params.minDuplications && params.minDuplications > 1) query.set("minDuplications", String(params.minDuplications));
-    if (params.minWinnerScore && params.minWinnerScore > 0) query.set("minWinnerScore", String(params.minWinnerScore));
-    if (params.minProductCreatives && params.minProductCreatives > 0) query.set("minProductCreatives", String(params.minProductCreatives));
-    if (params.productKey) query.set("productKey", params.productKey);
-    if (params.groupBy && params.groupBy !== "none") query.set("groupBy", params.groupBy);
-    if (params.isWatchlisted) query.set("isWatchlisted", "true");
-    if (params.dateFrom) query.set("dateFrom", params.dateFrom);
-    if (params.dateTo) query.set("dateTo", params.dateTo);
-    if (params.excludePageIds && params.excludePageIds.length > 0) query.set("excludePageIds", params.excludePageIds.join(","));
-    if (params.sortBy) query.set("sortBy", params.sortBy);
-    if (params.sortOrder) query.set("sortOrder", params.sortOrder);
-    if (params.page && params.page > 1) query.set("page", String(params.page));
-
-    const queryString = query.toString();
-    const newUrl = queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname;
-    window.history.replaceState(null, "", newUrl);
-
-    const payload = JSON.stringify({
+    // Save to localStorage
+    const toSave: Partial<AdFilterParams> = {
+      trackedPageId: params.trackedPageId,
       search: params.search,
-      smartPreset: params.smartPreset,
-      mediaType: params.mediaType,
-      status: params.status,
-      ctaText: params.ctaText,
+      dateFrom: params.dateFrom,
+      dateTo: params.dateTo,
       minDaysRunning: params.minDaysRunning,
       minDuplications: params.minDuplications,
       minWinnerScore: params.minWinnerScore,
-      groupBy: params.groupBy,
+      minProductCreatives: params.minProductCreatives,
+      productKey: params.productKey,
+      productId: params.productId,
+      mediaType: params.mediaType,
+      status: params.status,
+      ctaText: params.ctaText,
       isWatchlisted: params.isWatchlisted,
-      dateFrom: params.dateFrom,
-      dateTo: params.dateTo,
-      excludePageIds: params.excludePageIds || [],
+      smartPreset: params.smartPreset,
       sortBy: params.sortBy,
       sortOrder: params.sortOrder,
-      page: params.page,
-    });
+      groupBy: params.groupBy,
+      excludePageIds: params.excludePageIds,
+    };
+    localStorage.setItem("spy_feed_filters", JSON.stringify(toSave));
 
-    sessionStorage.setItem("spy_feed_filters", payload);
-    localStorage.setItem("spy_feed_filters", payload);
+    // Update URL query params smoothly without full reload
+    const url = new URL(window.location.href);
 
-    // Save dedicated excluded brands list into localStorage
-    localStorage.setItem("spy_excluded_brands", JSON.stringify(params.excludePageIds || []));
+    if (params.page && params.page > 1) {
+      url.searchParams.set("page", params.page.toString());
+    } else {
+      url.searchParams.delete("page");
+    }
+
+    if (params.trackedPageId) url.searchParams.set("trackedPageId", params.trackedPageId);
+    else url.searchParams.delete("trackedPageId");
+
+    if (params.search) url.searchParams.set("search", params.search);
+    else url.searchParams.delete("search");
+
+    if (params.dateFrom) url.searchParams.set("dateFrom", params.dateFrom);
+    else url.searchParams.delete("dateFrom");
+
+    if (params.dateTo) url.searchParams.set("dateTo", params.dateTo);
+    else url.searchParams.delete("dateTo");
+
+    if (params.minDaysRunning && params.minDaysRunning > 0) {
+      url.searchParams.set("minDaysRunning", params.minDaysRunning.toString());
+    } else {
+      url.searchParams.delete("minDaysRunning");
+    }
+
+    if (params.minDuplications && params.minDuplications > 1) {
+      url.searchParams.set("minDuplications", params.minDuplications.toString());
+    } else {
+      url.searchParams.delete("minDuplications");
+    }
+
+    if (params.minWinnerScore && params.minWinnerScore > 0) {
+      url.searchParams.set("minWinnerScore", params.minWinnerScore.toString());
+    } else {
+      url.searchParams.delete("minWinnerScore");
+    }
+
+    if (params.minProductCreatives && params.minProductCreatives > 0) {
+      url.searchParams.set("minProductCreatives", params.minProductCreatives.toString());
+    } else {
+      url.searchParams.delete("minProductCreatives");
+    }
+
+    if (params.productKey) url.searchParams.set("productKey", params.productKey);
+    else url.searchParams.delete("productKey");
+
+    if (params.productId) url.searchParams.set("productId", params.productId);
+    else url.searchParams.delete("productId");
+
+    if (params.mediaType && params.mediaType !== "all") {
+      url.searchParams.set("mediaType", params.mediaType);
+    } else {
+      url.searchParams.delete("mediaType");
+    }
+
+    if (params.status && params.status !== "all") {
+      url.searchParams.set("status", params.status);
+    } else {
+      url.searchParams.delete("status");
+    }
+
+    if (params.ctaText && params.ctaText !== "all") {
+      url.searchParams.set("ctaText", params.ctaText);
+    } else {
+      url.searchParams.delete("ctaText");
+    }
+
+    if (params.isWatchlisted) {
+      url.searchParams.set("isWatchlisted", "true");
+    } else {
+      url.searchParams.delete("isWatchlisted");
+    }
+
+    if (params.excludePageIds && params.excludePageIds.length > 0) {
+      url.searchParams.set("excludePageIds", params.excludePageIds.join(","));
+    } else {
+      url.searchParams.delete("excludePageIds");
+    }
+
+    if (params.smartPreset && params.smartPreset !== "all") {
+      url.searchParams.set("smartPreset", params.smartPreset);
+    } else {
+      url.searchParams.delete("smartPreset");
+    }
+
+    if (params.sortBy && params.sortBy !== "started_running_on") {
+      url.searchParams.set("sortBy", params.sortBy);
+    } else {
+      url.searchParams.delete("sortBy");
+    }
+
+    if (params.sortOrder && params.sortOrder !== "desc") {
+      url.searchParams.set("sortOrder", params.sortOrder);
+    } else {
+      url.searchParams.delete("sortOrder");
+    }
+
+    if (params.groupBy && params.groupBy !== "none") {
+      url.searchParams.set("groupBy", params.groupBy);
+    } else {
+      url.searchParams.delete("groupBy");
+    }
+
+    window.history.replaceState({}, "", url.toString());
   } catch (e) {
-    console.error("Error syncing spy params:", e);
+    console.error("Failed to sync spy params:", e);
   }
 }
 
-export function useAdFeed(initialParams?: AdFilterParams) {
+export function useSpy(initialParams?: AdFilterParams) {
   const [params, setParams] = useState<AdFilterParams>(() => getInitialSpyParams(initialParams));
 
-  // Sync on browser back/forward buttons
-  useEffect(() => {
-    const handlePopState = () => {
-      setParams(getInitialSpyParams(initialParams));
-    };
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, [initialParams]);
-
+  // Sync state if initialParams props explicitly update
   useEffect(() => {
     if (initialParams) {
-      setParams((prev) => {
-        const hasChanged =
-          prev.trackedPageId !== initialParams.trackedPageId ||
-          prev.limit !== initialParams.limit ||
-          prev.enabled !== initialParams.enabled ||
-          prev.search !== initialParams.search ||
-          prev.status !== initialParams.status ||
-          prev.mediaType !== initialParams.mediaType ||
-          prev.ctaText !== initialParams.ctaText ||
-          prev.isWatchlisted !== initialParams.isWatchlisted ||
-          prev.smartPreset !== initialParams.smartPreset ||
-          prev.minWinnerScore !== initialParams.minWinnerScore ||
-          prev.minProductCreatives !== initialParams.minProductCreatives ||
-          prev.productKey !== initialParams.productKey ||
-          prev.groupBy !== initialParams.groupBy ||
-          JSON.stringify(prev.excludePageIds) !== JSON.stringify(initialParams.excludePageIds);
-
-        if (hasChanged) {
-          const next = {
-            ...prev,
-            ...initialParams,
-            page: initialParams.page !== undefined ? initialParams.page : 1,
-          };
-          syncSpyParamsToUrlAndStorage(next);
-          return next;
-        }
-        return prev;
-      });
+      setParams((prev) => ({
+        ...prev,
+        ...initialParams,
+      }));
     }
   }, [
     initialParams?.trackedPageId,
-    initialParams?.limit,
-    initialParams?.enabled,
     initialParams?.search,
-    initialParams?.status,
     initialParams?.mediaType,
+    initialParams?.status,
     initialParams?.ctaText,
+    initialParams?.sortBy,
+    initialParams?.sortOrder,
     initialParams?.isWatchlisted,
     initialParams?.smartPreset,
     initialParams?.minWinnerScore,
@@ -320,13 +388,9 @@ export function useAdFeed(initialParams?: AdFilterParams) {
 
       const res = await fetch(`/api/spy/ads?${query.toString()}`, {
         cache: "no-store",
-        headers: { "Cache-Control": "no-cache" },
+        headers: { "Cache-Control": "no-cache", Accept: "application/json" },
       });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to fetch ad feed");
-      }
+      const data = await parseJsonResponse(res, "Failed to fetch ad feed");
 
       const newItems = data.items || [];
       if (currentPage > 1 && !isManualRefresh) {
@@ -402,12 +466,9 @@ export function useAdStats() {
     try {
       const res = await fetch(`/api/spy/stats?_t=${Date.now()}`, {
         cache: "no-store",
-        headers: { "Cache-Control": "no-cache" },
+        headers: { "Cache-Control": "no-cache", Accept: "application/json" },
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to fetch ad stats");
-      }
+      const data = await parseJsonResponse(res, "Failed to fetch ad stats");
       setStats(data);
     } catch (err: any) {
       setError(err.message || "Failed to fetch ad stats");
@@ -431,13 +492,10 @@ export function useEnqueueScan() {
     try {
       const res = await fetch("/api/spy/scans", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ trackedPageIds }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to enqueue scan");
-      }
+      const data = await parseJsonResponse(res, "Failed to enqueue scan");
       if (onRefresh) {
         onRefresh(trackedPageIds);
       }
@@ -459,11 +517,10 @@ export function useSpyBrands() {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/spy/brands");
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to fetch brands");
-      }
+      const res = await fetch("/api/spy/brands", {
+        headers: { Accept: "application/json" },
+      });
+      const data = await parseJsonResponse(res, "Failed to fetch brands");
       setBrands(data.brands || []);
     } catch (err: any) {
       setError(err.message || "Failed to fetch brands");
@@ -478,4 +535,6 @@ export function useSpyBrands() {
 
   return { brands, isLoading, error, refetch: fetchBrands };
 }
+
+export const useAdFeed = useSpy;
 
