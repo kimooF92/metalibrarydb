@@ -1,5 +1,5 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import { uploadMediaFromUrlToCatbox } from "./catbox-storage";
+import { uploadMediaFromUrlToCatbox, uploadBufferToCatbox } from "./catbox-storage";
 import { uploadBufferToSupabase } from "./supabase-storage";
 import { computeSha256, computeDHash } from "./media-hasher";
 
@@ -174,9 +174,9 @@ export async function uploadMediaWithHashing(
       };
     }
 
-    // Tier 2: Catbox.moe / Litterbox (Unlimited Free Storage for heavy videos & images)
+    // Tier 2: Catbox.moe (Unlimited Free Storage for heavy videos & images)
     console.log(`[Storage Engine] Uploading ${contentKey} (${(buffer.length / 1024 / 1024).toFixed(2)} MB) to Catbox...`);
-    const catboxUrl = await uploadMediaFromUrlToCatbox(sourceUrl, `${mediaHash}${ext}`);
+    const catboxUrl = await uploadBufferToCatbox(buffer, `${mediaHash}${ext}`, contentType);
     if (catboxUrl) {
       return {
         url: catboxUrl,

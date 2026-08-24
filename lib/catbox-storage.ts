@@ -3,25 +3,83 @@
  * Uploads media files directly to your Catbox.moe account for permanent $0 storage.
  *
  * Features:
+ * - Direct Buffer Upload (zero redundant downloads, fastest speed)
  * - Permanent file retention (files.catbox.moe)
  * - 200MB file limit for videos and images
- * - Extended timeouts (45s) for high-res Meta video ads
  * - Anti-bot browser headers to prevent Cloudflare challenges
- * - Multi-strategy permanent uploads: Direct Buffer -> Server-side URL Fetch
  */
 
 const BROWSER_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
+/**
+ * Uploads an in-memory buffer directly to Catbox.moe.
+ * Avoids any redundant network downloads.
+ */
+export async function uploadBufferToCatbox(
+  buffer: Buffer,
+  filename: string,
+  contentType: string = "application/octet-stream"
+): Promise<string | null> {
+  if (!buffer || buffer.length === 0) return null;
+
+  const userHash = process.env.CATBOX_USER_HASH?.trim();
+
+  let ext = ".jpg";
+  if (contentType.includes("video") || filename.includes(".mp4")) {
+    ext = ".mp4";
+    contentType = "video/mp4";
+  }
+
+  const cleanFilename = filename.endsWith(ext) ? filename : `${filename}${ext}`;
+
+  try {
+    const blob = new Blob([new Uint8Array(buffer)], { type: contentType });
+    const formData = new FormData();
+    formData.append("reqtype", "fileupload");
+    if (userHash) formData.append("userhash", userHash);
+    formData.append("fileToUpload", blob, cleanFilename);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+
+    const catboxRes = await fetch("https://catbox.moe/user/api.php", {
+      method: "POST",
+      headers: {
+        "User-Agent": BROWSER_USER_AGENT,
+      },
+      body: formData,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (catboxRes.ok) {
+      const catboxUrl = (await catboxRes.text()).trim();
+      if (catboxUrl.startsWith("http://") || catboxUrl.startsWith("https://")) {
+        console.log(`[Catbox Storage] Successfully uploaded to permanent Catbox: ${catboxUrl}`);
+        return catboxUrl;
+      }
+      console.warn(`[Catbox Storage] Catbox unexpected response: ${catboxUrl.substring(0, 100)}`);
+    } else {
+      console.warn(`[Catbox Storage] Upload request failed with status: ${catboxRes.status}`);
+    }
+  } catch (err: any) {
+    console.warn(`[Catbox Storage] Direct buffer upload failed: ${err.message}`);
+  }
+
+  return null;
+}
+
+/**
+ * Helper to download source media from URL and upload to Catbox.moe.
+ */
 export async function uploadMediaFromUrlToCatbox(
   sourceUrl: string,
   filename: string
 ): Promise<string | null> {
   if (!sourceUrl) return null;
 
-  const userHash = process.env.CATBOX_USER_HASH?.trim();
-
-  // 1. Download source media from Meta CDN with 35s timeout & browser headers
   let buffer: Buffer | null = null;
   let contentType = "application/octet-stream";
   let ext = ".jpg";
@@ -58,78 +116,15 @@ export async function uploadMediaFromUrlToCatbox(
       }
     } else {
       console.warn(`[Catbox Storage] Source media fetch status ${sourceRes.status} for ${sourceUrl}`);
+      return null;
     }
   } catch (err: any) {
-    console.warn(`[Catbox Storage] Source download failed/timed out (${err.message}). Trying Catbox URL-upload fallback...`);
+    console.warn(`[Catbox Storage] Source media download failed (${err.message}) for ${sourceUrl}`);
+    return null;
   }
 
-  const cleanFilename = filename.endsWith(ext) ? filename : `${filename}${ext}`;
-
-  // Strategy A: Direct permanent file upload to Catbox.moe (files.catbox.moe)
-  if (buffer && buffer.length > 0) {
-    try {
-      const blob = new Blob([new Uint8Array(buffer)], { type: contentType });
-      const formData = new FormData();
-      formData.append("reqtype", "fileupload");
-      if (userHash) formData.append("userhash", userHash);
-      formData.append("fileToUpload", blob, cleanFilename);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 45000);
-
-      const catboxRes = await fetch("https://catbox.moe/user/api.php", {
-        method: "POST",
-        headers: {
-          "User-Agent": BROWSER_USER_AGENT,
-        },
-        body: formData,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (catboxRes.ok) {
-        const catboxUrl = (await catboxRes.text()).trim();
-        if (catboxUrl.startsWith("http://") || catboxUrl.startsWith("https://")) {
-          console.log(`[Catbox Storage] Successfully uploaded to permanent Catbox: ${catboxUrl}`);
-          return catboxUrl;
-        }
-      }
-    } catch (err: any) {
-      console.warn(`[Catbox Storage] File upload to Catbox failed (${err.message}). Trying URL upload...`);
-    }
-  }
-
-  // Strategy B: Catbox URL upload (Catbox server fetches URL directly for permanent storage)
-  try {
-    const formData = new FormData();
-    formData.append("reqtype", "urlupload");
-    if (userHash) formData.append("userhash", userHash);
-    formData.append("url", sourceUrl);
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 35000);
-
-    const urlUploadRes = await fetch("https://catbox.moe/user/api.php", {
-      method: "POST",
-      headers: {
-        "User-Agent": BROWSER_USER_AGENT,
-      },
-      body: formData,
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (urlUploadRes.ok) {
-      const catboxUrl = (await urlUploadRes.text()).trim();
-      if (catboxUrl.startsWith("http://") || catboxUrl.startsWith("https://")) {
-        console.log(`[Catbox Storage] Successfully uploaded via Catbox URL fetch: ${catboxUrl}`);
-        return catboxUrl;
-      }
-    }
-  } catch (err: any) {
-    console.warn(`[Catbox Storage] URL upload failed (${err.message})`);
+  if (buffer) {
+    return uploadBufferToCatbox(buffer, filename, contentType);
   }
 
   return null;
