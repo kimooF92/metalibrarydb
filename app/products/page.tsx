@@ -30,9 +30,11 @@ import {
   CheckCircle2,
   Globe,
   SlidersHorizontal,
+  Star,
+  Building2,
 } from "lucide-react";
 
-type SmartPreset = "all" | "most_scaled" | "new_discovered" | "top_lasting" | "with_offers";
+type SmartPreset = "all" | "most_scaled" | "new_discovered" | "top_lasting" | "with_offers" | "favorites";
 
 export default function ProductsPage() {
   const router = useRouter();
@@ -47,6 +49,7 @@ export default function ProductsPage() {
 
   // Filters & Pagination
   const [search, setSearch] = useState("");
+  const [brandFilter, setBrandFilter] = useState("");
   const [platform, setPlatform] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState<string>("latest");
@@ -63,6 +66,7 @@ export default function ProductsPage() {
     successfulProducts: 0,
     pendingProducts: 0,
     withOffersCount: 0,
+    favoritesCount: 0,
     newThisWeekCount: 0,
     platforms: {
       shopify: 0,
@@ -74,6 +78,21 @@ export default function ProductsPage() {
   // Modal state
   const [selectedProduct, setSelectedProduct] = useState<ScrapedProduct | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Read URL query params on mount (e.g. ?brand=... or ?preset=favorites)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const brandParam = params.get("brand");
+      if (brandParam) {
+        setBrandFilter(brandParam);
+      }
+      const presetParam = params.get("preset");
+      if (presetParam === "favorites") {
+        setSmartPreset("favorites");
+      }
+    }
+  }, []);
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
@@ -87,6 +106,7 @@ export default function ProductsPage() {
       });
 
       if (search.trim()) query.set("search", search.trim());
+      if (brandFilter.trim()) query.set("brand", brandFilter.trim());
       if (platform !== "all") query.set("platform", platform);
       if (statusFilter !== "all") query.set("status", statusFilter);
 
@@ -108,11 +128,48 @@ export default function ProductsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, sortBy, smartPreset, search, platform, statusFilter]);
+  }, [page, sortBy, smartPreset, search, brandFilter, platform, statusFilter]);
 
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
+
+  const handleToggleFavorite = async (productId: string, nextFavorite: boolean) => {
+    setProducts((prev) =>
+      prev.map((p) => (p.id === productId ? { ...p, isFavorite: nextFavorite } : p))
+    );
+    setStats((prev) => ({
+      ...prev,
+      favoritesCount: Math.max(0, prev.favoritesCount + (nextFavorite ? 1 : -1)),
+    }));
+
+    try {
+      const res = await fetch("/api/products", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: productId, isFavorite: nextFavorite }),
+      });
+
+      if (!res.ok) throw new Error("Failed to update favorite status");
+
+      showToast({
+        type: "success",
+        title: nextFavorite ? "⭐ Added to Favorites" : "Removed from Favorites",
+        message: nextFavorite
+          ? "Product saved to your starred favorites catalog."
+          : "Product removed from favorites.",
+      });
+    } catch (err: any) {
+      setProducts((prev) =>
+        prev.map((p) => (p.id === productId ? { ...p, isFavorite: !nextFavorite } : p))
+      );
+      showToast({
+        type: "error",
+        title: "Favorite Error",
+        message: err.message || "Could not update favorite status.",
+      });
+    }
+  };
 
   const handleRefresh = async (productId: string) => {
     const prod = products.find((p) => p.id === productId);
@@ -200,8 +257,14 @@ export default function ProductsPage() {
     }
   };
 
+  const handleFilterBrand = (brandName: string) => {
+    setBrandFilter(brandName);
+    setPage(1);
+  };
+
   const handleResetFilters = () => {
     setSearch("");
+    setBrandFilter("");
     setPlatform("all");
     setStatusFilter("all");
     setSmartPreset("all");
@@ -223,7 +286,7 @@ export default function ProductsPage() {
             </h1>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Real-time discovered e-commerce products, scaling hero items, and competitor price intelligence across all tracked ad campaigns.
+            Discover winning products, star favorites, track active brand campaigns, and benchmark competitor pricing.
           </p>
         </div>
 
@@ -264,31 +327,37 @@ export default function ProductsPage() {
           </span>
         </div>
 
+        {/* Starred Favorites */}
+        <div
+          onClick={() => {
+            setSmartPreset("favorites");
+            setPage(1);
+          }}
+          className="p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80 shadow-xs cursor-pointer hover:border-amber-500/40 transition-colors"
+        >
+          <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
+            <span>⭐ Starred Favorites</span>
+            <Star className="w-4 h-4 text-amber-500 fill-amber-500/20" />
+          </div>
+          <p className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">
+            {stats.favoritesCount}
+          </p>
+          <span className="text-[11px] text-slate-500 font-medium">
+            Saved to product watchlist
+          </span>
+        </div>
+
         {/* Fresh Drops (Last 7 Days) */}
         <div className="p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
             <span>Fresh Drops (7d)</span>
-            <Zap className="w-4 h-4 text-amber-500" />
+            <Zap className="w-4 h-4 text-emerald-500" />
           </div>
-          <p className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">
+          <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
             {stats.newThisWeekCount}
           </p>
           <span className="text-[11px] text-slate-500 font-medium">
             Newly discovered this week
-          </span>
-        </div>
-
-        {/* Most Scaled */}
-        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
-            <span>High Scale (3+ Ads)</span>
-            <Flame className="w-4 h-4 text-rose-500" />
-          </div>
-          <p className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
-            {products.filter((p) => (p.activeAdsCount || 0) >= 3 || (p.linkedAdsCount || 0) >= 3).length}
-          </p>
-          <span className="text-[11px] text-slate-500 font-medium">
-            Aggressively scaled products
           </span>
         </div>
 
@@ -310,9 +379,9 @@ export default function ProductsPage() {
         <div className="p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80 shadow-xs col-span-2 sm:col-span-1">
           <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
             <span>Offers & Bundles</span>
-            <Tag className="w-4 h-4 text-emerald-500" />
+            <Tag className="w-4 h-4 text-blue-500" />
           </div>
-          <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+          <p className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-1">
             {stats.withOffersCount}
           </p>
           <span className="text-[11px] text-slate-500 font-medium">
@@ -340,6 +409,21 @@ export default function ProductsPage() {
 
         <button
           onClick={() => {
+            setSmartPreset("favorites");
+            setPage(1);
+          }}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            smartPreset === "favorites"
+              ? "bg-amber-500 text-slate-950 font-black shadow-sm shadow-amber-500/25"
+              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800"
+          }`}
+        >
+          <Star className={`w-3.5 h-3.5 ${smartPreset === "favorites" ? "fill-current" : "text-amber-500"}`} />
+          <span>⭐ Starred Favorites ({stats.favoritesCount})</span>
+        </button>
+
+        <button
+          onClick={() => {
             setSmartPreset("most_scaled");
             setSortBy("most_scaled");
             setPage(1);
@@ -362,11 +446,11 @@ export default function ProductsPage() {
           }}
           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             smartPreset === "new_discovered"
-              ? "bg-amber-600 text-white shadow-sm shadow-amber-600/25"
+              ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/25"
               : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800"
           }`}
         >
-          <Zap className="w-3.5 h-3.5 text-amber-400" />
+          <Zap className="w-3.5 h-3.5 text-emerald-400" />
           <span>⚡ Newly Discovered ({stats.newThisWeekCount})</span>
         </button>
 
@@ -393,16 +477,37 @@ export default function ProductsPage() {
           }}
           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             smartPreset === "with_offers"
-              ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/25"
+              ? "bg-blue-600 text-white shadow-sm shadow-blue-600/25"
               : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800"
           }`}
         >
-          <Tag className="w-3.5 h-3.5 text-emerald-400" />
-          <span>🏷️ With Bundle Offers ({stats.withOffersCount})</span>
+          <Tag className="w-3.5 h-3.5 text-blue-400" />
+          <span>🏷️ With Offers ({stats.withOffersCount})</span>
         </button>
       </div>
 
-      {/* 3. Toolbar Controls (Search, Platform, Status, Sort, View Switcher) */}
+      {/* Brand Active Filter Banner (if brand filter is applied) */}
+      {brandFilter && (
+        <div className="flex items-center justify-between p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-xs">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="flex h-2 w-2 rounded-full bg-indigo-600 animate-pulse shrink-0" />
+            <span className="text-slate-700 dark:text-slate-200 truncate">
+              Showing products advertised by brand: <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{brandFilter}</strong>
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              setBrandFilter("");
+              setPage(1);
+            }}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 text-[11px] cursor-pointer shrink-0 transition-colors"
+          >
+            <X className="w-3 h-3" /> Clear Brand Filter
+          </button>
+        </div>
+      )}
+
+      {/* 3. Toolbar Controls (Search, Brand Filter, Platform, Status, Sort, View Switcher) */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 bg-white dark:bg-slate-950/60 rounded-xl border border-slate-200 dark:border-slate-800/80 shadow-xs">
         {/* Search */}
         <div className="relative w-full sm:w-80">
@@ -433,6 +538,33 @@ export default function ProductsPage() {
 
         {/* Filters & Sort Controls */}
         <div className="flex flex-wrap items-center gap-2 justify-end">
+          {/* Brand Filter Input */}
+          <div className="relative">
+            <Building2 className="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-500" />
+            <input
+              type="text"
+              value={brandFilter}
+              onChange={(e) => {
+                setBrandFilter(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Filter by brand..."
+              className="w-36 bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 pl-8 pr-6 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none"
+            />
+            {brandFilter && (
+              <button
+                type="button"
+                onClick={() => {
+                  setBrandFilter("");
+                  setPage(1);
+                }}
+                className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 p-0.5"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
           {/* E-Commerce Platform Filter */}
           <select
             value={platform}
@@ -504,7 +636,7 @@ export default function ProductsPage() {
           </div>
 
           {/* Reset Filters */}
-          {(search !== "" || platform !== "all" || statusFilter !== "all" || smartPreset !== "all" || sortBy !== "latest") && (
+          {(search !== "" || brandFilter !== "" || platform !== "all" || statusFilter !== "all" || smartPreset !== "all" || sortBy !== "latest") && (
             <button
               onClick={handleResetFilters}
               className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
@@ -545,14 +677,22 @@ export default function ProductsPage() {
       ) : products.length === 0 ? (
         <div className="py-20 text-center bg-white dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-800/80 p-8 flex flex-col items-center justify-center space-y-4">
           <div className="w-16 h-16 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-            <ShoppingBag className="w-8 h-8" />
+            {smartPreset === "favorites" ? (
+              <Star className="w-8 h-8 text-amber-500" />
+            ) : (
+              <ShoppingBag className="w-8 h-8" />
+            )}
           </div>
           <div>
             <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-              No Matching Products Found
+              {smartPreset === "favorites"
+                ? "No Starred Favorite Products Yet"
+                : "No Matching Products Found"}
             </h3>
             <p className="text-xs text-slate-600 dark:text-slate-400 max-w-sm mt-1">
-              {search || platform !== "all" || smartPreset !== "all"
+              {smartPreset === "favorites"
+                ? "Click the star (⭐) button on any product card to add it to your starred favorites watchlist."
+                : search || brandFilter || platform !== "all" || smartPreset !== "all"
                 ? "Try resetting your active filters or smart preset to view more products."
                 : "Run ad spy scans to automatically extract, deduplicate, and scrape product landing pages."}
             </p>
@@ -583,8 +723,10 @@ export default function ProductsPage() {
                   product={product}
                   onRefresh={handleRefresh}
                   onDelete={handleDelete}
+                  onToggleFavorite={handleToggleFavorite}
                   onViewDetails={handleViewDetails}
                   onViewCreatives={handleViewCreatives}
+                  onFilterBrand={handleFilterBrand}
                 />
               ))}
             </div>
@@ -596,8 +738,10 @@ export default function ProductsPage() {
                   product={product}
                   onRefresh={handleRefresh}
                   onDelete={handleDelete}
+                  onToggleFavorite={handleToggleFavorite}
                   onViewDetails={handleViewDetails}
                   onViewCreatives={handleViewCreatives}
+                  onFilterBrand={handleFilterBrand}
                 />
               ))}
             </div>

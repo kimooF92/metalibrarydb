@@ -128,6 +128,7 @@ export const scrapedProducts = pgTable(
     metaPixelIds: text("meta_pixel_ids").array(),
     storePlatform: text("store_platform"),
     deliveryCost: text("delivery_cost"),
+    isFavorite: boolean("is_favorite").default(false),
     scrapeStatus: text("scrape_status").default("pending").notNull(), // pending | scraping | success | failed
     failureReason: text("failure_reason"),
     lastScrapedAt: timestamp("last_scraped_at", { withTimezone: true }),
@@ -138,6 +139,7 @@ export const scrapedProducts = pgTable(
     index("idx_scraped_products_url").on(table.url),
     index("idx_scraped_products_domain").on(table.domain),
     index("idx_scraped_products_page_id").on(table.pageId),
+    index("idx_scraped_products_is_favorite").on(table.isFavorite),
     index("idx_scraped_products_status").on(table.scrapeStatus),
     index("idx_scraped_products_created_at").on(table.createdAt.desc()),
   ]

@@ -13,8 +13,10 @@ export async function GET(req: NextRequest) {
 
     const search = searchParams.get("search");
     const domain = searchParams.get("domain");
+    const brand = searchParams.get("brand");
     const platform = searchParams.get("platform");
     const hasOffer = searchParams.get("hasOffer") === "true";
+    const isFavoriteOnly = searchParams.get("isFavorite") === "true";
     const status = searchParams.get("status") || "all";
     const smartPreset = searchParams.get("smartPreset") || "all";
     const sortBy = searchParams.get("sortBy") || "latest";
@@ -55,6 +57,18 @@ export async function GET(req: NextRequest) {
       conditions.push(ilike(scrapedProducts.domain, `%${domain.trim()}%`));
     }
 
+    // Filter by Brand Name or Brand Page ID
+    if (brand && brand.trim() !== "") {
+      const brandTerm = `%${brand.trim()}%`;
+      conditions.push(
+        or(
+          ilike(adMetricsSubquery.brandName, brandTerm),
+          eq(scrapedProducts.pageId, brand.trim()),
+          eq(adMetricsSubquery.brandPageId, brand.trim())
+        )
+      );
+    }
+
     // Filter by e-commerce platform (Shopify, YouCan, WooCommerce)
     if (platform && platform !== "all") {
       conditions.push(ilike(scrapedProducts.storePlatform, `%${platform.trim()}%`));
@@ -63,6 +77,11 @@ export async function GET(req: NextRequest) {
     // Filter by promotional offers
     if (hasOffer || smartPreset === "with_offers") {
       conditions.push(sql`${scrapedProducts.discountOrOffer} IS NOT NULL AND ${scrapedProducts.discountOrOffer} != ''`);
+    }
+
+    // Filter by Favorite / Starred status
+    if (isFavoriteOnly || smartPreset === "favorites") {
+      conditions.push(eq(scrapedProducts.isFavorite, true));
     }
 
     // Smart Preset: Newly Discovered (last 7 days)
@@ -106,7 +125,7 @@ export async function GET(req: NextRequest) {
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    // Main query with enriched ad and longevity analytics
+    // Main query with enriched ad, favorite, and longevity analytics
     let baseQuery = db
       .select({
         id: scrapedProducts.id,
@@ -126,6 +145,7 @@ export async function GET(req: NextRequest) {
         metaPixelIds: scrapedProducts.metaPixelIds,
         storePlatform: scrapedProducts.storePlatform,
         deliveryCost: scrapedProducts.deliveryCost,
+        isFavorite: scrapedProducts.isFavorite,
         scrapeStatus: scrapedProducts.scrapeStatus,
         failureReason: scrapedProducts.failureReason,
         lastScrapedAt: scrapedProducts.lastScrapedAt,
@@ -193,6 +213,7 @@ export async function GET(req: NextRequest) {
         .select({
           total: count(),
           withOffers: sql<number>`COUNT(CASE WHEN ${scrapedProducts.discountOrOffer} IS NOT NULL AND ${scrapedProducts.discountOrOffer} != '' THEN 1 END)`.mapWith(Number),
+          favoritesCount: sql<number>`COUNT(CASE WHEN ${scrapedProducts.isFavorite} = true THEN 1 END)`.mapWith(Number),
           successful: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} = 'success' THEN 1 END)`.mapWith(Number),
           pending: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} = 'pending' THEN 1 END)`.mapWith(Number),
           newThisWeek: sql<number>`COUNT(CASE WHEN ${scrapedProducts.createdAt} >= NOW() - INTERVAL '7 days' THEN 1 END)`.mapWith(Number),
@@ -220,6 +241,7 @@ export async function GET(req: NextRequest) {
         successfulProducts: statsResult[0]?.successful || 0,
         pendingProducts: statsResult[0]?.pending || 0,
         withOffersCount: statsResult[0]?.withOffers || 0,
+        favoritesCount: statsResult[0]?.favoritesCount || 0,
         newThisWeekCount: statsResult[0]?.newThisWeek || 0,
         platforms: {
           shopify: statsResult[0]?.shopifyCount || 0,
@@ -230,6 +252,56 @@ export async function GET(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("[Products API] Error:", err);
+    return NextResponse.json(
+      { success: false, error: err.message || "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  const authError = await validateApiSecret(req);
+  if (authError) return authError;
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const { id, isFavorite } = body;
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: "Product ID is required." },
+        { status: 400 }
+      );
+    }
+
+    const updatePayload: Record<string, any> = {
+      updatedAt: new Date(),
+    };
+
+    if (typeof isFavorite === "boolean") {
+      updatePayload.isFavorite = isFavorite;
+    }
+
+    const [updatedProduct] = await db
+      .update(scrapedProducts)
+      .set(updatePayload)
+      .where(eq(scrapedProducts.id, id))
+      .returning();
+
+    if (!updatedProduct) {
+      return NextResponse.json(
+        { success: false, error: "Product not found." },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      product: updatedProduct,
+      message: `Product ${isFavorite ? "added to" : "removed from"} favorites.`,
+    });
+  } catch (err: any) {
+    console.error("[Products PATCH API] Error:", err);
     return NextResponse.json(
       { success: false, error: err.message || "Internal server error" },
       { status: 500 }

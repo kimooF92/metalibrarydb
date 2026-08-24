@@ -14,26 +14,56 @@ import {
   Eye,
   Truck,
   Sparkles,
+  Star,
 } from "lucide-react";
 
 interface ProductRowProps {
   product: ScrapedProduct;
   onRefresh?: (productId: string) => Promise<void>;
   onDelete?: (productId: string) => Promise<void>;
+  onToggleFavorite?: (productId: string, nextFavorite: boolean) => Promise<void>;
   onViewDetails?: (product: ScrapedProduct) => void;
   onViewCreatives?: (product: ScrapedProduct) => void;
+  onFilterBrand?: (brandName: string) => void;
 }
 
 export function ProductRow({
   product,
   onRefresh,
   onDelete,
+  onToggleFavorite,
   onViewDetails,
   onViewCreatives,
+  onFilterBrand,
 }: ProductRowProps) {
   const [imgError, setImgError] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(Boolean(product.isFavorite));
+  const [isTogglingFav, setIsTogglingFav] = useState(false);
+
+  const handleToggleFavorite = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isTogglingFav) return;
+    const nextState = !isFavorite;
+    setIsFavorite(nextState);
+    setIsTogglingFav(true);
+    try {
+      if (onToggleFavorite) {
+        await onToggleFavorite(product.id, nextState);
+      } else {
+        await fetch("/api/products", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: product.id, isFavorite: nextState }),
+        });
+      }
+    } catch {
+      setIsFavorite(!nextState);
+    } finally {
+      setIsTogglingFav(false);
+    }
+  };
 
   const handleRefresh = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -67,8 +97,22 @@ export function ProductRow({
       onClick={() => onViewDetails?.(product)}
       className="group flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 bg-white dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800/80 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 shadow-xs hover:shadow-md transition-all duration-150 cursor-pointer"
     >
-      {/* Left: Thumbnail & Main Info */}
-      <div className="flex items-center gap-3 min-w-0 flex-1">
+      {/* Left: Star + Thumbnail & Main Info */}
+      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+        {/* Star Button */}
+        <button
+          type="button"
+          onClick={handleToggleFavorite}
+          className={`p-1.5 rounded-lg border transition-all cursor-pointer shrink-0 ${
+            isFavorite
+              ? "bg-amber-500/20 text-amber-500 border-amber-500/40"
+              : "text-slate-400 hover:text-amber-400 border-transparent hover:border-slate-200 dark:hover:border-slate-800"
+          }`}
+          title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+        >
+          <Star className={`w-3.5 h-3.5 ${isFavorite ? "fill-current" : ""}`} />
+        </button>
+
         {/* Thumbnail */}
         <div className="relative w-14 h-14 rounded-lg bg-slate-100 dark:bg-slate-950 overflow-hidden shrink-0 border border-slate-200 dark:border-slate-800 flex items-center justify-center">
           {product.mainImageUrl && !imgError ? (
@@ -89,10 +133,25 @@ export function ProductRow({
         {/* Details */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            {product.brandName ? (
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800/60">
+            {product.brandPageId ? (
+              <Link
+                href={`/spy/brand/${encodeURIComponent(product.brandPageId)}?tab=products`}
+                onClick={(e) => e.stopPropagation()}
+                className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800/60 hover:underline"
+              >
+                {product.brandName || "Brand"} &rarr;
+              </Link>
+            ) : product.brandName ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFilterBrand?.(product.brandName!);
+                }}
+                className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800/60 hover:underline cursor-pointer"
+              >
                 {product.brandName}
-              </span>
+              </button>
             ) : product.domain ? (
               <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
                 {product.domain}

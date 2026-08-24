@@ -37,6 +37,7 @@ import {
   Network,
   Radio,
   Truck,
+  Star,
 } from "lucide-react";
 
 interface ProductDetailsModalProps {
@@ -280,15 +281,59 @@ ${imagesText}`;
               <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">
                 {product.title || "Product Landing Page"}
               </h2>
-              {product.domain && (
-                <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                  {product.domain}
-                </span>
-              )}
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                {product.brandPageId ? (
+                  <a
+                    href={`/spy/brand/${encodeURIComponent(product.brandPageId)}?tab=products`}
+                    className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline uppercase tracking-wider"
+                  >
+                    {product.brandName || "Brand"} &rarr;
+                  </a>
+                ) : product.brandName ? (
+                  <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                    {product.brandName}
+                  </span>
+                ) : null}
+
+                {product.domain && (
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    • {product.domain}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {/* Star Favorite Toggle */}
+            <button
+              type="button"
+              onClick={async () => {
+                const nextState = !product.isFavorite;
+                product.isFavorite = nextState;
+                try {
+                  await fetch("/api/products", {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ id: product.id, isFavorite: nextState }),
+                  });
+                  showToast({
+                    type: "success",
+                    title: nextState ? "Starred" : "Removed",
+                    message: nextState ? "Added product to favorites" : "Removed product from favorites",
+                  });
+                } catch {}
+              }}
+              className={`p-1.5 rounded-lg border transition-all cursor-pointer shadow-xs ${
+                product.isFavorite
+                  ? "bg-amber-500 text-slate-950 border-amber-400 font-bold"
+                  : "bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:text-amber-500"
+              }`}
+              title={product.isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+            >
+              <Star className={`w-3.5 h-3.5 ${product.isFavorite ? "fill-current" : ""}`} />
+            </button>
+
             {/* 1-Click Copy Dropdown */}
             <div className="relative" ref={copyMenuRef}>
               <button

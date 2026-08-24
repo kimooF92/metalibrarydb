@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import NextImage from "next/image";
+import Link from "next/link";
 import { ScrapedProduct } from "@/types";
 import {
   ExternalLink,
@@ -16,26 +17,56 @@ import {
   Clock,
   Eye,
   Truck,
+  Star,
 } from "lucide-react";
 
 interface ProductCardProps {
   product: ScrapedProduct;
   onRefresh?: (productId: string) => Promise<void>;
   onDelete?: (productId: string) => Promise<void>;
+  onToggleFavorite?: (productId: string, nextFavorite: boolean) => Promise<void>;
   onViewDetails?: (product: ScrapedProduct) => void;
   onViewCreatives?: (product: ScrapedProduct) => void;
+  onFilterBrand?: (brandName: string) => void;
 }
 
 export function ProductCard({
   product,
   onRefresh,
   onDelete,
+  onToggleFavorite,
   onViewDetails,
   onViewCreatives,
+  onFilterBrand,
 }: ProductCardProps) {
   const [imgError, setImgError] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(Boolean(product.isFavorite));
+  const [isTogglingFav, setIsTogglingFav] = useState(false);
+
+  const handleToggleFavorite = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isTogglingFav) return;
+    const nextState = !isFavorite;
+    setIsFavorite(nextState);
+    setIsTogglingFav(true);
+    try {
+      if (onToggleFavorite) {
+        await onToggleFavorite(product.id, nextState);
+      } else {
+        await fetch("/api/products", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: product.id, isFavorite: nextState }),
+        });
+      }
+    } catch {
+      setIsFavorite(!nextState); // Rollback on error
+    } finally {
+      setIsTogglingFav(false);
+    }
+  };
 
   const handleRefresh = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -138,9 +169,20 @@ export function ProductCard({
           </div>
         )}
 
-        {/* Domain / Brand Badge */}
-        <div className="absolute top-2.5 right-2.5 z-10 px-2 py-0.5 rounded-md bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-semibold border border-white/10 shadow-sm truncate max-w-[140px]">
-          {product.brandName || product.domain || "Brand"}
+        {/* Top Right: Favorite Star & Brand Badge */}
+        <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={handleToggleFavorite}
+            className={`p-1.5 rounded-lg backdrop-blur-md border transition-all cursor-pointer shadow-sm ${
+              isFavorite
+                ? "bg-amber-500 text-slate-950 border-amber-400 font-bold"
+                : "bg-slate-900/70 text-slate-300 border-white/10 hover:text-amber-400 hover:bg-slate-900/90"
+            }`}
+            title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+          >
+            <Star className={`w-3.5 h-3.5 ${isFavorite ? "fill-current text-slate-950" : ""}`} />
+          </button>
         </div>
 
         {/* Offer Overlay Ribbon */}
@@ -154,12 +196,35 @@ export function ProductCard({
 
       {/* Content Area */}
       <div className="p-4 flex flex-col flex-1">
-        {/* Brand Name (if available) */}
-        {product.brandName && (
-          <div className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 mb-0.5 truncate uppercase tracking-wider">
-            {product.brandName}
-          </div>
-        )}
+        {/* Brand Name Link */}
+        <div className="flex items-center justify-between gap-1 mb-1">
+          {product.brandPageId ? (
+            <Link
+              href={`/spy/brand/${encodeURIComponent(product.brandPageId)}?tab=products`}
+              onClick={(e) => e.stopPropagation()}
+              className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline uppercase tracking-wider truncate"
+              title={`View ${product.brandName || "Brand"} Catalog`}
+            >
+              {product.brandName || product.domain || "View Brand"} &rarr;
+            </Link>
+          ) : product.brandName ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onFilterBrand?.(product.brandName!);
+              }}
+              className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline uppercase tracking-wider truncate text-left cursor-pointer"
+              title={`Filter by ${product.brandName}`}
+            >
+              {product.brandName}
+            </button>
+          ) : product.domain ? (
+            <span className="text-[11px] font-semibold text-slate-500 truncate">
+              {product.domain}
+            </span>
+          ) : null}
+        </div>
 
         {/* Product Title */}
         <h3
