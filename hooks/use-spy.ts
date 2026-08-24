@@ -302,6 +302,7 @@ export function useAdFeed(initialParams?: AdFilterParams) {
         query.set("minProductCreatives", params.minProductCreatives.toString());
       }
       if (params.productKey) query.set("productKey", params.productKey);
+      if (params.productId) query.set("productId", params.productId);
       if (params.groupBy && params.groupBy !== "none") query.set("groupBy", params.groupBy);
       if (params.mediaType && params.mediaType !== "all") query.set("mediaType", params.mediaType);
       if (params.status && params.status !== "all") query.set("status", params.status);

@@ -1011,17 +1011,18 @@ export function PagesTable({
 
                       {/* Approx Products Count (Clustered by Landing Page URLs & Ad Copy) */}
                       <td className="px-3 py-1.5 text-center">
-                        {p.approxProductCount !== null && p.approxProductCount !== undefined && p.approxProductCount > 0 ? (
-                          <span
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20"
-                            title={`~${p.approxProductCount} distinct product(s) identified across ${(p as any).extractedAdCount || 0} active ad creative(s)`}
-                          >
-                            <Package className="w-2.5 h-2.5 shrink-0" />
-                            ~{p.approxProductCount} {p.approxProductCount === 1 ? "prod" : "prods"}
+                        <Link
+                          href={`/spy/brand/${encodeURIComponent(p.id || p.pageId || "")}?tab=products`}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 hover:border-indigo-500/40 transition-all cursor-pointer shadow-xs"
+                          title={`Open ${p.displayName || "brand"} Product Catalog & Landing Pages`}
+                        >
+                          <Package className="w-2.5 h-2.5 shrink-0" />
+                          <span>
+                            {p.approxProductCount !== null && p.approxProductCount !== undefined && p.approxProductCount > 0
+                              ? `~${p.approxProductCount} ${p.approxProductCount === 1 ? "prod" : "prods"}`
+                              : "Catalog"}
                           </span>
-                        ) : (
-                          <span className="text-slate-300 dark:text-slate-600 text-xs">—</span>
-                        )}
+                        </Link>
                       </td>
 
                       {/* Previous Results */}

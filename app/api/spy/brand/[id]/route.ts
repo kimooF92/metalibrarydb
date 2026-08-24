@@ -9,6 +9,9 @@ import { enrichAdsWithProductClusters } from "@/lib/product-clustering";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+import { normalizeProductUrl } from "@/lib/firecrawl";
+import { getCleanDomain } from "@/lib/utils";
+
 const isUuid = (str: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
@@ -121,26 +124,44 @@ export async function GET(
       displayName = brandAdsRaw[0].pageName || `Brand ${pageId}`;
     }
 
-    // 3. Fetch linked scraped products
+    // 3. Fetch linked scraped products & normalized landing page URLs
     const productIds = Array.from(
       new Set(brandAdsRaw.map((a) => a.productId).filter((id): id is string => Boolean(id)))
     );
-    let linkedProducts: any[] = [];
+
+    const distinctNormalizedUrls = Array.from(
+      new Set(
+        brandAdsRaw
+          .map((a) => (a.linkUrl ? normalizeProductUrl(a.linkUrl) : null))
+          .filter((u): u is string => Boolean(u))
+      )
+    );
+
+    const productQueryConditions = [];
     if (productIds.length > 0) {
+      productQueryConditions.push(inArray(scrapedProducts.id, productIds));
+    }
+    if (pageId) {
+      productQueryConditions.push(eq(scrapedProducts.pageId, pageId));
+    }
+    if (distinctNormalizedUrls.length > 0) {
+      productQueryConditions.push(inArray(scrapedProducts.url, distinctNormalizedUrls));
+    }
+
+    let linkedProducts: any[] = [];
+    if (productQueryConditions.length > 0) {
       linkedProducts = await db
         .select()
         .from(scrapedProducts)
-        .where(inArray(scrapedProducts.id, productIds));
-    } else if (pageId) {
-      // Look up by pageId
-      linkedProducts = await db
-        .select()
-        .from(scrapedProducts)
-        .where(eq(scrapedProducts.pageId, pageId));
+        .where(or(...productQueryConditions));
     }
 
     const productMap = new Map<string, any>();
-    linkedProducts.forEach((p) => productMap.set(p.id, p));
+    const productUrlMap = new Map<string, any>();
+    linkedProducts.forEach((p) => {
+      productMap.set(p.id, p);
+      if (p.url) productUrlMap.set(p.url, p);
+    });
 
     // 4. Cluster analytics across brand ads
     const clusterMap = new Map<string, any>();
@@ -354,14 +375,87 @@ export async function GET(
         .limit(60);
     }
 
-    // 8. Store Tech & Tracking Detectors
+    // 8. Brand Products Catalog Compilation
+    const brandProductsList: any[] = [];
+    const scrapedProductUrls = new Set<string>();
+
+    linkedProducts.forEach((p) => {
+      if (p.url) scrapedProductUrls.add(p.url);
+
+      const matchingAds = allEnrichedAds.filter(
+        (ad) =>
+          ad.productId === p.id ||
+          (ad.linkUrl && normalizeProductUrl(ad.linkUrl) === p.url)
+      );
+
+      const linkedAdsCount = matchingAds.length;
+      const activeAdsCount = matchingAds.filter((a) => a.isActive && !a.isArchived).length;
+      const topThumb =
+        matchingAds.find((a) => a.thumbnailUrl)?.thumbnailUrl ||
+        matchingAds.find((a) => a.mediaUrls?.[0])?.mediaUrls?.[0] ||
+        p.mainImageUrl;
+      const maxScore = matchingAds.reduce((max, a) => Math.max(max, a.winnerScore || 0), 0);
+
+      brandProductsList.push({
+        ...p,
+        linkedAdsCount,
+        activeAdsCount,
+        topCreativeThumbnail: topThumb,
+        winnerScore: maxScore,
+      });
+    });
+
+    // Also include detected landing URLs that are pending scrape
+    distinctNormalizedUrls.forEach((normUrl) => {
+      if (!scrapedProductUrls.has(normUrl)) {
+        const matchingAds = allEnrichedAds.filter(
+          (ad) => ad.linkUrl && normalizeProductUrl(ad.linkUrl) === normUrl
+        );
+
+        brandProductsList.push({
+          id: `unscraped_${Buffer.from(normUrl).toString("base64").slice(0, 16)}`,
+          url: normUrl,
+          domain: getCleanDomain(normUrl),
+          pageId: pageId,
+          title: matchingAds[0]?.title || "Unscraped Product Landing Page",
+          currentPrice: null,
+          originalPrice: null,
+          currency: null,
+          discountOrOffer: null,
+          mainImageUrl: matchingAds.find((a) => a.thumbnailUrl)?.thumbnailUrl || null,
+          galleryImages: [],
+          allOffers: null,
+          storePlatform: "other",
+          deliveryCost: null,
+          phoneNumbers: [],
+          whatsappNumbers: [],
+          metaPixelIds: [],
+          scrapeStatus: "pending",
+          failureReason: null,
+          lastScrapedAt: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          linkedAdsCount: matchingAds.length,
+          activeAdsCount: matchingAds.filter((a) => a.isActive && !a.isArchived).length,
+          topCreativeThumbnail: matchingAds.find((a) => a.thumbnailUrl)?.thumbnailUrl || null,
+          winnerScore: matchingAds.reduce((max, a) => Math.max(max, a.winnerScore || 0), 0),
+        });
+      }
+    });
+
+    // Sort products by linkedAdsCount descending, then activeAdsCount descending
+    brandProductsList.sort(
+      (a, b) => (b.linkedAdsCount || 0) - (a.linkedAdsCount || 0) || (b.activeAdsCount || 0) - (a.activeAdsCount || 0)
+    );
+
+    // 9. Store Tech & Tracking Detectors
     const detectedPlatforms = new Set<string>();
     const detectedPixels = new Set<string>();
     const detectedPhones = new Set<string>();
     const detectedWhatsapp = new Set<string>();
 
     linkedProducts.forEach((p) => {
-      if (p.storePlatform) detectedPlatforms.add(p.storePlatform);
+      if (p.storePlatform && p.storePlatform !== "other") detectedPlatforms.add(p.storePlatform);
       if (p.metaPixelIds) p.metaPixelIds.forEach((id: string) => detectedPixels.add(id));
       if (p.phoneNumbers) p.phoneNumbers.forEach((ph: string) => detectedPhones.add(ph));
       if (p.whatsappNumbers) p.whatsappNumbers.forEach((w: string) => detectedWhatsapp.add(w));
@@ -394,7 +488,7 @@ export async function GET(
         breakoutCount,
         evergreenCount,
         evergreenRate: totalAdsCaptured > 0 ? Math.round((evergreenCount / totalAdsCaptured) * 100) : 0,
-        distinctProductsCount: productClusters.length,
+        distinctProductsCount: brandProductsList.length || productClusters.length,
       },
       mediaDistribution,
       longevityDistribution: {
@@ -409,6 +503,7 @@ export async function GET(
       },
       ctaDistribution,
       productClusters,
+      products: brandProductsList,
       topWinners,
       history,
       storeTech: {

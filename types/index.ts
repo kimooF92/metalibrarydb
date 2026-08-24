@@ -246,6 +246,7 @@ export interface AdFilterParams {
   minWinnerScore?: number;
   minProductCreatives?: number;
   productKey?: string;
+  productId?: string;
   mediaType?: "all" | "image" | "video" | "carousel";
   status?: "all" | "active" | "inactive" | "archived" | "unknown";
   ctaText?: string;

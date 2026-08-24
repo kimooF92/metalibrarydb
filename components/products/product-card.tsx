@@ -23,6 +23,7 @@ interface ProductCardProps {
   onRefresh?: (productId: string) => Promise<void>;
   onDelete?: (productId: string) => Promise<void>;
   onViewDetails?: (product: ScrapedProduct) => void;
+  onViewCreatives?: (product: ScrapedProduct) => void;
 }
 
 export function ProductCard({
@@ -30,6 +31,7 @@ export function ProductCard({
   onRefresh,
   onDelete,
   onViewDetails,
+  onViewCreatives,
 }: ProductCardProps) {
   const [imgError, setImgError] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -76,6 +78,8 @@ export function ProductCard({
   };
 
   const isWinning = (product.linkedAdsCount || 0) >= 3;
+  const isPendingScrape = product.scrapeStatus === "pending";
+  const isFailedScrape = product.scrapeStatus === "failed";
 
   return (
     <div
@@ -97,7 +101,9 @@ export function ProductCard({
         ) : (
           <div className="flex flex-col items-center gap-2 text-slate-400">
             <ShoppingBag className="w-12 h-12 stroke-[1.5] opacity-40" />
-            <span className="text-xs font-medium text-slate-400">No Image Available</span>
+            <span className="text-xs font-medium text-slate-400">
+              {isPendingScrape ? "Pending Scrape" : "No Image Available"}
+            </span>
           </div>
         )}
 
@@ -106,6 +112,21 @@ export function ProductCard({
           <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[11px] font-bold shadow-md">
             <Sparkles className="w-3 h-3 fill-current" />
             <span>Winning ({product.linkedAdsCount} Ads)</span>
+          </div>
+        )}
+
+        {/* Pending / Failed Scrape Badge */}
+        {isPendingScrape && (
+          <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-500/90 text-white text-[10px] font-bold shadow-sm backdrop-blur-sm">
+            <Clock className="w-3 h-3" />
+            <span>Pending Scrape</span>
+          </div>
+        )}
+
+        {isFailedScrape && (
+          <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 px-2.5 py-1 rounded-md bg-rose-500/90 text-white text-[10px] font-bold shadow-sm backdrop-blur-sm">
+            <AlertCircle className="w-3 h-3" />
+            <span>Scrape Failed</span>
           </div>
         )}
 
@@ -132,8 +153,29 @@ export function ProductCard({
           className="text-sm font-bold text-slate-900 dark:text-slate-100 line-clamp-2 mb-2 leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors"
           title={product.title || "Product Landing Page"}
         >
-          {product.title || "Untitled Scraped Product"}
+          {product.title || "Untitled Product Landing Page"}
         </h3>
+
+        {/* Badges: Platform + WhatsApp */}
+        <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
+          {product.storePlatform && product.storePlatform !== "other" && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 uppercase">
+              {product.storePlatform}
+            </span>
+          )}
+
+          {product.whatsappNumbers && product.whatsappNumbers.length > 0 && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              💬 WhatsApp
+            </span>
+          )}
+
+          {typeof product.linkedAdsCount === "number" && product.linkedAdsCount > 0 && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+              🎬 {product.linkedAdsCount} {product.linkedAdsCount === 1 ? "ad" : "ads"}
+            </span>
+          )}
+        </div>
 
         {/* Price & Offers */}
         <div className="flex items-center justify-between gap-2 mb-3 mt-auto flex-wrap">
@@ -142,6 +184,8 @@ export function ProductCard({
               <span className="text-base font-extrabold text-indigo-600 dark:text-indigo-400">
                 {product.currentPrice}
               </span>
+            ) : isPendingScrape ? (
+              <span className="text-xs text-amber-500 font-medium">Scrape to get price</span>
             ) : (
               <span className="text-xs text-slate-400 italic">Price not detected</span>
             )}
@@ -206,17 +250,30 @@ export function ProductCard({
 
         {/* Footer info & action buttons */}
         <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2 text-xs">
-          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-            <Clock className="w-3 h-3 shrink-0" />
-            <span>{formatDate(product.lastScrapedAt || product.createdAt) || "Scraped"}</span>
-          </div>
+          {onViewCreatives && (product.linkedAdsCount || 0) > 0 ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewCreatives(product);
+              }}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-600 dark:text-indigo-400 text-[11px] font-bold transition-colors cursor-pointer"
+            >
+              <Eye className="w-3 h-3" />
+              <span>View Ads ({product.linkedAdsCount})</span>
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+              <Clock className="w-3 h-3 shrink-0" />
+              <span>{formatDate(product.lastScrapedAt || product.createdAt) || "Scraped"}</span>
+            </div>
+          )}
 
           <div className="flex items-center gap-1">
             {onRefresh && (
               <button
                 onClick={handleRefresh}
                 disabled={isRefreshing}
-                className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors"
+                className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors cursor-pointer"
                 title="Re-extract Landing Page"
               >
                 <RotateCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-indigo-500" : ""}`} />
@@ -238,7 +295,7 @@ export function ProductCard({
               <button
                 onClick={handleDelete}
                 disabled={isDeleting}
-                className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md transition-colors"
+                className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md transition-colors cursor-pointer"
                 title="Delete Tracked Product"
               >
                 <Trash2 className="w-3.5 h-3.5" />

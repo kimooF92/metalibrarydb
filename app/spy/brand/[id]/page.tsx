@@ -6,8 +6,10 @@ import Link from "next/link";
 import { useAdFeed } from "@/hooks/use-spy";
 import { AdCard } from "@/components/spy/ad-card";
 import { AdRow } from "@/components/spy/ad-row";
+import { ProductCard } from "@/components/products/product-card";
+import { ProductDetailsModal } from "@/components/products/product-details-modal";
 import { useToast } from "@/components/toast-context";
-import { Ad } from "@/types";
+import { Ad, ScrapedProduct } from "@/types";
 import {
   ArrowLeft,
   Eye,
@@ -44,6 +46,9 @@ import {
   Target,
   ArrowUpRight,
   X,
+  Zap,
+  Check,
+  RotateCw,
 } from "lucide-react";
 
 interface BrandAnalyticsData {
@@ -108,6 +113,7 @@ interface BrandAnalyticsData {
     sharePercent: number;
     product: any | null;
   }>;
+  products?: ScrapedProduct[];
   topWinners: Ad[];
   history: Array<{
     id: string;
@@ -133,13 +139,26 @@ export default function BrandDeepDivePage({
   const { id } = use(params);
   const { showToast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<"analytics" | "creatives">("analytics");
+  const [activeTab, setActiveTab] = useState<"analytics" | "products" | "creatives">("analytics");
   const [data, setData] = useState<BrandAnalyticsData | null>(null);
   const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshingMedia, setIsRefreshingMedia] = useState(false);
   const [isWatchlisted, setIsWatchlisted] = useState(false);
   const [isTogglingWatchlist, setIsTogglingWatchlist] = useState(false);
+
+  // Products Tab State
+  const [isSyncingProducts, setIsSyncingProducts] = useState(false);
+  const [productSearch, setProductSearch] = useState("");
+  const [productStatusFilter, setProductStatusFilter] = useState<"all" | "scraped" | "pending">("all");
+  const [productOfferOnly, setProductOfferOnly] = useState(false);
+  const [selectedProductForModal, setSelectedProductForModal] = useState<ScrapedProduct | null>(null);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [filteredProductForCreatives, setFilteredProductForCreatives] = useState<{
+    id: string;
+    title: string;
+    url: string;
+  } | null>(null);
 
   // Creative feed controls
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -149,6 +168,17 @@ export default function BrandDeepDivePage({
   const [feedSortBy, setFeedSortBy] = useState<string>("winner_score");
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // Sync activeTab from URL query params on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tab = urlParams.get("tab");
+      if (tab === "products" || tab === "creatives" || tab === "analytics") {
+        setActiveTab(tab as any);
+      }
+    }
+  }, []);
 
   // Load brand analytics payload
   const fetchBrandData = async () => {
@@ -185,12 +215,91 @@ export default function BrandDeepDivePage({
   } = useAdFeed({
     trackedPageId: id,
     search: feedSearch,
+    productId: filteredProductForCreatives?.id,
     mediaType: feedMediaType as any,
     status: feedStatus as any,
     sortBy: feedSortBy as any,
     limit: 24,
     enabled: activeTab === "creatives",
   });
+
+  // Batch Sync & Extract Brand Products
+  const handleSyncBrandProducts = async (forceRefresh = false) => {
+    if (isSyncingProducts || !id) return;
+    setIsSyncingProducts(true);
+    try {
+      const res = await fetch(`/api/spy/brand/${encodeURIComponent(id)}/products/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ forceRefresh }),
+      });
+      const resJson = await res.json();
+      if (!res.ok || !resJson.success) {
+        throw new Error(resJson.error || "Failed to sync brand products");
+      }
+      showToast({
+        type: "success",
+        title: "Products Synchronized",
+        message: `${resJson.uniqueProductUrlsCount || 0} unique product URLs found: ${resJson.alreadyScrapedCount || 0} linked, ${resJson.newlyScrapedCount || 0} scraped.`,
+      });
+      await Promise.all([fetchBrandData(), refetchFeed()]);
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Product Sync Error",
+        message: err.message || "Failed to sync products from brand ads.",
+      });
+    } finally {
+      setIsSyncingProducts(false);
+    }
+  };
+
+  // Re-extract individual product
+  const handleRefreshProduct = async (productId: string) => {
+    const prod = data?.products?.find((p: any) => p.id === productId);
+    if (!prod || !prod.url) return;
+    try {
+      const res = await fetch("/api/products/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: prod.url, pageId: data?.brand?.pageId, forceRefresh: true }),
+      });
+      const resJson = await res.json();
+      if (resJson.success) {
+        showToast({
+          type: "success",
+          title: "Product Scraped",
+          message: `${resJson.product?.title || "Product"} updated successfully.`,
+        });
+        await fetchBrandData();
+      } else {
+        throw new Error(resJson.error || "Failed to scrape product");
+      }
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Scrape Failed",
+        message: err.message || "Could not scrape product page.",
+      });
+    }
+  };
+
+  // View creatives for a specific product
+  const handleViewCreativesForProduct = (product: any) => {
+    setFilteredProductForCreatives({
+      id: product.id,
+      title: product.title || "Product",
+      url: product.url,
+    });
+    setFeedSearch("");
+    updateFilters({ search: "", productId: product.id, page: 1 });
+    setActiveTab("creatives");
+  };
+
+  const handleClearProductFilter = () => {
+    setFilteredProductForCreatives(null);
+    updateFilters({ productId: undefined, page: 1 });
+  };
 
   // Watchlist toggle handler
   const handleToggleWatchlist = async () => {
@@ -413,7 +522,7 @@ export default function BrandDeepDivePage({
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center gap-2 pt-2">
+        <div className="flex items-center gap-2 pt-2 flex-wrap">
           <button
             onClick={() => setActiveTab("analytics")}
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
@@ -427,6 +536,23 @@ export default function BrandDeepDivePage({
           </button>
 
           <button
+            onClick={() => setActiveTab("products")}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === "products"
+                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/25"
+                : "bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+            }`}
+          >
+            <ShoppingBag className="w-4 h-4" />
+            <span>Products & Catalog ({data?.products?.length ?? productClusters.length})</span>
+            {data?.products && data.products.filter((p) => p.scrapeStatus === "pending").length > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-amber-400 text-slate-950">
+                {data.products.filter((p) => p.scrapeStatus === "pending").length} new
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => setActiveTab("creatives")}
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               activeTab === "creatives"
@@ -436,6 +562,9 @@ export default function BrandDeepDivePage({
           >
             <Layers className="w-4 h-4" />
             <span>All Scanned Creatives ({summary.totalAdsCaptured})</span>
+            {filteredProductForCreatives && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            )}
           </button>
         </div>
       </div>
@@ -749,46 +878,68 @@ export default function BrandDeepDivePage({
 
                     {p.product?.currentPrice && (
                       <div className="text-xs font-black text-indigo-600 dark:text-indigo-400 mb-2">
-                        {p.product.currentPrice} {p.product.currency || ""}
-                        {p.product.discountOrOffer && (
-                          <span className="ml-1.5 text-[10px] text-emerald-600 font-semibold">
-                            ({p.product.discountOrOffer})
-                          </span>
-                        )}
+                        {p.product.currentPrice}
                       </div>
                     )}
+
+                    <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
+                      <div className="flex justify-between">
+                        <span>Angles & Creatives:</span>
+                        <span className="font-bold text-slate-900 dark:text-white">
+                          {p.creativeCount} ({p.sharePercent}% brand share)
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Format Mix:</span>
+                        <span>{p.videoCount} videos • {p.imageCount} images</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Active Now:</span>
+                        <span className="text-emerald-600 font-semibold">{p.activeCount} active ads</span>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-200/80 dark:border-slate-800 text-[11px] flex items-center justify-between text-slate-500">
-                    <span className="font-bold text-slate-800 dark:text-slate-200">
-                      {p.creativeCount} angles ({p.sharePercent}% budget)
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      {p.videoCount > 0 && <span className="text-purple-600 dark:text-purple-400 font-semibold">{p.videoCount} vid</span>}
-                      {p.imageCount > 0 && <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{p.imageCount} img</span>}
-                    </div>
+                  <div className="pt-2 mt-2 border-t border-slate-200 dark:border-slate-800/80 flex items-center justify-between gap-2">
+                    <button
+                      onClick={() => {
+                        setFeedSearch(p.cleanProductUrl || p.productName);
+                        updateFilters({ search: p.cleanProductUrl || p.productName, page: 1 });
+                        setActiveTab("creatives");
+                      }}
+                      className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold hover:underline cursor-pointer"
+                    >
+                      View {p.creativeCount} Creatives &rarr;
+                    </button>
+
+                    {p.cleanProductUrl && (
+                      <a
+                        href={p.cleanProductUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                        title="Open product URL"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Top 3 Winning Creatives Spotlight */}
+          {/* Top 3 Winner Creatives Spotlight */}
           {topWinners.length > 0 && (
-            <div className="space-y-3 pt-2">
-              <div className="flex items-center justify-between">
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 p-4 shadow-sm space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
                 <div className="flex items-center gap-2">
                   <Trophy className="w-4 h-4 text-amber-500" />
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                    Top Winning Creatives Spotlight
+                    Top 3 Winner Creatives Spotlight
                   </h3>
                 </div>
-                <button
-                  onClick={() => setActiveTab("creatives")}
-                  className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1"
-                >
-                  View All Creatives <ArrowUpRight className="w-3.5 h-3.5" />
-                </button>
+                <span className="text-xs text-slate-500">Highest Scaling & Longevity</span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
@@ -804,9 +955,244 @@ export default function BrandDeepDivePage({
             </div>
           )}
         </div>
+      ) : activeTab === "products" ? (
+        /* 2b. PRODUCTS & CATALOG TAB */
+        <div className="space-y-4 animate-in fade-in duration-150">
+          {/* Header & Batch Scrape Action Bar */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white dark:bg-slate-950/50 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+            <div>
+              <div className="flex items-center gap-2">
+                <ShoppingBag className="w-5 h-5 text-indigo-500" />
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                  Brand Product Catalog & Landing Pages
+                </h2>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Extract all destination URLs from scanned ads, remove duplicates, and scrape full product details with pricing and offers.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => handleSyncBrandProducts(false)}
+                disabled={isSyncingProducts}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-sm shadow-indigo-600/25 transition-all cursor-pointer disabled:opacity-60"
+              >
+                {isSyncingProducts ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Zap className="w-4 h-4" />
+                )}
+                <span>{isSyncingProducts ? "Scanning & Extracting..." : "⚡ Sync & Scrape Brand Products"}</span>
+              </button>
+
+              <button
+                onClick={() => handleSyncBrandProducts(true)}
+                disabled={isSyncingProducts}
+                className="p-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 text-xs font-semibold transition-all cursor-pointer"
+                title="Force re-scrape all URLs from landing pages"
+              >
+                <RotateCw className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Metrics Bar */}
+          {(() => {
+            const allProds = data?.products || [];
+            const scrapedCount = allProds.filter((p) => p.scrapeStatus === "success").length;
+            const pendingCount = allProds.filter((p) => p.scrapeStatus === "pending").length;
+            const heroProd = allProds[0];
+
+            return (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3 rounded-xl bg-white dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <span className="text-[11px] font-bold uppercase text-slate-500 tracking-wider">Unique Products</span>
+                  <p className="text-xl font-black text-slate-900 dark:text-white mt-0.5">{allProds.length}</p>
+                  <span className="text-[10px] text-slate-500 font-medium">Extracted from {summary.totalAdsCaptured} ads</span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-white dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <span className="text-[11px] font-bold uppercase text-slate-500 tracking-wider">Scraped with Details</span>
+                  <p className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">{scrapedCount}</p>
+                  <span className="text-[10px] text-slate-500 font-medium">{pendingCount} URLs pending scrape</span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-white dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <span className="text-[11px] font-bold uppercase text-slate-500 tracking-wider">Hero Flagship Item</span>
+                  <p className="text-xs font-bold text-slate-900 dark:text-white truncate mt-1">
+                    {heroProd?.title || "None detected yet"}
+                  </p>
+                  <span className="text-[10px] text-indigo-500 font-semibold">
+                    {heroProd?.linkedAdsCount ? `${heroProd.linkedAdsCount} active creatives` : "Sync to calculate"}
+                  </span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-white dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <span className="text-[11px] font-bold uppercase text-slate-500 tracking-wider">Detected Platform</span>
+                  <p className="text-sm font-black text-indigo-600 dark:text-indigo-400 mt-1 uppercase">
+                    {storeTech.platforms.length > 0 ? storeTech.platforms.join(", ") : "Meta Ads"}
+                  </p>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    {storeTech.whatsappNumbers.length > 0 ? `${storeTech.whatsappNumbers.length} WhatsApp numbers` : "No WhatsApp links"}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Filter Bar */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 justify-between bg-white dark:bg-slate-950/50 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+            <div className="relative w-full sm:w-80">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search products by title, domain, offer..."
+                value={productSearch}
+                onChange={(e) => setProductSearch(e.target.value)}
+                className="w-full bg-slate-50 dark:bg-slate-900 text-xs rounded-lg pl-9 pr-8 py-1.5 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500"
+              />
+              {productSearch && (
+                <button
+                  type="button"
+                  onClick={() => setProductSearch("")}
+                  className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded-full cursor-pointer transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+              <select
+                value={productStatusFilter}
+                onChange={(e) => setProductStatusFilter(e.target.value as any)}
+                className="bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-2.5 py-1.5"
+              >
+                <option value="all">All Products</option>
+                <option value="scraped">Scraped Only</option>
+                <option value="pending">Pending Scrape Only</option>
+              </select>
+
+              <button
+                type="button"
+                onClick={() => setProductOfferOnly(!productOfferOnly)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                  productOfferOnly
+                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-bold"
+                    : "bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:bg-slate-100"
+                }`}
+              >
+                <Tag className="w-3 h-3" />
+                <span>With Offers Only</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Product Grid */}
+          {(() => {
+            const allProds: ScrapedProduct[] = (data?.products as any[]) || [];
+            const filtered = allProds.filter((p) => {
+              if (productStatusFilter === "scraped" && p.scrapeStatus !== "success") return false;
+              if (productStatusFilter === "pending" && p.scrapeStatus === "success") return false;
+              if (productOfferOnly && (!p.discountOrOffer || p.discountOrOffer.trim() === "")) return false;
+              if (productSearch.trim()) {
+                const q = productSearch.toLowerCase();
+                const matchTitle = p.title?.toLowerCase().includes(q);
+                const matchDomain = p.domain?.toLowerCase().includes(q);
+                const matchUrl = p.url?.toLowerCase().includes(q);
+                const matchOffer = p.discountOrOffer?.toLowerCase().includes(q);
+                if (!matchTitle && !matchDomain && !matchUrl && !matchOffer) return false;
+              }
+              return true;
+            });
+
+            if (allProds.length === 0) {
+              return (
+                <div className="flex flex-col items-center justify-center p-10 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-950/40 text-center space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-950/60 flex items-center justify-center text-indigo-500">
+                    <ShoppingBag className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      No Scraped Products in Brand Catalog Yet
+                    </h3>
+                    <p className="text-xs text-slate-500 max-w-md mt-1">
+                      Click the button below to extract all unique destination URLs from this brand's scanned ads and scrape product prices, offers, and photos.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleSyncBrandProducts(false)}
+                    disabled={isSyncingProducts}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/25 transition-all cursor-pointer"
+                  >
+                    <Zap className="w-4 h-4" />
+                    <span>⚡ Extract & Scrape Brand Products</span>
+                  </button>
+                </div>
+              );
+            }
+
+            if (filtered.length === 0) {
+              return (
+                <div className="flex flex-col items-center justify-center h-48 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center">
+                  <Search className="w-8 h-8 text-slate-400 mb-2" />
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    No products match your filter criteria
+                  </h4>
+                  <button
+                    onClick={() => {
+                      setProductSearch("");
+                      setProductStatusFilter("all");
+                      setProductOfferOnly(false);
+                    }}
+                    className="text-xs text-indigo-600 font-semibold mt-2 hover:underline cursor-pointer"
+                  >
+                    Reset Product Filters
+                  </button>
+                </div>
+              );
+            }
+
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filtered.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    onRefresh={handleRefreshProduct}
+                    onViewDetails={(p) => {
+                      setSelectedProductForModal(p);
+                      setIsProductModalOpen(true);
+                    }}
+                    onViewCreatives={handleViewCreativesForProduct}
+                  />
+                ))}
+              </div>
+            );
+          })()}
+        </div>
       ) : (
         /* 3. ALL CREATIVES FEED TAB */
         <div className="space-y-4 animate-in fade-in duration-150">
+          {/* Filter banner if filtered by product */}
+          {filteredProductForCreatives && (
+            <div className="flex items-center justify-between p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800/80 text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="flex h-2 w-2 rounded-full bg-indigo-600 animate-pulse shrink-0" />
+                <span className="text-slate-600 dark:text-slate-300 truncate">
+                  Filtered by Product: <strong className="text-slate-900 dark:text-white font-bold">{filteredProductForCreatives.title}</strong>
+                </span>
+              </div>
+              <button
+                onClick={handleClearProductFilter}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold cursor-pointer transition-colors shrink-0"
+              >
+                <X className="w-3.5 h-3.5" /> Clear Filter
+              </button>
+            </div>
+          )}
+
           {/* Feed Filter Bar */}
           <div className="flex flex-col sm:flex-row items-center gap-3 justify-between bg-white dark:bg-slate-950/50 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
             {/* Search Input */}
@@ -962,6 +1348,17 @@ export default function BrandDeepDivePage({
           )}
         </div>
       )}
+
+      {/* Product Details & Competitor Benchmark Modal */}
+      <ProductDetailsModal
+        isOpen={isProductModalOpen}
+        onClose={() => {
+          setIsProductModalOpen(false);
+          setSelectedProductForModal(null);
+        }}
+        product={selectedProductForModal}
+        onRefresh={handleRefreshProduct}
+      />
     </div>
   );
 }
