@@ -349,21 +349,24 @@ export async function ingestApifyDatasetItems(
           let detectedPerceptualHash: string | null = null;
           let hasChange = false;
 
-          // 1. Process Video media
-          if (mediaType === "video" && rawMediaUrls.length > 0) {
-            const b2VideoUrls = await Promise.all(
+          // 1. Process all media assets (Videos, Image Ads, Carousel cards)
+          if (rawMediaUrls.length > 0) {
+            const isVideo = mediaType === "video";
+            const storedMediaUrls = await Promise.all(
               rawMediaUrls.map(async (url, idx) => {
-                if (url.includes("backblazeb2.com") || url.includes("/api/spy/b2-media")) return url;
-                const uploadRes = await uploadMediaWithHashing(url, "videos", `${adArchiveId}_${idx}`).catch(() => null);
+                if (url.includes("backblazeb2.com") || url.includes("/api/spy/b2-media") || url.includes("files.catbox.moe")) return url;
+                const folder = isVideo || url.includes(".mp4") ? "videos" : "images";
+                const uploadRes = await uploadMediaWithHashing(url, folder as any, `${adArchiveId}_${idx}`).catch(() => null);
                 if (uploadRes?.url) {
                   hasChange = true;
                   if (uploadRes.mediaHash && !detectedMediaHash) detectedMediaHash = uploadRes.mediaHash;
+                  if (uploadRes.perceptualHash && !detectedPerceptualHash) detectedPerceptualHash = uploadRes.perceptualHash;
                   return uploadRes.url;
                 }
                 return url;
               })
             );
-            updatedMediaUrls = b2VideoUrls;
+            updatedMediaUrls = storedMediaUrls;
           }
 
           // 2. Process Thumbnail / Image media
