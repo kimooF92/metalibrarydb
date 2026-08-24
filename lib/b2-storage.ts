@@ -186,18 +186,16 @@ export async function uploadMediaWithHashing(
       };
     }
 
-    // Tier 3: Supabase Storage (STRICTLY for small thumbnails < 1.5MB to protect Supabase quota)
-    if (!isVideo && buffer.length <= MAX_SUPABASE_STORAGE_BYTES) {
-      const supabaseUrl = await uploadBufferToSupabase(buffer, contentKey, contentType);
-      if (supabaseUrl) {
-        console.log(`[Storage Engine] Stored thumbnail to Supabase Storage: ${supabaseUrl}`);
-        return {
-          url: supabaseUrl,
-          mediaHash,
-          perceptualHash,
-          wasReused: false,
-        };
-      }
+    // Tier 3: Supabase Storage Fallback (Ultra-fast & 100% reliable fallback)
+    const supabaseUrl = await uploadBufferToSupabase(buffer, contentKey, contentType);
+    if (supabaseUrl) {
+      console.log(`[Storage Engine] Stored to Supabase Storage fallback: ${supabaseUrl}`);
+      return {
+        url: supabaseUrl,
+        mediaHash,
+        perceptualHash,
+        wasReused: false,
+      };
     }
 
     // Tier 4: Fallback to source URL

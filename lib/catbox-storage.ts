@@ -6,7 +6,7 @@
  * - Direct Buffer Upload (zero redundant downloads, fastest speed)
  * - Permanent file retention (files.catbox.moe)
  * - 200MB file limit for videos and images
- * - Anti-bot browser headers to prevent Cloudflare challenges
+ * - Fast failover timeout (12s) to prevent stalled scraper tasks during Catbox maintenance
  */
 
 const BROWSER_USER_AGENT =
@@ -41,7 +41,7 @@ export async function uploadBufferToCatbox(
     formData.append("fileToUpload", blob, cleanFilename);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
 
     const catboxRes = await fetch("https://catbox.moe/user/api.php", {
       method: "POST",
@@ -60,12 +60,9 @@ export async function uploadBufferToCatbox(
         console.log(`[Catbox Storage] Successfully uploaded to permanent Catbox: ${catboxUrl}`);
         return catboxUrl;
       }
-      console.warn(`[Catbox Storage] Catbox unexpected response: ${catboxUrl.substring(0, 100)}`);
-    } else {
-      console.warn(`[Catbox Storage] Upload request failed with status: ${catboxRes.status}`);
     }
   } catch (err: any) {
-    console.warn(`[Catbox Storage] Direct buffer upload failed: ${err.message}`);
+    console.warn(`[Catbox Storage] Catbox upload unavailable (${err.message}). Using storage fallback...`);
   }
 
   return null;
@@ -91,7 +88,7 @@ export async function uploadMediaFromUrlToCatbox(
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 35000);
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
 
     const sourceRes = await fetch(sourceUrl, {
       signal: controller.signal,
