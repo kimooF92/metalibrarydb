@@ -1,6 +1,6 @@
 import FirecrawlApp from "@mendable/firecrawl-js";
-import { z } from "zod";
 import { resolveDestinationUrl } from "./utils";
+import { scrapeProductDirectHtml } from "./html-scraper";
 
 /**
  * Normalizes a URL for deduplication:
@@ -13,9 +13,11 @@ export function normalizeProductUrl(rawUrl: string | null | undefined): string |
   if (!unwrapped) return null;
 
   try {
-    const parsed = new URL(unwrapped);
+    // Strip carriage returns, tabs, and invalid whitespace
+    const sanitizedUrl = unwrapped.trim().replace(/[\r\n\t]+/g, "").replace(/\s+/g, "");
+    const parsed = new URL(sanitizedUrl);
 
-    // List of tracking query parameters to purge
+    // List of tracking query parameters and Meta ad template macros to purge
     const trackingParams = [
       "utm_source",
       "utm_medium",
@@ -36,12 +38,36 @@ export function normalizeProductUrl(rawUrl: string | null | undefined): string |
       "mc_eid",
       "fbadid",
       "ad_id",
+      "adset_id",
       "campaign_id",
+      "placement",
+      "site_source_name",
+      "cuid",
+      "hsa_acc",
+      "hsa_cam",
+      "hsa_grp",
+      "hsa_ad",
+      "hsa_src",
+      "hsa_net",
+      "hsa_ver",
     ];
 
-    trackingParams.forEach((param) => {
-      parsed.searchParams.delete(param);
+    const keysToDelete: string[] = [];
+    parsed.searchParams.forEach((val, key) => {
+      const cleanKey = key.replace(/^[+\s]+/, "").toLowerCase();
+      if (
+        trackingParams.includes(cleanKey) ||
+        key.startsWith("+") ||
+        val.includes("{{") ||
+        val.includes("%7B%7B") ||
+        key.includes("{{") ||
+        key.includes("%7B%7B")
+      ) {
+        keysToDelete.push(key);
+      }
     });
+
+    keysToDelete.forEach((key) => parsed.searchParams.delete(key));
 
     // Remove empty hash or trailing hash
     parsed.hash = "";
@@ -139,7 +165,7 @@ export interface ExtractedProductData {
 }
 
 /**
- * Scrapes a landing page URL using Firecrawl's extract format
+ * Scrapes a landing page URL using Firecrawl AI extraction, with seamless direct HTML/OpenGraph fallback.
  */
 export async function extractProductFromUrl(url: string): Promise<{
   success: boolean;
@@ -147,14 +173,6 @@ export async function extractProductFromUrl(url: string): Promise<{
   error?: string;
   raw?: any;
 }> {
-  const apiKey = process.env.FIRECRAWL_API_KEY;
-  if (!apiKey) {
-    return {
-      success: false,
-      error: "FIRECRAWL_API_KEY is not configured in environment variables.",
-    };
-  }
-
   const normalized = normalizeProductUrl(url);
   if (!normalized) {
     return {
@@ -163,67 +181,83 @@ export async function extractProductFromUrl(url: string): Promise<{
     };
   }
 
-  try {
-    const firecrawl = new FirecrawlApp({ apiKey });
+  const apiKey = process.env.FIRECRAWL_API_KEY;
 
-    const scrapeResponse: any = await firecrawl.scrapeUrl(normalized, {
-      formats: [
-        {
-          type: "json",
-          schema: productJsonSchema,
-          prompt:
-            "Extract the main product title, current selling price, original/crossed-out price, discount/offer summary, main product photo URL, and any quantity/bundle discount tiers.",
-        },
-        "html",
-      ],
-      waitFor: 2000,
-    });
+  // 1. If FIRECRAWL_API_KEY is configured, try Firecrawl LLM extraction first
+  if (apiKey && apiKey.trim() !== "") {
+    try {
+      const firecrawl = new FirecrawlApp({ apiKey: apiKey.trim() });
 
-    const rawData = scrapeResponse?.json || scrapeResponse?.extract || scrapeResponse?.data?.json || scrapeResponse?.data?.extract;
+      const scrapeResponse: any = await firecrawl.scrapeUrl(normalized, {
+        formats: [
+          {
+            type: "json",
+            schema: productJsonSchema,
+            prompt:
+              "Extract the main product title, current selling price, original/crossed-out price, discount/offer summary, main product photo URL, and any quantity/bundle discount tiers.",
+          },
+          "html",
+        ],
+        waitFor: 2000,
+      });
 
-    if (!scrapeResponse || !rawData) {
-      return {
-        success: false,
-        error: "Firecrawl could not extract product details from this page.",
-        raw: scrapeResponse,
-      };
-    }
+      const rawData =
+        scrapeResponse?.json ||
+        scrapeResponse?.extract ||
+        scrapeResponse?.data?.json ||
+        scrapeResponse?.data?.extract;
 
-    const extract = rawData as ExtractedProductData;
+      if (scrapeResponse && rawData && rawData.title) {
+        const extract = rawData as ExtractedProductData;
 
-    // Resolve relative image URLs if returned
-    if (extract.main_image_url && !extract.main_image_url.startsWith("http")) {
-      try {
-        const base = new URL(normalized);
-        extract.main_image_url = new URL(extract.main_image_url, base.origin).toString();
-      } catch {
-        // Keep as is if URL parsing fails
-      }
-    }
-
-    if (extract.gallery_images && Array.isArray(extract.gallery_images)) {
-      extract.gallery_images = extract.gallery_images.map((img) => {
-        if (!img.startsWith("http")) {
+        // Resolve relative image URLs if returned
+        if (extract.main_image_url && !extract.main_image_url.startsWith("http")) {
           try {
             const base = new URL(normalized);
-            return new URL(img, base.origin).toString();
-          } catch {
-            return img;
-          }
+            extract.main_image_url = new URL(extract.main_image_url, base.origin).toString();
+          } catch {}
         }
-        return img;
-      });
-    }
 
+        if (extract.gallery_images && Array.isArray(extract.gallery_images)) {
+          extract.gallery_images = extract.gallery_images.map((img) => {
+            if (!img.startsWith("http")) {
+              try {
+                const base = new URL(normalized);
+                return new URL(img, base.origin).toString();
+              } catch {
+                return img;
+              }
+            }
+            return img;
+          });
+        }
+
+        return {
+          success: true,
+          data: extract,
+          raw: scrapeResponse,
+        };
+      }
+    } catch (err: any) {
+      console.warn(`[Firecrawl] Failed, falling back to direct HTML scraper for ${normalized}:`, err?.message);
+    }
+  }
+
+  // 2. Direct E-Commerce HTML & JSON-LD Scraper Fallback ($0 API cost, zero external dependency)
+  console.log(`[Product Scraper] Extracting product via direct HTML scraper: ${normalized}`);
+  const fallback = await scrapeProductDirectHtml(normalized);
+
+  if (fallback.success && fallback.data) {
     return {
       success: true,
-      data: extract,
-      raw: scrapeResponse,
-    };
-  } catch (err: any) {
-    return {
-      success: false,
-      error: err.message || "Failed to scrape product with Firecrawl.",
+      data: fallback.data,
+      raw: { html: fallback.rawHtml },
     };
   }
+
+  return {
+    success: false,
+    error: fallback.error || "Failed to extract product details from landing page.",
+    raw: { html: fallback.rawHtml },
+  };
 }

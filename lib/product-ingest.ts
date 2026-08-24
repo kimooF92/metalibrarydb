@@ -219,7 +219,7 @@ export async function linkAndAutoScrapeProduct({
           await db
             .update(ads)
             .set({ productId: targetProductId })
-            .where(sql`(${ads.productId} IS NULL OR ${ads.productId} = '') AND ${ads.linkUrl} LIKE ${`%${normalizedUrl}%`}`);
+            .where(sql`${ads.productId} IS NULL AND ${ads.linkUrl} LIKE ${`%${normalizedUrl}%`}`);
 
           console.log(`[Auto-Scraper] Successfully extracted: "${extracted.title || normalizedUrl}" (${extracted.current_price || "N/A"})`);
         } catch (scrapeErr: any) {
