@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { ads, scrapedProducts } from "@/db/schema";
+import { ads, adObservations, scrapedProducts } from "@/db/schema";
 import { eq, ilike, and, sql, desc, asc, or, count } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 
@@ -13,8 +13,10 @@ export async function GET(req: NextRequest) {
 
     const search = searchParams.get("search");
     const domain = searchParams.get("domain");
+    const platform = searchParams.get("platform");
     const hasOffer = searchParams.get("hasOffer") === "true";
-    const status = searchParams.get("status") || "success";
+    const status = searchParams.get("status") || "all";
+    const smartPreset = searchParams.get("smartPreset") || "all";
     const sortBy = searchParams.get("sortBy") || "latest";
     const sortOrder = searchParams.get("sortOrder") || "desc";
 
@@ -22,20 +24,73 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "24", 10)));
     const offset = (page - 1) * limit;
 
+    // Subquery: Aggregate ad metrics per product
+    const adMetricsSubquery = db
+      .select({
+        productId: ads.productId,
+        linkedAdsCount: sql<number>`COUNT(DISTINCT ${ads.id})`.mapWith(Number).as("linked_ads_count"),
+        activeAdsCount: sql<number>`COUNT(DISTINCT CASE WHEN ${adObservations.isActive} = true AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL) THEN ${ads.id} END)`.mapWith(Number).as("active_ads_count"),
+        maxDuplications: sql<number>`MAX(COALESCE(${adObservations.duplicationCount}, 1))`.mapWith(Number).as("max_duplications"),
+        earliestAdDate: sql<string>`MIN(COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}))`.as("earliest_ad_date"),
+        latestAdDate: sql<string>`MAX(${ads.lastSeenAt})`.as("latest_ad_date"),
+        brandName: sql<string>`MAX(${ads.pageName})`.as("brand_name"),
+        brandPageId: sql<string>`MAX(${ads.pageId})`.as("brand_page_id"),
+        topCreativeThumbnail: sql<string>`MAX(COALESCE(${ads.thumbnailStoragePath}, ${ads.thumbnailUrl}))`.as("top_creative_thumbnail"),
+      })
+      .from(ads)
+      .leftJoin(adObservations, eq(adObservations.adId, ads.id))
+      .where(sql`${ads.productId} IS NOT NULL`)
+      .groupBy(ads.productId)
+      .as("ad_metrics");
+
     const conditions = [];
 
+    // Filter by scrape status (success, pending, failed)
     if (status && status !== "all") {
       conditions.push(eq(scrapedProducts.scrapeStatus, status));
     }
 
+    // Filter by domain
     if (domain && domain.trim() !== "") {
       conditions.push(ilike(scrapedProducts.domain, `%${domain.trim()}%`));
     }
 
-    if (hasOffer) {
+    // Filter by e-commerce platform (Shopify, YouCan, WooCommerce)
+    if (platform && platform !== "all") {
+      conditions.push(ilike(scrapedProducts.storePlatform, `%${platform.trim()}%`));
+    }
+
+    // Filter by promotional offers
+    if (hasOffer || smartPreset === "with_offers") {
       conditions.push(sql`${scrapedProducts.discountOrOffer} IS NOT NULL AND ${scrapedProducts.discountOrOffer} != ''`);
     }
 
+    // Smart Preset: Newly Discovered (last 7 days)
+    if (smartPreset === "new_discovered") {
+      conditions.push(sql`${scrapedProducts.createdAt} >= NOW() - INTERVAL '7 days'`);
+    }
+
+    // Smart Preset: Top Lasting / Evergreen (running 30+ days with active ads)
+    if (smartPreset === "top_lasting") {
+      conditions.push(
+        and(
+          sql`COALESCE(${adMetricsSubquery.activeAdsCount}, 0) > 0`,
+          sql`(${scrapedProducts.createdAt} <= NOW() - INTERVAL '30 days' OR ${adMetricsSubquery.earliestAdDate} <= NOW() - INTERVAL '30 days')`
+        )
+      );
+    }
+
+    // Smart Preset: Most Scaled (multiple active ads running)
+    if (smartPreset === "most_scaled") {
+      conditions.push(
+        or(
+          sql`COALESCE(${adMetricsSubquery.activeAdsCount}, 0) >= 2`,
+          sql`COALESCE(${adMetricsSubquery.maxDuplications}, 1) >= 2`
+        )
+      );
+    }
+
+    // Search filter across title, domain, URL, offer, and brand
     if (search && search.trim() !== "") {
       const term = `%${search.trim()}%`;
       conditions.push(
@@ -43,25 +98,15 @@ export async function GET(req: NextRequest) {
           ilike(scrapedProducts.title, term),
           ilike(scrapedProducts.domain, term),
           ilike(scrapedProducts.url, term),
-          ilike(scrapedProducts.discountOrOffer, term)
+          ilike(scrapedProducts.discountOrOffer, term),
+          ilike(adMetricsSubquery.brandName, term)
         )
       );
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    // Subquery: Count linked ads per product
-    const adCountsSubquery = db
-      .select({
-        productId: ads.productId,
-        linkedAdsCount: count(ads.id).as("linked_ads_count"),
-      })
-      .from(ads)
-      .where(sql`${ads.productId} IS NOT NULL`)
-      .groupBy(ads.productId)
-      .as("ad_counts");
-
-    // Main query
+    // Main query with enriched ad and longevity analytics
     let baseQuery = db
       .select({
         id: scrapedProducts.id,
@@ -86,47 +131,74 @@ export async function GET(req: NextRequest) {
         lastScrapedAt: scrapedProducts.lastScrapedAt,
         createdAt: scrapedProducts.createdAt,
         updatedAt: scrapedProducts.updatedAt,
-        linkedAdsCount: sql<number>`COALESCE(${adCountsSubquery.linkedAdsCount}, 0)`.mapWith(Number),
+        linkedAdsCount: sql<number>`COALESCE(${adMetricsSubquery.linkedAdsCount}, 0)`.mapWith(Number),
+        activeAdsCount: sql<number>`COALESCE(${adMetricsSubquery.activeAdsCount}, 0)`.mapWith(Number),
+        maxDuplications: sql<number>`COALESCE(${adMetricsSubquery.maxDuplications}, 1)`.mapWith(Number),
+        earliestAdDate: adMetricsSubquery.earliestAdDate,
+        latestAdDate: adMetricsSubquery.latestAdDate,
+        brandName: adMetricsSubquery.brandName,
+        brandPageId: adMetricsSubquery.brandPageId,
+        topCreativeThumbnail: adMetricsSubquery.topCreativeThumbnail,
+        daysRunning: sql<number>`
+          GREATEST(1, ROUND(EXTRACT(EPOCH FROM (NOW() - COALESCE(${adMetricsSubquery.earliestAdDate}, ${scrapedProducts.createdAt}))) / 86400))
+        `.mapWith(Number),
       })
       .from(scrapedProducts)
-      .leftJoin(adCountsSubquery, eq(scrapedProducts.id, adCountsSubquery.productId))
+      .leftJoin(adMetricsSubquery, eq(scrapedProducts.id, adMetricsSubquery.productId))
       .where(whereClause);
 
-    // Sorting with multi-tiered deterministic tie-breakers
+    // Sorting Logic
     let orderByClauses: any[] = [];
-    if (sortBy === "ads") {
+    if (sortBy === "most_scaled" || sortBy === "ads") {
       orderByClauses.push(
         sortOrder === "asc"
-          ? asc(sql`COALESCE(${adCountsSubquery.linkedAdsCount}, 0)`)
-          : desc(sql`COALESCE(${adCountsSubquery.linkedAdsCount}, 0)`)
+          ? asc(sql`COALESCE(${adMetricsSubquery.activeAdsCount}, 0)`)
+          : desc(sql`COALESCE(${adMetricsSubquery.activeAdsCount}, 0)`)
       );
+      orderByClauses.push(desc(sql`COALESCE(${adMetricsSubquery.maxDuplications}, 1)`));
       orderByClauses.push(desc(scrapedProducts.createdAt));
-      orderByClauses.push(desc(scrapedProducts.id));
+    } else if (sortBy === "top_lasting" || sortBy === "longevity") {
+      orderByClauses.push(
+        sortOrder === "asc"
+          ? asc(sql`COALESCE(${adMetricsSubquery.earliestAdDate}, ${scrapedProducts.createdAt})`)
+          : desc(sql`COALESCE(${adMetricsSubquery.earliestAdDate}, ${scrapedProducts.createdAt})`)
+      );
+      orderByClauses.push(desc(sql`COALESCE(${adMetricsSubquery.activeAdsCount}, 0)`));
     } else if (sortBy === "title") {
       orderByClauses.push(
         sortOrder === "asc" ? asc(scrapedProducts.title) : desc(scrapedProducts.title)
       );
       orderByClauses.push(desc(scrapedProducts.createdAt));
-      orderByClauses.push(desc(scrapedProducts.id));
+    } else if (sortBy === "price_asc") {
+      orderByClauses.push(asc(sql`NULLIF(REGEXP_REPLACE(${scrapedProducts.currentPrice}, '[^0-9.]', '', 'g'), '')::numeric`));
+    } else if (sortBy === "price_desc") {
+      orderByClauses.push(desc(sql`NULLIF(REGEXP_REPLACE(${scrapedProducts.currentPrice}, '[^0-9.]', '', 'g'), '')::numeric`));
     } else {
-      // Default: latest
+      // Default: latest discovery
       orderByClauses.push(
         sortOrder === "asc" ? asc(scrapedProducts.createdAt) : desc(scrapedProducts.createdAt)
       );
-      orderByClauses.push(desc(scrapedProducts.id));
     }
+    orderByClauses.push(desc(scrapedProducts.id));
 
+    // Parallel DB fetches for products, count, and dashboard KPIs
     const [rows, totalResult, statsResult] = await Promise.all([
       baseQuery.orderBy(...orderByClauses).limit(limit).offset(offset),
       db
         .select({ count: count() })
         .from(scrapedProducts)
+        .leftJoin(adMetricsSubquery, eq(scrapedProducts.id, adMetricsSubquery.productId))
         .where(whereClause),
       db
         .select({
           total: count(),
           withOffers: sql<number>`COUNT(CASE WHEN ${scrapedProducts.discountOrOffer} IS NOT NULL AND ${scrapedProducts.discountOrOffer} != '' THEN 1 END)`.mapWith(Number),
           successful: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} = 'success' THEN 1 END)`.mapWith(Number),
+          pending: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} = 'pending' THEN 1 END)`.mapWith(Number),
+          newThisWeek: sql<number>`COUNT(CASE WHEN ${scrapedProducts.createdAt} >= NOW() - INTERVAL '7 days' THEN 1 END)`.mapWith(Number),
+          shopifyCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%shopify%' THEN 1 END)`.mapWith(Number),
+          youcanCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%youcan%' THEN 1 END)`.mapWith(Number),
+          woocommerceCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%woocommerce%' THEN 1 END)`.mapWith(Number),
         })
         .from(scrapedProducts),
     ]);
@@ -146,7 +218,14 @@ export async function GET(req: NextRequest) {
       stats: {
         totalProducts: statsResult[0]?.total || 0,
         successfulProducts: statsResult[0]?.successful || 0,
+        pendingProducts: statsResult[0]?.pending || 0,
         withOffersCount: statsResult[0]?.withOffers || 0,
+        newThisWeekCount: statsResult[0]?.newThisWeek || 0,
+        platforms: {
+          shopify: statsResult[0]?.shopifyCount || 0,
+          youcan: statsResult[0]?.youcanCount || 0,
+          woocommerce: statsResult[0]?.woocommerceCount || 0,
+        },
       },
     });
   } catch (err: any) {

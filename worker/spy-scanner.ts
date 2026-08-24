@@ -9,6 +9,7 @@ import { extractStoryboardFrames } from "../lib/video-storyboard";
 import { extractMedia } from "../lib/apify-ingest";
 import { parseResultCountFromText } from "./scanner";
 import { resolveDestinationUrl } from "../lib/utils";
+import { linkAndAutoScrapeProduct } from "../lib/product-ingest";
 
 export interface ExtractedAdData {
   adArchiveId: string;
@@ -708,6 +709,17 @@ export async function scanAdCreatives(
           collationId: adData.collationId,
           observedAt: now,
         });
+
+        // Automated Product Landing Page Extraction & Background Scraper Trigger
+        if (adData.linkUrl) {
+          linkAndAutoScrapeProduct({
+            adId: upsertedAd.id,
+            linkUrl: adData.linkUrl,
+            pageId: trackedPageId,
+            adCopy: adData.caption,
+          }).catch((e) => console.warn(`[Worker Spy Scanner] Auto-scrape product warning:`, e.message));
+        }
+
         savedCount++;
       }
     }

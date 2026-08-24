@@ -115,6 +115,14 @@ export function ProductCard({
           </div>
         )}
 
+        {/* Top Lasting (Evergreen) Badge */}
+        {!isWinning && product.daysRunning && product.daysRunning >= 30 && (
+          <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full bg-purple-600 text-white text-[10px] font-bold shadow-md">
+            <Clock className="w-3 h-3" />
+            <span>⏳ {product.daysRunning}d Running</span>
+          </div>
+        )}
+
         {/* Pending / Failed Scrape Badge */}
         {isPendingScrape && (
           <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-500/90 text-white text-[10px] font-bold shadow-sm backdrop-blur-sm">
@@ -130,12 +138,10 @@ export function ProductCard({
           </div>
         )}
 
-        {/* Domain Badge */}
-        {product.domain && (
-          <div className="absolute top-2.5 right-2.5 z-10 px-2 py-0.5 rounded-md bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-semibold border border-white/10 shadow-sm truncate max-w-[140px]">
-            {product.domain}
-          </div>
-        )}
+        {/* Domain / Brand Badge */}
+        <div className="absolute top-2.5 right-2.5 z-10 px-2 py-0.5 rounded-md bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-semibold border border-white/10 shadow-sm truncate max-w-[140px]">
+          {product.brandName || product.domain || "Brand"}
+        </div>
 
         {/* Offer Overlay Ribbon */}
         {product.discountOrOffer && (
@@ -148,6 +154,13 @@ export function ProductCard({
 
       {/* Content Area */}
       <div className="p-4 flex flex-col flex-1">
+        {/* Brand Name (if available) */}
+        {product.brandName && (
+          <div className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 mb-0.5 truncate uppercase tracking-wider">
+            {product.brandName}
+          </div>
+        )}
+
         {/* Product Title */}
         <h3
           className="text-sm font-bold text-slate-900 dark:text-slate-100 line-clamp-2 mb-2 leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors"
@@ -156,7 +169,7 @@ export function ProductCard({
           {product.title || "Untitled Product Landing Page"}
         </h3>
 
-        {/* Badges: Platform + WhatsApp */}
+        {/* Badges: Platform + WhatsApp + Ad Count + Longevity */}
         <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
           {product.storePlatform && product.storePlatform !== "other" && (
             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 uppercase">
@@ -170,9 +183,19 @@ export function ProductCard({
             </span>
           )}
 
-          {typeof product.linkedAdsCount === "number" && product.linkedAdsCount > 0 && (
+          {typeof product.activeAdsCount === "number" && product.activeAdsCount > 0 ? (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              🔥 {product.activeAdsCount} active {product.activeAdsCount === 1 ? "ad" : "ads"}
+            </span>
+          ) : typeof product.linkedAdsCount === "number" && product.linkedAdsCount > 0 ? (
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
               🎬 {product.linkedAdsCount} {product.linkedAdsCount === 1 ? "ad" : "ads"}
+            </span>
+          ) : null}
+
+          {product.daysRunning && product.daysRunning > 1 && (
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+              ⏳ {product.daysRunning}d
             </span>
           )}
         </div>

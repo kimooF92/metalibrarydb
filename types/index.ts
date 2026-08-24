@@ -118,6 +118,14 @@ export interface ScrapedProduct {
   createdAt: string;
   updatedAt: string;
   linkedAdsCount?: number;
+  activeAdsCount?: number;
+  maxDuplications?: number;
+  daysRunning?: number;
+  brandName?: string | null;
+  brandPageId?: string | null;
+  topCreativeThumbnail?: string | null;
+  earliestAdDate?: string | null;
+  latestAdDate?: string | null;
 }
 
 export interface Ad {

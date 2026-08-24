@@ -1,0 +1,209 @@
+"use client";
+
+import { useState } from "react";
+import NextImage from "next/image";
+import Link from "next/link";
+import { ScrapedProduct } from "@/types";
+import {
+  ExternalLink,
+  ShoppingBag,
+  RotateCw,
+  Trash2,
+  Tag,
+  Clock,
+  Eye,
+  Truck,
+  Sparkles,
+} from "lucide-react";
+
+interface ProductRowProps {
+  product: ScrapedProduct;
+  onRefresh?: (productId: string) => Promise<void>;
+  onDelete?: (productId: string) => Promise<void>;
+  onViewDetails?: (product: ScrapedProduct) => void;
+  onViewCreatives?: (product: ScrapedProduct) => void;
+}
+
+export function ProductRow({
+  product,
+  onRefresh,
+  onDelete,
+  onViewDetails,
+  onViewCreatives,
+}: ProductRowProps) {
+  const [imgError, setImgError] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleRefresh = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onRefresh || isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await onRefresh(product.id);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onDelete || isDeleting) return;
+    if (!confirm(`Are you sure you want to delete "${product.title || "this product"}"?`)) {
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      await onDelete(product.id);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const isPendingScrape = product.scrapeStatus === "pending";
+
+  return (
+    <div
+      onClick={() => onViewDetails?.(product)}
+      className="group flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 bg-white dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800/80 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 shadow-xs hover:shadow-md transition-all duration-150 cursor-pointer"
+    >
+      {/* Left: Thumbnail & Main Info */}
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        {/* Thumbnail */}
+        <div className="relative w-14 h-14 rounded-lg bg-slate-100 dark:bg-slate-950 overflow-hidden shrink-0 border border-slate-200 dark:border-slate-800 flex items-center justify-center">
+          {product.mainImageUrl && !imgError ? (
+            <NextImage
+              src={product.mainImageUrl}
+              alt={product.title || "Product"}
+              fill
+              unoptimized
+              referrerPolicy="no-referrer"
+              className="object-contain p-1"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <ShoppingBag className="w-5 h-5 text-slate-400" />
+          )}
+        </div>
+
+        {/* Details */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            {product.brandName ? (
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800/60">
+                {product.brandName}
+              </span>
+            ) : product.domain ? (
+              <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                {product.domain}
+              </span>
+            ) : null}
+
+            {product.storePlatform && product.storePlatform !== "other" && (
+              <span className="text-[10px] font-bold uppercase text-slate-600 dark:text-slate-400">
+                • {product.storePlatform}
+              </span>
+            )}
+
+            {product.daysRunning && product.daysRunning >= 30 && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                ⏳ {product.daysRunning}d Running
+              </span>
+            )}
+          </div>
+
+          <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors mt-0.5">
+            {product.title || "Untitled Landing Page"}
+          </h4>
+
+          {/* Offer / Delivery preview */}
+          {product.discountOrOffer && (
+            <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
+              <Tag className="w-3 h-3" />
+              <span className="truncate max-w-xs">{product.discountOrOffer}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Center: Price & Ad Count */}
+      <div className="flex items-center gap-4 shrink-0 sm:px-4">
+        {/* Pricing */}
+        <div className="text-left sm:text-right">
+          <div className="text-sm font-extrabold text-indigo-600 dark:text-indigo-400">
+            {product.currentPrice || (isPendingScrape ? "Pending" : "—")}
+          </div>
+          {product.originalPrice && (
+            <div className="text-[11px] text-slate-400 line-through">
+              {product.originalPrice}
+            </div>
+          )}
+        </div>
+
+        {/* Active Ads Counter */}
+        <div className="min-w-[70px] text-center">
+          {typeof product.activeAdsCount === "number" && product.activeAdsCount > 0 ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              🔥 {product.activeAdsCount} active
+            </span>
+          ) : typeof product.linkedAdsCount === "number" && product.linkedAdsCount > 0 ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+              🎬 {product.linkedAdsCount} ads
+            </span>
+          ) : (
+            <span className="text-[10px] text-slate-400">0 ads</span>
+          )}
+        </div>
+      </div>
+
+      {/* Right: Action Buttons */}
+      <div className="flex items-center gap-1 shrink-0 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800/80">
+        {onViewCreatives && (product.linkedAdsCount || 0) > 0 && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewCreatives(product);
+            }}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-600 dark:text-indigo-400 text-xs font-bold transition-colors cursor-pointer"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            <span>View Ads</span>
+          </button>
+        )}
+
+        {onRefresh && (
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors cursor-pointer"
+            title="Re-extract Landing Page"
+          >
+            <RotateCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-indigo-500" : ""}`} />
+          </button>
+        )}
+
+        <a
+          href={product.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors"
+          title="Open Landing Page"
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+        </a>
+
+        {onDelete && (
+          <button
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md transition-colors cursor-pointer"
+            title="Delete Product"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}

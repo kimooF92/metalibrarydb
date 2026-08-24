@@ -3,6 +3,7 @@ import { ads, adObservations, creativeScans, trackedPages } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { uploadMediaFromUrlToB2, uploadMediaWithHashing, uploadStoryboardFrames, isB2Configured } from "@/lib/b2-storage";
 import { extractStoryboardFrames } from "@/lib/video-storyboard";
+import { linkAndAutoScrapeProduct } from "@/lib/product-ingest";
 
 /**
  * Robustly extracts adArchiveId from multiple candidate fields & URL parameters.
@@ -460,6 +461,16 @@ export async function ingestApifyDatasetItems(
         .update(adObservations)
         .set({ isActive: true })
         .where(and(eq(adObservations.adId, upsertedAd.id), eq(adObservations.isActive, false)));
+
+      // 3. Automated Product Landing Page Extraction & Background Scraper Trigger
+      if (linkUrl) {
+        linkAndAutoScrapeProduct({
+          adId: upsertedAd.id,
+          linkUrl,
+          pageId: pageId || trackedPageId,
+          adCopy: caption,
+        }).catch((e) => console.warn(`[Apify Ingest] Auto-scrape product warning for ${adArchiveId}:`, e.message));
+      }
 
       extractedCount++;
     }
