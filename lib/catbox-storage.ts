@@ -1,12 +1,13 @@
 /**
- * Catbox.moe Resilient Fallback Storage Utility
- * Uploads media files anonymously (or with optional userhash) to Catbox.moe / Litterbox.
- * Catbox offers permanent $0 storage with a 200MB limit per file.
+ * Catbox.moe Permanent Storage Utility
+ * Uploads media files directly to your Catbox.moe account for permanent $0 storage.
  *
  * Features:
- * - Extended timeouts (45s) for large video ad downloads
- * - Browser headers to avoid Cloudflare bot blocking / 403 / fetch failures
- * - Multi-strategy upload: Direct Buffer -> URL Upload -> Litterbox Fallback
+ * - Permanent file retention (files.catbox.moe)
+ * - 200MB file limit for videos and images
+ * - Extended timeouts (45s) for high-res Meta video ads
+ * - Anti-bot browser headers to prevent Cloudflare challenges
+ * - Multi-strategy permanent uploads: Direct Buffer -> Server-side URL Fetch
  */
 
 const BROWSER_USER_AGENT =
@@ -64,7 +65,7 @@ export async function uploadMediaFromUrlToCatbox(
 
   const cleanFilename = filename.endsWith(ext) ? filename : `${filename}${ext}`;
 
-  // Strategy A: Direct file upload to Catbox.moe
+  // Strategy A: Direct permanent file upload to Catbox.moe (files.catbox.moe)
   if (buffer && buffer.length > 0) {
     try {
       const blob = new Blob([new Uint8Array(buffer)], { type: contentType });
@@ -90,16 +91,16 @@ export async function uploadMediaFromUrlToCatbox(
       if (catboxRes.ok) {
         const catboxUrl = (await catboxRes.text()).trim();
         if (catboxUrl.startsWith("http://") || catboxUrl.startsWith("https://")) {
-          console.log(`[Catbox Storage] Successfully uploaded to Catbox: ${catboxUrl}`);
+          console.log(`[Catbox Storage] Successfully uploaded to permanent Catbox: ${catboxUrl}`);
           return catboxUrl;
         }
       }
     } catch (err: any) {
-      console.warn(`[Catbox Storage] File upload to Catbox failed (${err.message}). Trying URL upload / Litterbox...`);
+      console.warn(`[Catbox Storage] File upload to Catbox failed (${err.message}). Trying URL upload...`);
     }
   }
 
-  // Strategy B: Catbox URL upload (Catbox server fetches URL directly)
+  // Strategy B: Catbox URL upload (Catbox server fetches URL directly for permanent storage)
   try {
     const formData = new FormData();
     formData.append("reqtype", "urlupload");
@@ -129,41 +130,6 @@ export async function uploadMediaFromUrlToCatbox(
     }
   } catch (err: any) {
     console.warn(`[Catbox Storage] URL upload failed (${err.message})`);
-  }
-
-  // Strategy C: Litterbox fallback (Catbox high-capacity mirror)
-  if (buffer && buffer.length > 0) {
-    try {
-      const blob = new Blob([new Uint8Array(buffer)], { type: contentType });
-      const formData = new FormData();
-      formData.append("reqtype", "fileupload");
-      formData.append("time", "72h");
-      formData.append("fileToUpload", blob, cleanFilename);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 35000);
-
-      const litterboxRes = await fetch("https://litterbox.catbox.moe/resources/internals/api.php", {
-        method: "POST",
-        headers: {
-          "User-Agent": BROWSER_USER_AGENT,
-        },
-        body: formData,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (litterboxRes.ok) {
-        const litterboxUrl = (await litterboxRes.text()).trim();
-        if (litterboxUrl.startsWith("http://") || litterboxUrl.startsWith("https://")) {
-          console.log(`[Catbox Storage] Successfully uploaded to Litterbox fallback: ${litterboxUrl}`);
-          return litterboxUrl;
-        }
-      }
-    } catch (err: any) {
-      console.warn(`[Catbox Storage] Litterbox upload failed: ${err.message}`);
-    }
   }
 
   return null;
