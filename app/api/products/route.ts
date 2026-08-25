@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ads, adObservations, scrapedProducts } from "@/db/schema";
-import { eq, ilike, and, sql, desc, asc, or, count, inArray } from "drizzle-orm";
+import { eq, ilike, and, sql, desc, asc, or, count, inArray, isNull } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +35,17 @@ export async function GET(req: NextRequest) {
 
     // Filter by scrape status (success, pending, failed)
     if (status && status !== "all") {
-      conditions.push(eq(scrapedProducts.scrapeStatus, status));
+      if (status === "pending") {
+        conditions.push(
+          or(
+            eq(scrapedProducts.scrapeStatus, "pending"),
+            eq(scrapedProducts.scrapeStatus, "failed"),
+            isNull(scrapedProducts.currentPrice)
+          )
+        );
+      } else {
+        conditions.push(eq(scrapedProducts.scrapeStatus, status));
+      }
     }
 
     // Filter by domain
@@ -157,7 +167,7 @@ export async function GET(req: NextRequest) {
               withOffers: sql<number>`COUNT(CASE WHEN ${scrapedProducts.discountOrOffer} IS NOT NULL AND ${scrapedProducts.discountOrOffer} != '' THEN 1 END)`.mapWith(Number),
               favoritesCount: sql<number>`COUNT(CASE WHEN ${scrapedProducts.isFavorite} = true THEN 1 END)`.mapWith(Number),
               successful: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} = 'success' THEN 1 END)`.mapWith(Number),
-              pending: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} = 'pending' THEN 1 END)`.mapWith(Number),
+              pending: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} != 'success' OR ${scrapedProducts.currentPrice} IS NULL THEN 1 END)`.mapWith(Number),
               newThisWeek: sql<number>`COUNT(CASE WHEN ${scrapedProducts.createdAt} >= NOW() - INTERVAL '7 days' THEN 1 END)`.mapWith(Number),
               shopifyCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%shopify%' THEN 1 END)`.mapWith(Number),
               youcanCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%youcan%' THEN 1 END)`.mapWith(Number),

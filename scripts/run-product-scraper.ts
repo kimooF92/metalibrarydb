@@ -88,17 +88,24 @@ async function runProductScraperBatch() {
 
   let targetProducts;
   if (options.forceAll) {
-    targetProducts = await query.orderBy(desc(scrapedProducts.createdAt)).limit(options.limit || 100);
-  } else if (options.status) {
+    targetProducts = await query.orderBy(desc(scrapedProducts.createdAt)).limit(options.limit);
+  } else if (options.status && options.status !== "all" && options.status !== "pending") {
     targetProducts = await query
       .where(eq(scrapedProducts.scrapeStatus, options.status))
       .orderBy(desc(scrapedProducts.createdAt))
-      .limit(options.limit || 100);
+      .limit(options.limit);
   } else {
+    // Default or "pending": query any item that is pending, failed, or missing price
     targetProducts = await query
-      .where(or(eq(scrapedProducts.scrapeStatus, "pending"), eq(scrapedProducts.scrapeStatus, "failed"), isNull(scrapedProducts.currentPrice)))
+      .where(
+        or(
+          eq(scrapedProducts.scrapeStatus, "pending"),
+          eq(scrapedProducts.scrapeStatus, "failed"),
+          isNull(scrapedProducts.currentPrice)
+        )
+      )
       .orderBy(desc(scrapedProducts.createdAt))
-      .limit(options.limit || 100);
+      .limit(options.limit);
   }
 
   console.log(`Found ${targetProducts.length} product(s) to scrape.\n`);

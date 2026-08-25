@@ -776,8 +776,9 @@ export default function ProductsPage() {
             className="bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-2.5 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
           >
             <option value="all">All Scrape Status</option>
-            <option value="success">Scraped Only</option>
-            <option value="pending">Pending Scrape</option>
+            <option value="success">Scraped Only ({stats.successfulProducts})</option>
+            <option value="pending">Pending / Needs Scrape ({stats.pendingProducts})</option>
+            <option value="failed">Failed Scrape Only</option>
           </select>
 
           {/* Sort By */}
