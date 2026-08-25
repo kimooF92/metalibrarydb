@@ -68,7 +68,6 @@ export default function ProductsPage() {
   const [autoLoadCount, setAutoLoadCount] = useState(0);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
 
   const [stats, setStats] = useState({
     totalProducts: 0,
@@ -103,28 +102,12 @@ export default function ProductsPage() {
     }
   }, []);
 
-  // Back to top scroll listener
-  useEffect(() => {
-    const handleScroll = () => {
-      if (containerRef.current) {
-        setShowBackToTop(containerRef.current.scrollTop > 350);
-      } else {
-        setShowBackToTop(window.scrollY > 350);
-      }
-    };
-
-    const target = containerRef.current || window;
-    target.addEventListener("scroll", handleScroll, { passive: true });
-    return () => target.removeEventListener("scroll", handleScroll);
-  }, []);
-
   const fetchProducts = useCallback(
-    async (targetPage = 1, isManualRefresh = false) => {
-      if (targetPage === 1) {
-        setLoading(true);
-        setIsFetchingMore(false);
-      } else {
+    async (targetPage = 1, append = false) => {
+      if (append) {
         setIsFetchingMore(true);
+      } else {
+        setLoading(true);
       }
       setError(null);
 
@@ -150,7 +133,7 @@ export default function ProductsPage() {
         const data = await res.json();
         if (data.success) {
           const newItems: ScrapedProduct[] = data.products || [];
-          if (targetPage > 1 && !isManualRefresh) {
+          if (append) {
             setProducts((prev) => {
               const existingIds = new Set(prev.map((p) => p.id));
               const filtered = newItems.filter((p) => !existingIds.has(p.id));
@@ -174,53 +157,108 @@ export default function ProductsPage() {
     [sortBy, smartPreset, search, brandFilter, platform, statusFilter]
   );
 
-  // Trigger initial fetch or reset on filter changes
+  // Trigger initial fetch on filter/sort change
   useEffect(() => {
     setPage(1);
     setAutoLoadCount(0);
     fetchProducts(1, false);
   }, [fetchProducts]);
 
-  // Infinite scroll IntersectionObserver (Hybrid auto-scroll up to 3 batches)
-  const hasMore = page < pagination.totalPages;
-  const isAutoScrollPaused = autoLoadCount >= 3;
+  // Load next page function
+  const loadNextPage = useCallback(() => {
+    if (loading || isFetchingMore || page >= pagination.totalPages) return;
+    const nextPage = page + 1;
+    setPage(nextPage);
+    setAutoLoadCount((prev) => prev + 1);
+    fetchProducts(nextPage, true);
+  }, [loading, isFetchingMore, page, pagination.totalPages, fetchProducts]);
 
+  // Manual Load More button handler
+  const handleManualLoadMore = () => {
+    if (loading || isFetchingMore || page >= pagination.totalPages) return;
+    const nextPage = page + 1;
+    setPage(nextPage);
+    setAutoLoadCount(0); // Reset the 3-batch pause
+    fetchProducts(nextPage, true);
+  };
+
+  // Scroll listener on main container for back-to-top button & auto-scroll fallback
   useEffect(() => {
-    if (!sentinelRef.current || loading || isFetchingMore || !hasMore || isAutoScrollPaused) {
+    const mainContainer = document.querySelector("main") || window;
+
+    const handleScroll = () => {
+      const scrollPos =
+        mainContainer instanceof HTMLElement
+          ? mainContainer.scrollTop
+          : window.scrollY || document.documentElement.scrollTop;
+
+      setShowBackToTop(scrollPos > 350);
+
+      // Auto-load trigger fallback when near bottom
+      if (
+        !loading &&
+        !isFetchingMore &&
+        page < pagination.totalPages &&
+        autoLoadCount < 3
+      ) {
+        const scrollHeight =
+          mainContainer instanceof HTMLElement
+            ? mainContainer.scrollHeight
+            : document.documentElement.scrollHeight;
+        const clientHeight =
+          mainContainer instanceof HTMLElement
+            ? mainContainer.clientHeight
+            : window.innerHeight;
+
+        if (scrollPos + clientHeight >= scrollHeight - 350) {
+          loadNextPage();
+        }
+      }
+    };
+
+    mainContainer.addEventListener("scroll", handleScroll, { passive: true });
+    return () => mainContainer.removeEventListener("scroll", handleScroll);
+  }, [loading, isFetchingMore, page, pagination.totalPages, autoLoadCount, loadNextPage]);
+
+  // IntersectionObserver for sentinel element
+  useEffect(() => {
+    if (loading || isFetchingMore || page >= pagination.totalPages || autoLoadCount >= 3) {
       return;
     }
 
+    const mainContainer = document.querySelector("main");
+
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && hasMore && !isFetchingMore && !loading) {
-          setAutoLoadCount((prev) => prev + 1);
-          setPage((prevPage) => {
-            const nextPage = prevPage + 1;
-            fetchProducts(nextPage, false);
-            return nextPage;
-          });
+        const [entry] = entries;
+        if (entry.isIntersecting && !loading && !isFetchingMore && page < pagination.totalPages) {
+          loadNextPage();
         }
       },
-      { rootMargin: "300px 0px" }
+      {
+        root: mainContainer || null,
+        rootMargin: "300px",
+        threshold: 0.1,
+      }
     );
 
-    observer.observe(sentinelRef.current);
-    return () => observer.disconnect();
-  }, [hasMore, isFetchingMore, loading, isAutoScrollPaused, fetchProducts]);
+    const currentSentinel = sentinelRef.current;
+    if (currentSentinel) {
+      observer.observe(currentSentinel);
+    }
 
-  const handleManualLoadMore = () => {
-    if (isFetchingMore || !hasMore) return;
-    setAutoLoadCount(0); // Reset consecutive auto-load pause threshold
-    setPage((prevPage) => {
-      const nextPage = prevPage + 1;
-      fetchProducts(nextPage, false);
-      return nextPage;
-    });
-  };
+    return () => {
+      if (currentSentinel) {
+        observer.unobserve(currentSentinel);
+      }
+      observer.disconnect();
+    };
+  }, [loading, isFetchingMore, page, pagination.totalPages, autoLoadCount, loadNextPage]);
 
   const scrollToTop = () => {
-    if (containerRef.current) {
-      containerRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    const mainContainer = document.querySelector("main");
+    if (mainContainer) {
+      mainContainer.scrollTo({ top: 0, behavior: "smooth" });
     } else {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -368,12 +406,10 @@ export default function ProductsPage() {
   const progressPercent =
     pagination.total > 0 ? Math.min(100, Math.round((products.length / pagination.total) * 100)) : 0;
   const remainingCount = Math.max(0, pagination.total - products.length);
+  const hasMore = page < pagination.totalPages;
 
   return (
-    <div
-      ref={containerRef}
-      className="relative h-full flex flex-col space-y-4 overflow-y-auto p-4 sm:p-6"
-    >
+    <div className="space-y-4 pb-12">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800/60">
         <div>
@@ -400,7 +436,7 @@ export default function ProductsPage() {
           </Link>
 
           <button
-            onClick={() => fetchProducts(1, true)}
+            onClick={() => fetchProducts(1, false)}
             disabled={loading}
             title="Refresh product intelligence catalog"
             className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 transition-all cursor-pointer shadow-xs"
@@ -768,7 +804,7 @@ export default function ProductsPage() {
         <div className="py-16 text-center bg-white dark:bg-slate-900/40 rounded-xl border border-red-500/20 p-6">
           <p className="text-sm font-semibold text-red-500 mb-3">{error}</p>
           <button
-            onClick={() => fetchProducts(1, true)}
+            onClick={() => fetchProducts(1, false)}
             className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 rounded-lg cursor-pointer"
           >
             Retry
@@ -848,7 +884,7 @@ export default function ProductsPage() {
           )}
 
           {/* Sentinel element for infinite scroll auto-trigger */}
-          <div ref={sentinelRef} className="h-4 w-full" />
+          <div ref={sentinelRef} className="h-6 w-full" />
 
           {/* Skeletons while fetching more items */}
           {isFetchingMore && (
@@ -869,7 +905,7 @@ export default function ProductsPage() {
           )}
 
           {/* Bottom Discovery Bar with Visual Progress & Hybrid Load More */}
-          <div className="flex flex-col items-center justify-center pt-8 pb-12 space-y-3">
+          <div className="flex flex-col items-center justify-center pt-8 pb-8 space-y-3">
             {/* Visual Progress Counter */}
             <div className="w-full max-w-xs flex flex-col items-center space-y-1.5">
               <div className="flex items-center justify-between w-full text-xs font-semibold text-slate-500 dark:text-slate-400">
@@ -898,7 +934,7 @@ export default function ProductsPage() {
                 {isFetchingMore ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
-                    <span>Loading products...</span>
+                    <span>Loading next products...</span>
                   </>
                 ) : (
                   <>
