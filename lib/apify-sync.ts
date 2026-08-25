@@ -13,11 +13,12 @@ async function resetTrackedPageFromScan(creativeScanId: string) {
       const page = await db.query.trackedPages.findFirst({
         where: eq(trackedPages.id, scan.trackedPageId),
       });
-      if (page && page.status === "scanning") {
+      if (page && (page.status === "scanning" || page.status === "pending")) {
         await db
           .update(trackedPages)
           .set({
-            status: page.lastSuccessAt || page.currentResults !== null ? "success" : "failed",
+            status: "success",
+            lastSuccessAt: page.lastSuccessAt || new Date(),
             updatedAt: new Date(),
           })
           .where(eq(trackedPages.id, scan.trackedPageId));

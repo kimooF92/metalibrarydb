@@ -598,22 +598,22 @@ export async function ingestApifyDatasetItems(
 
     const activeAdCount = Number(activeCountRes?.count || 0);
 
+    const prevResults = pageRecord?.currentResults ?? null;
+    const difference = prevResults !== null ? activeAdCount - prevResults : null;
+
+    await db
+      .update(trackedPages)
+      .set({
+        currentResults: activeAdCount > 0 || isFullScan ? activeAdCount : pageRecord?.currentResults ?? 0,
+        adCount: activeAdCount > 0 || isFullScan ? activeAdCount : pageRecord?.adCount ?? 0,
+        lastChecked: now,
+        lastSuccessAt: now,
+        status: "success",
+        updatedAt: now,
+      })
+      .where(eq(trackedPages.id, finalTrackedPageId));
+
     if (activeAdCount > 0 || isFullScan) {
-      const prevResults = pageRecord?.currentResults ?? null;
-      const difference = prevResults !== null ? activeAdCount - prevResults : null;
-
-      await db
-        .update(trackedPages)
-        .set({
-          currentResults: activeAdCount,
-          adCount: activeAdCount,
-          lastChecked: now,
-          lastSuccessAt: now,
-          status: "success",
-          updatedAt: now,
-        })
-        .where(eq(trackedPages.id, finalTrackedPageId));
-
       await db.insert(scanHistory).values({
         trackedPageId: finalTrackedPageId,
         results: activeAdCount,

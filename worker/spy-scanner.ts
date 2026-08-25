@@ -739,11 +739,13 @@ export async function scanAdCreatives(
       });
     }
 
-    // Update tracked page last_creative_scan
+    // Update tracked page status & last_creative_scan
     await db
       .update(trackedPages)
       .set({
+        status: "success",
         lastCreativeScan: now,
+        lastSuccessAt: now,
         updatedAt: now,
       })
       .where(eq(trackedPages.id, trackedPageId));
