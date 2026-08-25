@@ -9,6 +9,7 @@
     "lint": "eslint",
     "worker": "npx tsx worker/index.ts",
     "spy:apify": "npx tsx scripts/run-apify-spy-cron.ts",
+    "scrape:products": "npx tsx scripts/run-product-scraper.ts",
     "reset-limits": "npx tsx scripts/reset-limits.ts",
     "clean-scans": "npx tsx scripts/clean-orphaned-scans.ts"
   },
