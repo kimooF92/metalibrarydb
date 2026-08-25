@@ -17,7 +17,7 @@ export function normalizeProductUrl(rawUrl: string | null | undefined): string |
     const sanitizedUrl = unwrapped.trim().replace(/[\r\n\t]+/g, "").replace(/\s+/g, "");
     const parsed = new URL(sanitizedUrl);
 
-    // List of tracking query parameters and Meta ad template macros to purge
+    // Comprehensive list of advertising, analytics, and affiliate tracking query parameters
     const trackingParams = [
       "utm_source",
       "utm_medium",
@@ -25,24 +25,45 @@ export function normalizeProductUrl(rawUrl: string | null | undefined): string |
       "utm_term",
       "utm_content",
       "utm_id",
+      "utm_source_platform",
+      "utm_creative",
       "fbclid",
       "gclid",
+      "wbraid",
+      "gbraid",
       "ttclid",
       "msclkid",
       "twclid",
+      "yclid",
+      "dclid",
+      "sc_clickid",
+      "s_kwcid",
       "ref",
+      "ref_src",
       "source",
+      "origin",
       "_ga",
       "_gl",
+      "_kx",
+      "_ke",
       "mc_cid",
       "mc_eid",
       "fbadid",
       "ad_id",
       "adset_id",
       "campaign_id",
+      "ad_name",
+      "adset_name",
+      "campaign_name",
       "placement",
       "site_source_name",
       "cuid",
+      "click_id",
+      "clickid",
+      "affiliateid",
+      "aff_id",
+      "affiliate_id",
+      "pixel_id",
       "hsa_acc",
       "hsa_cam",
       "hsa_grp",
@@ -50,6 +71,12 @@ export function normalizeProductUrl(rawUrl: string | null | undefined): string |
       "hsa_src",
       "hsa_net",
       "hsa_ver",
+      // Shopify predictive search & theme session parameters
+      "_pos",
+      "_psq",
+      "_psid",
+      "_ss",
+      "_v",
     ];
 
     const keysToDelete: string[] = [];
@@ -58,6 +85,8 @@ export function normalizeProductUrl(rawUrl: string | null | undefined): string |
       if (
         trackingParams.includes(cleanKey) ||
         key.startsWith("+") ||
+        key.includes("\n") ||
+        key.includes("\r") ||
         val.includes("{{") ||
         val.includes("%7B%7B") ||
         key.includes("{{") ||
