@@ -524,7 +524,7 @@ export async function scanAdCreatives(
       });
 
       // Close heavy browser page now that scraping is finished
-      await page.close().catch(() => {});
+      await page.close().catch(() => { });
 
       if (isVerifiedZeroState) {
         console.log(`[Spy Scanner] 🟢 Verified ZERO active ads for tracked page ${trackedPageId}. Running reconciliation...`);
@@ -559,7 +559,7 @@ export async function scanAdCreatives(
 
     // Close the heavy Facebook Ad Library browser tab immediately to release 1.5GB+ RAM
     console.log(`[Spy Scanner] 🧹 Closing heavy Facebook browser tab to free RAM before frame extraction...`);
-    await page.close().catch(() => {});
+    await page.close().catch(() => { });
 
     // 4. Save extracted ads and observations transactionally
     let savedCount = 0;
@@ -612,7 +612,7 @@ export async function scanAdCreatives(
             finalMediaUrls.map(async (url, idx) => {
               if (url.includes("backblazeb2.com") || url.includes("/api/spy/b2-media") || url.includes("files.catbox.moe")) return url;
               const isUrlVid = adData.mediaType === "video" || url.includes(".mp4");
-              
+
               // Skip uploading heavy full MP4 to storage to save 99.8% bandwidth & storage
               if (isUrlVid) return url;
 
@@ -739,13 +739,11 @@ export async function scanAdCreatives(
       });
     }
 
-    // Update tracked page status & last_creative_scan
+    // Update tracked page last_creative_scan
     await db
       .update(trackedPages)
       .set({
-        status: "success",
         lastCreativeScan: now,
-        lastSuccessAt: now,
         updatedAt: now,
       })
       .where(eq(trackedPages.id, trackedPageId));
