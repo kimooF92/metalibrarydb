@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { trackedPages, scanHistory, queue, ads } from "@/db/schema";
+import { trackedPages, scanHistory, queue, ads, scrapedProducts } from "@/db/schema";
 import { addSingleUrl } from "@/actions/add-url";
 import { singleUrlSchema } from "@/lib/validators";
 import { eq, ilike, or, and, sql, desc, asc, inArray, gte, lte, isNotNull } from "drizzle-orm";
@@ -201,8 +201,8 @@ export async function GET(request: Request) {
       activeCreativeJobMap = Object.fromEntries(activeCreativeJobs.map((q) => [q.trackedPageId, true]));
     }
 
-    // Fetch active non-archived ads per Meta pageId and cluster them by product
-    // (grouping duplicated ad copy fingerprints and landing page URLs)
+    // Fetch active non-archived ads and canonical scraped products per Meta pageId
+    // to calculate the exact distinct product catalog count per brand
     let approxProductCountMap: Record<string, number> = {};
     let extractedAdCountMap: Record<string, number> = {};
     if (pageIds.length > 0) {
@@ -211,34 +211,60 @@ export async function GET(request: Request) {
         .filter(Boolean) as string[];
 
       if (pageIdValues.length > 0) {
-        const brandAds = await db
-          .select({
-            id: ads.id,
-            pageId: ads.pageId,
-            linkUrl: ads.linkUrl,
-            caption: ads.caption,
-            title: ads.title,
-          })
-          .from(ads)
-          .where(
-            and(
-              inArray(ads.pageId, pageIdValues),
-              eq(ads.isArchived, false)
-            )
-          );
+        const [brandAds, brandDirectProducts] = await Promise.all([
+          db
+            .select({
+              id: ads.id,
+              pageId: ads.pageId,
+              productId: ads.productId,
+              linkUrl: ads.linkUrl,
+              caption: ads.caption,
+              title: ads.title,
+            })
+            .from(ads)
+            .where(
+              and(
+                inArray(ads.pageId, pageIdValues),
+                eq(ads.isArchived, false)
+              )
+            ),
+          db
+            .select({
+              id: scrapedProducts.id,
+              pageId: scrapedProducts.pageId,
+            })
+            .from(scrapedProducts)
+            .where(inArray(scrapedProducts.pageId, pageIdValues)),
+        ]);
 
-        // Group ads and count unique product cluster keys per brand
+        // Group ads and count unique exact products per brand
         const brandProducts = new Map<string, Set<string>>();
         const brandAdCounts = new Map<string, number>();
 
+        // 1. Add direct scraped products associated with each brand
+        for (const prod of brandDirectProducts) {
+          if (prod.pageId) {
+            if (!brandProducts.has(prod.pageId)) {
+              brandProducts.set(prod.pageId, new Set());
+            }
+            brandProducts.get(prod.pageId)!.add(prod.id);
+          }
+        }
+
+        // 2. Add product IDs or normalized URLs from active ads
         for (const ad of brandAds) {
           brandAdCounts.set(ad.pageId, (brandAdCounts.get(ad.pageId) || 0) + 1);
 
-          const keyInfo = extractProductClusterKey(ad);
           if (!brandProducts.has(ad.pageId)) {
             brandProducts.set(ad.pageId, new Set());
           }
-          brandProducts.get(ad.pageId)!.add(keyInfo.productKey);
+
+          if (ad.productId) {
+            brandProducts.get(ad.pageId)!.add(ad.productId);
+          } else {
+            const keyInfo = extractProductClusterKey(ad);
+            brandProducts.get(ad.pageId)!.add(keyInfo.productKey);
+          }
         }
 
         // Map counts by tracked page ID

@@ -1009,17 +1009,17 @@ export function PagesTable({
                         </div>
                       </td>
 
-                      {/* Approx Products Count (Clustered by Landing Page URLs & Ad Copy) */}
+                      {/* Exact Products Count (Canonical Scraped Products & Distinct Landing Pages) */}
                       <td className="px-3 py-1.5 text-center">
                         <Link
                           href={`/spy/brand/${encodeURIComponent(p.id || p.pageId || "")}?tab=products`}
                           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 hover:border-indigo-500/40 transition-all cursor-pointer shadow-xs"
-                          title={`Open ${p.displayName || "brand"} Product Catalog & Landing Pages`}
+                          title={`Open ${p.displayName || "brand"} Product Catalog (${p.approxProductCount || 0} distinct products listed)`}
                         >
                           <Package className="w-2.5 h-2.5 shrink-0" />
                           <span>
                             {p.approxProductCount !== null && p.approxProductCount !== undefined && p.approxProductCount > 0
-                              ? `~${p.approxProductCount} ${p.approxProductCount === 1 ? "prod" : "prods"}`
+                              ? `${p.approxProductCount} ${p.approxProductCount === 1 ? "prod" : "prods"}`
                               : "Catalog"}
                           </span>
                         </Link>
