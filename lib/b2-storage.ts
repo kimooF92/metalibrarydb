@@ -10,7 +10,7 @@ const BROWSER_USER_AGENT =
 const MAX_SUPABASE_STORAGE_BYTES = 1.5 * 1024 * 1024;
 
 export function isB2Configured(): boolean {
-  const keyId = process.env.B2_KEY_ID?.trim();
+  const keyId = process.env.B2_APPLICATION_KEY_ID?.trim() || process.env.B2_KEY_ID?.trim();
   const appKey = process.env.B2_APPLICATION_KEY?.trim();
   const bucketName = process.env.B2_BUCKET_NAME?.trim() || "meta-ad-media-feed";
   return Boolean(keyId && appKey && bucketName);
@@ -23,7 +23,7 @@ function getS3Client(): S3Client | null {
   if (!isB2Configured()) return null;
   if (cachedS3Client) return cachedS3Client;
 
-  const keyId = process.env.B2_KEY_ID?.trim()!;
+  const keyId = (process.env.B2_APPLICATION_KEY_ID?.trim() || process.env.B2_KEY_ID?.trim())!;
   const appKey = process.env.B2_APPLICATION_KEY?.trim()!;
   const endpoint = process.env.B2_ENDPOINT?.trim() || "s3.eu-central-003.backblazeb2.com";
   const region = process.env.B2_REGION?.trim() || "eu-central-003";
