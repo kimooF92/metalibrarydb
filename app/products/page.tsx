@@ -51,8 +51,11 @@ export default function ProductsPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   // Filters & Pagination
-  const [search, setSearch] = useState("");
-  const [brandFilter, setBrandFilter] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [brandInput, setBrandInput] = useState("");
+  const [debouncedBrand, setDebouncedBrand] = useState("");
+
   const [platform, setPlatform] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState<string>("latest");
@@ -68,6 +71,8 @@ export default function ProductsPage() {
   const [autoLoadCount, setAutoLoadCount] = useState(0);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const initialStatsLoadedRef = useRef<boolean>(false);
 
   const [stats, setStats] = useState({
     totalProducts: 0,
@@ -87,13 +92,30 @@ export default function ProductsPage() {
   const [selectedProduct, setSelectedProduct] = useState<ScrapedProduct | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  // Debounce search input (350ms) to prevent keystroke request storms
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchInput);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // Debounce brand filter input (350ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedBrand(brandInput);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [brandInput]);
+
   // Read URL query params on mount (e.g. ?brand=... or ?preset=favorites)
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const brandParam = params.get("brand");
       if (brandParam) {
-        setBrandFilter(brandParam);
+        setBrandInput(brandParam);
+        setDebouncedBrand(brandParam);
       }
       const presetParam = params.get("preset");
       if (presetParam === "favorites") {
@@ -103,7 +125,14 @@ export default function ProductsPage() {
   }, []);
 
   const fetchProducts = useCallback(
-    async (targetPage = 1, append = false) => {
+    async (targetPage = 1, append = false, includeStats = false) => {
+      // Abort any in-flight requests to eliminate connection-pool pileups
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      const currentController = new AbortController();
+      abortControllerRef.current = currentController;
+
       if (append) {
         setIsFetchingMore(true);
       } else {
@@ -120,12 +149,15 @@ export default function ProductsPage() {
           _t: Date.now().toString(),
         });
 
-        if (search.trim()) query.set("search", search.trim());
-        if (brandFilter.trim()) query.set("brand", brandFilter.trim());
+        if (debouncedSearch.trim()) query.set("search", debouncedSearch.trim());
+        if (debouncedBrand.trim()) query.set("brand", debouncedBrand.trim());
         if (platform !== "all") query.set("platform", platform);
         if (statusFilter !== "all") query.set("status", statusFilter);
+        if (includeStats) query.set("includeStats", "true");
 
-        const res = await fetch(`/api/products?${query.toString()}`);
+        const res = await fetch(`/api/products?${query.toString()}`, {
+          signal: currentController.signal,
+        });
         if (!res.ok) {
           throw new Error(`Failed to load products (${res.status})`);
         }
@@ -148,20 +180,29 @@ export default function ProductsPage() {
           throw new Error(data.error || "Unknown error");
         }
       } catch (err: any) {
+        if (err.name === "AbortError") {
+          return; // Intentional abort, ignore silently
+        }
         setError(err.message || "Failed to load products");
       } finally {
-        setLoading(false);
-        setIsFetchingMore(false);
+        if (abortControllerRef.current === currentController) {
+          setLoading(false);
+          setIsFetchingMore(false);
+        }
       }
     },
-    [sortBy, smartPreset, search, brandFilter, platform, statusFilter]
+    [sortBy, smartPreset, debouncedSearch, debouncedBrand, platform, statusFilter]
   );
 
-  // Trigger initial fetch on filter/sort change
+  // Trigger initial fetch on filter/sort change (only fetch heavy global stats on first mount)
   useEffect(() => {
     setPage(1);
     setAutoLoadCount(0);
-    fetchProducts(1, false);
+    const needStats = !initialStatsLoadedRef.current;
+    if (needStats) {
+      initialStatsLoadedRef.current = true;
+    }
+    fetchProducts(1, false, needStats);
   }, [fetchProducts]);
 
   // Load next page function
@@ -388,13 +429,16 @@ export default function ProductsPage() {
   };
 
   const handleFilterBrand = (brandName: string) => {
-    setBrandFilter(brandName);
+    setBrandInput(brandName);
+    setDebouncedBrand(brandName);
     setPage(1);
   };
 
   const handleResetFilters = () => {
-    setSearch("");
-    setBrandFilter("");
+    setSearchInput("");
+    setDebouncedSearch("");
+    setBrandInput("");
+    setDebouncedBrand("");
     setPlatform("all");
     setStatusFilter("all");
     setSmartPreset("all");
@@ -436,7 +480,7 @@ export default function ProductsPage() {
           </Link>
 
           <button
-            onClick={() => fetchProducts(1, false)}
+            onClick={() => fetchProducts(1, false, true)}
             disabled={loading}
             title="Refresh product intelligence catalog"
             className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 transition-all cursor-pointer shadow-xs"
@@ -623,17 +667,18 @@ export default function ProductsPage() {
       </div>
 
       {/* Brand Active Filter Banner (if brand filter is applied) */}
-      {brandFilter && (
+      {(brandInput || debouncedBrand) && (
         <div className="flex items-center justify-between p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-xs">
           <div className="flex items-center gap-2 min-w-0">
             <span className="flex h-2 w-2 rounded-full bg-indigo-600 animate-pulse shrink-0" />
             <span className="text-slate-700 dark:text-slate-200 truncate">
-              Showing products advertised by brand: <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{brandFilter}</strong>
+              Showing products advertised by brand: <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{brandInput || debouncedBrand}</strong>
             </span>
           </div>
           <button
             onClick={() => {
-              setBrandFilter("");
+              setBrandInput("");
+              setDebouncedBrand("");
               setPage(1);
             }}
             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 text-[11px] cursor-pointer shrink-0 transition-colors"
@@ -650,19 +695,20 @@ export default function ProductsPage() {
           <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
           <input
             type="text"
-            value={search}
+            value={searchInput}
             onChange={(e) => {
-              setSearch(e.target.value);
+              setSearchInput(e.target.value);
               setPage(1);
             }}
             placeholder="Search product title, brand, URL, offer..."
             className="w-full bg-slate-50 dark:bg-slate-900 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 rounded-lg pl-9 pr-8 py-1.5 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 font-medium"
           />
-          {search && (
+          {searchInput && (
             <button
               type="button"
               onClick={() => {
-                setSearch("");
+                setSearchInput("");
+                setDebouncedSearch("");
                 setPage(1);
               }}
               className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded-full cursor-pointer transition-colors"
@@ -679,19 +725,20 @@ export default function ProductsPage() {
             <Building2 className="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-500" />
             <input
               type="text"
-              value={brandFilter}
+              value={brandInput}
               onChange={(e) => {
-                setBrandFilter(e.target.value);
+                setBrandInput(e.target.value);
                 setPage(1);
               }}
               placeholder="Filter by brand..."
               className="w-36 bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 pl-8 pr-6 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none"
             />
-            {brandFilter && (
+            {brandInput && (
               <button
                 type="button"
                 onClick={() => {
-                  setBrandFilter("");
+                  setBrandInput("");
+                  setDebouncedBrand("");
                   setPage(1);
                 }}
                 className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
@@ -772,7 +819,7 @@ export default function ProductsPage() {
           </div>
 
           {/* Reset Filters */}
-          {(search !== "" || brandFilter !== "" || platform !== "all" || statusFilter !== "all" || smartPreset !== "all" || sortBy !== "latest") && (
+          {(searchInput !== "" || brandInput !== "" || platform !== "all" || statusFilter !== "all" || smartPreset !== "all" || sortBy !== "latest") && (
             <button
               onClick={handleResetFilters}
               className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
@@ -828,7 +875,7 @@ export default function ProductsPage() {
             <p className="text-xs text-slate-600 dark:text-slate-400 max-w-sm mt-1">
               {smartPreset === "favorites"
                 ? "Click the star (⭐) button on any product card to add it to your starred favorites watchlist."
-                : search || brandFilter || platform !== "all" || smartPreset !== "all"
+                : searchInput || brandInput || platform !== "all" || smartPreset !== "all"
                 ? "Try resetting your active filters or smart preset to view more products."
                 : "Run ad spy scans to automatically extract, deduplicate, and scrape product landing pages."}
             </p>

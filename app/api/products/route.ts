@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
     const smartPreset = searchParams.get("smartPreset") || "all";
     const sortBy = searchParams.get("sortBy") || "latest";
     const sortOrder = searchParams.get("sortOrder") || "desc";
+    const includeStats = searchParams.get("includeStats") === "true";
 
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "24", 10)));
@@ -124,8 +125,8 @@ export async function GET(req: NextRequest) {
         .select({ count: count() })
         .from(scrapedProducts)
         .where(whereClause),
-      // Fast KPI summary metrics across products
-      page === 1
+      // Fast KPI summary metrics across products (only executed on initial mount or manual refresh)
+      includeStats
         ? db
             .select({
               total: count(),

@@ -141,6 +141,7 @@ export const scrapedProducts = pgTable(
     index("idx_scraped_products_page_id").on(table.pageId),
     index("idx_scraped_products_is_favorite").on(table.isFavorite),
     index("idx_scraped_products_status").on(table.scrapeStatus),
+    index("idx_scraped_products_store_platform").on(table.storePlatform),
     index("idx_scraped_products_created_at").on(table.createdAt.desc()),
   ]
 );

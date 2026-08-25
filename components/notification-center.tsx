@@ -335,17 +335,15 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                   <div
                     key={n.id}
                     onClick={() => !n.isRead && handleMarkSingleRead(n.id)}
-                    className={`p-3.5 flex items-start space-x-3 transition-colors ${
+                    className={`relative p-3.5 flex items-start space-x-3 transition-colors cursor-pointer ${
                       n.isRead
-                        ? "bg-transparent hover:bg-slate-50/50 dark:hover:bg-slate-800/30 opacity-80 hover:opacity-100"
-                        : n.type === "batch_summary"
-                        ? "bg-emerald-500/5 dark:bg-emerald-950/20 hover:bg-emerald-500/10 border-l-2 border-emerald-500"
-                        : "bg-indigo-50/40 dark:bg-indigo-950/20 hover:bg-indigo-50/70 dark:hover:bg-indigo-950/40"
+                        ? "bg-transparent hover:bg-slate-50/50 dark:hover:bg-slate-800/30 opacity-75 hover:opacity-100"
+                        : "bg-indigo-500/[0.04] dark:bg-indigo-500/[0.07] hover:bg-indigo-500/[0.08] dark:hover:bg-indigo-500/[0.12]"
                     }`}
                   >
                     {getNotificationIcon(n.type)}
 
-                    <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex-1 min-w-0 space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
                         <h4
                           className={`text-xs font-bold truncate ${
@@ -365,13 +363,13 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
 
                       {/* Movers Pills for Batch Summaries */}
                       {n.type === "batch_summary" && movers.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
+                        <div className="flex flex-wrap gap-1.5 pt-0.5">
                           {movers.slice(0, 4).map((m, idx) => (
                             <Link
                               key={idx}
                               href={m.trackedPageId ? `/spy?trackedPageId=${m.trackedPageId}` : `/?search=${encodeURIComponent(m.name)}`}
                               onClick={() => setIsOpen(false)}
-                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/60 dark:border-indigo-800/40 text-[10px] font-bold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors"
+                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/60 text-[10px] font-semibold text-slate-700 dark:text-slate-200 hover:border-indigo-500/40 dark:hover:border-indigo-500/40 transition-colors"
                             >
                               <span>{m.name}</span>
                               <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">
@@ -388,7 +386,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                       )}
 
                       {/* Action Buttons */}
-                      <div className="flex items-center gap-2 pt-1">
+                      <div className="flex items-center gap-2 pt-0.5">
                         {n.type === "multi_page_detected" && n.trackedPageId && (
                           <button
                             onClick={(e) => {
@@ -407,17 +405,17 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                           <Link
                             href={n.actionUrl}
                             onClick={() => setIsOpen(false)}
-                            className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/20 text-[10px] font-bold border border-indigo-500/20 transition-all active:scale-95"
+                            className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200 dark:hover:bg-slate-700/80 text-[10px] font-semibold border border-slate-200 dark:border-slate-700/80 transition-all active:scale-95 shadow-2xs"
                           >
                             <span>View Details</span>
-                            <ExternalLink className="w-2.5 h-2.5" />
+                            <ExternalLink className="w-2.5 h-2.5 opacity-70" />
                           </Link>
                         )}
                       </div>
                     </div>
 
                     {!n.isRead && (
-                      <span className="w-2 h-2 rounded-full bg-indigo-600 shrink-0 mt-1" />
+                      <span className="w-2 h-2 rounded-full bg-indigo-500 ring-2 ring-white dark:ring-slate-900 shrink-0 mt-1 shadow-xs" />
                     )}
                   </div>
                 );
