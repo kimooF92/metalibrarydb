@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { trackedPages } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { trackedPages, ads, scrapedProducts } from "@/db/schema";
+import { eq, or } from "drizzle-orm";
 
 export async function DELETE(
   request: Request,
@@ -14,18 +14,36 @@ export async function DELETE(
       return NextResponse.json({ error: "Page ID is required" }, { status: 400 });
     }
 
+    // 1. Fetch tracked page first to get its pageId
+    const targetPage = await db.query.trackedPages.findFirst({
+      where: eq(trackedPages.id, id),
+    });
+
+    if (!targetPage) {
+      return NextResponse.json({ error: "Tracked page not found" }, { status: 404 });
+    }
+
+    const pageId = targetPage.pageId;
+
+    // 2. Delete associated ads and scraped products for this brand
+    if (pageId && pageId !== "0" && !pageId.startsWith("pending-")) {
+      await Promise.allSettled([
+        db.delete(ads).where(eq(ads.pageId, pageId)),
+        db.delete(scrapedProducts).where(or(eq(scrapedProducts.pageId, pageId), eq(scrapedProducts.pageId, id))),
+      ]);
+    } else {
+      await db.delete(scrapedProducts).where(eq(scrapedProducts.pageId, id));
+    }
+
+    // 3. Delete tracked page record (cascades to scan_history, creative_scans, ad_observations)
     const [deleted] = await db
       .delete(trackedPages)
       .where(eq(trackedPages.id, id))
       .returning();
 
-    if (!deleted) {
-      return NextResponse.json({ error: "Tracked page not found" }, { status: 404 });
-    }
-
     return NextResponse.json({
       success: true,
-      message: "Tracked page deleted successfully",
+      message: "Tracked page, ads, and product catalog deleted successfully",
       deletedId: id,
     });
   } catch (error) {
