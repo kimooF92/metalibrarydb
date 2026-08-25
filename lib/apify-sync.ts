@@ -180,6 +180,7 @@ export async function syncApifyRuns(): Promise<{ syncedCount: number; checkedCou
 /**
  * Polls an Apify run asynchronously in the background until it completes, then ingests dataset.
  * Designed for local development where public webhooks cannot reach localhost.
+ * Returns a Promise that resolves to true if succeeded, false if failed/timed-out.
  */
 export function pollApifyRunUntilDone(
   creativeScanId: string,
@@ -187,87 +188,93 @@ export function pollApifyRunUntilDone(
   defaultDatasetId?: string,
   maxAttempts: number = 60, // 60 * 5s = 5 minutes max
   intervalMs: number = 5000
-) {
-  let attempts = 0;
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    let attempts = 0;
 
-  const timer = setInterval(async () => {
-    attempts++;
-    try {
-      const details = await getApifyRunStatus(runId);
-      const status = details?.status;
-      const targetDatasetId = details?.defaultDatasetId || defaultDatasetId;
+    const timer = setInterval(async () => {
+      attempts++;
+      try {
+        const details = await getApifyRunStatus(runId);
+        const status = details?.status;
+        const targetDatasetId = details?.defaultDatasetId || defaultDatasetId;
 
-      if (status === "SUCCEEDED" && targetDatasetId) {
-        clearInterval(timer);
+        if (status === "SUCCEEDED" && targetDatasetId) {
+          clearInterval(timer);
 
-        // Atomic claim: only proceed if scan is still in status 'running'
-        const [claimed] = await db
-          .update(creativeScans)
-          .set({ status: "ingesting", outcomeDetails: "Ingesting Apify dataset items..." })
-          .where(and(eq(creativeScans.id, creativeScanId), eq(creativeScans.status, "running")))
-          .returning();
+          // Atomic claim: only proceed if scan is still in status 'running'
+          const [claimed] = await db
+            .update(creativeScans)
+            .set({ status: "ingesting", outcomeDetails: "Ingesting Apify dataset items..." })
+            .where(and(eq(creativeScans.id, creativeScanId), eq(creativeScans.status, "running")))
+            .returning();
 
-        if (!claimed) {
-          console.log(`[Apify Poller] Scan ${creativeScanId} is already being ingested by sync worker. Skipping.`);
+          if (!claimed) {
+            console.log(`[Apify Poller] Scan ${creativeScanId} is already being ingested by sync worker. Skipping.`);
+            resolve(true);
+            return;
+          }
+
+          console.log(`[Apify Poller] ⚡ Run ${runId} SUCCEEDED on attempt #${attempts}! Ingesting dataset ${targetDatasetId}...`);
+          const items = await fetchApifyDatasetItems(targetDatasetId);
+          await ingestApifyDatasetItems(creativeScanId, items);
+          resolve(true);
           return;
         }
 
-        console.log(`[Apify Poller] ⚡ Run ${runId} SUCCEEDED on attempt #${attempts}! Ingesting dataset ${targetDatasetId}...`);
-        const items = await fetchApifyDatasetItems(targetDatasetId);
-        await ingestApifyDatasetItems(creativeScanId, items);
-        return;
+        if (status === "FAILED" || status === "ABORTED" || status === "TIMED-OUT") {
+          clearInterval(timer);
+          console.warn(`[Apify Poller] Run ${runId} ${status} on attempt #${attempts}.`);
+          await db
+            .update(creativeScans)
+            .set({
+              status: "failed",
+              failureReason: `apify_${status.toLowerCase()}`,
+              outcomeDetails: `Apify run status: ${status}`,
+              finishedAt: new Date(),
+            })
+            .where(eq(creativeScans.id, creativeScanId));
+          await resetTrackedPageFromScan(creativeScanId);
+
+          const { createNotification } = await import("@/lib/notifications");
+          await createNotification({
+            type: "system_alert",
+            title: "⚠️ Apify Scan Failed",
+            message: `Apify run ended with status: ${status}.`,
+            severity: "error",
+            trackedPageId: creativeScanId,
+          });
+          resolve(false);
+          return;
+        }
+
+        if (attempts >= maxAttempts) {
+          clearInterval(timer);
+          console.log(`[Apify Poller] Reached max polling attempts (${maxAttempts}) for run ${runId}.`);
+          await db
+            .update(creativeScans)
+            .set({
+              status: "failed",
+              failureReason: "poll_timeout",
+              outcomeDetails: `Polling exceeded ${maxAttempts} attempts (${(maxAttempts * intervalMs) / 1000}s)`,
+              finishedAt: new Date(),
+            })
+            .where(eq(creativeScans.id, creativeScanId));
+          await resetTrackedPageFromScan(creativeScanId);
+
+          const { createNotification } = await import("@/lib/notifications");
+          await createNotification({
+            type: "system_alert",
+            title: "⏱️ Apify Polling Timeout",
+            message: `Apify run is still processing after ${Math.round((maxAttempts * intervalMs) / 1000)}s. Sync will finalize once complete.`,
+            severity: "warning",
+            trackedPageId: creativeScanId,
+          });
+          resolve(false);
+        }
+      } catch (err) {
+        console.error(`[Apify Poller] Error on attempt #${attempts}:`, err);
       }
-
-      if (status === "FAILED" || status === "ABORTED" || status === "TIMED-OUT") {
-        clearInterval(timer);
-        console.warn(`[Apify Poller] Run ${runId} ${status} on attempt #${attempts}.`);
-        await db
-          .update(creativeScans)
-          .set({
-            status: "failed",
-            failureReason: `apify_${status.toLowerCase()}`,
-            outcomeDetails: `Apify run status: ${status}`,
-            finishedAt: new Date(),
-          })
-          .where(eq(creativeScans.id, creativeScanId));
-        await resetTrackedPageFromScan(creativeScanId);
-
-        const { createNotification } = await import("@/lib/notifications");
-        await createNotification({
-          type: "system_alert",
-          title: "⚠️ Apify Scan Failed",
-          message: `Apify run ended with status: ${status}.`,
-          severity: "error",
-          trackedPageId: creativeScanId,
-        });
-        return;
-      }
-
-      if (attempts >= maxAttempts) {
-        clearInterval(timer);
-        console.log(`[Apify Poller] Reached max polling attempts (${maxAttempts}) for run ${runId}.`);
-        await db
-          .update(creativeScans)
-          .set({
-            status: "failed",
-            failureReason: "poll_timeout",
-            outcomeDetails: `Polling exceeded ${maxAttempts} attempts (${(maxAttempts * intervalMs) / 1000}s)`,
-            finishedAt: new Date(),
-          })
-          .where(eq(creativeScans.id, creativeScanId));
-        await resetTrackedPageFromScan(creativeScanId);
-
-        const { createNotification } = await import("@/lib/notifications");
-        await createNotification({
-          type: "system_alert",
-          title: "⏱️ Apify Polling Timeout",
-          message: `Apify run is still processing after ${Math.round((maxAttempts * intervalMs) / 1000)}s. Sync will finalize once complete.`,
-          severity: "warning",
-          trackedPageId: creativeScanId,
-        });
-      }
-    } catch (err) {
-      console.error(`[Apify Poller] Error on attempt #${attempts}:`, err);
-    }
-  }, intervalMs);
+    }, intervalMs);
+  });
 }

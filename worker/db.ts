@@ -565,13 +565,57 @@ export async function markJobCompleted(
   return { difference, results, brandName };
 }
 
+// In-memory sequential queue for Apify delta triggers to prevent slot starvation / 429 errors
+interface ApifyDeltaTask {
+  pageId: string;
+  difference: number;
+}
+
+const apifyDeltaQueue: ApifyDeltaTask[] = [];
+let isProcessingApifyQueue = false;
+
+async function processNextApifyDelta() {
+  if (isProcessingApifyQueue || apifyDeltaQueue.length === 0) return;
+  isProcessingApifyQueue = true;
+
+  const nextTask = apifyDeltaQueue.shift();
+  if (nextTask) {
+    try {
+      await executeApifyDeltaScan(nextTask.pageId, nextTask.difference);
+    } catch (err) {
+      console.error("[Apify Auto-Trigger Queue] Task error:", err);
+    } finally {
+      isProcessingApifyQueue = false;
+      // 2-second cooldown between consecutive Apify actor runs
+      setTimeout(() => {
+        processNextApifyDelta();
+      }, 2000);
+    }
+  } else {
+    isProcessingApifyQueue = false;
+  }
+}
+
 /**
- * Automatically triggers an Apify Delta Cloud scan when a positive ad count difference is detected.
+ * Enqueues an Apify Delta Cloud scan when a positive ad count difference is detected.
  * Uses formula: Limit = Delta + max(3, ceil(Delta * 0.2)) and respects 24h cooldown per page.
  */
 export async function tryAutoTriggerApifyDeltaScan(pageId: string, difference: number) {
   if (difference < 1) return;
 
+  // Deduplicate in-queue tasks for the same page
+  if (apifyDeltaQueue.some((t) => t.pageId === pageId)) {
+    return;
+  }
+
+  apifyDeltaQueue.push({ pageId, difference });
+  processNextApifyDelta();
+}
+
+/**
+ * Executes a single Apify Delta Cloud scan with fail-fast database updates and synchronous completion wait.
+ */
+async function executeApifyDeltaScan(pageId: string, difference: number) {
   const page = await db.query.trackedPages.findFirst({
     where: eq(trackedPages.id, pageId),
   });
@@ -603,6 +647,8 @@ export async function tryAutoTriggerApifyDeltaScan(pageId: string, difference: n
     return;
   }
 
+  let newScanId: string | null = null;
+
   try {
     const { startApifyDeltaScan, calculateDeltaLimit } = await import("../lib/apify");
     const maxResults = calculateDeltaLimit(difference);
@@ -622,6 +668,8 @@ export async function tryAutoTriggerApifyDeltaScan(pageId: string, difference: n
         outcomeDetails: `Auto-triggered Apify Delta Cloud run for +${difference} new ad(s) (Limit: ${maxResults})`,
       })
       .returning();
+
+    newScanId = newScan.id;
 
     const baseUrl =
       process.env.NEXT_PUBLIC_APP_URL ||
@@ -650,15 +698,30 @@ export async function tryAutoTriggerApifyDeltaScan(pageId: string, difference: n
         })
         .where(eq(creativeScans.id, newScan.id));
 
-      const { pollApifyRunUntilDone } = await import("../lib/apify-sync");
-      pollApifyRunUntilDone(newScan.id, runRes.id, runRes.defaultDatasetId);
-    }
+      console.log(
+        `[Apify Auto-Trigger] ⚡ Launched Apify Delta Cloud scan for "${page.displayName || pageId}" (+${difference} new ads | limit ${maxResults} ads). Run ID: ${runRes?.id}`
+      );
 
-    console.log(
-      `[Apify Auto-Trigger] ⚡ Launched Apify Delta Cloud scan for "${page.displayName || pageId}" (+${difference} new ads | limit ${maxResults} ads). Run ID: ${runRes?.id}`
-    );
+      const { pollApifyRunUntilDone } = await import("../lib/apify-sync");
+      await pollApifyRunUntilDone(newScan.id, runRes.id, runRes.defaultDatasetId);
+    } else {
+      throw new Error("No Apify Run ID returned from startApifyDeltaScan");
+    }
   } catch (err: any) {
     console.error(`[Apify Auto-Trigger] Failed to auto-launch Apify scan for "${page.displayName || pageId}":`, err);
+
+    if (newScanId) {
+      const isRateLimited = err?.message?.toLowerCase().includes("rate") || err?.message?.toLowerCase().includes("limit") || err?.message?.toLowerCase().includes("429");
+      await db
+        .update(creativeScans)
+        .set({
+          status: "failed",
+          failureReason: isRateLimited ? "rate_limited" : "apify_launch_failed",
+          outcomeDetails: `Auto-trigger start failed: ${err?.message || "Unknown error"}`,
+          finishedAt: new Date(),
+        })
+        .where(eq(creativeScans.id, newScanId));
+    }
   }
 }
 
