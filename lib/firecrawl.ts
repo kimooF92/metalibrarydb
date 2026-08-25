@@ -187,6 +187,7 @@ export interface ExtractedProductData {
   main_image_url?: string;
   gallery_images?: string[];
   store_platform?: string;
+  resolved_url?: string;
   all_offers?: Array<{
     tier_name: string;
     price: string;

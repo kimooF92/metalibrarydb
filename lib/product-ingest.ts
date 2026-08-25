@@ -177,10 +177,13 @@ export async function linkAndAutoScrapeProduct({
             extractionResult.raw?.rawHtml ||
             "";
 
+          const finalEffectiveUrl = extracted.resolved_url || normalizedUrl;
+          const resolvedDomain = getCleanDomain(finalEffectiveUrl);
+
           const phoneNumbers = extractTunisianPhoneNumbers(rawHtml);
           const whatsappNumbers = extractWhatsAppNumbers(rawHtml);
           const metaPixelIds = extractMetaPixelIds(rawHtml);
-          const storePlatform = detectStorePlatform(rawHtml, normalizedUrl);
+          const storePlatform = detectStorePlatform(rawHtml, finalEffectiveUrl);
           const deliveryInfo = extractDeliveryInfo(rawHtml, extracted.delivery_cost);
           const deliveryCost = deliveryInfo?.label || null;
 
@@ -194,6 +197,7 @@ export async function linkAndAutoScrapeProduct({
           await db
             .update(scrapedProducts)
             .set({
+              domain: resolvedDomain || undefined,
               title: extracted.title,
               currentPrice: extracted.current_price,
               originalPrice: extracted.original_price || null,

@@ -12,6 +12,7 @@ import {
   detectStorePlatform,
   extractDeliveryInfo,
 } from "../lib/network-extractor";
+import { getCleanDomain } from "../lib/utils";
 
 interface RunOptions {
   limit: number;
@@ -137,7 +138,9 @@ async function runProductScraperBatch() {
       if (res.success && res.data) {
         const rawHtml = res.raw?.html || "";
         const engine = res.raw?.engine || "direct_html";
-        const platform = detectStorePlatform(rawHtml, targetUrl);
+        const finalEffectiveUrl = res.data.resolved_url || targetUrl;
+        const resolvedDomain = getCleanDomain(finalEffectiveUrl);
+        const platform = detectStorePlatform(rawHtml, finalEffectiveUrl);
         const phones = extractTunisianPhoneNumbers(rawHtml);
         const wa = extractWhatsAppNumbers(rawHtml);
         const pixels = extractMetaPixelIds(rawHtml);
@@ -152,6 +155,7 @@ async function runProductScraperBatch() {
         await db
           .update(scrapedProducts)
           .set({
+            domain: resolvedDomain || item.domain,
             title: res.data.title || item.title,
             currentPrice: res.data.current_price || item.currentPrice,
             originalPrice: res.data.original_price || item.originalPrice,

@@ -63,8 +63,9 @@ function decodeHtmlEntities(str: string): string {
  */
 export async function scrapeProductDirectHtml(
   url: string,
-  timeoutMs = 10000
-): Promise<{ success: boolean; data?: ExtractedProductData; error?: string; rawHtml?: string }> {
+  timeoutMs = 10000,
+  maxRedirects = 2
+): Promise<{ success: boolean; data?: ExtractedProductData; error?: string; rawHtml?: string; finalUrl?: string }> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -95,6 +96,43 @@ export async function scrapeProductDirectHtml(
     const html = await res.text();
     const cleanUrl = res.url || url;
     const baseOrigin = new URL(cleanUrl).origin;
+
+    // Check for deleted / expired short URLs (e.g. shorturl.at, bit.ly 404s)
+    if (
+      html.includes("This link does not exist") ||
+      (html.includes("404 Not Found") && (cleanUrl.includes("shorturl.at") || cleanUrl.includes("bit.ly") || cleanUrl.includes("tinyurl.com")))
+    ) {
+      return {
+        success: false,
+        error: "Short link expired or deleted by creator (404).",
+        rawHtml: html,
+      };
+    }
+
+    // Follow HTML Meta-Refresh redirects (e.g. <meta http-equiv="refresh" content="0; url=...">)
+    if (maxRedirects > 0) {
+      const metaRefreshMatch = /<meta\s+[^>]*http-equiv=["']refresh["'][^>]*content=["'][^"']*url=([^"'>\s]+)["']/i.exec(html);
+      if (metaRefreshMatch && metaRefreshMatch[1]) {
+        let nextUrl = metaRefreshMatch[1].trim();
+        if (!nextUrl.startsWith("http")) {
+          try {
+            nextUrl = new URL(nextUrl, baseOrigin).toString();
+          } catch {}
+        }
+        if (nextUrl.startsWith("http") && nextUrl !== url && nextUrl !== cleanUrl) {
+          return scrapeProductDirectHtml(nextUrl, timeoutMs, maxRedirects - 1);
+        }
+      }
+
+      // Follow JavaScript-based window.location redirects on redirect landing pages
+      const jsRedirectMatch = /(?:window\.)?location(?:\.href|\.replace)?\s*=\s*["'](https?:\/\/[^"']+)["']/i.exec(html);
+      if (jsRedirectMatch && jsRedirectMatch[1]) {
+        const nextUrl = jsRedirectMatch[1].trim();
+        if (nextUrl !== url && nextUrl !== cleanUrl && !html.includes("schema.org/Product") && !html.includes("og:price")) {
+          return scrapeProductDirectHtml(nextUrl, timeoutMs, maxRedirects - 1);
+        }
+      }
+    }
 
     // 1. JSON-LD Extraction & Custom Platform Data Extraction
     const jsonLdList = extractJsonLd(html);
@@ -350,6 +388,7 @@ export async function scrapeProductDirectHtml(
 
     return {
       success: true,
+      finalUrl: cleanUrl,
       data: {
         title: title || "Product Landing Page",
         current_price: currentPrice || "0 DT",
@@ -360,6 +399,7 @@ export async function scrapeProductDirectHtml(
         main_image_url: mainImageUrl || undefined,
         gallery_images: galleryImages.length > 0 ? galleryImages : undefined,
         all_offers: allOffers.length > 0 ? allOffers : undefined,
+        resolved_url: cleanUrl,
       },
       rawHtml: html,
     };

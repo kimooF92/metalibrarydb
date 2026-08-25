@@ -274,10 +274,13 @@ export async function POST(
 
         const combinedText = `${rawHtml} ${adCopyText} ${JSON.stringify(extractionResult.raw || {})}`;
 
+        const finalEffectiveUrl = extracted.resolved_url || normalizedUrl;
+        const resolvedDomain = getCleanDomain(finalEffectiveUrl) || domain;
+
         const phoneNumbers = extractTunisianPhoneNumbers(combinedText);
         const whatsappNumbers = extractWhatsAppNumbers(combinedText);
         const metaPixelIds = extractMetaPixelIds(rawHtml);
-        const storePlatform = detectStorePlatform(rawHtml, normalizedUrl);
+        const storePlatform = detectStorePlatform(rawHtml, finalEffectiveUrl);
         const deliveryInfo = extractDeliveryInfo(
           combinedText,
           extracted.delivery_cost,
@@ -289,7 +292,7 @@ export async function POST(
           const [updated] = await db
             .update(scrapedProducts)
             .set({
-              domain: domain || existingProduct.domain,
+              domain: resolvedDomain || existingProduct.domain,
               pageId: pageId || existingProduct.pageId,
               title: extracted.title || existingProduct.title,
               currentPrice: extracted.current_price || existingProduct.currentPrice,
