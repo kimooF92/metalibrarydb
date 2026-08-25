@@ -180,10 +180,13 @@ export default function ProductsPage() {
           throw new Error(data.error || "Unknown error");
         }
       } catch (err: any) {
-        if (err.name === "AbortError") {
+        if (err.name === "AbortError" || err.message?.toLowerCase().includes("abort")) {
           return; // Intentional abort, ignore silently
         }
+        console.error("[Products Page] Fetch error:", err);
         setError(err.message || "Failed to load products");
+        setLoading(false);
+        setIsFetchingMore(false);
       } finally {
         if (abortControllerRef.current === currentController) {
           setLoading(false);

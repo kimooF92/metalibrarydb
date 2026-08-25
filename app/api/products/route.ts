@@ -112,10 +112,34 @@ export async function GET(req: NextRequest) {
     }
     orderByClauses.push(desc(scrapedProducts.id));
 
-    // Execute fast primary queries in parallel
+    // Execute fast primary queries in parallel (excluding heavy rawExtract to reduce network transfer by 85%)
     const [rawProducts, totalCountResult, statsResult] = await Promise.all([
       db
-        .select()
+        .select({
+          id: scrapedProducts.id,
+          url: scrapedProducts.url,
+          domain: scrapedProducts.domain,
+          pageId: scrapedProducts.pageId,
+          title: scrapedProducts.title,
+          currentPrice: scrapedProducts.currentPrice,
+          originalPrice: scrapedProducts.originalPrice,
+          currency: scrapedProducts.currency,
+          discountOrOffer: scrapedProducts.discountOrOffer,
+          mainImageUrl: scrapedProducts.mainImageUrl,
+          galleryImages: scrapedProducts.galleryImages,
+          allOffers: scrapedProducts.allOffers,
+          phoneNumbers: scrapedProducts.phoneNumbers,
+          whatsappNumbers: scrapedProducts.whatsappNumbers,
+          metaPixelIds: scrapedProducts.metaPixelIds,
+          storePlatform: scrapedProducts.storePlatform,
+          deliveryCost: scrapedProducts.deliveryCost,
+          isFavorite: scrapedProducts.isFavorite,
+          scrapeStatus: scrapedProducts.scrapeStatus,
+          failureReason: scrapedProducts.failureReason,
+          lastScrapedAt: scrapedProducts.lastScrapedAt,
+          createdAt: scrapedProducts.createdAt,
+          updatedAt: scrapedProducts.updatedAt,
+        })
         .from(scrapedProducts)
         .where(whereClause)
         .orderBy(...orderByClauses)
@@ -152,9 +176,8 @@ export async function GET(req: NextRequest) {
         const metricsRows = await db
           .select({
             productId: ads.productId,
-            linkedAdsCount: sql<number>`COUNT(DISTINCT ${ads.id})`.mapWith(Number),
-            activeAdsCount: sql<number>`COUNT(DISTINCT CASE WHEN ${adObservations.isActive} = true AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL) THEN ${ads.id} END)`.mapWith(Number),
-            maxDuplications: sql<number>`MAX(COALESCE(${adObservations.duplicationCount}, 1))`.mapWith(Number),
+            linkedAdsCount: sql<number>`COUNT(${ads.id})`.mapWith(Number),
+            activeAdsCount: sql<number>`COUNT(CASE WHEN ${ads.isArchived} = false OR ${ads.isArchived} IS NULL THEN ${ads.id} END)`.mapWith(Number),
             earliestAdDate: sql<string>`MIN(COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}))`,
             latestAdDate: sql<string>`MAX(${ads.lastSeenAt})`,
             brandName: sql<string>`MAX(${ads.pageName})`,
@@ -162,7 +185,6 @@ export async function GET(req: NextRequest) {
             topCreativeThumbnail: sql<string>`MAX(COALESCE(${ads.thumbnailStoragePath}, ${ads.thumbnailUrl}))`,
           })
           .from(ads)
-          .leftJoin(adObservations, eq(adObservations.adId, ads.id))
           .where(inArray(ads.productId, productIds))
           .groupBy(ads.productId);
 
