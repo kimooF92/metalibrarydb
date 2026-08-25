@@ -14,21 +14,25 @@ import {
 } from "../lib/network-extractor";
 
 interface RunOptions {
-  limit?: number;
-  forceAll?: boolean;
+  limit: number;
+  forceAll: boolean;
   status?: string;
 }
 
 function parseArgs(): RunOptions {
   const args = process.argv.slice(2);
   const options: RunOptions = {
-    limit: 100,
-    forceAll: false,
+    limit: parseInt(process.env.SCRAPE_LIMIT || "100", 10) || 100,
+    forceAll: process.env.SCRAPE_FORCE_ALL === "true",
+    status: process.env.SCRAPE_STATUS || undefined,
   };
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--limit" && args[i + 1]) {
-      options.limit = parseInt(args[i + 1], 10);
+      const parsedLimit = parseInt(args[i + 1], 10);
+      if (!isNaN(parsedLimit) && parsedLimit > 0) {
+        options.limit = parsedLimit;
+      }
       i++;
     } else if (args[i] === "--force-all") {
       options.forceAll = true;
@@ -59,7 +63,7 @@ async function runProductScraperBatch() {
       })
       .from(ads)
       .where(sql`${ads.linkUrl} IS NOT NULL AND ${ads.linkUrl} != '' AND ${ads.productId} IS NULL`)
-      .limit(100);
+      .limit(options.limit);
 
     if (unlinkedAds.length > 0) {
       console.log(`Found ${unlinkedAds.length} unlinked ads with product URLs. Ingesting into product queue...`);
