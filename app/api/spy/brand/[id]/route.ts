@@ -8,6 +8,7 @@ import { enrichAdsWithProductClusters } from "@/lib/product-clustering";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60;
 
 import { normalizeProductUrl } from "@/lib/firecrawl";
 import { getCleanDomain } from "@/lib/utils";

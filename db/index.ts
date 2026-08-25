@@ -11,17 +11,23 @@ const globalForDb = globalThis as unknown as {
   conn: postgres.Sql | undefined;
 };
 
+const isLocal =
+  connectionString.includes("localhost") ||
+  connectionString.includes("127.0.0.1") ||
+  !connectionString;
+
 export const client =
   globalForDb.conn ??
-  postgres(connectionString, {
+  postgres(connectionString || "postgres://localhost:5432/postgres", {
     prepare: false,
-    max: 10,
-    idle_timeout: 15,
-    connect_timeout: 15,
-    ssl: "require",
+    max: process.env.VERCEL ? 2 : 10,
+    idle_timeout: 20,
+    connect_timeout: 10,
+    ssl: isLocal ? false : "require",
   });
 
-if (process.env.NODE_ENV !== "production") globalForDb.conn = client;
+// Always cache client on globalThis to preserve connection pool in serverless environments
+globalForDb.conn = client;
 
 export const db = drizzle(client, { schema });
 

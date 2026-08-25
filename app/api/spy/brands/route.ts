@@ -4,6 +4,10 @@ import { trackedPages } from "@/db/schema";
 import { asc, desc, isNotNull, sql } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const maxDuration = 60;
+
 export async function GET(req: Request) {
   const authError = await validateApiSecret(req);
   if (authError) return authError;

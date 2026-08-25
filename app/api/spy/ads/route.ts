@@ -10,6 +10,7 @@ import { enrichAdsWithCreativeClusters, getDeduplicatedCreativeHeroAds } from "@
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
   const authError = await validateApiSecret(req);
@@ -44,13 +45,6 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "24", 10)));
     const offset = (page - 1) * limit;
-
-    // Asynchronously synchronize completed active Apify runs in background without blocking feed load
-    if (page === 1) {
-      syncApifyRuns().catch((err) => {
-        console.error("[Ad Feed] Apify sync error in background:", err);
-      });
-    }
 
     // Build conditions array
     const conditions = [];
@@ -374,54 +368,72 @@ export async function GET(req: NextRequest) {
       .limit(limit)
       .offset(offset);
 
-    // Count total matching distinct ads
-    const [countResult] = await db
-      .select({ count: sql<number>`count(distinct ${ads.id})` })
-      .from(ads)
-      .innerJoin(adObservations, eq(ads.id, adObservations.adId))
-      .leftJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
-      .where(whereClause);
+    // Count total matching distinct ads safely
+    let total = 0;
+    try {
+      const [countResult] = await db
+        .select({ count: sql<number>`count(distinct ${ads.id})` })
+        .from(ads)
+        .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+        .leftJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+        .where(whereClause);
+      total = Number(countResult?.count || 0);
+    } catch (countErr) {
+      console.warn("[Ad Feed] Count query warning:", countErr);
+      total = offset + rows.length + (rows.length === limit ? limit : 0);
+    }
 
-    const total = Number(countResult?.count || 0);
-
-    // Fetch all ads for these brands to build comprehensive product cluster metrics
+    // Fetch ads for these brands to build comprehensive product cluster metrics
     const pageIds = Array.from(new Set(rows.map((r) => r.pageId).filter(Boolean)));
     let brandAds: any[] = [];
     if (pageIds.length > 0) {
-      brandAds = await db
-        .select({
-          id: ads.id,
-          pageId: ads.pageId,
-          linkUrl: ads.linkUrl,
-          caption: ads.caption,
-          title: ads.title,
-          mediaType: ads.mediaType,
-        })
-        .from(ads)
-        .where(inArray(ads.pageId, pageIds));
+      try {
+        brandAds = await db
+          .select({
+            id: ads.id,
+            pageId: ads.pageId,
+            linkUrl: ads.linkUrl,
+            caption: ads.caption,
+            title: ads.title,
+            mediaType: ads.mediaType,
+          })
+          .from(ads)
+          .where(inArray(ads.pageId, pageIds))
+          .limit(300);
+      } catch (brandErr) {
+        console.warn("[Ad Feed] brandAds query warning:", brandErr);
+      }
     }
 
     const clusterMap = new Map<string, any>();
     if (brandAds.length > 0) {
-      const enrichedBrandAds = enrichAdsWithProductClusters(brandAds);
-      enrichedBrandAds.forEach((item) => {
-        clusterMap.set(item.id, item);
-      });
+      try {
+        const enrichedBrandAds = enrichAdsWithProductClusters(brandAds);
+        enrichedBrandAds.forEach((item) => {
+          clusterMap.set(item.id, item);
+        });
+      } catch (clusterErr) {
+        console.warn("[Ad Feed] Clustering warning:", clusterErr);
+      }
     }
 
-    // Fetch products linked to these ads in batch
+    // Fetch products linked to these ads in batch safely
     const productIds = Array.from(
       new Set(rows.map((r) => r.productId).filter((id): id is string => Boolean(id)))
     );
     const productMap = new Map<string, any>();
     if (productIds.length > 0) {
-      const fetchedProducts = await db
-        .select()
-        .from(scrapedProducts)
-        .where(inArray(scrapedProducts.id, productIds));
-      fetchedProducts.forEach((p) => {
-        productMap.set(p.id, p);
-      });
+      try {
+        const fetchedProducts = await db
+          .select()
+          .from(scrapedProducts)
+          .where(inArray(scrapedProducts.id, productIds));
+        fetchedProducts.forEach((p) => {
+          productMap.set(p.id, p);
+        });
+      } catch (prodErr) {
+        console.warn("[Ad Feed] Product fetch warning:", prodErr);
+      }
     }
 
     // Synchronous row mapping with Winner Score & Product Cluster calculations
