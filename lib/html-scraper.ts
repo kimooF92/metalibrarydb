@@ -96,7 +96,7 @@ export async function scrapeProductDirectHtml(
     const cleanUrl = res.url || url;
     const baseOrigin = new URL(cleanUrl).origin;
 
-    // 1. JSON-LD Extraction
+    // 1. JSON-LD Extraction & Custom Platform Data Extraction
     const jsonLdList = extractJsonLd(html);
     let jsonLdProduct: any = null;
 
@@ -116,12 +116,37 @@ export async function scrapeProductDirectHtml(
       }
     }
 
+    // 1b. Check Converty platform product data (<script id="productData">)
+    let convertyProduct: any = null;
+    const convertyMatch = /<script\s+id=["']productData["'][^>]*>([\s\S]*?)<\/script>/i.exec(html);
+    if (convertyMatch && convertyMatch[1]) {
+      try {
+        convertyProduct = JSON.parse(convertyMatch[1].trim());
+      } catch {}
+    }
+
+    // 1c. Check Next.js __NEXT_DATA__
+    let nextDataProduct: any = null;
+    const nextDataMatch = /<script\s+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i.exec(html);
+    if (nextDataMatch && nextDataMatch[1]) {
+      try {
+        const nextJson = JSON.parse(nextDataMatch[1].trim());
+        const pageProps = nextJson?.props?.pageProps;
+        nextDataProduct = pageProps?.product || pageProps?.initialProduct || pageProps?.item;
+      } catch {}
+    }
+
     // 2. Extract Title
     let title: string | null = null;
 
     if (jsonLdProduct?.name) {
       title = String(jsonLdProduct.name).trim();
+    } else if (convertyProduct?.name) {
+      title = String(convertyProduct.name).trim();
+    } else if (nextDataProduct?.title || nextDataProduct?.name) {
+      title = String(nextDataProduct.title || nextDataProduct.name).trim();
     }
+
     if (!title) {
       title = extractMeta(html, "og:title") || extractMeta(html, "twitter:title");
     }
@@ -159,6 +184,13 @@ export async function scrapeProductDirectHtml(
       } else if (jsonLdProduct.image.url) {
         mainImageUrl = jsonLdProduct.image.url;
       }
+    } else if (convertyProduct?.images && Array.isArray(convertyProduct.images) && convertyProduct.images.length > 0) {
+      mainImageUrl = convertyProduct.images[0]?.url || convertyProduct.images[0];
+      galleryImages.push(
+        ...convertyProduct.images.slice(1).map((img: any) => (typeof img === "string" ? img : img.url)).filter(Boolean)
+      );
+    } else if (convertyProduct?.thumbnail) {
+      mainImageUrl = convertyProduct.thumbnail;
     }
 
     if (!mainImageUrl) {
@@ -192,33 +224,66 @@ export async function scrapeProductDirectHtml(
     let originalPrice: string | null = null;
     let currency: string = "TND";
 
-    // Try JSON-LD offers
-    if (jsonLdProduct?.offers) {
+    // 4a. Check Converty platform price
+    if (convertyProduct) {
+      const pVal =
+        convertyProduct.price ??
+        convertyProduct.salePrice ??
+        convertyProduct.variants?.[0]?.price ??
+        convertyProduct.variants?.[0]?.salePrice ??
+        convertyProduct.offers?.[0]?.price;
+      
+      const compVal =
+        convertyProduct.comparePrice ??
+        convertyProduct.regularPrice ??
+        convertyProduct.compareAtPrice ??
+        convertyProduct.variants?.[0]?.comparePrice ??
+        convertyProduct.variants?.[0]?.regularPrice;
+
+      if (pVal !== undefined && pVal !== null && Number(pVal) > 0) {
+        currentPrice = `${pVal} DT`;
+      }
+      if (compVal !== undefined && compVal !== null && Number(compVal) > 0) {
+        originalPrice = `${compVal} DT`;
+      }
+    }
+
+    // 4b. Try JSON-LD offers
+    if (!currentPrice && jsonLdProduct?.offers) {
       const offers = Array.isArray(jsonLdProduct.offers) ? jsonLdProduct.offers[0] : jsonLdProduct.offers;
-      if (offers?.price) {
+      if (offers?.price && Number(offers.price) > 0) {
         const rawP = String(offers.price);
         const curr = offers.priceCurrency || "TND";
         currency = curr;
-        currentPrice = `${rawP} ${curr}`;
+        currentPrice = `${rawP} ${curr === "TND" ? "DT" : curr}`;
       }
     }
 
-    // Try meta og:price:amount or product:price:amount
+    // 4c. Try meta og:price:amount or product:price:amount
     if (!currentPrice) {
       const metaPrice = extractMeta(html, "product:price:amount") || extractMeta(html, "og:price:amount");
       const metaCurr = extractMeta(html, "product:price:currency") || extractMeta(html, "og:price:currency") || "TND";
-      if (metaPrice) {
+      if (metaPrice && Number(metaPrice) > 0) {
         currency = metaCurr;
-        currentPrice = `${metaPrice} ${metaCurr}`;
+        currentPrice = `${metaPrice} ${metaCurr === "TND" ? "DT" : metaCurr}`;
       }
     }
 
-    // Try HTML DOM regex patterns (WooCommerce, YouCan, Shopify, COD funnels)
+    // 4d. Try JSON state regex (e.g. "price":49 or "regularPrice":79 in scripts)
+    if (!currentPrice) {
+      const jsonPriceMatch = /["'](?:price|selling_price|current_price|price_amount)["']\s*:\s*(\d+(?:\.\d+)?)/i.exec(html);
+      if (jsonPriceMatch && jsonPriceMatch[1] && Number(jsonPriceMatch[1]) > 0) {
+        currentPrice = `${jsonPriceMatch[1]} DT`;
+        currency = "TND";
+      }
+    }
+
+    // 4e. Try HTML DOM regex patterns (WooCommerce, YouCan, Shopify, COD funnels)
     if (!currentPrice) {
       // 1. Tunisian price formats: e.g. "49.00 TND", "49 DT", "49,000 DT", "49 د.ت", "49.00DT"
       const tunisianPriceRegex = /(?:class|id|data-[^=]*)?["'][^"']*(?:price|current|sale|amount)[^"']*["'][^>]*>[\s\S]*?(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت|دinar|Dinar)/i;
       const tndMatch = tunisianPriceRegex.exec(html);
-      if (tndMatch && tndMatch[1]) {
+      if (tndMatch && tndMatch[1] && Number(tndMatch[1].replace(",", ".")) > 0) {
         currentPrice = `${tndMatch[1]} DT`;
         currency = "TND";
       }
@@ -227,16 +292,18 @@ export async function scrapeProductDirectHtml(
     if (!currentPrice) {
       // General price regex in page body
       const generalPriceMatch = /(\d{1,4}(?:[.,]\d{2,3})?)\s*(?:TND|DT|dt|د\.ت)/i.exec(html);
-      if (generalPriceMatch && generalPriceMatch[1]) {
+      if (generalPriceMatch && generalPriceMatch[1] && Number(generalPriceMatch[1].replace(",", ".")) > 0) {
         currentPrice = `${generalPriceMatch[1]} DT`;
         currency = "TND";
       }
     }
 
-    // Extract Crossed-out / Regular Price
-    const delPriceMatch = /<(?:del|s|span)[^>]*(?:class|id)=["'][^"']*(?:old|regular|compare|original|was)[^"']*["'][^>]*>[\s\S]*?(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت)?/i.exec(html);
-    if (delPriceMatch && delPriceMatch[1] && currentPrice && !currentPrice.startsWith(delPriceMatch[1])) {
-      originalPrice = `${delPriceMatch[1]} ${currency === "TND" ? "DT" : currency}`;
+    // Extract Crossed-out / Regular Price if not already extracted
+    if (!originalPrice) {
+      const delPriceMatch = /<(?:del|s|span)[^>]*(?:class|id)=["'][^"']*(?:old|regular|compare|original|was)[^"']*["'][^>]*>[\s\S]*?(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت)?/i.exec(html);
+      if (delPriceMatch && delPriceMatch[1] && currentPrice && !currentPrice.startsWith(delPriceMatch[1])) {
+        originalPrice = `${delPriceMatch[1]} ${currency === "TND" ? "DT" : currency}`;
+      }
     }
 
     // 5. Extract Bundle Offers

@@ -157,6 +157,7 @@ export interface ExtractedProductData {
   delivery_cost?: string;
   main_image_url?: string;
   gallery_images?: string[];
+  store_platform?: string;
   all_offers?: Array<{
     tier_name: string;
     price: string;
@@ -181,11 +182,31 @@ export async function extractProductFromUrl(url: string): Promise<{
     };
   }
 
-  const apiKey = process.env.FIRECRAWL_API_KEY;
+  // 1. Primary: High-speed Direct E-Commerce HTML & JSON-LD Scraper ($0 cost, ~250ms latency)
+  try {
+    const directResult = await scrapeProductDirectHtml(normalized);
+    if (
+      directResult.success &&
+      directResult.data &&
+      directResult.data.title &&
+      (directResult.data.current_price || directResult.data.main_image_url)
+    ) {
+      return {
+        success: true,
+        data: directResult.data,
+        raw: { html: directResult.rawHtml, engine: "direct_html" },
+      };
+    }
+    console.log(`[Product Scraper] Direct HTML incomplete for ${normalized}. Checking Firecrawl rescue fallback...`);
+  } catch (directErr: any) {
+    console.warn(`[Product Scraper] Direct scraper error for ${normalized}:`, directErr?.message);
+  }
 
-  // 1. If FIRECRAWL_API_KEY is configured, try Firecrawl LLM extraction first
+  // 2. Backup: Firecrawl Cloud AI Extraction (Only called if Direct Scraper fails/incomplete)
+  const apiKey = process.env.FIRECRAWL_API_KEY;
   if (apiKey && apiKey.trim() !== "") {
     try {
+      console.log(`[Product Scraper] Invoking Firecrawl AI rescue fallback for ${normalized}...`);
       const firecrawl = new FirecrawlApp({ apiKey: apiKey.trim() });
 
       const scrapeResponse: any = await firecrawl.scrapeUrl(normalized, {
@@ -235,29 +256,16 @@ export async function extractProductFromUrl(url: string): Promise<{
         return {
           success: true,
           data: extract,
-          raw: scrapeResponse,
+          raw: { ...scrapeResponse, engine: "firecrawl" },
         };
       }
     } catch (err: any) {
-      console.warn(`[Firecrawl] Failed, falling back to direct HTML scraper for ${normalized}:`, err?.message);
+      console.warn(`[Product Scraper] Firecrawl rescue fallback also failed for ${normalized}:`, err?.message);
     }
-  }
-
-  // 2. Direct E-Commerce HTML & JSON-LD Scraper Fallback ($0 API cost, zero external dependency)
-  console.log(`[Product Scraper] Extracting product via direct HTML scraper: ${normalized}`);
-  const fallback = await scrapeProductDirectHtml(normalized);
-
-  if (fallback.success && fallback.data) {
-    return {
-      success: true,
-      data: fallback.data,
-      raw: { html: fallback.rawHtml },
-    };
   }
 
   return {
     success: false,
-    error: fallback.error || "Failed to extract product details from landing page.",
-    raw: { html: fallback.rawHtml },
+    error: "Failed to extract product details from landing page using both direct and fallback extractors.",
   };
 }
