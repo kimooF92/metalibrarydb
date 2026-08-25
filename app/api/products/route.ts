@@ -91,6 +91,8 @@ export async function GET(req: NextRequest) {
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     // Fast Sorting Order directly on scraped_products
+    const safePriceSql = sql`COALESCE(NULLIF(SUBSTRING(REPLACE(${scrapedProducts.currentPrice}, ',', '.') FROM '([0-9]+(?:\\.[0-9]+)?)'), '')::numeric, 0)`;
+
     let orderByClauses: any[] = [];
     if (sortBy === "title") {
       orderByClauses.push(
@@ -98,13 +100,9 @@ export async function GET(req: NextRequest) {
       );
       orderByClauses.push(desc(scrapedProducts.createdAt));
     } else if (sortBy === "price_asc") {
-      orderByClauses.push(
-        asc(sql`NULLIF(REGEXP_REPLACE(${scrapedProducts.currentPrice}, '[^0-9.]', '', 'g'), '')::numeric`)
-      );
+      orderByClauses.push(asc(safePriceSql));
     } else if (sortBy === "price_desc") {
-      orderByClauses.push(
-        desc(sql`NULLIF(REGEXP_REPLACE(${scrapedProducts.currentPrice}, '[^0-9.]', '', 'g'), '')::numeric`)
-      );
+      orderByClauses.push(desc(safePriceSql));
     } else {
       // Default: latest discovery
       orderByClauses.push(
