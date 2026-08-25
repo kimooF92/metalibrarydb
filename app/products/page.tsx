@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ScrapedProduct } from "@/types";
@@ -32,6 +32,8 @@ import {
   SlidersHorizontal,
   Star,
   Building2,
+  ArrowUp,
+  Loader2,
 } from "lucide-react";
 
 type SmartPreset = "all" | "most_scaled" | "new_discovered" | "top_lasting" | "with_offers" | "favorites";
@@ -41,6 +43,7 @@ export default function ProductsPage() {
   const { showToast } = useToast();
   const [products, setProducts] = useState<ScrapedProduct[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Smart preset tab & view mode
@@ -60,6 +63,12 @@ export default function ProductsPage() {
     total: 0,
     totalPages: 1,
   });
+
+  // Hybrid auto-scroll tracking
+  const [autoLoadCount, setAutoLoadCount] = useState(0);
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   const [stats, setStats] = useState({
     totalProducts: 0,
@@ -94,45 +103,128 @@ export default function ProductsPage() {
     }
   }, []);
 
-  const fetchProducts = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const query = new URLSearchParams({
-        page: page.toString(),
-        limit: "24",
-        sortBy,
-        smartPreset,
-      });
-
-      if (search.trim()) query.set("search", search.trim());
-      if (brandFilter.trim()) query.set("brand", brandFilter.trim());
-      if (platform !== "all") query.set("platform", platform);
-      if (statusFilter !== "all") query.set("status", statusFilter);
-
-      const res = await fetch(`/api/products?${query.toString()}`);
-      if (!res.ok) {
-        throw new Error(`Failed to load products (${res.status})`);
-      }
-
-      const data = await res.json();
-      if (data.success) {
-        setProducts(data.products || []);
-        if (data.pagination) setPagination(data.pagination);
-        if (data.stats) setStats(data.stats);
+  // Back to top scroll listener
+  useEffect(() => {
+    const handleScroll = () => {
+      if (containerRef.current) {
+        setShowBackToTop(containerRef.current.scrollTop > 350);
       } else {
-        throw new Error(data.error || "Unknown error");
+        setShowBackToTop(window.scrollY > 350);
       }
-    } catch (err: any) {
-      setError(err.message || "Failed to load products");
-    } finally {
-      setLoading(false);
-    }
-  }, [page, sortBy, smartPreset, search, brandFilter, platform, statusFilter]);
+    };
+
+    const target = containerRef.current || window;
+    target.addEventListener("scroll", handleScroll, { passive: true });
+    return () => target.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const fetchProducts = useCallback(
+    async (targetPage = 1, isManualRefresh = false) => {
+      if (targetPage === 1) {
+        setLoading(true);
+        setIsFetchingMore(false);
+      } else {
+        setIsFetchingMore(true);
+      }
+      setError(null);
+
+      try {
+        const query = new URLSearchParams({
+          page: targetPage.toString(),
+          limit: "24",
+          sortBy,
+          smartPreset,
+          _t: Date.now().toString(),
+        });
+
+        if (search.trim()) query.set("search", search.trim());
+        if (brandFilter.trim()) query.set("brand", brandFilter.trim());
+        if (platform !== "all") query.set("platform", platform);
+        if (statusFilter !== "all") query.set("status", statusFilter);
+
+        const res = await fetch(`/api/products?${query.toString()}`);
+        if (!res.ok) {
+          throw new Error(`Failed to load products (${res.status})`);
+        }
+
+        const data = await res.json();
+        if (data.success) {
+          const newItems: ScrapedProduct[] = data.products || [];
+          if (targetPage > 1 && !isManualRefresh) {
+            setProducts((prev) => {
+              const existingIds = new Set(prev.map((p) => p.id));
+              const filtered = newItems.filter((p) => !existingIds.has(p.id));
+              return [...prev, ...filtered];
+            });
+          } else {
+            setProducts(newItems);
+          }
+          if (data.pagination) setPagination(data.pagination);
+          if (data.stats) setStats(data.stats);
+        } else {
+          throw new Error(data.error || "Unknown error");
+        }
+      } catch (err: any) {
+        setError(err.message || "Failed to load products");
+      } finally {
+        setLoading(false);
+        setIsFetchingMore(false);
+      }
+    },
+    [sortBy, smartPreset, search, brandFilter, platform, statusFilter]
+  );
+
+  // Trigger initial fetch or reset on filter changes
+  useEffect(() => {
+    setPage(1);
+    setAutoLoadCount(0);
+    fetchProducts(1, false);
+  }, [fetchProducts]);
+
+  // Infinite scroll IntersectionObserver (Hybrid auto-scroll up to 3 batches)
+  const hasMore = page < pagination.totalPages;
+  const isAutoScrollPaused = autoLoadCount >= 3;
 
   useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
+    if (!sentinelRef.current || loading || isFetchingMore || !hasMore || isAutoScrollPaused) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isFetchingMore && !loading) {
+          setAutoLoadCount((prev) => prev + 1);
+          setPage((prevPage) => {
+            const nextPage = prevPage + 1;
+            fetchProducts(nextPage, false);
+            return nextPage;
+          });
+        }
+      },
+      { rootMargin: "300px 0px" }
+    );
+
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [hasMore, isFetchingMore, loading, isAutoScrollPaused, fetchProducts]);
+
+  const handleManualLoadMore = () => {
+    if (isFetchingMore || !hasMore) return;
+    setAutoLoadCount(0); // Reset consecutive auto-load pause threshold
+    setPage((prevPage) => {
+      const nextPage = prevPage + 1;
+      fetchProducts(nextPage, false);
+      return nextPage;
+    });
+  };
+
+  const scrollToTop = () => {
+    if (containerRef.current) {
+      containerRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
 
   const handleToggleFavorite = async (productId: string, nextFavorite: boolean) => {
     setProducts((prev) =>
@@ -270,10 +362,18 @@ export default function ProductsPage() {
     setSmartPreset("all");
     setSortBy("latest");
     setPage(1);
+    setAutoLoadCount(0);
   };
 
+  const progressPercent =
+    pagination.total > 0 ? Math.min(100, Math.round((products.length / pagination.total) * 100)) : 0;
+  const remainingCount = Math.max(0, pagination.total - products.length);
+
   return (
-    <div className="h-full flex flex-col space-y-4 overflow-y-auto p-4 sm:p-6">
+    <div
+      ref={containerRef}
+      className="relative h-full flex flex-col space-y-4 overflow-y-auto p-4 sm:p-6"
+    >
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800/60">
         <div>
@@ -300,7 +400,7 @@ export default function ProductsPage() {
           </Link>
 
           <button
-            onClick={() => fetchProducts()}
+            onClick={() => fetchProducts(1, true)}
             disabled={loading}
             title="Refresh product intelligence catalog"
             className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 transition-all cursor-pointer shadow-xs"
@@ -558,7 +658,7 @@ export default function ProductsPage() {
                   setBrandFilter("");
                   setPage(1);
                 }}
-                className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 p-0.5"
+                className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -668,7 +768,7 @@ export default function ProductsPage() {
         <div className="py-16 text-center bg-white dark:bg-slate-900/40 rounded-xl border border-red-500/20 p-6">
           <p className="text-sm font-semibold text-red-500 mb-3">{error}</p>
           <button
-            onClick={() => fetchProducts()}
+            onClick={() => fetchProducts(1, true)}
             className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 rounded-lg cursor-pointer"
           >
             Retry
@@ -747,33 +847,85 @@ export default function ProductsPage() {
             </div>
           )}
 
-          {/* Pagination */}
-          {pagination.totalPages > 1 && (
-            <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
-              <span className="text-xs text-slate-600 dark:text-slate-400">
-                Showing page <span className="font-bold text-slate-900 dark:text-slate-100">{pagination.page}</span> of{" "}
-                <span className="font-bold text-slate-900 dark:text-slate-100">{pagination.totalPages}</span> ({pagination.total} products)
-              </span>
+          {/* Sentinel element for infinite scroll auto-trigger */}
+          <div ref={sentinelRef} className="h-4 w-full" />
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                  className="p-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+          {/* Skeletons while fetching more items */}
+          {isFetchingMore && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 pt-2">
+              {[...Array(4)].map((_, i) => (
+                <div
+                  key={`skeleton-${i}`}
+                  className="aspect-[3/4] bg-white dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-800 animate-pulse p-4 flex flex-col justify-between"
                 >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
-                  disabled={page >= pagination.totalPages}
-                  className="p-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
+                  <div className="aspect-square bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                  <div className="space-y-2 mt-4">
+                    <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-3/4" />
+                    <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-1/2" />
+                  </div>
+                </div>
+              ))}
             </div>
           )}
+
+          {/* Bottom Discovery Bar with Visual Progress & Hybrid Load More */}
+          <div className="flex flex-col items-center justify-center pt-8 pb-12 space-y-3">
+            {/* Visual Progress Counter */}
+            <div className="w-full max-w-xs flex flex-col items-center space-y-1.5">
+              <div className="flex items-center justify-between w-full text-xs font-semibold text-slate-500 dark:text-slate-400">
+                <span>
+                  Showing <strong className="text-slate-900 dark:text-white font-bold">{products.length}</strong> of{" "}
+                  <strong className="text-slate-900 dark:text-white font-bold">{pagination.total}</strong> products
+                </span>
+                <span className="font-bold text-indigo-600 dark:text-indigo-400">{progressPercent}%</span>
+              </div>
+              {/* Progress Track */}
+              <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full transition-all duration-300"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Hybrid "Load More" Action Button if paused or if user prefers clicking */}
+            {hasMore ? (
+              <button
+                onClick={handleManualLoadMore}
+                disabled={isFetchingMore}
+                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 font-bold text-xs shadow-sm hover:shadow-md transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isFetchingMore ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                    <span>Loading products...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Load More Products ({Math.min(24, remainingCount)} more)</span>
+                    <span className="text-[10px] text-slate-400 font-normal">({remainingCount} remaining)</span>
+                  </>
+                )}
+              </button>
+            ) : products.length > 0 ? (
+              <div className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] font-semibold text-slate-500">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                <span>You&apos;ve viewed all {pagination.total} products</span>
+              </div>
+            ) : null}
+          </div>
         </>
+      )}
+
+      {/* Floating Back to Top Button */}
+      {showBackToTop && (
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-6 right-6 z-40 p-3 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg hover:shadow-indigo-500/30 transition-all duration-200 animate-in fade-in zoom-in cursor-pointer"
+          title="Scroll Back to Top"
+        >
+          <ArrowUp className="w-4 h-4" />
+        </button>
       )}
 
       {/* Details & Competitor Benchmark Modal */}
