@@ -28,11 +28,14 @@ export async function DELETE(
     // 2. Delete associated ads and scraped products for this brand
     if (pageId && pageId !== "0" && !pageId.startsWith("pending-")) {
       await Promise.allSettled([
-        db.delete(ads).where(eq(ads.pageId, pageId)),
+        db.delete(ads).where(or(eq(ads.pageId, pageId), eq(ads.pageId, id))),
         db.delete(scrapedProducts).where(or(eq(scrapedProducts.pageId, pageId), eq(scrapedProducts.pageId, id))),
       ]);
     } else {
-      await db.delete(scrapedProducts).where(eq(scrapedProducts.pageId, id));
+      await Promise.allSettled([
+        db.delete(ads).where(eq(ads.pageId, id)),
+        db.delete(scrapedProducts).where(eq(scrapedProducts.pageId, id)),
+      ]);
     }
 
     // 3. Delete tracked page record (cascades to scan_history, creative_scans, ad_observations)
