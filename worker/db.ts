@@ -749,6 +749,21 @@ export async function markCreativeJobCompleted(
       finishedAt: now,
     })
     .where(eq(queue.id, queueId));
+
+  const creativeScan = await db.query.creativeScans.findFirst({
+    where: eq(creativeScans.id, creativeScanId),
+  });
+  if (creativeScan?.trackedPageId) {
+    await db
+      .update(trackedPages)
+      .set({
+        status: "success",
+        lastCreativeScan: now,
+        lastSuccessAt: now,
+        updatedAt: now,
+      })
+      .where(eq(trackedPages.id, creativeScan.trackedPageId));
+  }
 }
 
 export async function markJobFailed(
