@@ -147,6 +147,10 @@ export const scrapedProducts = pgTable(
     index("idx_scraped_products_status").on(table.scrapeStatus),
     index("idx_scraped_products_store_platform").on(table.storePlatform),
     index("idx_scraped_products_created_at").on(table.createdAt.desc()),
+    index("idx_scraped_products_status_created_at").on(
+      table.scrapeStatus,
+      table.createdAt.desc()
+    ),
   ]
 );
 
@@ -186,6 +190,7 @@ export const ads = pgTable(
     index("idx_ads_media_type").on(table.mediaType),
     index("idx_ads_is_archived").on(table.isArchived),
     index("idx_ads_product_id").on(table.productId),
+    index("idx_ads_product_id_archived").on(table.productId, table.isArchived),
     index("idx_ads_media_hash").on(table.mediaHash),
     index("idx_ads_perceptual_hash").on(table.perceptualHash),
     index("idx_ads_creative_cluster_id").on(table.creativeClusterId),

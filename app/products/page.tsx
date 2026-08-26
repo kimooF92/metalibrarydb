@@ -75,8 +75,8 @@ export default function ProductsPage() {
   const [showBackToTop, setShowBackToTop] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const initialStatsLoadedRef = useRef<boolean>(false);
 
+  const [statsLoading, setStatsLoading] = useState(true);
   const [stats, setStats] = useState({
     totalProducts: 0,
     successfulProducts: 0,
@@ -96,6 +96,28 @@ export default function ProductsPage() {
   // Modal state
   const [selectedProduct, setSelectedProduct] = useState<ScrapedProduct | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Async stats fetcher (cached on backend, does not block product feed)
+  const fetchStats = useCallback(async (forceRefresh = false) => {
+    try {
+      const res = await fetch(`/api/products/stats${forceRefresh ? "?refresh=true" : ""}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.stats) {
+          setStats(data.stats);
+        }
+      }
+    } catch (err) {
+      console.warn("[Products Page] Stats fetch error:", err);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, []);
+
+  // Fetch stats once on initial mount
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
 
   // Debounce search input (350ms) to prevent keystroke request storms
   useEffect(() => {
@@ -134,7 +156,7 @@ export default function ProductsPage() {
   }, []);
 
   const fetchProducts = useCallback(
-    async (targetPage = 1, append = false, includeStats = false) => {
+    async (targetPage = 1, append = false) => {
       // Abort any in-flight requests to eliminate connection-pool pileups
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -164,7 +186,6 @@ export default function ProductsPage() {
         if (categoryFilter !== "all") query.set("category", categoryFilter);
         if (statusFilter !== "all") query.set("status", statusFilter);
         if (hideInactive) query.set("hideInactive", "true");
-        if (includeStats) query.set("includeStats", "true");
 
         const res = await fetch(`/api/products?${query.toString()}`, {
           signal: currentController.signal,
@@ -186,7 +207,6 @@ export default function ProductsPage() {
             setProducts(newItems);
           }
           if (data.pagination) setPagination(data.pagination);
-          if (data.stats) setStats(data.stats);
         } else {
           throw new Error(data.error || "Unknown error");
         }
@@ -208,15 +228,11 @@ export default function ProductsPage() {
     [sortBy, smartPreset, debouncedSearch, debouncedBrand, platform, categoryFilter, statusFilter, hideInactive]
   );
 
-  // Trigger initial fetch on filter/sort change (only fetch heavy global stats on first mount)
+  // Trigger fetch on filter/sort change
   useEffect(() => {
     setPage(1);
     setAutoLoadCount(0);
-    const needStats = !initialStatsLoadedRef.current;
-    if (needStats) {
-      initialStatsLoadedRef.current = true;
-    }
-    fetchProducts(1, false, needStats);
+    fetchProducts(1, false);
   }, [fetchProducts]);
 
   // Load next page function
@@ -524,12 +540,15 @@ export default function ProductsPage() {
           </Link>
 
           <button
-            onClick={() => fetchProducts(1, false, true)}
-            disabled={loading}
+            onClick={() => {
+              fetchProducts(1, false);
+              fetchStats(true);
+            }}
+            disabled={loading && statsLoading}
             title="Refresh product intelligence catalog"
             className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 transition-all cursor-pointer shadow-xs"
           >
-            <RotateCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-indigo-500" : ""}`} />
+            <RotateCw className={`w-3.5 h-3.5 ${(loading || statsLoading) ? "animate-spin text-indigo-500" : ""}`} />
             <span>Refresh</span>
           </button>
         </div>
@@ -543,7 +562,7 @@ export default function ProductsPage() {
             <span>Total Products</span>
             <ShoppingBag className="w-4 h-4 text-indigo-500" />
           </div>
-          <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+          <p className={`text-2xl font-black text-slate-900 dark:text-white mt-1 ${statsLoading ? "animate-pulse opacity-60" : ""}`}>
             {stats.totalProducts}
           </p>
           <span className="text-[11px] text-slate-500 font-medium">
@@ -563,7 +582,7 @@ export default function ProductsPage() {
             <span>⭐ Starred Favorites</span>
             <Star className="w-4 h-4 text-amber-500 fill-amber-500/20" />
           </div>
-          <p className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">
+          <p className={`text-2xl font-black text-amber-600 dark:text-amber-400 mt-1 ${statsLoading ? "animate-pulse opacity-60" : ""}`}>
             {stats.favoritesCount}
           </p>
           <span className="text-[11px] text-slate-500 font-medium">
@@ -577,7 +596,7 @@ export default function ProductsPage() {
             <span>Fresh Drops (7d)</span>
             <Zap className="w-4 h-4 text-emerald-500" />
           </div>
-          <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+          <p className={`text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1 ${statsLoading ? "animate-pulse opacity-60" : ""}`}>
             {stats.newThisWeekCount}
           </p>
           <span className="text-[11px] text-slate-500 font-medium">
@@ -605,7 +624,7 @@ export default function ProductsPage() {
             <span>Offers & Bundles</span>
             <Tag className="w-4 h-4 text-blue-500" />
           </div>
-          <p className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-1">
+          <p className={`text-2xl font-black text-blue-600 dark:text-blue-400 mt-1 ${statsLoading ? "animate-pulse opacity-60" : ""}`}>
             {stats.withOffersCount}
           </p>
           <span className="text-[11px] text-slate-500 font-medium">

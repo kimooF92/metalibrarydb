@@ -41,17 +41,17 @@ export async function GET(req: NextRequest) {
     // Filter by Active / Inactive (Off-Air) Ads status
     if (activeStatus === "active" || hideInactive) {
       conditions.push(
-        sql`${scrapedProducts.id} IN (
-          SELECT ${ads.productId} FROM ${ads}
-          WHERE ${ads.productId} IS NOT NULL
+        sql`EXISTS (
+          SELECT 1 FROM ${ads}
+          WHERE ${ads.productId} = ${scrapedProducts.id}
           AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
         )`
       );
     } else if (activeStatus === "inactive") {
       conditions.push(
-        sql`${scrapedProducts.id} NOT IN (
-          SELECT ${ads.productId} FROM ${ads}
-          WHERE ${ads.productId} IS NOT NULL
+        sql`NOT EXISTS (
+          SELECT 1 FROM ${ads}
+          WHERE ${ads.productId} = ${scrapedProducts.id}
           AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
         )`
       );
@@ -163,8 +163,8 @@ export async function GET(req: NextRequest) {
     }
     orderByClauses.push(desc(scrapedProducts.id));
 
-    // Execute fast primary queries in parallel (excluding heavy rawExtract to reduce network transfer by 85%)
-    const [rawProducts, totalCountResult, statsResult] = await Promise.all([
+    // Execute fast primary queries in parallel (lean, indexed product select + count)
+    const [rawProducts, totalCountResult] = await Promise.all([
       db
         .select({
           id: scrapedProducts.id,
@@ -203,45 +203,6 @@ export async function GET(req: NextRequest) {
         .select({ count: count() })
         .from(scrapedProducts)
         .where(whereClause),
-      // Fast KPI summary metrics across products (only executed on initial mount or manual refresh)
-      includeStats
-        ? Promise.all([
-            db
-              .select({
-                total: count(),
-                withOffers: sql<number>`COUNT(CASE WHEN ${scrapedProducts.discountOrOffer} IS NOT NULL AND ${scrapedProducts.discountOrOffer} != '' THEN 1 END)`.mapWith(Number),
-                favoritesCount: sql<number>`COUNT(CASE WHEN ${scrapedProducts.isFavorite} = true THEN 1 END)`.mapWith(Number),
-                successful: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} = 'success' THEN 1 END)`.mapWith(Number),
-                pending: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} NOT IN ('success', 'deleted', 'ignored') OR ${scrapedProducts.currentPrice} IS NULL THEN 1 END)`.mapWith(Number),
-                newThisWeek: sql<number>`COUNT(CASE WHEN ${scrapedProducts.createdAt} >= NOW() - INTERVAL '7 days' THEN 1 END)`.mapWith(Number),
-                shopifyCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%shopify%' THEN 1 END)`.mapWith(Number),
-                youcanCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%youcan%' THEN 1 END)`.mapWith(Number),
-                woocommerceCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%woocommerce%' THEN 1 END)`.mapWith(Number),
-              })
-              .from(scrapedProducts)
-              .where(sql`${scrapedProducts.scrapeStatus} NOT IN ('deleted', 'ignored')`),
-            db
-              .select({
-                activeDistinctCount: sql<number>`COUNT(DISTINCT ${ads.productId})`.mapWith(Number),
-              })
-              .from(ads)
-              .where(
-                sql`${ads.productId} IS NOT NULL AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)`
-              ),
-          ]).then(([productStatsRows, activeAdsStatsRows]) => {
-            const baseStats = productStatsRows[0] || ({} as any);
-            const activeCount = Number(activeAdsStatsRows[0]?.activeDistinctCount) || 0;
-            const total = Number(baseStats.total) || 0;
-            const inactiveCount = Math.max(0, total - activeCount);
-            return [
-              {
-                ...baseStats,
-                activeCount,
-                inactiveCount,
-              },
-            ];
-          })
-        : Promise.resolve([]),
     ]);
 
     // Batch query linked ad metrics for this page's products in 1 query
@@ -307,8 +268,6 @@ export async function GET(req: NextRequest) {
     const total = totalCountResult[0]?.count || 0;
     const totalPages = Math.ceil(total / limit);
 
-    const statsObj = statsResult && statsResult.length > 0 ? statsResult[0] : null;
-
     return NextResponse.json({
       success: true,
       products,
@@ -318,21 +277,6 @@ export async function GET(req: NextRequest) {
         total,
         totalPages,
       },
-      stats: statsObj
-        ? {
-            totalProducts: statsObj.total || 0,
-            successfulProducts: statsObj.successful || 0,
-            pendingProducts: statsObj.pending || 0,
-            withOffersCount: statsObj.withOffers || 0,
-            favoritesCount: statsObj.favoritesCount || 0,
-            newThisWeekCount: statsObj.newThisWeek || 0,
-            platforms: {
-              shopify: statsObj.shopifyCount || 0,
-              youcan: statsObj.youcanCount || 0,
-              woocommerce: statsObj.woocommerceCount || 0,
-            },
-          }
-        : undefined,
     });
   } catch (err: any) {
     console.error("[Products API Error]:", err);
