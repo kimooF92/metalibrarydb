@@ -23,6 +23,8 @@ export async function GET(req: NextRequest) {
     const hasOffer = searchParams.get("hasOffer") === "true";
     const isFavoriteOnly = searchParams.get("isFavorite") === "true";
     const status = searchParams.get("status") || "all";
+    const hideInactive = searchParams.get("hideInactive") === "true";
+    const activeStatus = searchParams.get("activeStatus") || (hideInactive ? "active" : "all");
     const smartPreset = searchParams.get("smartPreset") || "all";
     const sortBy = searchParams.get("sortBy") || "latest";
     const sortOrder = searchParams.get("sortOrder") || "desc";
@@ -33,6 +35,25 @@ export async function GET(req: NextRequest) {
     const offset = (page - 1) * limit;
 
     const conditions = [];
+
+    // Filter by Active / Inactive (Off-Air) Ads status
+    if (activeStatus === "active" || hideInactive) {
+      conditions.push(
+        sql`EXISTS (
+          SELECT 1 FROM ${ads}
+          WHERE ${ads.productId} = ${scrapedProducts.id}
+          AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
+        )`
+      );
+    } else if (activeStatus === "inactive") {
+      conditions.push(
+        sql`NOT EXISTS (
+          SELECT 1 FROM ${ads}
+          WHERE ${ads.productId} = ${scrapedProducts.id}
+          AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
+        )`
+      );
+    }
 
     // Filter by scrape status (success, pending, failed)
     if (status && status !== "all") {
@@ -190,6 +211,16 @@ export async function GET(req: NextRequest) {
               successful: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} = 'success' THEN 1 END)`.mapWith(Number),
               pending: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} != 'success' OR ${scrapedProducts.currentPrice} IS NULL THEN 1 END)`.mapWith(Number),
               newThisWeek: sql<number>`COUNT(CASE WHEN ${scrapedProducts.createdAt} >= NOW() - INTERVAL '7 days' THEN 1 END)`.mapWith(Number),
+              activeCount: sql<number>`COUNT(CASE WHEN EXISTS (
+                SELECT 1 FROM ${ads}
+                WHERE ${ads.productId} = ${scrapedProducts.id}
+                AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
+              ) THEN 1 END)`.mapWith(Number),
+              inactiveCount: sql<number>`COUNT(CASE WHEN NOT EXISTS (
+                SELECT 1 FROM ${ads}
+                WHERE ${ads.productId} = ${scrapedProducts.id}
+                AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
+              ) THEN 1 END)`.mapWith(Number),
               shopifyCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%shopify%' THEN 1 END)`.mapWith(Number),
               youcanCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%youcan%' THEN 1 END)`.mapWith(Number),
               woocommerceCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%woocommerce%' THEN 1 END)`.mapWith(Number),

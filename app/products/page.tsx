@@ -21,6 +21,7 @@ import {
   ChevronRight,
   TrendingUp,
   Eye,
+  EyeOff,
   X,
   Flame,
   Clock,
@@ -59,6 +60,7 @@ export default function ProductsPage() {
   const [platform, setPlatform] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [hideInactive, setHideInactive] = useState(false);
   const [sortBy, setSortBy] = useState<string>("latest");
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({
@@ -82,6 +84,8 @@ export default function ProductsPage() {
     withOffersCount: 0,
     favoritesCount: 0,
     newThisWeekCount: 0,
+    activeCount: 0,
+    inactiveCount: 0,
     platforms: {
       shopify: 0,
       youcan: 0,
@@ -109,7 +113,7 @@ export default function ProductsPage() {
     return () => clearTimeout(timer);
   }, [brandInput]);
 
-  // Read URL query params on mount (e.g. ?brand=... or ?preset=favorites)
+  // Read URL query params on mount (e.g. ?brand=... or ?preset=favorites or ?hideInactive=true)
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -121,6 +125,10 @@ export default function ProductsPage() {
       const presetParam = params.get("preset");
       if (presetParam === "favorites") {
         setSmartPreset("favorites");
+      }
+      const hideInactiveParam = params.get("hideInactive");
+      if (hideInactiveParam === "true") {
+        setHideInactive(true);
       }
     }
   }, []);
@@ -155,6 +163,7 @@ export default function ProductsPage() {
         if (platform !== "all") query.set("platform", platform);
         if (categoryFilter !== "all") query.set("category", categoryFilter);
         if (statusFilter !== "all") query.set("status", statusFilter);
+        if (hideInactive) query.set("hideInactive", "true");
         if (includeStats) query.set("includeStats", "true");
 
         const res = await fetch(`/api/products?${query.toString()}`, {
@@ -196,7 +205,7 @@ export default function ProductsPage() {
         }
       }
     },
-    [sortBy, smartPreset, debouncedSearch, debouncedBrand, platform, categoryFilter, statusFilter]
+    [sortBy, smartPreset, debouncedSearch, debouncedBrand, platform, categoryFilter, statusFilter, hideInactive]
   );
 
   // Trigger initial fetch on filter/sort change (only fetch heavy global stats on first mount)
@@ -449,6 +458,7 @@ export default function ProductsPage() {
     setStatusFilter("all");
     setSmartPreset("all");
     setSortBy("latest");
+    setHideInactive(false);
     setPage(1);
     setAutoLoadCount(0);
   };
@@ -821,6 +831,47 @@ export default function ProductsPage() {
             <option value="title">🔤 Title (A-Z)</option>
           </select>
 
+          {/* Active / Inactive (Off-Air) Toggle Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setHideInactive((prev) => !prev);
+              setPage(1);
+            }}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border cursor-pointer select-none ${
+              hideInactive
+                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 shadow-xs"
+                : "bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-slate-900 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
+            }`}
+            title={
+              hideInactive
+                ? "Currently hiding inactive (off-air) products. Click to include all products."
+                : "Currently showing all products including off-air. Click to hide inactive products."
+            }
+          >
+            {hideInactive ? (
+              <>
+                <EyeOff className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <span>Active Only</span>
+                {stats.inactiveCount > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold">
+                    -{stats.inactiveCount}
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                <Eye className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <span>Include Inactive</span>
+                {stats.inactiveCount > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold">
+                    {stats.inactiveCount} off-air
+                  </span>
+                )}
+              </>
+            )}
+          </button>
+
           {/* Grid / List View Toggle */}
           <div className="flex items-center bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800">
             <button
@@ -846,7 +897,7 @@ export default function ProductsPage() {
           </div>
 
           {/* Reset Filters */}
-          {(searchInput !== "" || brandInput !== "" || platform !== "all" || statusFilter !== "all" || smartPreset !== "all" || sortBy !== "latest") && (
+          {(searchInput !== "" || brandInput !== "" || platform !== "all" || statusFilter !== "all" || smartPreset !== "all" || sortBy !== "latest" || hideInactive) && (
             <button
               onClick={handleResetFilters}
               className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
