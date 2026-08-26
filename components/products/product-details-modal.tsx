@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react";
 import NextImage from "next/image";
 import { ScrapedProduct, Ad } from "@/types";
-import { CompetitorBenchmarkSummary } from "@/lib/product-matcher";
 import { useToast } from "@/components/toast-context";
 import {
   X,
@@ -21,7 +20,6 @@ import {
   Eye,
   Play,
   Image as ImageIcon,
-  Swords,
   Globe,
   TrendingUp,
   Percent,
@@ -59,8 +57,6 @@ export function ProductDetailsModal({
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [linkedAds, setLinkedAds] = useState<Ad[]>([]);
   const [loadingAds, setLoadingAds] = useState(false);
-  const [benchmark, setBenchmark] = useState<CompetitorBenchmarkSummary | null>(null);
-  const [loadingBenchmark, setLoadingBenchmark] = useState(false);
   const [network, setNetwork] = useState<any>(null);
   const [loadingNetwork, setLoadingNetwork] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -82,7 +78,6 @@ export function ProductDetailsModal({
     if (product) {
       setSelectedImage(product.mainImageUrl || null);
       fetchLinkedAds(product.id);
-      fetchCompetitorBenchmark(product.id);
       fetchNetworkIntelligence(product.id);
     }
   }, [product]);
@@ -101,23 +96,6 @@ export function ProductDetailsModal({
       console.error("Failed to fetch linked ads:", err);
     } finally {
       setLoadingAds(false);
-    }
-  }
-
-  async function fetchCompetitorBenchmark(productId: string) {
-    setLoadingBenchmark(true);
-    try {
-      const res = await fetch(`/api/products/competitors?productId=${productId}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.benchmark) {
-          setBenchmark(data.benchmark);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to fetch competitor benchmark:", err);
-    } finally {
-      setLoadingBenchmark(false);
     }
   }
 
@@ -172,11 +150,6 @@ export function ProductDetailsModal({
             .join("\n\n")
         : "No active ad copies tracked.";
 
-    const competitorBenchmarkText =
-      benchmark && benchmark.matches.length > 0
-        ? `Lowest Price: ${benchmark.currency}${benchmark.minPrice} | Highest Price: ${benchmark.currency}${benchmark.maxPrice} | Average Price: ${benchmark.currency}${benchmark.avgPrice} across ${benchmark.uniqueDomainsCount} competitor stores.`
-        : "Single store tracked.";
-
     return `# Product Brief for AI Copywriting & Store Listing
 
 ## Product Details:
@@ -190,9 +163,6 @@ export function ProductDetailsModal({
 
 ## Multi-Tier Offers & Bundles:
 ${offersText}
-
-## Competitor Pricing Benchmark:
-${competitorBenchmarkText}
 
 ## Product Images (High-Resolution):
 ${imagesText}
@@ -622,136 +592,6 @@ ${imagesText}`;
                 )}
               </div>
             </div>
-          </div>
-
-          {/* Competitor Market Intelligence Section */}
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Swords className="w-4 h-4 text-amber-500" />
-                <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                  Competitor Market Intelligence
-                </h4>
-                {benchmark && benchmark.matches.length > 0 && (
-                  <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-bold border border-amber-500/20">
-                    {benchmark.uniqueDomainsCount} Stores Selling
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {loadingBenchmark ? (
-              <div className="py-6 text-center text-xs text-slate-400">
-                Analyzing competitor landing pages...
-              </div>
-            ) : benchmark && benchmark.matches.length > 0 ? (
-              <div className="space-y-3">
-                {/* Market Benchmark Stats Bar */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-xl bg-gradient-to-r from-amber-500/5 via-indigo-500/5 to-purple-500/5 border border-amber-500/20">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">
-                      Lowest Price
-                    </span>
-                    <p className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
-                      {benchmark.currency} {benchmark.minPrice}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">
-                      Highest Price
-                    </span>
-                    <p className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
-                      {benchmark.currency} {benchmark.maxPrice}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">
-                      Average Price
-                    </span>
-                    <p className="text-sm font-extrabold text-indigo-600 dark:text-indigo-400">
-                      {benchmark.currency} {benchmark.avgPrice}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">
-                      Total Market Ads
-                    </span>
-                    <p className="text-sm font-extrabold text-purple-600 dark:text-purple-400">
-                      {benchmark.totalCrossBrandAds} Active Ads
-                    </p>
-                  </div>
-                </div>
-
-                {/* Competitor Stores List */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {benchmark.matches.map((comp) => (
-                    <div
-                      key={comp.product.id}
-                      className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 flex items-start justify-between gap-3 hover:border-amber-500/50 transition-all"
-                    >
-                      <div className="flex items-start gap-2.5 min-w-0">
-                        <div className="relative w-10 h-10 rounded-lg bg-slate-200 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
-                          {comp.product.mainImageUrl ? (
-                            <NextImage
-                              src={comp.product.mainImageUrl}
-                              alt="Competitor product"
-                              fill
-                              unoptimized
-                              referrerPolicy="no-referrer"
-                              className="object-cover"
-                            />
-                          ) : (
-                            <ShoppingBag className="w-4 h-4 text-slate-400" />
-                          )}
-                        </div>
-
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <Globe className="w-3 h-3 text-slate-400 shrink-0" />
-                            <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
-                              {comp.product.domain || "Competitor Store"}
-                            </span>
-                            <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.2 rounded shrink-0">
-                              {Math.round(comp.similarityScore * 100)}% Match
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-2 mt-1 text-[11px]">
-                            <span className="font-extrabold text-emerald-600 dark:text-emerald-400">
-                              {comp.product.currentPrice || "N/A"}
-                            </span>
-                            {comp.product.discountOrOffer && (
-                              <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[120px]">
-                                • {comp.product.discountOrOffer}
-                              </span>
-                            )}
-                          </div>
-
-                          <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                            {comp.linkedAdsCount} active Meta ad{comp.linkedAdsCount === 1 ? "" : "s"}
-                          </p>
-                        </div>
-                      </div>
-
-                      <a
-                        href={comp.product.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200/60 dark:border-indigo-800/60 rounded-lg shrink-0 transition-all"
-                        title="View Competitor Landing Page"
-                      >
-                        <span>Visit</span>
-                        <ExternalLink className="w-2.5 h-2.5" />
-                      </a>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="py-4 px-3 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between">
-                <span>🛡️ Single Store Tracked — No other competitor stores currently tracked selling this exact item.</span>
-              </div>
-            )}
           </div>
 
           {/* Tunisian Advertiser & Shadow Network Intelligence Section */}
