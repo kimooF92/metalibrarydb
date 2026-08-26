@@ -1,6 +1,6 @@
 import FirecrawlApp from "@mendable/firecrawl-js";
 import { resolveDestinationUrl } from "./utils";
-import { scrapeProductDirectHtml } from "./html-scraper";
+import { scrapeProductDirectHtml, parseProductHtmlContent } from "./html-scraper";
 
 /**
  * Normalizes a URL for deduplication:
@@ -252,9 +252,10 @@ export async function extractProductFromUrl(url: string): Promise<{
             prompt:
               "Extract the main product title, current selling price, original/crossed-out price, discount/offer summary, main product photo URL, and any quantity/bundle discount tiers.",
           },
+          "markdown",
           "html",
         ],
-        waitFor: 2000,
+        waitFor: 3000,
       });
 
       const rawData =
@@ -263,11 +264,11 @@ export async function extractProductFromUrl(url: string): Promise<{
         scrapeResponse?.data?.json ||
         scrapeResponse?.data?.extract;
 
-      if (scrapeResponse && rawData && rawData.title) {
+      if (scrapeResponse && rawData && rawData.title && (rawData.current_price || rawData.main_image_url)) {
         const extract = rawData as ExtractedProductData;
 
         // Resolve relative image URLs if returned
-        if (extract.main_image_url && !extract.main_image_url.startsWith("http")) {
+        if (extract.main_image_url && !extract.main_image_url.startsWith("http") && !extract.main_image_url.startsWith("data:")) {
           try {
             const base = new URL(normalized);
             extract.main_image_url = new URL(extract.main_image_url, base.origin).toString();
@@ -276,7 +277,7 @@ export async function extractProductFromUrl(url: string): Promise<{
 
         if (extract.gallery_images && Array.isArray(extract.gallery_images)) {
           extract.gallery_images = extract.gallery_images.map((img) => {
-            if (!img.startsWith("http")) {
+            if (!img.startsWith("http") && !img.startsWith("data:")) {
               try {
                 const base = new URL(normalized);
                 return new URL(img, base.origin).toString();
@@ -291,8 +292,24 @@ export async function extractProductFromUrl(url: string): Promise<{
         return {
           success: true,
           data: extract,
-          raw: { ...scrapeResponse, engine: "firecrawl" },
+          raw: { ...scrapeResponse, engine: "firecrawl_json" },
         };
+      }
+
+      // If JSON format was empty/null (common in Arabic/RTL SPAs), parse rendered HTML + Markdown
+      if (scrapeResponse && (scrapeResponse.html || scrapeResponse.markdown)) {
+        const parsed = parseProductHtmlContent(
+          scrapeResponse.html || "",
+          normalized,
+          scrapeResponse.markdown
+        );
+        if (parsed.success && parsed.data && (parsed.data.title || parsed.data.current_price)) {
+          return {
+            success: true,
+            data: parsed.data,
+            raw: { ...scrapeResponse, engine: "firecrawl_rendered_html" },
+          };
+        }
       }
     } catch (err: any) {
       console.warn(`[Product Scraper] Firecrawl rescue fallback also failed for ${normalized}:`, err?.message);
