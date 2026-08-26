@@ -147,33 +147,35 @@ function getInitialSpyParams(initialParams?: AdFilterParams): AdFilterParams {
   }
 }
 
-function syncSpyParamsToUrlAndStorage(params: AdFilterParams) {
+function syncSpyParamsToUrlAndStorage(params: AdFilterParams, skipStorage = false) {
   if (typeof window === "undefined") return;
 
   try {
-    // Save to localStorage
-    const toSave: Partial<AdFilterParams> = {
-      trackedPageId: params.trackedPageId,
-      search: params.search,
-      dateFrom: params.dateFrom,
-      dateTo: params.dateTo,
-      minDaysRunning: params.minDaysRunning,
-      minDuplications: params.minDuplications,
-      minWinnerScore: params.minWinnerScore,
-      minProductCreatives: params.minProductCreatives,
-      productKey: params.productKey,
-      productId: params.productId,
-      mediaType: params.mediaType,
-      status: params.status,
-      ctaText: params.ctaText,
-      isWatchlisted: params.isWatchlisted,
-      smartPreset: params.smartPreset,
-      sortBy: params.sortBy,
-      sortOrder: params.sortOrder,
-      groupBy: params.groupBy,
-      excludePageIds: params.excludePageIds,
-    };
-    localStorage.setItem("spy_feed_filters", JSON.stringify(toSave));
+    if (!skipStorage) {
+      // Save to localStorage
+      const toSave: Partial<AdFilterParams> = {
+        trackedPageId: params.trackedPageId,
+        search: params.search,
+        dateFrom: params.dateFrom,
+        dateTo: params.dateTo,
+        minDaysRunning: params.minDaysRunning,
+        minDuplications: params.minDuplications,
+        minWinnerScore: params.minWinnerScore,
+        minProductCreatives: params.minProductCreatives,
+        productKey: params.productKey,
+        productId: params.productId,
+        mediaType: params.mediaType,
+        status: params.status,
+        ctaText: params.ctaText,
+        isWatchlisted: params.isWatchlisted,
+        smartPreset: params.smartPreset,
+        sortBy: params.sortBy,
+        sortOrder: params.sortOrder,
+        groupBy: params.groupBy,
+        excludePageIds: params.excludePageIds,
+      };
+      localStorage.setItem("spy_feed_filters", JSON.stringify(toSave));
+    }
 
     // Update URL query params smoothly without full reload
     const url = new URL(window.location.href);
@@ -185,10 +187,16 @@ function syncSpyParamsToUrlAndStorage(params: AdFilterParams) {
     }
 
     if (params.trackedPageId) url.searchParams.set("trackedPageId", params.trackedPageId);
-    else url.searchParams.delete("trackedPageId");
+    else {
+      url.searchParams.delete("trackedPageId");
+      url.searchParams.delete("pageId");
+    }
 
     if (params.search) url.searchParams.set("search", params.search);
-    else url.searchParams.delete("search");
+    else {
+      url.searchParams.delete("search");
+      url.searchParams.delete("q");
+    }
 
     if (params.dateFrom) url.searchParams.set("dateFrom", params.dateFrom);
     else url.searchParams.delete("dateFrom");
@@ -248,6 +256,7 @@ function syncSpyParamsToUrlAndStorage(params: AdFilterParams) {
       url.searchParams.set("isWatchlisted", "true");
     } else {
       url.searchParams.delete("isWatchlisted");
+      url.searchParams.delete("watchlist");
     }
 
     if (params.excludePageIds && params.excludePageIds.length > 0) {
@@ -260,6 +269,7 @@ function syncSpyParamsToUrlAndStorage(params: AdFilterParams) {
       url.searchParams.set("smartPreset", params.smartPreset);
     } else {
       url.searchParams.delete("smartPreset");
+      url.searchParams.delete("preset");
     }
 
     if (params.sortBy && params.sortBy !== "started_running_on") {
@@ -278,6 +288,7 @@ function syncSpyParamsToUrlAndStorage(params: AdFilterParams) {
       url.searchParams.set("groupBy", params.groupBy);
     } else {
       url.searchParams.delete("groupBy");
+      url.searchParams.delete("groupByCreative");
     }
 
     window.history.replaceState({}, "", url.toString());
@@ -418,15 +429,111 @@ export function useSpy(initialParams?: AdFilterParams) {
 
   const updateFilters = useCallback((newParams: Partial<AdFilterParams>) => {
     setParams((prev) => {
-      const next = {
+      const next: AdFilterParams = {
         ...prev,
         ...newParams,
         page: newParams.page !== undefined ? newParams.page : 1, // Reset to page 1 on filter change
       };
-      syncSpyParamsToUrlAndStorage(next);
+
+      // Ensure explicit undefined/null overrides are cleaned up
+      Object.keys(newParams).forEach((key) => {
+        const k = key as keyof AdFilterParams;
+        if (newParams[k] === undefined || newParams[k] === null || newParams[k] === "") {
+          if (
+            k === "search" ||
+            k === "dateFrom" ||
+            k === "dateTo" ||
+            k === "trackedPageId" ||
+            k === "productKey" ||
+            k === "productId" ||
+            k === "smartPreset" ||
+            k === "ctaText"
+          ) {
+            delete (next as any)[k];
+          }
+        }
+      });
+
+      syncSpyParamsToUrlAndStorage(next, Boolean(initialParams?.trackedPageId));
       return next;
     });
-  }, []);
+  }, [initialParams?.trackedPageId]);
+
+  const resetFilters = useCallback(() => {
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("spy_feed_filters");
+        sessionStorage.removeItem("spy_feed_filters");
+        localStorage.removeItem("spy_excluded_brands");
+        const url = new URL(window.location.href);
+        const keysToRemove = [
+          "trackedPageId",
+          "pageId",
+          "search",
+          "q",
+          "dateFrom",
+          "dateTo",
+          "minDaysRunning",
+          "minDuplications",
+          "minWinnerScore",
+          "minProductCreatives",
+          "productKey",
+          "productId",
+          "mediaType",
+          "status",
+          "ctaText",
+          "isWatchlisted",
+          "watchlist",
+          "smartPreset",
+          "preset",
+          "sortBy",
+          "sortOrder",
+          "groupBy",
+          "groupByCreative",
+          "excludePageIds",
+          "page",
+          "limit",
+          "_t",
+        ];
+        keysToRemove.forEach((k) => url.searchParams.delete(k));
+        window.history.replaceState(
+          {},
+          "",
+          url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : "")
+        );
+      }
+    } catch (e) {
+      console.error("Failed to clear spy filter storage on reset:", e);
+    }
+
+    const cleanDefaults: AdFilterParams = {
+      page: 1,
+      limit: initialParams?.limit || 24,
+      minDuplications: 1,
+      minWinnerScore: 0,
+      minProductCreatives: 0,
+      mediaType: "all",
+      status: "all",
+      sortBy: "started_running_on",
+      sortOrder: "desc",
+      enabled: true,
+      excludePageIds: [],
+      search: undefined,
+      dateFrom: undefined,
+      dateTo: undefined,
+      minDaysRunning: 0,
+      ctaText: undefined,
+      isWatchlisted: false,
+      smartPreset: undefined,
+      trackedPageId: initialParams?.trackedPageId,
+      productKey: undefined,
+      productId: undefined,
+      groupBy: "none",
+      ...initialParams,
+    };
+
+    setParams(cleanDefaults);
+  }, [initialParams]);
 
   const updateAdInFeed = useCallback((updatedAd: Ad) => {
     setAds((prev) => prev.map((item) => (item.id === updatedAd.id ? { ...item, ...updatedAd } : item)));
@@ -445,6 +552,7 @@ export function useSpy(initialParams?: AdFilterParams) {
     error,
     params,
     updateFilters,
+    resetFilters,
     updateAdInFeed,
     refetch,
   };

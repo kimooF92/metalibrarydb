@@ -12,7 +12,19 @@ import { useToast } from "@/components/toast-context";
 import { Layers, Calendar, Video, Image as ImageIcon, RefreshCw, Eye, ArrowUp } from "lucide-react";
 
 export default function AdSpyPage() {
-  const { ads, pagination, isLoading, isFetchingMore, isRefreshing, error, params, updateFilters, updateAdInFeed, refetch } = useAdFeed();
+  const {
+    ads,
+    pagination,
+    isLoading,
+    isFetchingMore,
+    isRefreshing,
+    error,
+    params,
+    updateFilters,
+    resetFilters,
+    updateAdInFeed,
+    refetch,
+  } = useAdFeed();
   const { stats, refetch: refetchStats } = useAdStats();
   const { showToast } = useToast();
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -53,33 +65,7 @@ export default function AdSpyPage() {
   };
 
   const handleResetFilters = () => {
-    try {
-      sessionStorage.removeItem("spy_feed_filters");
-      localStorage.removeItem("spy_feed_filters");
-      localStorage.removeItem("spy_excluded_brands");
-      if (typeof window !== "undefined") {
-        window.history.replaceState(null, "", window.location.pathname);
-      }
-    } catch (e) {
-      console.error("Error clearing spy filter storage:", e);
-    }
-
-    updateFilters({
-      search: "",
-      dateFrom: undefined,
-      dateTo: undefined,
-      minDaysRunning: 0,
-      minDuplications: 1,
-      mediaType: "all",
-      status: "all",
-      ctaText: "all",
-      isWatchlisted: false,
-      excludePageIds: [],
-      smartPreset: undefined,
-      sortBy: "started_running_on",
-      sortOrder: "desc",
-      page: 1,
-    });
+    resetFilters();
   };
 
   const handleExcludeBrand = (pageId: string) => {
