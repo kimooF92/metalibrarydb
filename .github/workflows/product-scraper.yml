@@ -18,6 +18,14 @@ on:
         description: 'Status filter (pending, failed, all)'
         required: false
         default: 'pending'
+      page:
+        description: 'Target specific Brand Page ID or Name (optional)'
+        required: false
+        default: ''
+      url:
+        description: 'Target a single Product URL (optional)'
+        required: false
+        default: ''
 
 concurrency:
   group: product-scraper-group
@@ -50,9 +58,15 @@ jobs:
           SCRAPE_LIMIT: ${{ inputs.limit || '100' }}
           SCRAPE_FORCE_ALL: ${{ inputs.force_all || 'false' }}
           SCRAPE_STATUS: ${{ inputs.status_filter || 'pending' }}
+          SCRAPE_PAGE: ${{ inputs.page || '' }}
+          SCRAPE_URL: ${{ inputs.url || '' }}
         run: |
           FLAGS="--limit ${SCRAPE_LIMIT}"
-          if [ "${SCRAPE_FORCE_ALL}" = "true" ]; then
+          if [ -n "${SCRAPE_URL}" ]; then
+            FLAGS="--url \"${SCRAPE_URL}\""
+          elif [ -n "${SCRAPE_PAGE}" ]; then
+            FLAGS="--page \"${SCRAPE_PAGE}\""
+          elif [ "${SCRAPE_FORCE_ALL}" = "true" ]; then
             FLAGS="$FLAGS --force-all"
           elif [ -n "${SCRAPE_STATUS}" ] && [ "${SCRAPE_STATUS}" != "all" ]; then
             FLAGS="$FLAGS --status ${SCRAPE_STATUS}"
