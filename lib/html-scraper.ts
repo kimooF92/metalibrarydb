@@ -154,26 +154,45 @@ export function parseProductHtmlContent(
         .trim();
     }
 
+function extractImageUrl(img: any): string | null {
+  if (!img) return null;
+  if (typeof img === "string") return img.trim();
+  if (typeof img === "object") {
+    if (typeof img.url === "string") return img.url.trim();
+    if (typeof img.contentUrl === "string") return img.contentUrl.trim();
+    if (typeof img.src === "string") return img.src.trim();
+  }
+  return null;
+}
+
     // 3. Extract Main Image & Gallery
     let mainImageUrl: string | null = null;
     const galleryImages: string[] = [];
 
     if (jsonLdProduct?.image) {
       if (typeof jsonLdProduct.image === "string") {
-        mainImageUrl = jsonLdProduct.image;
+        mainImageUrl = jsonLdProduct.image.trim();
       } else if (Array.isArray(jsonLdProduct.image) && jsonLdProduct.image.length > 0) {
-        mainImageUrl = jsonLdProduct.image[0];
-        galleryImages.push(...jsonLdProduct.image.slice(1));
-      } else if (jsonLdProduct.image.url) {
-        mainImageUrl = jsonLdProduct.image.url;
+        mainImageUrl = extractImageUrl(jsonLdProduct.image[0]);
+        for (const item of jsonLdProduct.image.slice(1)) {
+          const imgUrl = extractImageUrl(item);
+          if (imgUrl && !galleryImages.includes(imgUrl)) {
+            galleryImages.push(imgUrl);
+          }
+        }
+      } else if (typeof jsonLdProduct.image === "object") {
+        mainImageUrl = extractImageUrl(jsonLdProduct.image);
       }
     } else if (convertyProduct?.images && Array.isArray(convertyProduct.images) && convertyProduct.images.length > 0) {
-      mainImageUrl = convertyProduct.images[0]?.url || convertyProduct.images[0];
-      galleryImages.push(
-        ...convertyProduct.images.slice(1).map((img: any) => (typeof img === "string" ? img : img.url)).filter(Boolean)
-      );
+      mainImageUrl = extractImageUrl(convertyProduct.images[0]);
+      for (const img of convertyProduct.images.slice(1)) {
+        const imgUrl = extractImageUrl(img);
+        if (imgUrl && !galleryImages.includes(imgUrl)) {
+          galleryImages.push(imgUrl);
+        }
+      }
     } else if (convertyProduct?.thumbnail) {
-      mainImageUrl = convertyProduct.thumbnail;
+      mainImageUrl = extractImageUrl(convertyProduct.thumbnail);
     }
 
     if (!mainImageUrl) {
@@ -210,7 +229,7 @@ export function parseProductHtmlContent(
     }
 
     // Resolve relative image URLs
-    if (mainImageUrl && !mainImageUrl.startsWith("http") && !mainImageUrl.startsWith("data:")) {
+    if (mainImageUrl && typeof mainImageUrl === "string" && !mainImageUrl.startsWith("http") && !mainImageUrl.startsWith("data:")) {
       try {
         mainImageUrl = new URL(mainImageUrl, baseOrigin).toString();
       } catch {}
@@ -221,7 +240,7 @@ export function parseProductHtmlContent(
     let ogMatch;
     while ((ogMatch = ogImagesRegex.exec(html)) !== null) {
       let img = decodeHtmlEntities(ogMatch[1].trim());
-      if (img && !img.startsWith("http") && !img.startsWith("data:")) {
+      if (img && typeof img === "string" && !img.startsWith("http") && !img.startsWith("data:")) {
         try {
           img = new URL(img, baseOrigin).toString();
         } catch {}
