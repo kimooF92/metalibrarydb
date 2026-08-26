@@ -39,17 +39,17 @@ export async function GET(req: NextRequest) {
     // Filter by Active / Inactive (Off-Air) Ads status
     if (activeStatus === "active" || hideInactive) {
       conditions.push(
-        sql`EXISTS (
-          SELECT 1 FROM ${ads}
-          WHERE ${ads.productId} = ${scrapedProducts.id}
+        sql`${scrapedProducts.id} IN (
+          SELECT ${ads.productId} FROM ${ads}
+          WHERE ${ads.productId} IS NOT NULL
           AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
         )`
       );
     } else if (activeStatus === "inactive") {
       conditions.push(
-        sql`NOT EXISTS (
-          SELECT 1 FROM ${ads}
-          WHERE ${ads.productId} = ${scrapedProducts.id}
+        sql`${scrapedProducts.id} NOT IN (
+          SELECT ${ads.productId} FROM ${ads}
+          WHERE ${ads.productId} IS NOT NULL
           AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
         )`
       );
@@ -203,29 +203,41 @@ export async function GET(req: NextRequest) {
         .where(whereClause),
       // Fast KPI summary metrics across products (only executed on initial mount or manual refresh)
       includeStats
-        ? db
-            .select({
-              total: count(),
-              withOffers: sql<number>`COUNT(CASE WHEN ${scrapedProducts.discountOrOffer} IS NOT NULL AND ${scrapedProducts.discountOrOffer} != '' THEN 1 END)`.mapWith(Number),
-              favoritesCount: sql<number>`COUNT(CASE WHEN ${scrapedProducts.isFavorite} = true THEN 1 END)`.mapWith(Number),
-              successful: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} = 'success' THEN 1 END)`.mapWith(Number),
-              pending: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} != 'success' OR ${scrapedProducts.currentPrice} IS NULL THEN 1 END)`.mapWith(Number),
-              newThisWeek: sql<number>`COUNT(CASE WHEN ${scrapedProducts.createdAt} >= NOW() - INTERVAL '7 days' THEN 1 END)`.mapWith(Number),
-              activeCount: sql<number>`COUNT(CASE WHEN EXISTS (
-                SELECT 1 FROM ${ads}
-                WHERE ${ads.productId} = ${scrapedProducts.id}
-                AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
-              ) THEN 1 END)`.mapWith(Number),
-              inactiveCount: sql<number>`COUNT(CASE WHEN NOT EXISTS (
-                SELECT 1 FROM ${ads}
-                WHERE ${ads.productId} = ${scrapedProducts.id}
-                AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
-              ) THEN 1 END)`.mapWith(Number),
-              shopifyCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%shopify%' THEN 1 END)`.mapWith(Number),
-              youcanCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%youcan%' THEN 1 END)`.mapWith(Number),
-              woocommerceCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%woocommerce%' THEN 1 END)`.mapWith(Number),
-            })
-            .from(scrapedProducts)
+        ? Promise.all([
+            db
+              .select({
+                total: count(),
+                withOffers: sql<number>`COUNT(CASE WHEN ${scrapedProducts.discountOrOffer} IS NOT NULL AND ${scrapedProducts.discountOrOffer} != '' THEN 1 END)`.mapWith(Number),
+                favoritesCount: sql<number>`COUNT(CASE WHEN ${scrapedProducts.isFavorite} = true THEN 1 END)`.mapWith(Number),
+                successful: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} = 'success' THEN 1 END)`.mapWith(Number),
+                pending: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} != 'success' OR ${scrapedProducts.currentPrice} IS NULL THEN 1 END)`.mapWith(Number),
+                newThisWeek: sql<number>`COUNT(CASE WHEN ${scrapedProducts.createdAt} >= NOW() - INTERVAL '7 days' THEN 1 END)`.mapWith(Number),
+                shopifyCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%shopify%' THEN 1 END)`.mapWith(Number),
+                youcanCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%youcan%' THEN 1 END)`.mapWith(Number),
+                woocommerceCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%woocommerce%' THEN 1 END)`.mapWith(Number),
+              })
+              .from(scrapedProducts),
+            db
+              .select({
+                activeDistinctCount: sql<number>`COUNT(DISTINCT ${ads.productId})`.mapWith(Number),
+              })
+              .from(ads)
+              .where(
+                sql`${ads.productId} IS NOT NULL AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)`
+              ),
+          ]).then(([productStatsRows, activeAdsStatsRows]) => {
+            const baseStats = productStatsRows[0] || ({} as any);
+            const activeCount = Number(activeAdsStatsRows[0]?.activeDistinctCount) || 0;
+            const total = Number(baseStats.total) || 0;
+            const inactiveCount = Math.max(0, total - activeCount);
+            return [
+              {
+                ...baseStats,
+                activeCount,
+                inactiveCount,
+              },
+            ];
+          })
         : Promise.resolve([]),
     ]);
 
