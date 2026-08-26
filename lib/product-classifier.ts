@@ -34,10 +34,9 @@ const categoryCache = new Map<string, ProductClassificationResult>();
 
 // 3 Best Free Models on OpenRouter (in cascade priority order)
 const AI_MODELS = [
-  "nvidia/llama-3.1-nemotron-70b-instruct:free",
-  "google/gemini-2.0-flash-exp:free",
-  "meta-llama/llama-3.3-70b-instruct:free",
-  "qwen/qwen-2.5-72b-instruct:free",
+  "nvidia/nemotron-3.5-lightning:free",
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "minimax/minimax-m2.7:free",
 ];
 
 /**
@@ -177,6 +176,120 @@ export function classifyProductOffline(title: string): ProductClassificationResu
 }
 
 /**
+ * Parses and validates LLM JSON or reasoning output to standard taxonomy
+ */
+function parseAiResponse(rawContent: string | null | undefined, modelUsed: string): ProductClassificationResult | null {
+  if (!rawContent) return null;
+  
+  // 1. Try extracting structured JSON
+  try {
+    let jsonStr = rawContent
+      .replace(/```json/gi, "")
+      .replace(/```/g, "")
+      .trim();
+
+    // If not clean JSON, extract the JSON object with regex
+    if (!jsonStr.startsWith("{") || !jsonStr.endsWith("}")) {
+      const match = jsonStr.match(/\{[\s\S]*?"category"[\s\S]*?\}/);
+      if (match) {
+        jsonStr = match[0];
+      }
+    }
+
+    if (jsonStr.startsWith("{") && jsonStr.endsWith("}")) {
+      const parsed = JSON.parse(jsonStr);
+
+      let matchedCategory: ProductCategory = "General & Other";
+      if (parsed.category) {
+        const found = PRODUCT_CATEGORIES.find(
+          (c) => c.toLowerCase() === parsed.category.toLowerCase()
+        );
+        if (found) {
+          matchedCategory = found;
+        } else {
+          matchedCategory = mapStringToCategory(parsed.category);
+        }
+      }
+
+      const validAudiences = ["unisex", "men", "women", "kids"] as const;
+      const audience = validAudiences.includes(parsed.targetAudience?.toLowerCase())
+        ? (parsed.targetAudience.toLowerCase() as "unisex" | "men" | "women" | "kids")
+        : "unisex";
+
+      return {
+        category: matchedCategory,
+        subCategory: parsed.subCategory || "General",
+        targetAudience: audience,
+        modelUsed,
+      };
+    }
+  } catch (err) {
+    // Continue to reasoning extraction
+  }
+
+  // 2. Extract classification from reasoning text if JSON parsing failed
+  const lower = rawContent.toLowerCase();
+  let matchedCat: ProductCategory = "General & Other";
+  let matchedSub = "General";
+  let audience: "unisex" | "men" | "women" | "kids" = "unisex";
+
+  if (lower.includes("beauty, health & care") || lower.includes("beauty") || lower.includes("hair styling") || lower.includes("straighten") || lower.includes("skincare")) {
+    matchedCat = "Beauty, Health & Care";
+    matchedSub = "Personal Care & Beauty";
+    if (lower.includes("women") || lower.includes("female")) audience = "women";
+  } else if (lower.includes("kids, baby & toys") || lower.includes("toy") || lower.includes("children") || lower.includes("building blocks")) {
+    matchedCat = "Kids, Baby & Toys";
+    matchedSub = "Toys & Kids";
+    audience = "kids";
+  } else if (lower.includes("automotive & tools") || lower.includes("angle grinder") || lower.includes("power tool") || lower.includes("car charger") || lower.includes("automotive")) {
+    matchedCat = "Automotive & Tools";
+    matchedSub = "Tools & Automotive";
+  } else if (lower.includes("fashion & jewelry") || lower.includes("waist trainer") || lower.includes("corset") || lower.includes("shapewear") || lower.includes("apparel") || lower.includes("clothing")) {
+    matchedCat = "Fashion & Jewelry";
+    matchedSub = "Shapewear & Apparel";
+    if (lower.includes("women") || lower.includes("female")) audience = "women";
+  } else if (lower.includes("electronics & tech") || lower.includes("electronic") || lower.includes("gadget") || lower.includes("audio")) {
+    matchedCat = "Electronics & Tech";
+    matchedSub = "Gadgets & Tech";
+  } else if (lower.includes("sports, fitness & outdoor") || lower.includes("fitness") || lower.includes("workout")) {
+    matchedCat = "Sports, Fitness & Outdoor";
+    matchedSub = "Fitness & Exercise";
+  } else if (lower.includes("home, kitchen & living") || lower.includes("kitchen") || lower.includes("home appliance")) {
+    matchedCat = "Home, Kitchen & Living";
+    matchedSub = "Home & Kitchen";
+  } else {
+    return null;
+  }
+
+  return {
+    category: matchedCat,
+    subCategory: matchedSub,
+    targetAudience: audience,
+    modelUsed,
+  };
+}
+
+function mapStringToCategory(text: string): ProductCategory {
+  const lower = (text || "").toLowerCase();
+  if (lower.includes("electr") || lower.includes("tech") || lower.includes("gadget") || lower.includes("phone")) {
+    return "Electronics & Tech";
+  } else if (lower.includes("beaut") || lower.includes("health") || lower.includes("care") || lower.includes("soin") || lower.includes("cosmetic")) {
+    return "Beauty, Health & Care";
+  } else if (lower.includes("home") || lower.includes("kitchen") || lower.includes("living") || lower.includes("maison") || lower.includes("cuisine")) {
+    return "Home, Kitchen & Living";
+  } else if (lower.includes("fashion") || lower.includes("cloth") || lower.includes("jewelry") || lower.includes("apparel") || lower.includes("mode") || lower.includes("vetement") || lower.includes("shapewear")) {
+    return "Fashion & Jewelry";
+  } else if (lower.includes("sport") || lower.includes("fit") || lower.includes("outdoor")) {
+    return "Sports, Fitness & Outdoor";
+  } else if (lower.includes("kid") || lower.includes("baby") || lower.includes("toy") || lower.includes("enfant")) {
+    return "Kids, Baby & Toys";
+  } else if (lower.includes("auto") || lower.includes("car") || lower.includes("tool") || lower.includes("voiture") || lower.includes("outil")) {
+    return "Automotive & Tools";
+  }
+  return "General & Other";
+}
+
+/**
  * Classifies a product using OpenRouter's 3 best free models with automatic failover.
  */
 export async function classifyProductWithAI(
@@ -199,14 +312,10 @@ export async function classifyProductWithAI(
     return categoryCache.get(cacheKey)!;
   }
 
-  const apiKey = process.env.OPENROUTER_API_KEY || process.env.OPEN_ROUTER_API_KEY;
-
-  // If no OpenRouter key configured, use deterministic offline classifier ($0 cost, 0ms)
-  if (!apiKey || apiKey.trim() === "") {
-    const offlineResult = classifyProductOffline(cleanTitle);
-    categoryCache.set(cacheKey, offlineResult);
-    return offlineResult;
-  }
+  const openRouterKey = process.env.OPENROUTER_API_KEY || process.env.OPEN_ROUTER_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  const groqKey = process.env.GROQ_API_KEY;
+  const openAiKey = process.env.OPENAI_API_KEY;
 
   const systemPrompt = `You are a high-speed e-commerce product catalog classifier.
 Classify the product into EXACTLY ONE valid category from this list:
@@ -223,91 +332,158 @@ You must respond ONLY with raw, valid JSON in this exact structure:
     extraContext?.domain ? ` | Store: ${extraContext.domain}` : ""
   }${extraContext?.adText ? ` | Ad Context: ${extraContext.adText.slice(0, 150)}` : ""}`;
 
-  // Try OpenRouter with cascading models
-  try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey.trim()}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://ad-library-tracker.local",
-        "X-Title": "Meta Ad Tracker Product Categorizer",
-      },
-      body: JSON.stringify({
-        model: AI_MODELS[0], // Primary: NVIDIA Nemotron 70B
-        models: AI_MODELS, // Fallback models in priority order (Gemini 2.0 Flash -> Llama 3.3 70B -> Qwen 2.5 72B)
-        temperature: 0.1,
-        max_tokens: 120,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userContent },
-        ],
-        response_format: { type: "json_object" },
-      }),
-      signal: AbortSignal.timeout(8000), // 8-second hard timeout
-    });
+  // 1. If OpenRouter Key is provided (Primary: Nemotron 70B -> Gemini 2.0 -> Llama 3.3 70B)
+  if (openRouterKey && openRouterKey.trim() !== "") {
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openRouterKey.trim()}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://ad-library-tracker.local",
+          "X-Title": "Meta Ad Tracker Product Categorizer",
+        },
+        body: JSON.stringify({
+          model: AI_MODELS[0],
+          models: AI_MODELS,
+          reasoning: { max_tokens: 0 },
+          temperature: 0.1,
+          max_tokens: 150,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userContent },
+          ],
+          response_format: { type: "json_object" },
+        }),
+        signal: AbortSignal.timeout(8000),
+      });
 
-    if (response.ok) {
-      const data = await response.json();
-      const rawContent = data.choices?.[0]?.message?.content;
-      const modelUsed = data.model || AI_MODELS[0];
-
-      if (rawContent) {
-        // Strip markdown fences if present
-        const cleanedJson = rawContent
-          .replace(/```json/gi, "")
-          .replace(/```/g, "")
-          .trim();
-
-        const parsed = JSON.parse(cleanedJson);
-
-        // Validate category matches one of the canonical categories
-        let matchedCategory: ProductCategory = "General & Other";
-        if (parsed.category) {
-          const found = PRODUCT_CATEGORIES.find(
-            (c) => c.toLowerCase() === parsed.category.toLowerCase()
-          );
-          if (found) {
-            matchedCategory = found;
-          } else {
-            // Fuzzy match category
-            const lower = parsed.category.toLowerCase();
-            if (lower.includes("electr") || lower.includes("tech") || lower.includes("gadget")) {
-              matchedCategory = "Electronics & Tech";
-            } else if (lower.includes("beaut") || lower.includes("health") || lower.includes("care") || lower.includes("soin") || lower.includes("cosmetic")) {
-              matchedCategory = "Beauty, Health & Care";
-            } else if (lower.includes("home") || lower.includes("kitchen") || lower.includes("living") || lower.includes("maison") || lower.includes("cuisine")) {
-              matchedCategory = "Home, Kitchen & Living";
-            } else if (lower.includes("fashion") || lower.includes("cloth") || lower.includes("jewelry") || lower.includes("apparel") || lower.includes("mode")) {
-              matchedCategory = "Fashion & Jewelry";
-            } else if (lower.includes("sport") || lower.includes("fit") || lower.includes("outdoor")) {
-              matchedCategory = "Sports, Fitness & Outdoor";
-            } else if (lower.includes("kid") || lower.includes("baby") || lower.includes("toy") || lower.includes("enfant")) {
-              matchedCategory = "Kids, Baby & Toys";
-            } else if (lower.includes("auto") || lower.includes("car") || lower.includes("tool") || lower.includes("voiture")) {
-              matchedCategory = "Automotive & Tools";
-            }
-          }
+      if (response.ok) {
+        const data = await response.json();
+        const rawContent = data.choices?.[0]?.message?.content || data.choices?.[0]?.message?.reasoning;
+        const modelUsed = data.model || AI_MODELS[0];
+        const res = parseAiResponse(rawContent, modelUsed);
+        if (res) {
+          categoryCache.set(cacheKey, res);
+          return res;
         }
-
-        const validAudiences = ["unisex", "men", "women", "kids"] as const;
-        const audience = validAudiences.includes(parsed.targetAudience?.toLowerCase())
-          ? (parsed.targetAudience.toLowerCase() as "unisex" | "men" | "women" | "kids")
-          : "unisex";
-
-        const result: ProductClassificationResult = {
-          category: matchedCategory,
-          subCategory: parsed.subCategory || "General",
-          targetAudience: audience,
-          modelUsed,
-        };
-
-        categoryCache.set(cacheKey, result);
-        return result;
+      } else {
+        const errText = await response.text();
+        console.warn(`[OpenRouter HTTP ${response.status}]`, errText);
       }
+    } catch (e: any) {
+      console.warn(`[OpenRouter AI Notice] ${e?.message || "timeout"}, checking other LLM keys...`);
     }
-  } catch (apiErr: any) {
-    console.warn(`[Product Classifier] OpenRouter API notice (${apiErr?.message || "timeout"}), using offline rules.`);
+  }
+
+  // 2. If Direct Google Gemini Key is provided
+  if (geminiKey && geminiKey.trim() !== "") {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey.trim()}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [{ text: `${systemPrompt}\n\n${userContent}` }],
+              },
+            ],
+            generationConfig: {
+              responseMimeType: "application/json",
+              temperature: 0.1,
+              maxOutputTokens: 120,
+            },
+          }),
+          signal: AbortSignal.timeout(8000),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        const res = parseAiResponse(rawText, "google/gemini-2.0-flash");
+        if (res) {
+          categoryCache.set(cacheKey, res);
+          return res;
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[Gemini AI Notice] ${e?.message || "timeout"}`);
+    }
+  }
+
+  // 3. If Groq Key is provided
+  if (groqKey && groqKey.trim() !== "") {
+    try {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${groqKey.trim()}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          temperature: 0.1,
+          max_tokens: 120,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userContent },
+          ],
+          response_format: { type: "json_object" },
+        }),
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const rawContent = data.choices?.[0]?.message?.content;
+        const res = parseAiResponse(rawContent, "groq/llama-3.3-70b");
+        if (res) {
+          categoryCache.set(cacheKey, res);
+          return res;
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[Groq AI Notice] ${e?.message || "timeout"}`);
+    }
+  }
+
+  // 4. If OpenAI Key is provided
+  if (openAiKey && openAiKey.trim() !== "") {
+    try {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openAiKey.trim()}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          temperature: 0.1,
+          max_tokens: 120,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userContent },
+          ],
+          response_format: { type: "json_object" },
+        }),
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const rawContent = data.choices?.[0]?.message?.content;
+        const res = parseAiResponse(rawContent, "openai/gpt-4o-mini");
+        if (res) {
+          categoryCache.set(cacheKey, res);
+          return res;
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[OpenAI Notice] ${e?.message || "timeout"}`);
+    }
   }
 
   // Graceful offline fallback
