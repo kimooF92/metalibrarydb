@@ -404,13 +404,20 @@ export default function ProductsPage() {
         });
       }
     } catch (err: any) {
-      showToast({
-        type: "error",
-        title: "Network Error",
-        message: err.message || "Failed to refresh product.",
-      });
-    }
-  };
+        showToast({
+          type: "error",
+          title: "Network Error",
+          message: err.message || "Failed to refresh product.",
+        });
+      }
+    };
+
+    const handleProductUpdate = (updatedProduct: ScrapedProduct) => {
+      setSelectedProduct(updatedProduct);
+      setProducts((prev) =>
+        prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p))
+      );
+    };
 
   const handleDelete = async (productId: string) => {
     // 1. Find product and original index before removing
@@ -1143,6 +1150,7 @@ export default function ProductsPage() {
         product={selectedProduct}
         onRefresh={handleRefresh}
         onDelete={handleDelete}
+        onProductUpdate={handleProductUpdate}
       />
     </div>
   );

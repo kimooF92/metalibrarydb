@@ -321,6 +321,19 @@ export function ProductCard({
               ⏳ {product.daysRunning}d
             </span>
           )}
+
+          {product.supplierUrls && product.supplierUrls.length > 0 && (
+            <span
+              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                isInactive
+                  ? "bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                  : "bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800"
+              }`}
+              title={`${product.supplierUrls.length} Supplier link${product.supplierUrls.length === 1 ? "" : "s"} attached`}
+            >
+              📦 {product.supplierUrls.length} {product.supplierUrls.length === 1 ? "Supplier" : "Suppliers"}
+            </span>
+          )}
         </div>
 
         {/* Price & Offers */}

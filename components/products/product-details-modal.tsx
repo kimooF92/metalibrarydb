@@ -36,7 +36,48 @@ import {
   Radio,
   Truck,
   Star,
+  Boxes,
+  Link2,
+  Plus,
 } from "lucide-react";
+
+export function getSupplierPlatformInfo(url: string) {
+  try {
+    const lowercase = url.toLowerCase();
+    if (
+      lowercase.includes("facebook.com") ||
+      lowercase.includes("fb.com") ||
+      lowercase.includes("fb.watch") ||
+      lowercase.includes("m.facebook.com")
+    ) {
+      return {
+        name: "Facebook",
+        badgeClass: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+        icon: "🌐",
+      };
+    }
+    if (lowercase.includes("instagram.com")) {
+      return {
+        name: "Instagram",
+        badgeClass: "bg-pink-500/10 text-pink-600 dark:text-pink-400 border-pink-500/20",
+        icon: "📷",
+      };
+    }
+
+    const host = new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace(/^www\./, "");
+    return {
+      name: host || "Supplier Link",
+      badgeClass: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20",
+      icon: "🔗",
+    };
+  } catch {
+    return {
+      name: "Supplier Link",
+      badgeClass: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20",
+      icon: "🔗",
+    };
+  }
+}
 
 interface ProductDetailsModalProps {
   isOpen: boolean;
@@ -44,6 +85,7 @@ interface ProductDetailsModalProps {
   product: ScrapedProduct | null;
   onRefresh?: (productId: string) => Promise<void>;
   onDelete?: (productId: string) => Promise<void>;
+  onProductUpdate?: (updatedProduct: ScrapedProduct) => void;
 }
 
 export function ProductDetailsModal({
@@ -52,6 +94,7 @@ export function ProductDetailsModal({
   product,
   onRefresh,
   onDelete,
+  onProductUpdate,
 }: ProductDetailsModalProps) {
   const { showToast } = useToast();
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -63,6 +106,12 @@ export function ProductDetailsModal({
   const [copiedType, setCopiedType] = useState<string | null>(null);
   const [showCopyMenu, setShowCopyMenu] = useState(false);
   const copyMenuRef = useRef<HTMLDivElement>(null);
+
+  // Supplier URLs State
+  const [supplierUrls, setSupplierUrls] = useState<string[]>([]);
+  const [newSupplierInput, setNewSupplierInput] = useState("");
+  const [isSavingSuppliers, setIsSavingSuppliers] = useState(false);
+  const [copiedSupplierIndex, setCopiedSupplierIndex] = useState<number | null>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -77,6 +126,9 @@ export function ProductDetailsModal({
   useEffect(() => {
     if (product) {
       setSelectedImage(product.mainImageUrl || null);
+      setSupplierUrls(product.supplierUrls || []);
+      setNewSupplierInput("");
+      setCopiedSupplierIndex(null);
       fetchLinkedAds(product.id);
       fetchNetworkIntelligence(product.id);
     }
@@ -126,6 +178,131 @@ export function ProductDetailsModal({
     }
   };
 
+  const handleAddSupplierUrl = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const raw = newSupplierInput.trim();
+    if (!raw || isSavingSuppliers) return;
+
+    let formattedUrl = raw;
+    if (!/^https?:\/\//i.test(formattedUrl)) {
+      formattedUrl = `https://${formattedUrl}`;
+    }
+
+    try {
+      new URL(formattedUrl);
+    } catch {
+      showToast({
+        type: "error",
+        title: "Invalid URL",
+        message: "Please enter a valid web address (e.g. https://aliexpress.com/item/...).",
+      });
+      return;
+    }
+
+    if (supplierUrls.includes(formattedUrl)) {
+      showToast({
+        type: "info",
+        title: "Already Added",
+        message: "This supplier URL is already in the list.",
+      });
+      setNewSupplierInput("");
+      return;
+    }
+
+    const updatedList = [...supplierUrls, formattedUrl];
+    setIsSavingSuppliers(true);
+
+    try {
+      const res = await fetch("/api/products", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: product.id,
+          supplierUrls: updatedList,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to save supplier URL");
+
+      setSupplierUrls(updatedList);
+      product.supplierUrls = updatedList;
+      setNewSupplierInput("");
+      onProductUpdate?.({ ...product, supplierUrls: updatedList });
+
+      const platform = getSupplierPlatformInfo(formattedUrl);
+      showToast({
+        type: "success",
+        title: "Supplier Link Added",
+        message: `Saved ${platform.name} supplier link to product.`,
+      });
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Failed to Add Supplier",
+        message: err.message || "Could not save supplier URL.",
+      });
+    } finally {
+      setIsSavingSuppliers(false);
+    }
+  };
+
+  const handleRemoveSupplierUrl = async (indexToRemove: number) => {
+    if (isSavingSuppliers) return;
+    const removedUrl = supplierUrls[indexToRemove];
+    const updatedList = supplierUrls.filter((_, idx) => idx !== indexToRemove);
+    setIsSavingSuppliers(true);
+
+    try {
+      const res = await fetch("/api/products", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: product.id,
+          supplierUrls: updatedList,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to update supplier URLs");
+
+      setSupplierUrls(updatedList);
+      product.supplierUrls = updatedList;
+      onProductUpdate?.({ ...product, supplierUrls: updatedList });
+
+      showToast({
+        type: "success",
+        title: "Supplier Link Removed",
+        message: "Supplier URL deleted.",
+      });
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Failed to Remove",
+        message: err.message || "Could not remove supplier URL.",
+      });
+    } finally {
+      setIsSavingSuppliers(false);
+    }
+  };
+
+  const handleCopySupplierUrl = async (url: string, index: number) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedSupplierIndex(index);
+      showToast({
+        type: "success",
+        title: "Supplier Link Copied",
+        message: "URL copied to clipboard.",
+      });
+      setTimeout(() => setCopiedSupplierIndex(null), 2000);
+    } catch {
+      showToast({
+        type: "error",
+        title: "Copy Failed",
+        message: "Could not access clipboard.",
+      });
+    }
+  };
+
   const allImages = [
     ...(product.mainImageUrl ? [product.mainImageUrl] : []),
     ...(product.galleryImages || []),
@@ -150,6 +327,13 @@ export function ProductDetailsModal({
             .join("\n\n")
         : "No active ad copies tracked.";
 
+    const suppliersText =
+      supplierUrls.length > 0
+        ? supplierUrls
+            .map((u, i) => `${i + 1}. [${getSupplierPlatformInfo(u).name}] ${u}`)
+            .join("\n")
+        : "None specified.";
+
     return `# Product Brief for AI Copywriting & Store Listing
 
 ## Product Details:
@@ -160,6 +344,9 @@ export function ProductDetailsModal({
 - **Delivery / Shipping Policy:** ${product.deliveryCost || "Not specified"}
 - **Store Domain:** ${product.domain || "N/A"}
 - **Destination URL:** ${product.url}
+
+## Sourcing & Verified Supplier Links:
+${suppliersText}
 
 ## Multi-Tier Offers & Bundles:
 ${offersText}
@@ -189,12 +376,22 @@ ${adCopiesText}
 
     const imagesText = allImages.map((img) => `- ${img}`).join("\n");
 
+    const suppliersText =
+      supplierUrls.length > 0
+        ? supplierUrls
+            .map((u) => `- [${getSupplierPlatformInfo(u).name}](${u})`)
+            .join("\n")
+        : "None specified.";
+
     return `# ${product.title || "Product Landing Page"}
 
 **Price:** ${product.currentPrice || "N/A"} ${product.originalPrice ? `(Regular: ${product.originalPrice})` : ""}
 **Offer:** ${product.discountOrOffer || "N/A"}
 **Delivery:** ${product.deliveryCost || "Not specified"}
 **Source URL:** ${product.url}
+
+### Sourcing & Suppliers:
+${suppliersText}
 
 ### Offers / Quantity Discounts:
 ${offersText}
@@ -203,7 +400,7 @@ ${offersText}
 ${imagesText}`;
   };
 
-  const handleCopy = async (type: "ai" | "markdown" | "images") => {
+  const handleCopy = async (type: "ai" | "markdown" | "images" | "suppliers") => {
     let textToCopy = "";
     let label = "";
 
@@ -216,6 +413,9 @@ ${imagesText}`;
     } else if (type === "images") {
       textToCopy = allImages.join("\n");
       label = `${allImages.length} Image URL${allImages.length === 1 ? "" : "s"}`;
+    } else if (type === "suppliers") {
+      textToCopy = supplierUrls.join("\n");
+      label = `${supplierUrls.length} Supplier URL${supplierUrls.length === 1 ? "" : "s"}`;
     }
 
     try {
@@ -369,6 +569,19 @@ ${imagesText}`;
                       <div className="text-[10px] text-slate-400">{allImages.length} high-res photo links</div>
                     </div>
                   </button>
+
+                  {supplierUrls.length > 0 && (
+                    <button
+                      onClick={() => handleCopy("suppliers")}
+                      className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-start gap-2 transition-colors cursor-pointer border-t border-slate-100 dark:border-slate-800"
+                    >
+                      <Boxes className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-slate-100">Supplier URLs Only</div>
+                        <div className="text-[10px] text-slate-400">{supplierUrls.length} sourcing link{supplierUrls.length === 1 ? "" : "s"}</div>
+                      </div>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -606,6 +819,128 @@ ${imagesText}`;
                 )}
               </div>
             </div>
+          </div>
+
+          {/* Product Sourcing & Supplier Links Section */}
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Boxes className="w-4 h-4 text-amber-500" />
+                <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  Product Sourcing & Supplier Links
+                </h4>
+                <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold border border-slate-200 dark:border-slate-700">
+                  {supplierUrls.length} {supplierUrls.length === 1 ? "Supplier" : "Suppliers"}
+                </span>
+              </div>
+              {supplierUrls.length > 0 && (
+                <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Sourcing Verified</span>
+                </span>
+              )}
+            </div>
+
+            {/* Supplier URLs List */}
+            {supplierUrls.length > 0 ? (
+              <div className="space-y-2 mb-3">
+                {supplierUrls.map((url, idx) => {
+                  const platform = getSupplierPlatformInfo(url);
+                  return (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-all group"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border ${platform.badgeClass}`}>
+                          <span>{platform.icon}</span>
+                          <span>{platform.name}</span>
+                        </span>
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-mono text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline truncate"
+                          title={url}
+                        >
+                          {url}
+                        </a>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Copy URL */}
+                        <button
+                          type="button"
+                          onClick={() => handleCopySupplierUrl(url, idx)}
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                          title="Copy Supplier URL"
+                        >
+                          {copiedSupplierIndex === idx ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-500" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+
+                        {/* Open in new tab */}
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                          title="Open Supplier Link in New Tab"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+
+                        {/* Delete URL */}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSupplierUrl(idx)}
+                          disabled={isSavingSuppliers}
+                          className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                          title="Remove Supplier URL"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-3 mb-3 text-center rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-dashed border-slate-200 dark:border-slate-800 text-xs text-slate-400 flex items-center justify-center gap-2">
+                <Link2 className="w-4 h-4 text-slate-400" />
+                <span>No supplier URLs added yet. Add supplier product URLs (e.g. Facebook post/page link, custom supplier URL) below.</span>
+              </div>
+            )}
+
+            {/* Add New Supplier URL Form */}
+            <form onSubmit={handleAddSupplierUrl} className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Link2 className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={newSupplierInput}
+                  onChange={(e) => setNewSupplierInput(e.target.value)}
+                  placeholder="Paste supplier product URL (e.g. Facebook post/page, custom supplier link)..."
+                  className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
+                  disabled={isSavingSuppliers}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={!newSupplierInput.trim() || isSavingSuppliers}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl shadow-sm transition-all cursor-pointer shrink-0"
+              >
+                {isSavingSuppliers ? (
+                  <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Plus className="w-3.5 h-3.5" />
+                )}
+                <span>Add Supplier</span>
+              </button>
+            </form>
           </div>
 
           {/* Tunisian Advertiser & Shadow Network Intelligence Section */}

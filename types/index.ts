@@ -115,6 +115,7 @@ export interface ScrapedProduct {
   category?: string | null;
   subCategory?: string | null;
   targetAudience?: "unisex" | "men" | "women" | "kids" | null;
+  supplierUrls?: string[] | null;
   isFavorite?: boolean;
   scrapeStatus: "pending" | "scraping" | "success" | "failed";
   failureReason?: string | null;

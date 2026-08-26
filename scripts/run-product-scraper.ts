@@ -292,6 +292,7 @@ async function runProductScraperBatch() {
           category: null,
           subCategory: null,
           targetAudience: null,
+          supplierUrls: [],
           isFavorite: false,
           scrapeStatus: "pending",
           failureReason: null,

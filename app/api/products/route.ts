@@ -187,6 +187,7 @@ export async function GET(req: NextRequest) {
           category: scrapedProducts.category,
           subCategory: scrapedProducts.subCategory,
           targetAudience: scrapedProducts.targetAudience,
+          supplierUrls: scrapedProducts.supplierUrls,
           isFavorite: scrapedProducts.isFavorite,
           scrapeStatus: scrapedProducts.scrapeStatus,
           failureReason: scrapedProducts.failureReason,
@@ -293,7 +294,7 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { id, isFavorite } = body;
+    const { id, isFavorite, supplierUrls } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -302,21 +303,40 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
+    const updateData: Record<string, any> = {
+      updatedAt: new Date(),
+    };
+
+    if (isFavorite !== undefined) {
+      updateData.isFavorite = Boolean(isFavorite);
+    }
+
+    if (supplierUrls !== undefined) {
+      // Validate, clean, and deduplicate array of URL strings
+      updateData.supplierUrls = Array.isArray(supplierUrls)
+        ? Array.from(
+            new Set(
+              supplierUrls
+                .filter((u: any) => typeof u === "string" && u.trim().length > 0)
+                .map((u: string) => u.trim())
+            )
+          )
+        : [];
+    }
+
     await db
       .update(scrapedProducts)
-      .set({
-        isFavorite: Boolean(isFavorite),
-        updatedAt: new Date(),
-      })
+      .set(updateData)
       .where(eq(scrapedProducts.id, id));
 
     return NextResponse.json({
       success: true,
-      message: "Product favorite status updated successfully.",
+      message: "Product updated successfully.",
+      supplierUrls: updateData.supplierUrls,
     });
   } catch (err: any) {
     return NextResponse.json(
-      { error: err.message || "Failed to update favorite status" },
+      { error: err.message || "Failed to update product" },
       { status: 500 }
     );
   }

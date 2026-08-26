@@ -131,6 +131,7 @@ export const scrapedProducts = pgTable(
     category: text("category"), // e.g. Electronics & Tech, Beauty, Health & Care
     subCategory: text("sub_category"), // e.g. Smartwatches, Hair Care
     targetAudience: text("target_audience"), // unisex | men | women | kids
+    supplierUrls: text("supplier_urls").array(), // Array of supplier sourcing URLs (AliExpress, 1688, Alibaba, CJ, etc.)
     isFavorite: boolean("is_favorite").default(false),
     scrapeStatus: text("scrape_status").default("pending").notNull(), // pending | scraping | success | failed
     failureReason: text("failure_reason"),
