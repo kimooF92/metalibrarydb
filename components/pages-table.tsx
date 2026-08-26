@@ -938,7 +938,7 @@ export function PagesTable({
                         ) : (
                           <div className="flex items-center space-x-1.5 min-w-0">
                             <Link
-                              href={`/spy/brand/${encodeURIComponent(p.id || p.pageId || "")}`}
+                              href={`/spy/brand/${encodeURIComponent(p.pageId || p.id || "")}`}
                               title={`Open ${p.displayName || "brand"} Analytics & Ad Library`}
                               className="font-semibold text-slate-800 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-300 underline-offset-2 hover:underline transition-colors truncate max-w-[180px]"
                             >
@@ -1012,7 +1012,7 @@ export function PagesTable({
                       {/* Exact Products Count (Canonical Scraped Products & Distinct Landing Pages) */}
                       <td className="px-3 py-1.5 text-center">
                         <Link
-                          href={`/spy/brand/${encodeURIComponent(p.id || p.pageId || "")}?tab=products`}
+                          href={`/spy/brand/${encodeURIComponent(p.pageId || p.id || "")}?tab=products`}
                           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 hover:border-indigo-500/40 transition-all cursor-pointer shadow-xs"
                           title={`Open ${p.displayName || "brand"} Product Catalog (${p.approxProductCount || 0} distinct products listed)`}
                         >
@@ -1173,7 +1173,7 @@ export function PagesTable({
                           </button>
 
                           <Link
-                            href={`/spy/brand/${encodeURIComponent(p.id || p.pageId || "")}`}
+                            href={`/spy/brand/${encodeURIComponent(p.pageId || p.id || "")}`}
                             className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer inline-flex items-center justify-center"
                             title="Open Brand Deep-Dive & Analytics"
                             aria-label={`Open Brand Deep-Dive & Analytics for ${p.displayName || "tracked page"}`}
