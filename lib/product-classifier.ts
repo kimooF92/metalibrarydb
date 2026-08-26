@@ -332,47 +332,46 @@ You must respond ONLY with raw, valid JSON in this exact structure:
     extraContext?.domain ? ` | Store: ${extraContext.domain}` : ""
   }${extraContext?.adText ? ` | Ad Context: ${extraContext.adText.slice(0, 150)}` : ""}`;
 
-  // 1. If OpenRouter Key is provided (Primary: Nemotron 70B -> Gemini 2.0 -> Llama 3.3 70B)
+  // 1. If OpenRouter Key is provided (Dual-Layer Fallback across 3 free models)
   if (openRouterKey && openRouterKey.trim() !== "") {
-    try {
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${openRouterKey.trim()}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "https://ad-library-tracker.local",
-          "X-Title": "Meta Ad Tracker Product Categorizer",
-        },
-        body: JSON.stringify({
-          model: AI_MODELS[0],
-          models: AI_MODELS,
-          reasoning: { max_tokens: 0 },
-          temperature: 0.1,
-          max_tokens: 150,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userContent },
-          ],
-          response_format: { type: "json_object" },
-        }),
-        signal: AbortSignal.timeout(8000),
-      });
+    for (const currentModel of AI_MODELS) {
+      try {
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${openRouterKey.trim()}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://ad-library-tracker.local",
+            "X-Title": "Meta Ad Tracker Product Categorizer",
+          },
+          body: JSON.stringify({
+            model: currentModel,
+            models: AI_MODELS, // OpenRouter native instant server-side cascade
+            reasoning: { max_tokens: 0 },
+            temperature: 0.1,
+            max_tokens: 150,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userContent },
+            ],
+            response_format: { type: "json_object" },
+          }),
+          signal: AbortSignal.timeout(6000),
+        });
 
-      if (response.ok) {
-        const data = await response.json();
-        const rawContent = data.choices?.[0]?.message?.content || data.choices?.[0]?.message?.reasoning;
-        const modelUsed = data.model || AI_MODELS[0];
-        const res = parseAiResponse(rawContent, modelUsed);
-        if (res) {
-          categoryCache.set(cacheKey, res);
-          return res;
+        if (response.ok) {
+          const data = await response.json();
+          const rawContent = data.choices?.[0]?.message?.content || data.choices?.[0]?.message?.reasoning;
+          const modelUsed = data.model || currentModel;
+          const res = parseAiResponse(rawContent, modelUsed);
+          if (res) {
+            categoryCache.set(cacheKey, res);
+            return res;
+          }
         }
-      } else {
-        const errText = await response.text();
-        console.warn(`[OpenRouter HTTP ${response.status}]`, errText);
+      } catch (e: any) {
+        // Continue to next model in cascade
       }
-    } catch (e: any) {
-      console.warn(`[OpenRouter AI Notice] ${e?.message || "timeout"}, checking other LLM keys...`);
     }
   }
 
