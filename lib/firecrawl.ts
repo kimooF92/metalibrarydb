@@ -215,11 +215,16 @@ export async function extractProductFromUrl(url: string): Promise<{
   // 1. Primary: High-speed Direct E-Commerce HTML & JSON-LD Scraper ($0 cost, ~250ms latency)
   try {
     const directResult = await scrapeProductDirectHtml(normalized);
+    const priceStr = directResult.data?.current_price?.trim() || "";
+    const isZeroPrice = /^0(\.0+)?\s*(dt|tnd|usd|eur|dinar)?$/i.test(priceStr) || priceStr === "0";
+    const hasValidPrice = Boolean(priceStr && !isZeroPrice);
+    const hasValidImage = Boolean(directResult.data?.main_image_url);
+
     if (
       directResult.success &&
       directResult.data &&
       directResult.data.title &&
-      (directResult.data.current_price || directResult.data.main_image_url)
+      (hasValidPrice || hasValidImage)
     ) {
       return {
         success: true,
@@ -227,7 +232,7 @@ export async function extractProductFromUrl(url: string): Promise<{
         raw: { html: directResult.rawHtml, engine: "direct_html" },
       };
     }
-    console.log(`[Product Scraper] Direct HTML incomplete for ${normalized}. Checking Firecrawl rescue fallback...`);
+    console.log(`[Product Scraper] Direct HTML incomplete or empty SPA shell for ${normalized}. Checking Firecrawl rescue fallback...`);
   } catch (directErr: any) {
     console.warn(`[Product Scraper] Direct scraper error for ${normalized}:`, directErr?.message);
   }
