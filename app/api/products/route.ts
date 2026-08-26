@@ -34,7 +34,9 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "24", 10)));
     const offset = (page - 1) * limit;
 
-    const conditions = [];
+    const conditions: any[] = [
+      sql`${scrapedProducts.scrapeStatus} NOT IN ('deleted', 'ignored')`,
+    ];
 
     // Filter by Active / Inactive (Off-Air) Ads status
     if (activeStatus === "active" || hideInactive) {
@@ -210,13 +212,14 @@ export async function GET(req: NextRequest) {
                 withOffers: sql<number>`COUNT(CASE WHEN ${scrapedProducts.discountOrOffer} IS NOT NULL AND ${scrapedProducts.discountOrOffer} != '' THEN 1 END)`.mapWith(Number),
                 favoritesCount: sql<number>`COUNT(CASE WHEN ${scrapedProducts.isFavorite} = true THEN 1 END)`.mapWith(Number),
                 successful: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} = 'success' THEN 1 END)`.mapWith(Number),
-                pending: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} != 'success' OR ${scrapedProducts.currentPrice} IS NULL THEN 1 END)`.mapWith(Number),
+                pending: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} NOT IN ('success', 'deleted', 'ignored') OR ${scrapedProducts.currentPrice} IS NULL THEN 1 END)`.mapWith(Number),
                 newThisWeek: sql<number>`COUNT(CASE WHEN ${scrapedProducts.createdAt} >= NOW() - INTERVAL '7 days' THEN 1 END)`.mapWith(Number),
                 shopifyCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%shopify%' THEN 1 END)`.mapWith(Number),
                 youcanCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%youcan%' THEN 1 END)`.mapWith(Number),
                 woocommerceCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%woocommerce%' THEN 1 END)`.mapWith(Number),
               })
-              .from(scrapedProducts),
+              .from(scrapedProducts)
+              .where(sql`${scrapedProducts.scrapeStatus} NOT IN ('deleted', 'ignored')`),
             db
               .select({
                 activeDistinctCount: sql<number>`COUNT(DISTINCT ${ads.productId})`.mapWith(Number),
@@ -241,10 +244,10 @@ export async function GET(req: NextRequest) {
         : Promise.resolve([]),
     ]);
 
+    // Batch query linked ad metrics for this page's products in 1 query
     const productIds = rawProducts.map((p) => p.id);
     const metricsMap = new Map<string, any>();
 
-    // Batch fetch ad metrics ONLY for the 24 returned products (ultra-fast indexed IN query <5ms)
     if (productIds.length > 0) {
       try {
         const metricsRows = await db
@@ -348,9 +351,9 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json();
     const { id, isFavorite } = body;
 
-    if (!id || typeof isFavorite !== "boolean") {
+    if (!id) {
       return NextResponse.json(
-        { error: "Product id and boolean isFavorite are required." },
+        { error: "Product id is required." },
         { status: 400 }
       );
     }
@@ -358,15 +361,14 @@ export async function PATCH(req: NextRequest) {
     await db
       .update(scrapedProducts)
       .set({
-        isFavorite,
+        isFavorite: Boolean(isFavorite),
         updatedAt: new Date(),
       })
       .where(eq(scrapedProducts.id, id));
 
     return NextResponse.json({
       success: true,
-      id,
-      isFavorite,
+      message: "Product favorite status updated successfully.",
     });
   } catch (err: any) {
     return NextResponse.json(
@@ -397,9 +399,14 @@ export async function DELETE(req: NextRequest) {
       .set({ productId: null })
       .where(eq(ads.productId, id));
 
-    // Delete scraped product
+    // Mark product as deleted so background sync/scrapers never resurrect it
     await db
-      .delete(scrapedProducts)
+      .update(scrapedProducts)
+      .set({
+        scrapeStatus: "deleted",
+        isFavorite: false,
+        updatedAt: new Date(),
+      })
       .where(eq(scrapedProducts.id, id));
 
     return NextResponse.json({

@@ -3,7 +3,7 @@ dotenv.config({ path: ".env.local" });
 
 import { db, client } from "../db";
 import { scrapedProducts, ads } from "../db/schema";
-import { eq, or, isNull, inArray, sql, desc } from "drizzle-orm";
+import { eq, or, and, isNull, inArray, sql, desc } from "drizzle-orm";
 import { extractProductFromUrl } from "../lib/firecrawl";
 import {
   extractTunisianPhoneNumbers,
@@ -302,15 +302,16 @@ async function runProductScraperBatch() {
       }
     }
 
-    if (!options.forceAll) {
-      targetProducts = targetProducts.filter(
-        (p) =>
+    targetProducts = targetProducts.filter(
+      (p) =>
+        p.scrapeStatus !== "deleted" &&
+        p.scrapeStatus !== "ignored" &&
+        (options.forceAll ||
           p.scrapeStatus === "pending" ||
           p.scrapeStatus === "failed" ||
           !p.currentPrice ||
-          p.currentPrice === "0 DT"
-      );
-    }
+          p.currentPrice === "0 DT")
+    );
 
     console.log(`Scraping ${targetProducts.length} product(s) for brand ${resolvedPageId}...\n`);
     // Proceeds to execution loop below
@@ -357,7 +358,10 @@ async function runProductScraperBatch() {
     let query = db.select().from(scrapedProducts);
 
     if (options.forceAll) {
-      targetProducts = await query.orderBy(desc(scrapedProducts.createdAt)).limit(options.limit);
+      targetProducts = await query
+        .where(sql`${scrapedProducts.scrapeStatus} NOT IN ('deleted', 'ignored')`)
+        .orderBy(desc(scrapedProducts.createdAt))
+        .limit(options.limit);
     } else if (options.status && options.status !== "all" && options.status !== "pending") {
       targetProducts = await query
         .where(eq(scrapedProducts.scrapeStatus, options.status))
@@ -367,10 +371,13 @@ async function runProductScraperBatch() {
       // Default or "pending": query any item that is pending, failed, or missing price
       targetProducts = await query
         .where(
-          or(
-            eq(scrapedProducts.scrapeStatus, "pending"),
-            eq(scrapedProducts.scrapeStatus, "failed"),
-            isNull(scrapedProducts.currentPrice)
+          and(
+            sql`${scrapedProducts.scrapeStatus} NOT IN ('deleted', 'ignored')`,
+            or(
+              eq(scrapedProducts.scrapeStatus, "pending"),
+              eq(scrapedProducts.scrapeStatus, "failed"),
+              isNull(scrapedProducts.currentPrice)
+            )
           )
         )
         .orderBy(desc(scrapedProducts.createdAt))

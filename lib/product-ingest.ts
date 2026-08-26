@@ -92,7 +92,13 @@ export async function linkAndAutoScrapeProduct({
       .limit(1);
 
     if (existing.length > 0) {
-      const prodId = existing[0].id;
+      const prod = existing[0];
+      // If user deleted or ignored this product, do not resurrect or link it
+      if (prod.scrapeStatus === "deleted" || prod.scrapeStatus === "ignored") {
+        return { productId: null, isNew: false };
+      }
+
+      const prodId = prod.id;
       // Link ad to existing product record immediately
       if (adId) {
         await db
