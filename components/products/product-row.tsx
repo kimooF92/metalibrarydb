@@ -91,11 +91,16 @@ export function ProductRow({
   };
 
   const isPendingScrape = product.scrapeStatus === "pending";
+  const isInactive = typeof product.activeAdsCount === "number" && product.activeAdsCount === 0;
 
   return (
     <div
       onClick={() => onViewDetails?.(product)}
-      className="group flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 bg-white dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800/80 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 shadow-xs hover:shadow-md transition-all duration-150 cursor-pointer"
+      className={`group flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 bg-white dark:bg-slate-900/60 rounded-xl border transition-all duration-150 cursor-pointer ${
+        isInactive
+          ? "border-slate-200/60 dark:border-slate-800/60 opacity-80 hover:opacity-100 shadow-xs"
+          : "border-slate-200 dark:border-slate-800/80 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 shadow-xs hover:shadow-md"
+      }`}
     >
       {/* Left: Star + Thumbnail & Main Info */}
       <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -122,7 +127,9 @@ export function ProductRow({
               fill
               unoptimized
               referrerPolicy="no-referrer"
-              className="object-contain p-1"
+              className={`object-contain p-1 transition-all duration-300 ${
+                isInactive ? "grayscale contrast-90 group-hover:grayscale-0 group-hover:contrast-100" : ""
+              }`}
               onError={() => setImgError(true)}
             />
           ) : (
@@ -164,13 +171,19 @@ export function ProductRow({
               </span>
             )}
 
+            {isInactive && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                ⚫ Inactive (Off-Air)
+              </span>
+            )}
+
             {product.storePlatform && product.storePlatform !== "other" && (
               <span className="text-[10px] font-bold uppercase text-slate-600 dark:text-slate-400">
                 • {product.storePlatform}
               </span>
             )}
 
-            {product.daysRunning && product.daysRunning >= 30 && (
+            {!isInactive && product.daysRunning && product.daysRunning >= 30 && (
               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
                 ⏳ {product.daysRunning}d Running
               </span>
@@ -210,6 +223,10 @@ export function ProductRow({
           {typeof product.activeAdsCount === "number" && product.activeAdsCount > 0 ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
               🔥 {product.activeAdsCount} active
+            </span>
+          ) : isInactive ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+              ⚫ 0 active ads
             </span>
           ) : typeof product.linkedAdsCount === "number" && product.linkedAdsCount > 0 ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">

@@ -108,14 +108,19 @@ export function ProductCard({
     }
   };
 
-  const isWinning = (product.linkedAdsCount || 0) >= 3;
+  const isWinning = (product.linkedAdsCount || 0) >= 3 && (product.activeAdsCount || 0) > 0;
+  const isInactive = typeof product.activeAdsCount === "number" && product.activeAdsCount === 0;
   const isPendingScrape = product.scrapeStatus === "pending";
   const isFailedScrape = product.scrapeStatus === "failed";
 
   return (
     <div
       onClick={() => onViewDetails?.(product)}
-      className="group relative flex flex-col bg-white dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800/80 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 shadow-sm hover:shadow-lg transition-all duration-200 overflow-hidden cursor-pointer"
+      className={`group relative flex flex-col bg-white dark:bg-slate-900/60 rounded-xl border transition-all duration-200 overflow-hidden cursor-pointer ${
+        isInactive
+          ? "border-slate-200/80 dark:border-slate-800/80 opacity-80 hover:opacity-100 hover:border-slate-400 dark:hover:border-slate-600 shadow-xs"
+          : "border-slate-200 dark:border-slate-800/80 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 shadow-sm hover:shadow-lg"
+      }`}
     >
       {/* Top Banner / Badges */}
       <div className="relative aspect-square w-full bg-slate-100 dark:bg-slate-950/80 overflow-hidden flex items-center justify-center border-b border-slate-200 dark:border-slate-800/60">
@@ -126,7 +131,9 @@ export function ProductCard({
             fill
             unoptimized
             referrerPolicy="no-referrer"
-            className="object-contain p-2 transition-transform duration-300 group-hover:scale-105"
+            className={`object-contain p-2 transition-all duration-300 group-hover:scale-105 ${
+              isInactive ? "grayscale contrast-90 group-hover:grayscale-0 group-hover:contrast-100" : ""
+            }`}
             onError={() => setImgError(true)}
           />
         ) : (
@@ -146,8 +153,16 @@ export function ProductCard({
           </div>
         )}
 
+        {/* Inactive / Off-Air Badge */}
+        {isInactive && (
+          <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900/85 text-slate-300 text-[10px] font-bold shadow-md border border-slate-700/80 backdrop-blur-xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+            <span>Inactive (Off-Air)</span>
+          </div>
+        )}
+
         {/* Top Lasting (Evergreen) Badge */}
-        {!isWinning && product.daysRunning && product.daysRunning >= 30 && (
+        {!isWinning && !isInactive && product.daysRunning && product.daysRunning >= 30 && (
           <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full bg-purple-600 text-white text-[10px] font-bold shadow-md">
             <Clock className="w-3 h-3" />
             <span>⏳ {product.daysRunning}d Running</span>
@@ -257,6 +272,10 @@ export function ProductCard({
           {typeof product.activeAdsCount === "number" && product.activeAdsCount > 0 ? (
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
               🔥 {product.activeAdsCount} active {product.activeAdsCount === 1 ? "ad" : "ads"}
+            </span>
+          ) : isInactive ? (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+              ⚫ 0 active ads (Off-air)
             </span>
           ) : typeof product.linkedAdsCount === "number" && product.linkedAdsCount > 0 ? (
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">

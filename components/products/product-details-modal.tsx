@@ -300,6 +300,12 @@ ${imagesText}`;
                     • {product.domain}
                   </span>
                 )}
+
+                {typeof product.activeAdsCount === "number" && product.activeAdsCount === 0 && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                    ⚫ Inactive / Off-Air
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -441,7 +447,11 @@ ${imagesText}`;
                     fill
                     unoptimized
                     referrerPolicy="no-referrer"
-                    className="object-contain p-3"
+                    className={`object-contain p-3 transition-all duration-300 ${
+                      typeof product.activeAdsCount === "number" && product.activeAdsCount === 0
+                        ? "grayscale contrast-90 hover:grayscale-0"
+                        : ""
+                    }`}
                   />
                 ) : (
                   <div className="flex flex-col items-center gap-2 text-slate-400">
