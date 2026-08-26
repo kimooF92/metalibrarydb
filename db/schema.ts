@@ -128,6 +128,9 @@ export const scrapedProducts = pgTable(
     metaPixelIds: text("meta_pixel_ids").array(),
     storePlatform: text("store_platform"),
     deliveryCost: text("delivery_cost"),
+    category: text("category"), // e.g. Electronics & Tech, Beauty, Health & Care
+    subCategory: text("sub_category"), // e.g. Smartwatches, Hair Care
+    targetAudience: text("target_audience"), // unisex | men | women | kids
     isFavorite: boolean("is_favorite").default(false),
     scrapeStatus: text("scrape_status").default("pending").notNull(), // pending | scraping | success | failed
     failureReason: text("failure_reason"),
@@ -139,6 +142,7 @@ export const scrapedProducts = pgTable(
     index("idx_scraped_products_url").on(table.url),
     index("idx_scraped_products_domain").on(table.domain),
     index("idx_scraped_products_page_id").on(table.pageId),
+    index("idx_scraped_products_category").on(table.category),
     index("idx_scraped_products_is_favorite").on(table.isFavorite),
     index("idx_scraped_products_status").on(table.scrapeStatus),
     index("idx_scraped_products_store_platform").on(table.storePlatform),

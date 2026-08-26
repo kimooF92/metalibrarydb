@@ -12,6 +12,7 @@ import {
   detectStorePlatform,
   extractDeliveryInfo,
 } from "@/lib/network-extractor";
+import { classifyProductWithAI } from "@/lib/product-classifier";
 
 export async function POST(req: NextRequest) {
   const authError = await validateApiSecret(req);
@@ -126,6 +127,11 @@ export async function POST(req: NextRequest) {
       extracted.all_offers
     );
 
+    const classification = await classifyProductWithAI(extracted.title || "", {
+      domain: resolvedDomain,
+      adText: adCaptionText,
+    });
+
     // 3. Save or update product in DB
     let savedProduct;
     if (existingProduct) {
@@ -148,6 +154,9 @@ export async function POST(req: NextRequest) {
           metaPixelIds: metaPixelIds.length > 0 ? metaPixelIds : existingProduct.metaPixelIds,
           storePlatform: storePlatform !== "other" ? storePlatform : existingProduct.storePlatform,
           deliveryCost: deliveryInfo.label || existingProduct.deliveryCost,
+          category: classification.category || existingProduct.category,
+          subCategory: classification.subCategory || existingProduct.subCategory,
+          targetAudience: classification.targetAudience || existingProduct.targetAudience,
           scrapeStatus: "success",
           failureReason: null,
           lastScrapedAt: new Date(),
@@ -177,6 +186,9 @@ export async function POST(req: NextRequest) {
           metaPixelIds: metaPixelIds.length > 0 ? metaPixelIds : [],
           storePlatform: storePlatform || "other",
           deliveryCost: deliveryInfo.label || null,
+          category: classification.category || null,
+          subCategory: classification.subCategory || null,
+          targetAudience: classification.targetAudience || null,
           scrapeStatus: "success",
           lastScrapedAt: new Date(),
         })

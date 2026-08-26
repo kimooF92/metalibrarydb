@@ -10,6 +10,7 @@ import {
   detectStorePlatform,
   extractDeliveryInfo,
 } from "@/lib/network-extractor";
+import { classifyProductWithAI } from "@/lib/product-classifier";
 
 // In-flight URL scrape deduplication map to prevent redundant concurrent Firecrawl requests
 const inFlightScrapes = new Map<string, Promise<any>>();
@@ -187,6 +188,11 @@ export async function linkAndAutoScrapeProduct({
           const deliveryInfo = extractDeliveryInfo(rawHtml, extracted.delivery_cost);
           const deliveryCost = deliveryInfo?.label || null;
 
+          const classification = await classifyProductWithAI(extracted.title || "", {
+            domain: resolvedDomain,
+            adText: adCopy,
+          });
+
           const formattedOffers = (extracted.all_offers || []).map((offer) => ({
             tierName: offer.tier_name,
             price: offer.price,
@@ -211,6 +217,9 @@ export async function linkAndAutoScrapeProduct({
               metaPixelIds: metaPixelIds.length > 0 ? metaPixelIds : null,
               storePlatform: storePlatform || "other",
               deliveryCost: deliveryCost || null,
+              category: classification.category || null,
+              subCategory: classification.subCategory || null,
+              targetAudience: classification.targetAudience || null,
               rawExtract: extractionResult.raw || null,
               scrapeStatus: "success",
               failureReason: null,

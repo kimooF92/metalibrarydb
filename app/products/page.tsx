@@ -57,6 +57,7 @@ export default function ProductsPage() {
   const [debouncedBrand, setDebouncedBrand] = useState("");
 
   const [platform, setPlatform] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState<string>("latest");
   const [page, setPage] = useState(1);
@@ -152,6 +153,7 @@ export default function ProductsPage() {
         if (debouncedSearch.trim()) query.set("search", debouncedSearch.trim());
         if (debouncedBrand.trim()) query.set("brand", debouncedBrand.trim());
         if (platform !== "all") query.set("platform", platform);
+        if (categoryFilter !== "all") query.set("category", categoryFilter);
         if (statusFilter !== "all") query.set("status", statusFilter);
         if (includeStats) query.set("includeStats", "true");
 
@@ -194,7 +196,7 @@ export default function ProductsPage() {
         }
       }
     },
-    [sortBy, smartPreset, debouncedSearch, debouncedBrand, platform, statusFilter]
+    [sortBy, smartPreset, debouncedSearch, debouncedBrand, platform, categoryFilter, statusFilter]
   );
 
   // Trigger initial fetch on filter/sort change (only fetch heavy global stats on first mount)
@@ -443,6 +445,7 @@ export default function ProductsPage() {
     setBrandInput("");
     setDebouncedBrand("");
     setPlatform("all");
+    setCategoryFilter("all");
     setStatusFilter("all");
     setSmartPreset("all");
     setSortBy("latest");
@@ -750,6 +753,26 @@ export default function ProductsPage() {
               </button>
             )}
           </div>
+
+          {/* Category Filter */}
+          <select
+            value={categoryFilter}
+            onChange={(e) => {
+              setCategoryFilter(e.target.value);
+              setPage(1);
+            }}
+            className="bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-2.5 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
+          >
+            <option value="all">All Categories</option>
+            <option value="Electronics & Tech">📱 Electronics & Tech</option>
+            <option value="Beauty, Health & Care">💄 Beauty & Health</option>
+            <option value="Home, Kitchen & Living">🏠 Home & Kitchen</option>
+            <option value="Fashion & Jewelry">👗 Fashion & Jewelry</option>
+            <option value="Sports, Fitness & Outdoor">⚡ Sports & Fitness</option>
+            <option value="Kids, Baby & Toys">🧸 Kids & Baby</option>
+            <option value="Automotive & Tools">🚗 Automotive & Tools</option>
+            <option value="General & Other">📦 General & Other</option>
+          </select>
 
           {/* E-Commerce Platform Filter */}
           <select

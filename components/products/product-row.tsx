@@ -158,6 +158,12 @@ export function ProductRow({
               </span>
             ) : null}
 
+            {product.category && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                🏷️ {product.category}
+              </span>
+            )}
+
             {product.storePlatform && product.storePlatform !== "other" && (
               <span className="text-[10px] font-bold uppercase text-slate-600 dark:text-slate-400">
                 • {product.storePlatform}

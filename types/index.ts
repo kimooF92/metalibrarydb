@@ -112,6 +112,9 @@ export interface ScrapedProduct {
   metaPixelIds?: string[] | null;
   storePlatform?: string | null;
   deliveryCost?: string | null;
+  category?: string | null;
+  subCategory?: string | null;
+  targetAudience?: "unisex" | "men" | "women" | "kids" | null;
   isFavorite?: boolean;
   scrapeStatus: "pending" | "scraping" | "success" | "failed";
   failureReason?: string | null;

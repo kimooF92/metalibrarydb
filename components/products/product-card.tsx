@@ -234,8 +234,14 @@ export function ProductCard({
           {product.title || "Untitled Product Landing Page"}
         </h3>
 
-        {/* Badges: Platform + WhatsApp + Ad Count + Longevity */}
+        {/* Badges: Category + Platform + WhatsApp + Ad Count + Longevity */}
         <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
+          {product.category && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+              🏷️ {product.category}
+            </span>
+          )}
+
           {product.storePlatform && product.storePlatform !== "other" && (
             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 uppercase">
               {product.storePlatform}

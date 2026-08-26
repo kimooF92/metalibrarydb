@@ -13,6 +13,7 @@ import {
   extractDeliveryInfo,
 } from "../lib/network-extractor";
 import { getCleanDomain } from "../lib/utils";
+import { classifyProductWithAI } from "../lib/product-classifier";
 
 interface RunOptions {
   limit: number;
@@ -146,6 +147,10 @@ async function runProductScraperBatch() {
         const pixels = extractMetaPixelIds(rawHtml);
         const delivery = extractDeliveryInfo(rawHtml, res.data.delivery_cost);
 
+        const classification = await classifyProductWithAI(res.data.title || item.title || "", {
+          domain: resolvedDomain,
+        });
+
         const formattedOffers = (res.data.all_offers || []).map((o) => ({
           tierName: o.tier_name,
           price: o.price,
@@ -169,6 +174,9 @@ async function runProductScraperBatch() {
             whatsappNumbers: wa.length > 0 ? wa : item.whatsappNumbers,
             metaPixelIds: pixels.length > 0 ? pixels : item.metaPixelIds,
             deliveryCost: delivery.label || item.deliveryCost,
+            category: classification.category || item.category,
+            subCategory: classification.subCategory || item.subCategory,
+            targetAudience: classification.targetAudience || item.targetAudience,
             scrapeStatus: "success",
             failureReason: null,
             lastScrapedAt: new Date(),

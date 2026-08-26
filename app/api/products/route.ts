@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
     const domain = searchParams.get("domain");
     const brand = searchParams.get("brand");
     const platform = searchParams.get("platform");
+    const category = searchParams.get("category");
     const hasOffer = searchParams.get("hasOffer") === "true";
     const isFavoriteOnly = searchParams.get("isFavorite") === "true";
     const status = searchParams.get("status") || "all";
@@ -46,6 +47,11 @@ export async function GET(req: NextRequest) {
       } else {
         conditions.push(eq(scrapedProducts.scrapeStatus, status));
       }
+    }
+
+    // Filter by category
+    if (category && category !== "all") {
+      conditions.push(eq(scrapedProducts.category, category));
     }
 
     // Filter by domain
@@ -86,7 +92,7 @@ export async function GET(req: NextRequest) {
       conditions.push(sql`${scrapedProducts.createdAt} >= NOW() - INTERVAL '7 days'`);
     }
 
-    // Search filter across title, domain, URL, offer
+    // Search filter across title, domain, URL, offer, category
     if (search && search.trim() !== "") {
       const term = `%${search.trim()}%`;
       conditions.push(
@@ -94,7 +100,9 @@ export async function GET(req: NextRequest) {
           ilike(scrapedProducts.title, term),
           ilike(scrapedProducts.domain, term),
           ilike(scrapedProducts.url, term),
-          ilike(scrapedProducts.discountOrOffer, term)
+          ilike(scrapedProducts.discountOrOffer, term),
+          ilike(scrapedProducts.category, term),
+          ilike(scrapedProducts.subCategory, term)
         )
       );
     }
@@ -143,6 +151,9 @@ export async function GET(req: NextRequest) {
           metaPixelIds: scrapedProducts.metaPixelIds,
           storePlatform: scrapedProducts.storePlatform,
           deliveryCost: scrapedProducts.deliveryCost,
+          category: scrapedProducts.category,
+          subCategory: scrapedProducts.subCategory,
+          targetAudience: scrapedProducts.targetAudience,
           isFavorite: scrapedProducts.isFavorite,
           scrapeStatus: scrapedProducts.scrapeStatus,
           failureReason: scrapedProducts.failureReason,
