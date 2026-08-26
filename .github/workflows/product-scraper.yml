@@ -56,6 +56,7 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           SCRAPE_LIMIT: ${{ inputs.limit || '100' }}
           SCRAPE_FORCE_ALL: ${{ inputs.force_all || 'false' }}
           SCRAPE_STATUS: ${{ inputs.status_filter || 'pending' }}
