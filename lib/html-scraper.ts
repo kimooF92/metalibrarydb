@@ -147,20 +147,42 @@ export function parseProductHtmlContent(
     }
 
     if (title) {
-      title = decodeHtmlEntities(title)
-        .replace(/\s*\|\s*.*$/g, "") // remove " | StoreName"
-        .replace(/\s*–\s*.*$/g, "")
-        .replace(/\s*-\s*.*$/g, "")
-        .trim();
+      title = decodeHtmlEntities(title).trim();
+      if (title.includes("|")) {
+        const parts = title.split("|").map((p) => p.trim()).filter(Boolean);
+        if (parts.length > 1) {
+          parts.sort((a, b) => b.length - a.length);
+          title = parts[0];
+        }
+      } else if (title.includes(" – ")) {
+        const parts = title.split(" – ").map((p) => p.trim()).filter(Boolean);
+        if (parts.length > 1) {
+          parts.sort((a, b) => b.length - a.length);
+          title = parts[0];
+        }
+      } else if (title.includes(" - ")) {
+        const parts = title.split(" - ").map((p) => p.trim()).filter(Boolean);
+        if (parts.length > 1) {
+          const sorted = [...parts].sort((a, b) => b.length - a.length);
+          if (sorted[0].length > sorted[1].length * 1.2) {
+            title = sorted[0];
+          }
+        }
+      }
+      title = title.trim();
     }
 
 function extractImageUrl(img: any): string | null {
   if (!img) return null;
-  if (typeof img === "string") return img.trim();
+  if (typeof img === "string") {
+    const s = img.trim();
+    if (s.includes("[[") || s.includes("{{") || s.length < 5) return null;
+    return s;
+  }
   if (typeof img === "object") {
-    if (typeof img.url === "string") return img.url.trim();
-    if (typeof img.contentUrl === "string") return img.contentUrl.trim();
-    if (typeof img.src === "string") return img.src.trim();
+    if (typeof img.url === "string") return extractImageUrl(img.url);
+    if (typeof img.contentUrl === "string") return extractImageUrl(img.contentUrl);
+    if (typeof img.src === "string") return extractImageUrl(img.src);
   }
   return null;
 }
@@ -171,7 +193,7 @@ function extractImageUrl(img: any): string | null {
 
     if (jsonLdProduct?.image) {
       if (typeof jsonLdProduct.image === "string") {
-        mainImageUrl = jsonLdProduct.image.trim();
+        mainImageUrl = extractImageUrl(jsonLdProduct.image);
       } else if (Array.isArray(jsonLdProduct.image) && jsonLdProduct.image.length > 0) {
         mainImageUrl = extractImageUrl(jsonLdProduct.image[0]);
         for (const item of jsonLdProduct.image.slice(1)) {
@@ -196,14 +218,16 @@ function extractImageUrl(img: any): string | null {
     }
 
     if (!mainImageUrl) {
-      mainImageUrl = extractMeta(html, "og:image:secure_url") || extractMeta(html, "og:image") || extractMeta(html, "twitter:image");
+      mainImageUrl = extractImageUrl(
+        extractMeta(html, "og:image:secure_url") || extractMeta(html, "og:image") || extractMeta(html, "twitter:image")
+      );
     }
 
     // Markdown/HTML image fallback for dynamic DOMs
     if (!mainImageUrl && markdown) {
       const mdImgMatch = markdown.match(/!\[([^\]]*)\]\((https?:\/\/[^\s\)]+)\)/i);
       if (mdImgMatch && mdImgMatch[2]) {
-        mainImageUrl = mdImgMatch[2];
+        mainImageUrl = extractImageUrl(mdImgMatch[2]);
       }
     }
 
@@ -211,8 +235,9 @@ function extractImageUrl(img: any): string | null {
       const imgRegex = /<img\s+[^>]*src=["']([^"']+)["'][^>]*>/gi;
       let imgMatch;
       while ((imgMatch = imgRegex.exec(html)) !== null) {
-        const src = imgMatch[1];
+        const src = extractImageUrl(imgMatch[1]);
         if (
+          src &&
           !src.includes("pixel") &&
           !src.includes("icon") &&
           !src.includes("svg") &&
@@ -239,7 +264,7 @@ function extractImageUrl(img: any): string | null {
     const ogImagesRegex = /<meta\s+[^>]*property=["']og:image["'][^>]*content=["']([^"']*)["']/gi;
     let ogMatch;
     while ((ogMatch = ogImagesRegex.exec(html)) !== null) {
-      let img = decodeHtmlEntities(ogMatch[1].trim());
+      let img = extractImageUrl(decodeHtmlEntities(ogMatch[1].trim()));
       if (img && typeof img === "string" && !img.startsWith("http") && !img.startsWith("data:")) {
         try {
           img = new URL(img, baseOrigin).toString();
@@ -271,40 +296,60 @@ function extractImageUrl(img: any): string | null {
         convertyProduct.variants?.[0]?.comparePrice ??
         convertyProduct.variants?.[0]?.regularPrice;
 
-      if (pVal !== undefined && pVal !== null && Number(pVal) > 0) {
+      if (pVal !== undefined && pVal !== null) {
         currentPrice = `${pVal} DT`;
       }
-      if (compVal !== undefined && compVal !== null && Number(compVal) > 0) {
+      if (compVal !== undefined && compVal !== null && Number(compVal) > Number(pVal)) {
         originalPrice = `${compVal} DT`;
       }
     }
 
-    // 4b. Try JSON-LD offers
+    // 4b. Check JSON-LD offers price
     if (!currentPrice && jsonLdProduct?.offers) {
-      const offers = Array.isArray(jsonLdProduct.offers) ? jsonLdProduct.offers[0] : jsonLdProduct.offers;
-      if (offers?.price && Number(offers.price) > 0) {
-        const rawP = String(offers.price);
-        const curr = offers.priceCurrency || "TND";
-        currency = curr;
-        currentPrice = `${rawP} ${curr === "TND" ? "DT" : curr}`;
+      const offer = Array.isArray(jsonLdProduct.offers) ? jsonLdProduct.offers[0] : jsonLdProduct.offers;
+      if (offer?.price) {
+        let priceNum = parseFloat(String(offer.price).replace(",", "."));
+        if (priceNum >= 1000 && (String(offer.price).includes(",000") || String(offer.price).includes(".000"))) {
+          priceNum = Math.round(priceNum / 1000);
+        }
+        currentPrice = `${priceNum} DT`;
+        if (offer.priceCurrency) currency = offer.priceCurrency;
+      }
+      if (offer?.highPrice && parseFloat(offer.highPrice) > parseFloat(offer.price || "0")) {
+        originalPrice = `${offer.highPrice} ${currency === "TND" ? "DT" : currency}`;
       }
     }
 
-    // 4c. Try meta og:price:amount or product:price:amount
+    // 4c. Check Meta Tags (og:price:amount, product:price:amount)
     if (!currentPrice) {
-      const metaPrice = extractMeta(html, "product:price:amount") || extractMeta(html, "og:price:amount");
-      const metaCurr = extractMeta(html, "product:price:currency") || extractMeta(html, "og:price:currency") || "TND";
-      if (metaPrice && Number(metaPrice) > 0) {
-        currency = metaCurr;
-        currentPrice = `${metaPrice} ${metaCurr === "TND" ? "DT" : metaCurr}`;
+      const metaPrice =
+        extractMeta(html, "product:price:amount") ||
+        extractMeta(html, "og:price:amount") ||
+        extractMeta(html, "twitter:data1");
+      if (metaPrice) {
+        const cleanedPrice = metaPrice.replace(/[^0-9.,]/g, "").trim();
+        if (cleanedPrice && Number(cleanedPrice.replace(",", ".")) > 0) {
+          let num = parseFloat(cleanedPrice.replace(",", "."));
+          if (num >= 1000 && (cleanedPrice.includes(",000") || cleanedPrice.includes(".000"))) {
+            num = Math.round(num / 1000);
+          }
+          currentPrice = `${num} DT`;
+          currency = extractMeta(html, "product:price:currency") || extractMeta(html, "og:price:currency") || "TND";
+        }
       }
     }
 
-    // 4d. Try JSON state regex (e.g. "price":49 or "regularPrice":79 in scripts)
+    // 4d. Check OpenGraph Title or Description for price
     if (!currentPrice) {
-      const jsonPriceMatch = /["'](?:price|selling_price|current_price|price_amount)["']\s*:\s*(\d+(?:\.\d+)?)/i.exec(html);
-      if (jsonPriceMatch && jsonPriceMatch[1] && Number(jsonPriceMatch[1]) > 0) {
-        currentPrice = `${jsonPriceMatch[1]} DT`;
+      const ogDesc = extractMeta(html, "og:description") || extractMeta(html, "description") || "";
+      const descPriceMatch = /(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت)/i.exec(ogDesc);
+      if (descPriceMatch && descPriceMatch[1] && Number(descPriceMatch[1].replace(",", ".")) > 0) {
+        let numStr = descPriceMatch[1].replace(",", ".");
+        let num = parseFloat(numStr);
+        if (num >= 1000 && (descPriceMatch[1].includes(",000") || descPriceMatch[1].includes(".000"))) {
+          num = Math.round(num / 1000);
+        }
+        currentPrice = `${num} DT`;
         currency = "TND";
       }
     }
@@ -367,9 +412,19 @@ function extractImageUrl(img: any): string | null {
 
     // Extract Crossed-out / Regular Price if not already extracted
     if (!originalPrice) {
-      const delPriceMatch = /<(?:del|s|span)[^>]*(?:class|id)=["'][^"']*(?:old|regular|compare|original|was)[^"']*["'][^>]*>[\s\S]*?(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت)?/i.exec(html);
-      if (delPriceMatch && delPriceMatch[1] && currentPrice && !currentPrice.startsWith(delPriceMatch[1])) {
-        originalPrice = `${delPriceMatch[1]} ${currency === "TND" ? "DT" : currency}`;
+      const delPriceRegex = /<(?:del|s|span)[^>]*(?:class|id)=["'][^"']*(?:old|regular|compare|original|was)[^"']*["'][^>]*>[\s\S]*?(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت)?/gi;
+      let delMatch;
+      const currNum = currentPrice ? parseFloat(currentPrice.replace(/[^0-9.]/g, "")) : 0;
+      while ((delMatch = delPriceRegex.exec(html)) !== null) {
+        let numStr = delMatch[1].replace(",", ".");
+        let num = parseFloat(numStr);
+        if (num >= 1000 && (delMatch[1].includes(",000") || delMatch[1].includes(".000"))) {
+          num = Math.round(num / 1000);
+        }
+        if (num > 0 && num > currNum) {
+          originalPrice = `${num} ${currency === "TND" ? "DT" : currency}`;
+          break;
+        }
       }
     }
 
@@ -390,11 +445,16 @@ function extractImageUrl(img: any): string | null {
 
     // Discount or promotional offer summary
     let discountOrOffer: string | null = null;
-    const discountMatch = /(\d{1,2}%\s*(?:de\s*réduction|off|de\s*remise|تخفيض)|Achetez\s*\d+\s*obtenez\s*\d+|Buy\s*\d+\s*Get\s*\d+|-\d{1,2}%)/i.exec(html || markdown || "");
+    const discountMatch = /(\d{1,2}%\s*(?:de\s*réduction|off|de\s*remise|تخفيض)|Achetez\s*\d+\s*obtenez\s*\d+|Buy\s*\d+\s*Get\s*\d+|-\d{1,2}%|\d{1,3}\s*DT\s*de\s*(?:réduction|remise))/i.exec(html || markdown || "");
     if (discountMatch) {
       discountOrOffer = discountMatch[1].trim();
     } else if (originalPrice && currentPrice) {
-      discountOrOffer = `Promo: ${currentPrice} au lieu de ${originalPrice}`;
+      const origNum = parseFloat(originalPrice.replace(/[^0-9.]/g, ""));
+      const currNum = parseFloat(currentPrice.replace(/[^0-9.]/g, ""));
+      if (origNum > currNum && origNum > 0) {
+        const pct = Math.round(((origNum - currNum) / origNum) * 100);
+        discountOrOffer = `-${pct}% (Promo: ${currentPrice} au lieu de ${originalPrice})`;
+      }
     }
 
     // Delivery info
