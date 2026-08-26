@@ -68,6 +68,11 @@ function getInitialSpyParams(initialParams?: AdFilterParams): AdFilterParams {
 
   if (typeof window === "undefined") return defaults;
 
+  // Scoped feeds (e.g. Brand page, drawer, product modal) should NOT inherit global /spy localStorage filters
+  if (initialParams?.trackedPageId || initialParams?.enabled !== undefined || initialParams?.productId) {
+    return defaults;
+  }
+
   try {
     // 1. Load saved state from localStorage / sessionStorage
     let saved: Partial<AdFilterParams> = {};
@@ -321,8 +326,12 @@ export function useSpy(initialParams?: AdFilterParams) {
     initialParams?.minWinnerScore,
     initialParams?.minProductCreatives,
     initialParams?.productKey,
+    initialParams?.productId,
     initialParams?.groupBy,
     initialParams?.excludePageIds,
+    initialParams?.enabled,
+    initialParams?.limit,
+    initialParams?.page,
   ]);
 
   const [ads, setAds] = useState<Ad[]>([]);

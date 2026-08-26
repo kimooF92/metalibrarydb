@@ -213,7 +213,7 @@ export default function BrandDeepDivePage({
     updateFilters,
     updateAdInFeed,
   } = useAdFeed({
-    trackedPageId: id,
+    trackedPageId: data?.brand?.pageId || data?.brand?.id || id,
     search: feedSearch,
     productId: filteredProductForCreatives?.id,
     mediaType: feedMediaType as any,
