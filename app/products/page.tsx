@@ -771,7 +771,7 @@ export default function ProductsPage() {
             <option value="Sports, Fitness & Outdoor">⚡ Sports & Fitness</option>
             <option value="Kids, Baby & Toys">🧸 Kids & Baby</option>
             <option value="Automotive & Tools">🚗 Automotive & Tools</option>
-            <option value="General & Other">📦 General & Other</option>
+            <option value="General & Other">📦 General & Uncategorized</option>
           </select>
 
           {/* E-Commerce Platform Filter */}

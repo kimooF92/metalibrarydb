@@ -51,7 +51,17 @@ export async function GET(req: NextRequest) {
 
     // Filter by category
     if (category && category !== "all") {
-      conditions.push(eq(scrapedProducts.category, category));
+      if (category === "General & Other" || category === "other") {
+        conditions.push(
+          or(
+            eq(scrapedProducts.category, "General & Other"),
+            isNull(scrapedProducts.category),
+            eq(scrapedProducts.category, "")
+          )
+        );
+      } else {
+        conditions.push(eq(scrapedProducts.category, category));
+      }
     }
 
     // Filter by domain
