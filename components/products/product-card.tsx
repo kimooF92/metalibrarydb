@@ -82,9 +82,6 @@ export function ProductCard({
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!onDelete || isDeleting) return;
-    if (!confirm(`Are you sure you want to delete "${product.title || "this product"}"?`)) {
-      return;
-    }
     setIsDeleting(true);
     try {
       await onDelete(product.id);

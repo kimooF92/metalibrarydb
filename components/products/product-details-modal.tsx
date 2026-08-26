@@ -385,6 +385,20 @@ ${imagesText}`;
               </button>
             )}
 
+            {onDelete && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onDelete(product.id);
+                }}
+                className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
+                title="Delete Product"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+
             <a
               href={product.url}
               target="_blank"

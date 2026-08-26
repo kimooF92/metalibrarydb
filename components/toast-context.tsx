@@ -13,6 +13,10 @@ export interface ToastOptions {
   link?: string;
   linkLabel?: string;
   duration?: number;
+  action?: {
+    label: string;
+    onClick: () => void | Promise<void>;
+  };
 }
 
 interface ToastContextType {
@@ -95,6 +99,27 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   {toast.message}
                 </p>
               )}
+
+              {/* Interactive Action Button (e.g. Undo) */}
+              {toast.action && (
+                <div className="mt-2.5">
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      hideToast(toast.id);
+                      try {
+                        await toast.action?.onClick();
+                      } catch (err) {
+                        console.error("[Toast Action Error]:", err);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow-sm hover:shadow transition-all cursor-pointer active:scale-95"
+                  >
+                    {toast.action.label}
+                  </button>
+                </div>
+              )}
+
               {toast.link && (
                 <Link
                   href={toast.link}

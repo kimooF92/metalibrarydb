@@ -397,36 +397,64 @@ export default function ProductsPage() {
   };
 
   const handleDelete = async (productId: string) => {
-    try {
-      const res = await fetch(`/api/products?id=${productId}`, {
-        method: "DELETE",
-      });
+    // 1. Find product and original index before removing
+    const targetProduct = products.find((p) => p.id === productId);
+    const targetIndex = products.findIndex((p) => p.id === productId);
+    if (!targetProduct) return;
 
-      if (res.ok) {
-        setProducts((prev) => prev.filter((p) => p.id !== productId));
-        if (selectedProduct?.id === productId) {
-          setIsModalOpen(false);
-          setSelectedProduct(null);
-        }
-        showToast({
-          type: "info",
-          title: "Product Removed",
-          message: "Product removed from intelligence hub.",
-        });
-      } else {
-        showToast({
-          type: "error",
-          title: "Delete Failed",
-          message: "Failed to delete product.",
-        });
-      }
-    } catch (err: any) {
-      showToast({
-        type: "error",
-        title: "Network Error",
-        message: err.message || "Failed to delete product.",
-      });
+    // 2. Fast Optimistic removal from UI state (instant response <1ms)
+    setProducts((prev) => prev.filter((p) => p.id !== productId));
+    if (selectedProduct?.id === productId) {
+      setIsModalOpen(false);
+      setSelectedProduct(null);
     }
+
+    // 3. Fire backend delete request in background
+    fetch(`/api/products?id=${productId}`, {
+      method: "DELETE",
+    }).catch((err) => console.error("[Delete API Error]:", err));
+
+    // 4. Show sleek Toast with Undo button
+    showToast({
+      type: "info",
+      title: "Product Deleted",
+      message: `"${targetProduct.title || "Product"}" removed.`,
+      duration: 6000,
+      action: {
+        label: "↩ Undo",
+        onClick: async () => {
+          // Instantly restore to state at original index
+          setProducts((prev) => {
+            if (prev.some((p) => p.id === productId)) return prev;
+            const next = [...prev];
+            if (targetIndex >= 0 && targetIndex <= next.length) {
+              next.splice(targetIndex, 0, targetProduct);
+            } else {
+              next.unshift(targetProduct);
+            }
+            return next;
+          });
+
+          // Call restore API in background
+          try {
+            const res = await fetch("/api/products/restore", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: productId }),
+            });
+            if (res.ok) {
+              showToast({
+                type: "success",
+                title: "Product Restored",
+                message: `"${targetProduct.title || "Product"}" restored to catalog.`,
+              });
+            }
+          } catch (err) {
+            console.error("[Restore Error]:", err);
+          }
+        },
+      },
+    });
   };
 
   const handleViewDetails = (product: ScrapedProduct) => {
