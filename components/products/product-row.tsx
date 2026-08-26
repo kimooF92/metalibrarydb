@@ -144,7 +144,11 @@ export function ProductRow({
               <Link
                 href={`/spy/brand/${encodeURIComponent(product.brandPageId)}?tab=products`}
                 onClick={(e) => e.stopPropagation()}
-                className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800/60 hover:underline"
+                className={`text-[10px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded border hover:underline ${
+                  isInactive
+                    ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                    : "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800/60"
+                }`}
               >
                 {product.brandName || "Brand"} &rarr;
               </Link>
@@ -155,7 +159,11 @@ export function ProductRow({
                   e.stopPropagation();
                   onFilterBrand?.(product.brandName!);
                 }}
-                className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800/60 hover:underline cursor-pointer"
+                className={`text-[10px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded border hover:underline cursor-pointer ${
+                  isInactive
+                    ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                    : "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800/60"
+                }`}
               >
                 {product.brandName}
               </button>
@@ -166,7 +174,13 @@ export function ProductRow({
             ) : null}
 
             {product.category && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+              <span
+                className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                  isInactive
+                    ? "bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                    : "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+                }`}
+              >
                 🏷️ {product.category}
               </span>
             )}
@@ -178,7 +192,7 @@ export function ProductRow({
             )}
 
             {product.storePlatform && product.storePlatform !== "other" && (
-              <span className="text-[10px] font-bold uppercase text-slate-600 dark:text-slate-400">
+              <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">
                 • {product.storePlatform}
               </span>
             )}
@@ -190,13 +204,25 @@ export function ProductRow({
             )}
           </div>
 
-          <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors mt-0.5">
+          <h4
+            className={`text-xs font-bold truncate transition-colors mt-0.5 ${
+              isInactive
+                ? "text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200"
+                : "text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
+            }`}
+          >
             {product.title || "Untitled Landing Page"}
           </h4>
 
           {/* Offer / Delivery preview */}
           {product.discountOrOffer && (
-            <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
+            <div
+              className={`inline-flex items-center gap-1 text-[11px] font-semibold mt-0.5 ${
+                isInactive
+                  ? "text-slate-500 dark:text-slate-400"
+                  : "text-emerald-600 dark:text-emerald-400"
+              }`}
+            >
               <Tag className="w-3 h-3" />
               <span className="truncate max-w-xs">{product.discountOrOffer}</span>
             </div>
@@ -208,7 +234,13 @@ export function ProductRow({
       <div className="flex items-center gap-4 shrink-0 sm:px-4">
         {/* Pricing */}
         <div className="text-left sm:text-right">
-          <div className="text-sm font-extrabold text-indigo-600 dark:text-indigo-400">
+          <div
+            className={`text-sm font-extrabold ${
+              isInactive
+                ? "text-slate-600 dark:text-slate-400"
+                : "text-indigo-600 dark:text-indigo-400"
+            }`}
+          >
             {product.currentPrice || (isPendingScrape ? "Pending" : "—")}
           </div>
           {product.originalPrice && (
@@ -246,7 +278,11 @@ export function ProductRow({
               e.stopPropagation();
               onViewCreatives(product);
             }}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-600 dark:text-indigo-400 text-xs font-bold transition-colors cursor-pointer"
+            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+              isInactive
+                ? "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+                : "bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-600 dark:text-indigo-400"
+            }`}
           >
             <Eye className="w-3.5 h-3.5" />
             <span>View Ads</span>

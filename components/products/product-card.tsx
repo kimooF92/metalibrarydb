@@ -202,7 +202,13 @@ export function ProductCard({
 
         {/* Offer Overlay Ribbon */}
         {product.discountOrOffer && (
-          <div className="absolute bottom-2.5 left-2.5 z-10 flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600/90 text-white text-[11px] font-bold shadow-md backdrop-blur-sm max-w-[90%] truncate">
+          <div
+            className={`absolute bottom-2.5 left-2.5 z-10 flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-md backdrop-blur-sm max-w-[90%] truncate ${
+              isInactive
+                ? "bg-slate-800/90 text-slate-300 border border-slate-700/80"
+                : "bg-emerald-600/90 text-white"
+            }`}
+          >
             <Tag className="w-3 h-3 shrink-0" />
             <span className="truncate">{product.discountOrOffer}</span>
           </div>
@@ -217,7 +223,11 @@ export function ProductCard({
             <Link
               href={`/spy/brand/${encodeURIComponent(product.brandPageId)}?tab=products`}
               onClick={(e) => e.stopPropagation()}
-              className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline uppercase tracking-wider truncate"
+              className={`text-[11px] font-bold uppercase tracking-wider truncate hover:underline ${
+                isInactive
+                  ? "text-slate-500 dark:text-slate-400"
+                  : "text-indigo-600 dark:text-indigo-400"
+              }`}
               title={`View ${product.brandName || "Brand"} Catalog`}
             >
               {product.brandName || product.domain || "View Brand"} &rarr;
@@ -229,7 +239,11 @@ export function ProductCard({
                 e.stopPropagation();
                 onFilterBrand?.(product.brandName!);
               }}
-              className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline uppercase tracking-wider truncate text-left cursor-pointer"
+              className={`text-[11px] font-bold uppercase tracking-wider truncate text-left cursor-pointer hover:underline ${
+                isInactive
+                  ? "text-slate-500 dark:text-slate-400"
+                  : "text-indigo-600 dark:text-indigo-400"
+              }`}
               title={`Filter by ${product.brandName}`}
             >
               {product.brandName}
@@ -243,7 +257,11 @@ export function ProductCard({
 
         {/* Product Title */}
         <h3
-          className="text-sm font-bold text-slate-900 dark:text-slate-100 line-clamp-2 mb-2 leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors"
+          className={`text-sm font-bold line-clamp-2 mb-2 leading-snug transition-colors ${
+            isInactive
+              ? "text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200"
+              : "text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
+          }`}
           title={product.title || "Product Landing Page"}
         >
           {product.title || "Untitled Product Landing Page"}
@@ -252,19 +270,37 @@ export function ProductCard({
         {/* Badges: Category + Platform + WhatsApp + Ad Count + Longevity */}
         <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
           {product.category && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+            <span
+              className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                isInactive
+                  ? "bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                  : "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+              }`}
+            >
               🏷️ {product.category}
             </span>
           )}
 
           {product.storePlatform && product.storePlatform !== "other" && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 uppercase">
+            <span
+              className={`px-1.5 py-0.5 rounded text-[10px] font-bold border uppercase ${
+                isInactive
+                  ? "bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                  : "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800"
+              }`}
+            >
               {product.storePlatform}
             </span>
           )}
 
           {product.whatsappNumbers && product.whatsappNumbers.length > 0 && (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+            <span
+              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
+                isInactive
+                  ? "bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                  : "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+              }`}
+            >
               💬 WhatsApp
             </span>
           )}
@@ -284,7 +320,7 @@ export function ProductCard({
           ) : null}
 
           {product.daysRunning && product.daysRunning > 1 && (
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
               ⏳ {product.daysRunning}d
             </span>
           )}
@@ -294,7 +330,13 @@ export function ProductCard({
         <div className="flex items-center justify-between gap-2 mb-3 mt-auto flex-wrap">
           <div className="flex items-baseline gap-2">
             {product.currentPrice ? (
-              <span className="text-base font-extrabold text-indigo-600 dark:text-indigo-400">
+              <span
+                className={`text-base font-extrabold ${
+                  isInactive
+                    ? "text-slate-600 dark:text-slate-400"
+                    : "text-indigo-600 dark:text-indigo-400"
+                }`}
+              >
                 {product.currentPrice}
               </span>
             ) : isPendingScrape ? (
@@ -304,7 +346,7 @@ export function ProductCard({
             )}
 
             {product.originalPrice && (
-              <span className="text-xs text-slate-600 dark:text-slate-400 line-through">
+              <span className="text-xs text-slate-500 dark:text-slate-500 line-through">
                 {product.originalPrice}
               </span>
             )}
@@ -336,7 +378,9 @@ export function ProductCard({
             return (
               <span
                 className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${
-                  isFree
+                  isInactive
+                    ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                    : isFree
                     ? "bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
                     : isSpecifiedPaid
                     ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
@@ -369,7 +413,11 @@ export function ProductCard({
                 e.stopPropagation();
                 onViewCreatives(product);
               }}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-600 dark:text-indigo-400 text-[11px] font-bold transition-colors cursor-pointer"
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold transition-colors cursor-pointer ${
+                isInactive
+                  ? "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+                  : "bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-600 dark:text-indigo-400"
+              }`}
             >
               <Eye className="w-3 h-3" />
               <span>View Ads ({product.linkedAdsCount})</span>
