@@ -288,13 +288,54 @@ export async function GET(req: NextRequest) {
   }
 }
 
+function extractPageId(input?: string | null): string | null {
+  if (!input || typeof input !== "string") return null;
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  // Check if it's pure digits
+  if (/^[0-9]+$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  // Check if it's a Meta Ad Library URL: view_all_page_id=(\d+) or page_id=(\d+) or id=(\d+)
+  const match = trimmed.match(/(?:view_all_page_id|page_id|id)=([0-9]+)/i);
+  if (match && match[1]) {
+    return match[1];
+  }
+
+  // Facebook profile / page URL pattern
+  const profileMatch = trimmed.match(/facebook\.com\/profile\.php\?id=([0-9]+)/i);
+  if (profileMatch && profileMatch[1]) {
+    return profileMatch[1];
+  }
+
+  return trimmed;
+}
+
 export async function PATCH(req: NextRequest) {
   const authError = await validateApiSecret(req);
   if (authError) return authError;
 
   try {
     const body = await req.json();
-    const { id, isFavorite, supplierUrls } = body;
+    const {
+      id,
+      isFavorite,
+      supplierUrls,
+      title,
+      url,
+      mainImageUrl,
+      currentPrice,
+      originalPrice,
+      discountOrOffer,
+      deliveryCost,
+      category,
+      subCategory,
+      storePlatform,
+      pageId,
+      metaAdLibraryUrl,
+    } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -311,6 +352,57 @@ export async function PATCH(req: NextRequest) {
       updateData.isFavorite = Boolean(isFavorite);
     }
 
+    if (title !== undefined) {
+      updateData.title = typeof title === "string" ? title.trim() : null;
+    }
+
+    if (url !== undefined && typeof url === "string" && url.trim()) {
+      updateData.url = url.trim();
+      try {
+        const parsed = new URL(url.startsWith("http") ? url : `https://${url}`);
+        updateData.domain = parsed.hostname.replace(/^www\./, "");
+      } catch {}
+    }
+
+    if (mainImageUrl !== undefined) {
+      updateData.mainImageUrl = typeof mainImageUrl === "string" ? mainImageUrl.trim() : null;
+    }
+
+    if (currentPrice !== undefined) {
+      updateData.currentPrice = typeof currentPrice === "string" ? currentPrice.trim() : null;
+    }
+
+    if (originalPrice !== undefined) {
+      updateData.originalPrice = typeof originalPrice === "string" ? originalPrice.trim() : null;
+    }
+
+    if (discountOrOffer !== undefined) {
+      updateData.discountOrOffer = typeof discountOrOffer === "string" ? discountOrOffer.trim() : null;
+    }
+
+    if (deliveryCost !== undefined) {
+      updateData.deliveryCost = typeof deliveryCost === "string" ? deliveryCost.trim() : null;
+    }
+
+    if (category !== undefined) {
+      updateData.category = typeof category === "string" ? category.trim() : null;
+    }
+
+    if (subCategory !== undefined) {
+      updateData.subCategory = typeof subCategory === "string" ? subCategory.trim() : null;
+    }
+
+    if (storePlatform !== undefined) {
+      updateData.storePlatform = typeof storePlatform === "string" ? storePlatform.trim() : null;
+    }
+
+    // Handle Page ID / Meta Ad Library URL parsing
+    const rawPageId = pageId !== undefined ? pageId : metaAdLibraryUrl;
+    if (rawPageId !== undefined) {
+      const parsedPageId = extractPageId(rawPageId);
+      updateData.pageId = parsedPageId;
+    }
+
     if (supplierUrls !== undefined) {
       // Validate, clean, and deduplicate array of URL strings
       updateData.supplierUrls = Array.isArray(supplierUrls)
@@ -324,17 +416,20 @@ export async function PATCH(req: NextRequest) {
         : [];
     }
 
-    await db
+    const [updatedProduct] = await db
       .update(scrapedProducts)
       .set(updateData)
-      .where(eq(scrapedProducts.id, id));
+      .where(eq(scrapedProducts.id, id))
+      .returning();
 
     return NextResponse.json({
       success: true,
       message: "Product updated successfully.",
+      product: updatedProduct,
       supplierUrls: updateData.supplierUrls,
     });
   } catch (err: any) {
+    console.error("[Products PATCH API Error]:", err);
     return NextResponse.json(
       { error: err.message || "Failed to update product" },
       { status: 500 }

@@ -39,6 +39,9 @@ import {
   Boxes,
   Link2,
   Plus,
+  Edit3,
+  Save,
+  Undo2,
 } from "lucide-react";
 
 export function getSupplierPlatformInfo(url: string) {
@@ -114,6 +117,88 @@ export function ProductDetailsModal({
   const [copiedSupplierIndex, setCopiedSupplierIndex] = useState<number | null>(null);
   const [isQueueingVerify, setIsQueueingVerify] = useState(false);
 
+  // Inline Edit Mode State
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: "",
+    url: "",
+    mainImageUrl: "",
+    pageId: "",
+    brandName: "",
+    currentPrice: "",
+    originalPrice: "",
+    discountOrOffer: "",
+    deliveryCost: "",
+    category: "",
+    subCategory: "",
+    storePlatform: "",
+  });
+
+  const handleSaveEdit = async () => {
+    if (!product?.id || isSavingEdit) return;
+    setIsSavingEdit(true);
+    try {
+      const res = await fetch("/api/products", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: product.id,
+          ...editForm,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast({
+          type: "success",
+          title: "Saved",
+          message: "Product details updated successfully.",
+        });
+        const updated = {
+          ...product,
+          ...editForm,
+          ...(data.product || {}),
+        };
+        onProductUpdate?.(updated);
+        setIsEditMode(false);
+      } else {
+        showToast({
+          type: "error",
+          title: "Save Failed",
+          message: data.error || "Could not save product details",
+        });
+      }
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Network Error",
+        message: err.message || "Failed to update product",
+      });
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    if (product) {
+      setEditForm({
+        title: product.title || "",
+        url: product.url || "",
+        mainImageUrl: product.mainImageUrl || "",
+        pageId: product.pageId || product.brandPageId || "",
+        brandName: product.brandName || "",
+        currentPrice: product.currentPrice || "",
+        originalPrice: product.originalPrice || "",
+        discountOrOffer: product.discountOrOffer || "",
+        deliveryCost: product.deliveryCost || "",
+        category: product.category || "",
+        subCategory: product.subCategory || "",
+        storePlatform: product.storePlatform || "",
+      });
+    }
+    setIsEditMode(false);
+  };
+
   const handleQueueVerify = async () => {
     if (!product?.id || isQueueingVerify) return;
     setIsQueueingVerify(true);
@@ -164,6 +249,21 @@ export function ProductDetailsModal({
       setSupplierUrls(product.supplierUrls || []);
       setNewSupplierInput("");
       setCopiedSupplierIndex(null);
+      setIsEditMode(false);
+      setEditForm({
+        title: product.title || "",
+        url: product.url || "",
+        mainImageUrl: product.mainImageUrl || "",
+        pageId: product.pageId || product.brandPageId || "",
+        brandName: product.brandName || "",
+        currentPrice: product.currentPrice || "",
+        originalPrice: product.originalPrice || "",
+        discountOrOffer: product.discountOrOffer || "",
+        deliveryCost: product.deliveryCost || "",
+        category: product.category || "",
+        subCategory: product.subCategory || "",
+        storePlatform: product.storePlatform || "",
+      });
       fetchLinkedAds(product.id);
       fetchNetworkIntelligence(product.id);
     }
@@ -483,195 +583,246 @@ ${imagesText}`;
           <div className="flex items-center gap-2.5 truncate">
             <ShoppingBag className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0" />
             <div className="truncate">
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">
-                {product.title || "Product Landing Page"}
-              </h2>
-              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                {product.brandPageId ? (
-                  <a
-                    href={`/spy/brand/${encodeURIComponent(product.brandPageId)}?tab=products`}
-                    className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline uppercase tracking-wider"
-                  >
-                    {product.brandName || "Brand"} &rarr;
-                  </a>
-                ) : product.brandName ? (
-                  <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                    {product.brandName}
+              {isEditMode ? (
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                    ✏️ Editing Product Details
                   </span>
-                ) : null}
+                  <span className="text-xs text-slate-500 truncate">{product.title}</span>
+                </div>
+              ) : (
+                <>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">
+                    {product.title || "Product Landing Page"}
+                  </h2>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    {product.brandPageId ? (
+                      <a
+                        href={`/spy/brand/${encodeURIComponent(product.brandPageId)}?tab=products`}
+                        className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline uppercase tracking-wider"
+                      >
+                        {product.brandName || "Brand"} &rarr;
+                      </a>
+                    ) : product.brandName ? (
+                      <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                        {product.brandName}
+                      </span>
+                    ) : null}
 
-                {product.domain && (
-                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                    • {product.domain}
-                  </span>
-                )}
+                    {product.domain && (
+                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                        • {product.domain}
+                      </span>
+                    )}
 
-                {typeof product.activeAdsCount === "number" && product.activeAdsCount === 0 && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                    ⚫ Inactive / Off-Air
-                  </span>
-                )}
-              </div>
+                    {typeof product.activeAdsCount === "number" && product.activeAdsCount === 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                        ⚫ Inactive / Off-Air
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {/* Star Favorite Toggle */}
-            <button
-              type="button"
-              onClick={async () => {
-                const nextState = !product.isFavorite;
-                product.isFavorite = nextState;
-                try {
-                  await fetch("/api/products", {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ id: product.id, isFavorite: nextState }),
-                  });
-                  showToast({
-                    type: "success",
-                    title: nextState ? "Starred" : "Removed",
-                    message: nextState ? "Added product to favorites" : "Removed product from favorites",
-                  });
-                } catch {}
-              }}
-              className={`p-1.5 rounded-lg border transition-all cursor-pointer shadow-xs ${
-                product.isFavorite
-                  ? "bg-amber-500 text-slate-950 border-amber-400 font-bold"
-                  : "bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:text-amber-500"
-              }`}
-              title={product.isFavorite ? "Remove from Favorites" : "Add to Favorites"}
-            >
-              <Star className={`w-3.5 h-3.5 ${product.isFavorite ? "fill-current" : ""}`} />
-            </button>
+            {isEditMode ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  disabled={isSavingEdit}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <Undo2 className="w-3.5 h-3.5" />
+                  <span>Cancel</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEdit}
+                  disabled={isSavingEdit}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingEdit ? (
+                    <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Save className="w-3.5 h-3.5" />
+                  )}
+                  <span>{isSavingEdit ? "Saving..." : "Save Changes"}</span>
+                </button>
+              </>
+            ) : (
+              <>
+                {/* Edit Details Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsEditMode(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xs transition-all cursor-pointer"
+                  title="Edit Product Details, Meta Ad Library Link, Prices & Taxonomy"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>Edit Details</span>
+                </button>
 
-            {/* Re-check / Set Pending Ads Button */}
-            <button
-              type="button"
-              onClick={handleQueueVerify}
-              disabled={isQueueingVerify}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 rounded-lg shadow-xs transition-all cursor-pointer disabled:opacity-50"
-              title="Set all linked ads as Pending so the next worker or GitHub Action scans them"
-            >
-              <RotateCw className={`w-3.5 h-3.5 ${isQueueingVerify ? "animate-spin" : ""}`} />
-              <span>{isQueueingVerify ? "Queueing..." : "Recheck Ads"}</span>
-            </button>
+                {/* Star Favorite Toggle */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const nextState = !product.isFavorite;
+                    product.isFavorite = nextState;
+                    try {
+                      await fetch("/api/products", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ id: product.id, isFavorite: nextState }),
+                      });
+                      showToast({
+                        type: "success",
+                        title: nextState ? "Starred" : "Removed",
+                        message: nextState ? "Added product to favorites" : "Removed product from favorites",
+                      });
+                    } catch {}
+                  }}
+                  className={`p-1.5 rounded-lg border transition-all cursor-pointer shadow-xs ${
+                    product.isFavorite
+                      ? "bg-amber-500 text-slate-950 border-amber-400 font-bold"
+                      : "bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:text-amber-500"
+                  }`}
+                  title={product.isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+                >
+                  <Star className={`w-3.5 h-3.5 ${product.isFavorite ? "fill-current" : ""}`} />
+                </button>
 
-            {/* 1-Click Copy Dropdown */}
-            <div className="relative" ref={copyMenuRef}>
-              <button
-                onClick={() => setShowCopyMenu(!showCopyMenu)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 rounded-lg shadow-sm transition-all cursor-pointer"
-                title="Copy Product Pack for AI Copywriting & Store Builders"
-              >
-                {copiedType ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-emerald-300" />
-                    <span>Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3.5 h-3.5 text-indigo-200" />
-                    <span>Copy for AI / Store</span>
-                    <ChevronDown className="w-3 h-3 text-indigo-200 ml-0.5" />
-                  </>
-                )}
-              </button>
+                {/* Re-check / Set Pending Ads Button */}
+                <button
+                  type="button"
+                  onClick={handleQueueVerify}
+                  disabled={isQueueingVerify}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 rounded-lg shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                  title="Set all linked ads as Pending so the next worker or GitHub Action scans them"
+                >
+                  <RotateCw className={`w-3.5 h-3.5 ${isQueueingVerify ? "animate-spin" : ""}`} />
+                  <span>{isQueueingVerify ? "Queueing..." : "Recheck Ads"}</span>
+                </button>
 
-              {/* Copy Menu Dropdown */}
-              {showCopyMenu && (
-                <div className="absolute right-0 mt-1.5 w-64 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl py-1.5 z-50 animate-in fade-in slide-in-from-top-2">
-                  <div className="px-3 py-1.5 border-b border-slate-100 dark:border-slate-800 text-[10px] uppercase font-bold text-slate-400">
-                    1-Click Content Export
-                  </div>
+                {/* 1-Click Copy Dropdown */}
+                <div className="relative" ref={copyMenuRef}>
                   <button
-                    onClick={() => handleCopy("ai")}
-                    className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-start gap-2 transition-colors cursor-pointer"
+                    onClick={() => setShowCopyMenu(!showCopyMenu)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 rounded-lg shadow-sm transition-all cursor-pointer"
+                    title="Copy Product Pack for AI Copywriting & Store Builders"
                   >
-                    <Bot className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />
-                    <div>
-                      <div className="font-bold text-slate-900 dark:text-slate-100">Full AI Prompt Pack</div>
-                      <div className="text-[10px] text-slate-400">Ready for ChatGPT/Claude (Hooks, Description, Video Scripts)</div>
-                    </div>
+                    {copiedType ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-300" />
+                        <span>Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 text-indigo-200" />
+                        <span>Copy for AI / Store</span>
+                        <ChevronDown className="w-3 h-3 text-indigo-200 ml-0.5" />
+                      </>
+                    )}
                   </button>
 
-                  <button
-                    onClick={() => handleCopy("markdown")}
-                    className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-start gap-2 transition-colors cursor-pointer"
-                  >
-                    <FileText className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
-                    <div>
-                      <div className="font-bold text-slate-900 dark:text-slate-100">Clean Specs & Offers</div>
-                      <div className="text-[10px] text-slate-400">Markdown format for store builders</div>
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={() => handleCopy("images")}
-                    className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-start gap-2 transition-colors cursor-pointer"
-                  >
-                    <ImageIcon className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                    <div>
-                      <div className="font-bold text-slate-900 dark:text-slate-100">All Image URLs Only</div>
-                      <div className="text-[10px] text-slate-400">{allImages.length} high-res photo links</div>
-                    </div>
-                  </button>
-
-                  {supplierUrls.length > 0 && (
-                    <button
-                      onClick={() => handleCopy("suppliers")}
-                      className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-start gap-2 transition-colors cursor-pointer border-t border-slate-100 dark:border-slate-800"
-                    >
-                      <Boxes className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                      <div>
-                        <div className="font-bold text-slate-900 dark:text-slate-100">Supplier URLs Only</div>
-                        <div className="text-[10px] text-slate-400">{supplierUrls.length} sourcing link{supplierUrls.length === 1 ? "" : "s"}</div>
+                  {/* Copy Menu Dropdown */}
+                  {showCopyMenu && (
+                    <div className="absolute right-0 mt-1.5 w-64 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl py-1.5 z-50 animate-in fade-in slide-in-from-top-2">
+                      <div className="px-3 py-1.5 border-b border-slate-100 dark:border-slate-800 text-[10px] uppercase font-bold text-slate-400">
+                        1-Click Content Export
                       </div>
-                    </button>
+                      <button
+                        onClick={() => handleCopy("ai")}
+                        className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-start gap-2 transition-colors cursor-pointer"
+                      >
+                        <Bot className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />
+                        <div>
+                          <div className="font-bold text-slate-900 dark:text-slate-100">Full AI Prompt Pack</div>
+                          <div className="text-[10px] text-slate-400">Ready for ChatGPT/Claude (Hooks, Description, Video Scripts)</div>
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={() => handleCopy("markdown")}
+                        className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-start gap-2 transition-colors cursor-pointer"
+                      >
+                        <FileText className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+                        <div>
+                          <div className="font-bold text-slate-900 dark:text-slate-100">Clean Specs & Offers</div>
+                          <div className="text-[10px] text-slate-400">Markdown format for store builders</div>
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={() => handleCopy("images")}
+                        className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-start gap-2 transition-colors cursor-pointer"
+                      >
+                        <ImageIcon className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                        <div>
+                          <div className="font-bold text-slate-900 dark:text-slate-100">All Image URLs Only</div>
+                          <div className="text-[10px] text-slate-400">{allImages.length} high-res photo links</div>
+                        </div>
+                      </button>
+
+                      {supplierUrls.length > 0 && (
+                        <button
+                          onClick={() => handleCopy("suppliers")}
+                          className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-start gap-2 transition-colors cursor-pointer border-t border-slate-100 dark:border-slate-800"
+                        >
+                          <Boxes className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                          <div>
+                            <div className="font-bold text-slate-900 dark:text-slate-100">Supplier URLs Only</div>
+                            <div className="text-[10px] text-slate-400">{supplierUrls.length} sourcing link{supplierUrls.length === 1 ? "" : "s"}</div>
+                          </div>
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
 
-            {onRefresh && (
-              <button
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                title="Re-extract Product"
-              >
-                <RotateCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-indigo-500" : ""}`} />
-                <span>Refresh</span>
-              </button>
+                {onRefresh && (
+                  <button
+                    onClick={handleRefresh}
+                    disabled={isRefreshing}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                    title="Re-extract Product"
+                  >
+                    <RotateCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-indigo-500" : ""}`} />
+                    <span>Refresh</span>
+                  </button>
+                )}
+
+                {onDelete && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onDelete(product.id);
+                    }}
+                    className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
+                    title="Delete Product"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+
+                <a
+                  href={product.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-sm transition-all"
+                >
+                  <span>Visit Store</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </>
             )}
-
-            {onDelete && (
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onDelete(product.id);
-                }}
-                className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
-                title="Delete Product"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            )}
-
-            <a
-              href={product.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-sm transition-all"
-            >
-              <span>Visit Store</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
 
             <button
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+              className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -680,23 +831,300 @@ ${imagesText}`;
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-            {/* Left: Product Images */}
-            <div className="md:col-span-5 flex flex-col gap-3">
-              <div className="relative aspect-square w-full bg-slate-100 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex items-center justify-center">
-                {selectedImage ? (
-                  <NextImage
-                    src={selectedImage}
-                    alt={product.title || "Product image"}
-                    fill
-                    unoptimized
-                    referrerPolicy="no-referrer"
-                    className={`object-contain p-3 transition-all duration-300 ${
-                      typeof product.activeAdsCount === "number" && product.activeAdsCount === 0
-                        ? "grayscale contrast-90 hover:grayscale-0"
-                        : ""
-                    }`}
-                  />
+          {isEditMode ? (
+            /* ========================================================
+               INLINE EDIT MODE FORM
+               ======================================================== */
+            <div className="space-y-5">
+              {/* Section 1: Brand & Meta Ad Library Tracking */}
+              <div className="p-4 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-800/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-900 dark:text-indigo-200">
+                      Brand & Meta Ad Library Tracking
+                    </h4>
+                  </div>
+                  {editForm.pageId && (
+                    <a
+                      href={`https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&view_all_page_id=${encodeURIComponent(editForm.pageId.trim())}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                    >
+                      <span>Test Ad Library Link</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Meta Ad Library URL / Facebook Page ID
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.pageId}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, pageId: e.target.value }))}
+                      placeholder="e.g. 1048155524678020 or https://facebook.com/ads/library/?view_all_page_id=..."
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 font-mono"
+                    />
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
+                      💡 Paste either the numeric Page ID or the full Meta Ad Library URL. Clean digits are auto-extracted.
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Brand Display Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.brandName}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, brandName: e.target.value }))}
+                      placeholder="e.g. TechStore TN"
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2: Product Identity & Media */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center gap-2">
+                  <ShoppingBag className="w-4 h-4 text-purple-500" />
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                    Product Identity & Media
+                  </h4>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Product Title
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.title}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, title: e.target.value }))}
+                      placeholder="Product display title..."
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Store Landing Page URL
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.url}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, url: e.target.value }))}
+                      placeholder="https://store.tn/products/..."
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 font-mono"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                    <div className="sm:col-span-9">
+                      <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                        Main Image URL
+                      </label>
+                      <input
+                        type="text"
+                        value={editForm.mainImageUrl}
+                        onChange={(e) => setEditForm((prev) => ({ ...prev, mainImageUrl: e.target.value }))}
+                        placeholder="https://.../product.jpg"
+                        className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 font-mono"
+                      />
+                    </div>
+                    <div className="sm:col-span-3 flex items-center justify-center">
+                      <div className="relative w-16 h-16 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden flex items-center justify-center shrink-0">
+                        {editForm.mainImageUrl ? (
+                          <NextImage
+                            src={editForm.mainImageUrl}
+                            alt="Preview"
+                            fill
+                            unoptimized
+                            referrerPolicy="no-referrer"
+                            className="object-contain p-1"
+                          />
+                        ) : (
+                          <ImageIcon className="w-5 h-5 text-slate-400" />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Pricing & Commercial Offers */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Tag className="w-4 h-4 text-emerald-500" />
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                    Pricing & Commercial Offers
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Selling Price
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.currentPrice}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, currentPrice: e.target.value }))}
+                      placeholder="e.g. 69.00 TND"
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Original / Compare Price
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.originalPrice}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, originalPrice: e.target.value }))}
+                      placeholder="e.g. 99.00 TND"
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Promo Offer / Discount Badge
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.discountOrOffer}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, discountOrOffer: e.target.value }))}
+                      placeholder="e.g. Achetez 1 Obtenez 1 Gratuit"
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Delivery / Shipping Fee
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.deliveryCost}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, deliveryCost: e.target.value }))}
+                      placeholder="e.g. Gratuit or 7 DT"
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 4: Classification & Platform */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-amber-500" />
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                    Classification & Store Platform
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Category (Free Text)
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.category}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, category: e.target.value }))}
+                      placeholder="e.g. Beauty & Personal Care"
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Sub-Category (Free Text)
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.subCategory}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, subCategory: e.target.value }))}
+                      placeholder="e.g. Hair Care, Kitchen Gadgets"
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Store Platform
+                    </label>
+                    <select
+                      value={editForm.storePlatform}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, storePlatform: e.target.value }))}
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
+                    >
+                      <option value="">Auto-detected / Other</option>
+                      <option value="youcan">🛍️ YouCan.shop</option>
+                      <option value="shopify">🟢 Shopify</option>
+                      <option value="woocommerce">🌐 WooCommerce</option>
+                      <option value="custom_cod">⚡ Custom COD Form</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Actions inside Edit Form */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  disabled={isSavingEdit}
+                  className="px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEdit}
+                  disabled={isSavingEdit}
+                  className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingEdit ? (
+                    <RotateCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  <span>{isSavingEdit ? "Saving Changes..." : "Save Product Details"}</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* ========================================================
+               VIEW MODE (ORIGINAL CONTENT)
+               ======================================================== */
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                {/* Left: Product Images */}
+                <div className="md:col-span-5 flex flex-col gap-3">
+                  <div className="relative aspect-square w-full bg-slate-100 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex items-center justify-center">
+                    {selectedImage ? (
+                      <NextImage
+                        src={selectedImage}
+                        alt={product.title || "Product image"}
+                        fill
+                        unoptimized
+                        referrerPolicy="no-referrer"
+                        className={`object-contain p-3 transition-all duration-300 ${
+                          typeof product.activeAdsCount === "number" && product.activeAdsCount === 0
+                            ? "grayscale contrast-90 hover:grayscale-0"
+                            : ""
+                        }`}
+                      />
                 ) : (
                   <div className="flex flex-col items-center gap-2 text-slate-400">
                     <ShoppingBag className="w-12 h-12 stroke-[1.5] opacity-40" />
@@ -1248,6 +1676,8 @@ ${imagesText}`;
               );
             })()}
           </div>
+            </>
+          )}
         </div>
       </div>
     </div>
