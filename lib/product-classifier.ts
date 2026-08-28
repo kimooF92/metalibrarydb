@@ -32,10 +32,12 @@ export interface ProductClassificationResult {
 // In-memory cache for categorized titles (avoids redundant API requests)
 const categoryCache = new Map<string, ProductClassificationResult>();
 
-// OpenRouter Cascade: deepseek/deepseek-v4-pro as primary
+// 100% Free OpenRouter Model Cascade (Zero Token Cost)
 const AI_MODELS = [
-  "deepseek/deepseek-v4-pro",
-  "deepseek/deepseek-chat",
+  "google/gemini-2.0-flash-exp:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
+  "nvidia/llama-3.1-nemotron-70b-instruct:free",
+  "mistralai/mistral-7b-instruct:free",
   "minimax/minimax-m2.7:free",
 ];
 
