@@ -44,6 +44,23 @@ export function ProductCard({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isFavorite, setIsFavorite] = useState(Boolean(product.isFavorite));
   const [isTogglingFav, setIsTogglingFav] = useState(false);
+  const [isQueueingVerify, setIsQueueingVerify] = useState(false);
+
+  const handleQueueVerify = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isQueueingVerify) return;
+    setIsQueueingVerify(true);
+    try {
+      const res = await fetch(`/api/products/${product.id}/queue-verify`, {
+        method: "POST",
+      });
+      if (res.ok && onRefresh) {
+        await onRefresh(product.id);
+      }
+    } finally {
+      setIsQueueingVerify(false);
+    }
+  };
 
   const handleToggleFavorite = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -440,6 +457,17 @@ export function ProductCard({
           )}
 
           <div className="flex items-center gap-1">
+            {(product.linkedAdsCount || 0) > 0 && (
+              <button
+                onClick={handleQueueVerify}
+                disabled={isQueueingVerify}
+                className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors cursor-pointer"
+                title="Mark all linked ads as Pending for next verifier scan"
+              >
+                <CheckCircle2 className={`w-3.5 h-3.5 ${isQueueingVerify ? "animate-pulse text-indigo-500" : ""}`} />
+              </button>
+            )}
+
             {onRefresh && (
               <button
                 onClick={handleRefresh}

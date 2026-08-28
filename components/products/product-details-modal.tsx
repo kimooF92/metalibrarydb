@@ -112,6 +112,29 @@ export function ProductDetailsModal({
   const [newSupplierInput, setNewSupplierInput] = useState("");
   const [isSavingSuppliers, setIsSavingSuppliers] = useState(false);
   const [copiedSupplierIndex, setCopiedSupplierIndex] = useState<number | null>(null);
+  const [isQueueingVerify, setIsQueueingVerify] = useState(false);
+
+  const handleQueueVerify = async () => {
+    if (!product?.id || isQueueingVerify) return;
+    setIsQueueingVerify(true);
+    try {
+      const res = await fetch(`/api/products/${product.id}/queue-verify`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        showToast("All linked ads marked as Pending for next scan.", "success");
+        await fetchLinkedAds(product.id);
+        onRefresh?.(product.id);
+      } else {
+        showToast("Failed to queue product for ad verification", "error");
+      }
+    } catch (err) {
+      console.error("Failed to queue verify:", err);
+      showToast("Network error queueing ad verification", "error");
+    } finally {
+      setIsQueueingVerify(false);
+    }
+  };
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -1101,11 +1124,23 @@ ${imagesText}`;
                         </div>
                       )}
                     </div>
-                    {activeLinkedAds.length >= 3 && (
-                      <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-bold border border-amber-500/20">
-                        High Scaling Winner
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleQueueVerify}
+                        disabled={isQueueingVerify || linkedAds.length === 0}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 transition-all cursor-pointer disabled:opacity-50"
+                        title="Set all linked ads to Pending so the next worker or GitHub Action scans them"
+                      >
+                        <RotateCw className={`w-3.5 h-3.5 ${isQueueingVerify ? "animate-spin" : ""}`} />
+                        <span>{isQueueingVerify ? "Queueing..." : "Set Pending Scan"}</span>
+                      </button>
+                      {activeLinkedAds.length >= 3 && (
+                        <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-bold border border-amber-500/20">
+                          High Scaling Winner
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {isAllInactive && (
