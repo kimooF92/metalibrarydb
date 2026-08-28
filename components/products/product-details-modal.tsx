@@ -533,6 +533,18 @@ ${imagesText}`;
               <Star className={`w-3.5 h-3.5 ${product.isFavorite ? "fill-current" : ""}`} />
             </button>
 
+            {/* Re-check / Set Pending Ads Button */}
+            <button
+              type="button"
+              onClick={handleQueueVerify}
+              disabled={isQueueingVerify}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 rounded-lg shadow-xs transition-all cursor-pointer disabled:opacity-50"
+              title="Set all linked ads as Pending so the next worker or GitHub Action scans them"
+            >
+              <RotateCw className={`w-3.5 h-3.5 ${isQueueingVerify ? "animate-spin" : ""}`} />
+              <span>{isQueueingVerify ? "Queueing..." : "Recheck Ads"}</span>
+            </button>
+
             {/* 1-Click Copy Dropdown */}
             <div className="relative" ref={copyMenuRef}>
               <button
