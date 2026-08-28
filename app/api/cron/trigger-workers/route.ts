@@ -15,6 +15,14 @@ export const maxDuration = 60; // 60s max execution limit on Vercel Serverless
  * 3. Records an audit notification in Supabase.
  */
 export async function GET(req: NextRequest) {
+  return handleCronTrigger(req);
+}
+
+export async function POST(req: NextRequest) {
+  return handleCronTrigger(req);
+}
+
+async function handleCronTrigger(req: NextRequest) {
   try {
     // 1. Authorization: verify Vercel Cron header or internal API secret
     const authHeader = req.headers.get("authorization");
@@ -31,6 +39,9 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const { searchParams } = new URL(req.url);
+    const target = searchParams.get("target") || "worker"; // 'worker' | 'spy' | 'scraper' | 'all'
+
     const repoOwner = "kimooF92";
     const repoName = "metalibrarydb";
     const githubToken = process.env.GH_PAT_TOKEN || process.env.GITHUB_TOKEN;
@@ -43,69 +54,57 @@ export async function GET(req: NextRequest) {
     const results: {
       supabaseKeepAlive: boolean;
       totalMonitoredPages: number;
+      target: string;
       githubActionsDispatched: {
-        spyWorker: string;
-        productScraper: string;
+        worker?: string;
+        spyWorker?: string;
+        productScraper?: string;
       };
     } = {
       supabaseKeepAlive: true,
       totalMonitoredPages: Number(dbCheck?.count || 0),
-      githubActionsDispatched: {
-        spyWorker: "skipped_no_token",
-        productScraper: "skipped_no_token",
-      },
+      target,
+      githubActionsDispatched: {},
     };
 
-    // 3. Dispatch to GitHub Actions via REST API (if GH_PAT_TOKEN is configured)
-    if (githubToken) {
-      // A. Trigger Spy Worker (Ad Creatives & Page Scraper)
+    // Helper to dispatch GitHub Action workflow
+    const dispatchWorkflow = async (workflowFile: string) => {
+      if (!githubToken) return "skipped_no_token";
       try {
-        const spyRes = await fetch(
-          `https://api.github.com/repos/${repoOwner}/${repoName}/actions/workflows/spy-worker.yml/dispatches`,
+        const res = await fetch(
+          `https://api.github.com/repos/${repoOwner}/${repoName}/actions/workflows/${workflowFile}/dispatches`,
           {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${githubToken}`,
               "Accept": "application/vnd.github.v3+json",
-              "User-Agent": "Vercel-Cron-Keeper",
+              "User-Agent": "External-Cron-Trigger",
             },
             body: JSON.stringify({ ref: "main" }),
           }
         );
-        results.githubActionsDispatched.spyWorker = spyRes.ok
-          ? "success_204_dispatched"
-          : `failed_${spyRes.status}`;
+        return res.ok ? "success_204_dispatched" : `failed_${res.status}`;
       } catch (err: any) {
-        results.githubActionsDispatched.spyWorker = `error: ${err.message}`;
+        return `error: ${err.message}`;
       }
+    };
 
-      // B. Trigger Product Scraper
-      try {
-        const prodRes = await fetch(
-          `https://api.github.com/repos/${repoOwner}/${repoName}/actions/workflows/product-scraper.yml/dispatches`,
-          {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${githubToken}`,
-              "Accept": "application/vnd.github.v3+json",
-              "User-Agent": "Vercel-Cron-Keeper",
-            },
-            body: JSON.stringify({ ref: "main" }),
-          }
-        );
-        results.githubActionsDispatched.productScraper = prodRes.ok
-          ? "success_204_dispatched"
-          : `failed_${prodRes.status}`;
-      } catch (err: any) {
-        results.githubActionsDispatched.productScraper = `error: ${err.message}`;
-      }
+    // 3. Dispatch requested workflows
+    if (target === "worker" || target === "all") {
+      results.githubActionsDispatched.worker = await dispatchWorkflow("worker.yml");
+    }
+    if (target === "spy" || target === "all") {
+      results.githubActionsDispatched.spyWorker = await dispatchWorkflow("spy-worker.yml");
+    }
+    if (target === "scraper" || target === "all") {
+      results.githubActionsDispatched.productScraper = await dispatchWorkflow("product-scraper.yml");
     }
 
     // 4. Record Activity Notification for Audit Trail
     await db.insert(activityNotifications).values({
       type: "system_alert",
-      title: "⏰ Daily Scheduled Workers Triggered",
-      message: `Vercel Cron triggered GitHub Actions (${results.githubActionsDispatched.spyWorker}) and refreshed Supabase activity.`,
+      title: `⏰ Cron Trigger: ${target.toUpperCase()}`,
+      message: `External cron triggered GitHub Actions: ${JSON.stringify(results.githubActionsDispatched)}`,
       severity: "info",
       actionUrl: "/analytics",
     });
@@ -116,7 +115,7 @@ export async function GET(req: NextRequest) {
       details: results,
     });
   } catch (err: any) {
-    console.error("[Vercel Cron Trigger Error]:", err);
+    console.error("[Cron Trigger Error]:", err);
     return NextResponse.json(
       { error: err.message || "Failed to execute cron trigger" },
       { status: 500 }
