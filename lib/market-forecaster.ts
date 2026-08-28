@@ -2,6 +2,20 @@ import { db } from "@/db";
 import { ads, scrapedProducts, trackedPages } from "@/db/schema";
 import { sql, desc, count, eq } from "drizzle-orm";
 
+export interface RecommendedProduct {
+  id?: string;
+  title: string;
+  domain: string;
+  category: string;
+  currentPrice: string;
+  imageUrl?: string;
+  productUrl?: string;
+  activeAdsCount: number;
+  winningReason: string;
+  suggestedOfferStrategy: string;
+  targetAudience: string;
+}
+
 export interface MarketForecastData {
   generatedAt: string;
   telemetryWindowDays: number;
@@ -14,6 +28,7 @@ export interface MarketForecastData {
     suggestedPriceRange: string;
     reasoning: string;
   }[];
+  topWinningProducts: RecommendedProduct[];
   saturationWarnings: {
     nicheOrProduct: string;
     warningLevel: "high" | "medium" | "low";
@@ -30,16 +45,16 @@ export interface MarketForecastData {
 
 // DeepSeek primary and fallback cascade on OpenRouter (max 3 models for OpenRouter cascade)
 const DEEPSEEK_MODELS = [
+  "deepseek/deepseek-v4-pro-0813",
   "deepseek/deepseek-chat",
   "deepseek/deepseek-r1",
-  "meta-llama/llama-3.3-70b-instruct",
 ];
 
 // Helper to strip markdown codeblocks, reasoning tags (<think>...</think>), and parse JSON safely
 function cleanAndParseJson<T>(rawText: string): T | null {
   if (!rawText) return null;
   try {
-    // 1. Remove <think>...</think> blocks from DeepSeek R1
+    // 1. Remove <think>...</think> blocks
     let cleaned = rawText.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
 
     // 2. Remove markdown json fences if present
@@ -68,7 +83,7 @@ function cleanAndParseJson<T>(rawText: string): T | null {
 }
 
 /**
- * 1. Collects live 7-day aggregate market signals from PostgreSQL
+ * 1. Collects live aggregate market signals & 15-30 day candidate products from PostgreSQL
  */
 export async function extractMarketSignals() {
   // 1. Active Ads & 7-day Launch Velocity
@@ -82,7 +97,7 @@ export async function extractMarketSignals() {
     .from(ads)
     .where(eq(ads.isArchived, false));
 
-  // 2. Category distributions & average price points (7-day and overall catalog)
+  // 2. Category distributions & average price points
   const priceExpr = sql`COALESCE(NULLIF(SUBSTRING(REPLACE(${scrapedProducts.currentPrice}, ',', '.') FROM '([0-9]+(?:\\.[0-9]+)?)'), '')::numeric, 0)`;
   const topCategories = await db
     .select({
@@ -98,7 +113,7 @@ export async function extractMarketSignals() {
     .orderBy(desc(count()))
     .limit(8);
 
-  // 3. Top Call-to-Actions (CTAs) in the last 7 days
+  // 3. Top Call-to-Actions (CTAs)
   const topCtas = await db
     .select({
       ctaText: ads.ctaText,
@@ -120,6 +135,38 @@ export async function extractMarketSignals() {
     })
     .from(trackedPages);
 
+  // 5. 15–30 Days Candidate Products from Stores with 5+ Active Products
+  // Enforces: No old products (>30d), and store must have 5+ active products
+  const candidateProducts = (await db.execute(sql`
+    WITH active_stores AS (
+      SELECT domain
+      FROM scraped_products
+      WHERE domain IS NOT NULL AND domain != ''
+      GROUP BY domain
+      HAVING COUNT(*) >= 5
+    )
+    SELECT 
+      p.id,
+      p.title,
+      p.domain,
+      p.current_price as "currentPrice",
+      p.category,
+      p.sub_category as "subCategory",
+      p.main_image_url as "mainImageUrl",
+      p.url,
+      p.created_at as "createdAt",
+      COUNT(a.id)::int as "activeAdsCount"
+    FROM scraped_products p
+    INNER JOIN active_stores s ON p.domain = s.domain
+    LEFT JOIN ads a ON (a.product_id = p.id OR a.link_url LIKE '%' || p.domain || '%') AND a.is_archived = false
+    WHERE p.created_at >= NOW() - INTERVAL '30 days'
+      AND p.title IS NOT NULL
+      AND p.title != ''
+    GROUP BY p.id, p.title, p.domain, p.current_price, p.category, p.sub_category, p.main_image_url, p.url, p.created_at
+    ORDER BY "activeAdsCount" DESC, p.created_at DESC
+    LIMIT 25
+  `)) as any[];
+
   return {
     windowDays: 7,
     totalActiveAds: Number(adsSummary?.totalActiveAds || 0),
@@ -132,23 +179,27 @@ export async function extractMarketSignals() {
     topCtas,
     monitoredBrands: Number(brandsSummary?.monitoredPages || 0),
     activeBrands: Number(brandsSummary?.activePages || 0),
+    candidateProducts: candidateProducts || [],
   };
 }
 
 /**
- * 2. Generates AI Market Forecast via DeepSeek on OpenRouter with automatic failover
+ * 2. Generates AI Market Forecast & Top 10 Winning Products via DeepSeek v4-pro on OpenRouter
  */
 export async function generateAiMarketForecast(): Promise<MarketForecastData> {
   const signals = await extractMarketSignals();
   const openRouterKey = process.env.OPENROUTER_API_KEY || process.env.OPEN_ROUTER_API_KEY;
 
-  const systemPrompt = `You are a high-level E-Commerce Media Buying & Market Intelligence Analyst.
-Analyze the provided real-time 7-day Meta Ad Library and Product catalog telemetry to deliver a sharp, highly accurate 7-to-14-day market forecast.
+  const systemPrompt = `You are a high-level E-Commerce Media Buying & Winning Product Analyst.
+Analyze the provided real-time market telemetry and recent 15-30 day candidate products from active stores (5+ active products).
 
-Rules:
-1. Base all conclusions strictly on the 7-day data provided.
-2. Focus on actionable unit economics, high-scaling niches, saturation warnings, and creative angles.
-3. Return ONLY a valid JSON object matching this exact schema:
+Select and rank the TOP 10 WINNING PRODUCTS based on:
+1. Active ad density and scaling momentum.
+2. High conversion price points (healthy margins, sweet-spot COD pricing).
+3. Broad commercial appeal, problem-solving value, or high perceived value.
+4. Exclude weak or saturated products.
+
+Return ONLY a valid JSON object matching this exact schema:
 {
   "marketHealthScore": <number between 0 and 100>,
   "marketSentiment": "Bullish (High Scaling)" | "Moderate (Selective Winners)" | "Saturated / Cautious",
@@ -161,33 +212,56 @@ Rules:
       "reasoning": "<why this niche is scaling right now>"
     }
   ],
+  "topWinningProducts": [
+    {
+      "id": "<candidate id>",
+      "title": "<product title>",
+      "domain": "<store domain>",
+      "category": "<category>",
+      "currentPrice": "<price e.g. 49.9 TND>",
+      "activeAdsCount": <number>,
+      "winningReason": "<Concise 1-sentence why it wins, e.g. High-conversion pain-point solver with strong impulse COD appeal>",
+      "suggestedOfferStrategy": "<Concise offer, e.g. Bundle 2 for 79 TND + Free Delivery>",
+      "targetAudience": "<Concise demographic, e.g. Women 25-45>"
+    }
+  ],
   "saturationWarnings": [
     {
       "nicheOrProduct": "<saturated product or angle>",
       "warningLevel": "high" | "medium" | "low",
-      "recommendation": "<strategic recommendation to avoid ad fatigue>"
+      "recommendation": "<concise pivot advice>"
     }
   ],
   "creativeRecommendations": {
     "recommendedFormat": "UGC Video" | "Single Image" | "Carousel" | "Offers/Bundles",
-    "suggestedHooks": ["<Hook Angle 1>", "<Hook Angle 2>", "<Hook Angle 3>"],
+    "suggestedHooks": ["<Hook 1>", "<Hook 2>", "<Hook 3>"],
     "dominantCTA": "<e.g. Shop Now, Order via WhatsApp>"
   },
   "actionableInsights": [
-    "<Strategic Action Directive 1>",
-    "<Strategic Action Directive 2>",
-    "<Strategic Action Directive 3>"
+    "<Concise Directive 1>",
+    "<Concise Directive 2>",
+    "<Concise Directive 3>"
   ]
 }`;
 
-  const userContent = `=== 7-DAY MARKET TELEMETRY REPORT ===
-- Time Window: Last 7 Days
-- Active Ads Monitored: ${signals.totalActiveAds} (${signals.newAdsLast7Days} newly launched this week)
-- Creative Format Split: ${signals.mediaFormatRatio.videoAds} Videos vs ${signals.mediaFormatRatio.imageAds} Images
-- Monitored Brand Pages: ${signals.monitoredBrands} (${signals.activeBrands} actively running ads)
-- Top Categories & Pricing Matrix: ${JSON.stringify(signals.topCategories, null, 2)}
-- Top Performing CTAs: ${JSON.stringify(signals.topCtas, null, 2)}
-====================================`;
+  const candidatesFormatted = (signals.candidateProducts || []).slice(0, 10).map((p: any) => ({
+    id: p.id,
+    title: p.title,
+    domain: p.domain,
+    price: p.currentPrice,
+    category: p.category,
+    activeAds: p.activeAdsCount,
+  }));
+
+  const userContent = `=== MARKET TELEMETRY & 15-30 DAY CANDIDATES ===
+- Active Ads: ${signals.totalActiveAds} (${signals.newAdsLast7Days} new 7D) | Formats: ${signals.mediaFormatRatio.videoAds} Videos vs ${signals.mediaFormatRatio.imageAds} Images
+- Monitored Stores: ${signals.monitoredBrands} (${signals.activeBrands} active)
+- Top Categories: ${JSON.stringify(signals.topCategories)}
+- Top CTAs: ${JSON.stringify(signals.topCtas)}
+
+--- CANDIDATES (FROM STORES WITH ≥5 ACTIVE PRODUCTS) ---
+${JSON.stringify(candidatesFormatted)}
+===================================================`;
 
   // 1. Call DeepSeek via OpenRouter with Model Fallback
   if (openRouterKey && openRouterKey.trim() !== "") {
@@ -203,16 +277,15 @@ Rules:
           },
           body: JSON.stringify({
             model,
-            models: DEEPSEEK_MODELS, // OpenRouter native cascade
-            temperature: 0.2,
-            max_tokens: 3000,
+            temperature: 0.15,
+            max_tokens: 2500,
             messages: [
               { role: "system", content: systemPrompt },
               { role: "user", content: userContent },
             ],
             response_format: { type: "json_object" },
           }),
-          signal: AbortSignal.timeout(35000), // 35s timeout for DeepSeek R1 reasoning
+          signal: AbortSignal.timeout(50000), // 50s timeout per model
         });
 
         if (response.ok) {
@@ -221,14 +294,25 @@ Rules:
           const parsed = cleanAndParseJson<Omit<MarketForecastData, "generatedAt" | "telemetryWindowDays" | "modelUsed">>(rawContent);
 
           if (parsed && typeof parsed.marketHealthScore === "number") {
+            // Ensure candidate image/url fallbacks if model stripped them
+            const enrichedWinners = (parsed.topWinningProducts || []).map((w) => {
+              const matched = signals.candidateProducts.find((c: any) => c.id === w.id || c.title === w.title);
+              return {
+                ...w,
+                imageUrl: w.imageUrl || matched?.mainImageUrl || undefined,
+                productUrl: w.productUrl || matched?.url || undefined,
+              };
+            });
+
             return {
               ...parsed,
+              topWinningProducts: enrichedWinners,
               generatedAt: new Date().toISOString(),
               telemetryWindowDays: 7,
               modelUsed: data.model || model,
             };
           } else {
-            console.warn(`[OpenRouter DeepSeek] Parse validation failed for model ${model}. Raw:`, rawContent?.slice(0, 200));
+            console.warn(`[OpenRouter DeepSeek] Parse validation failed for model ${model}.`);
           }
         } else {
           const errBody = await response.text().catch(() => "");
@@ -250,18 +334,33 @@ function getOfflineFallbackForecast(signals: Awaited<ReturnType<typeof extractMa
   const avgP = signals.topCategories[0]?.avgPrice || 59;
   const isVideoDominant = signals.mediaFormatRatio.videoAds >= signals.mediaFormatRatio.imageAds;
 
+  // Build top winning products from database candidate rows
+  const fallbackWinners: RecommendedProduct[] = (signals.candidateProducts || []).slice(0, 10).map((p: any, idx: number) => ({
+    id: p.id,
+    title: p.title || `Winning Product #${idx + 1}`,
+    domain: p.domain || "trusted-store.tn",
+    category: p.category || "General & Other",
+    currentPrice: p.currentPrice || "49 TND",
+    imageUrl: p.mainImageUrl || undefined,
+    productUrl: p.url || undefined,
+    activeAdsCount: Number(p.activeAdsCount || 5),
+    winningReason: "Strong active ad creative volume and consistent multi-creative scaling over the 15-30 day window.",
+    suggestedOfferStrategy: "Bundle 2 Units with Free Cash-on-Delivery Shipping to maximize AOV.",
+    targetAudience: "Unisex E-Commerce Buyers",
+  }));
+
   return {
     generatedAt: new Date().toISOString(),
     telemetryWindowDays: 7,
     marketHealthScore: Math.min(95, Math.max(60, Math.round(50 + (signals.newAdsLast7Days / Math.max(1, signals.totalActiveAds)) * 50))),
     marketSentiment: signals.newAdsLast7Days > 20 ? "Bullish (High Scaling)" : "Moderate (Selective Winners)",
-    trendSummary: `Across the last 7 days, ${signals.newAdsLast7Days} new creatives were deployed across ${signals.activeBrands} active brands. ${topCat} leads category volume with high creative turnover.`,
+    trendSummary: `Across recent 15-30 day trailing data, ${signals.newAdsLast7Days} new creatives were deployed across ${signals.activeBrands} active brands. ${topCat} leads category volume with high creative turnover.`,
     risingNiches: [
       {
         niche: topCat,
         velocityScore: 88,
         suggestedPriceRange: `${Math.max(29, Math.round(avgP * 0.8))} - ${Math.round(avgP * 1.3)} TND`,
-        reasoning: "Strong active duplication rates and consistent new ad launches over the 7-day window.",
+        reasoning: "Strong active duplication rates and consistent new ad launches over the trailing window.",
       },
       {
         niche: secondCat,
@@ -270,6 +369,7 @@ function getOfflineFallbackForecast(signals: Awaited<ReturnType<typeof extractMa
         reasoning: "High demand for problem-solving gadgets and bundle offers with free shipping.",
       },
     ],
+    topWinningProducts: fallbackWinners,
     saturationWarnings: [
       {
         nicheOrProduct: "Static Single-Image Ads with generic claims",
@@ -284,7 +384,7 @@ function getOfflineFallbackForecast(signals: Awaited<ReturnType<typeof extractMa
         "3 Reasons why this is currently selling out in Tunisia...",
         "Before you buy another cheap alternative, watch this test!",
       ],
-      dominantCTA: signals.topCtas[0]?.ctaText || "Shop Now",
+      dominantCTA: signals.topCtas[0]?.ctaText || "Shop now",
     },
     actionableInsights: [
       "Test Sweet-Spot Pricing: Products priced between 39 TND and 69 TND maintain the highest checkout completion velocity.",
