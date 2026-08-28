@@ -1075,69 +1075,119 @@ ${imagesText}`;
 
           {/* Linked Creatives Section */}
           <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-indigo-500" />
-                <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                  Active Ad Creatives Linked to this Landing Page ({linkedAds.length})
-                </h4>
-              </div>
-              {linkedAds.length >= 3 && (
-                <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-bold border border-amber-500/20">
-                  High Scaling Winner
-                </span>
-              )}
-            </div>
+            {(() => {
+              const activeLinkedAds = linkedAds.filter((a: any) => !a.isArchived && a.isActive !== false);
+              const inactiveLinkedAds = linkedAds.filter((a: any) => a.isArchived || a.isActive === false);
+              const isAllInactive = linkedAds.length > 0 && activeLinkedAds.length === 0;
 
-            {loadingAds ? (
-              <div className="py-8 text-center text-xs text-slate-400">
-                Loading linked creatives...
-              </div>
-            ) : linkedAds.length === 0 ? (
-              <div className="py-6 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-200 dark:border-slate-800">
-                No active ad creatives directly linked to this product ID yet.
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                {linkedAds.map((ad) => {
-                  const thumb = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.[0];
-                  return (
-                    <a
-                      key={ad.id}
-                      href={`https://www.facebook.com/ads/library/?id=${ad.adArchiveId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group relative flex flex-col bg-slate-50 dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden hover:border-indigo-500 transition-all"
-                      title={ad.title || ad.caption || "Ad Creative"}
-                    >
-                      <div className="relative aspect-square w-full bg-slate-200 dark:bg-slate-900 flex items-center justify-center">
-                        {thumb ? (
-                          <NextImage
-                            src={thumb}
-                            alt="Ad creative"
-                            fill
-                            unoptimized
-                            referrerPolicy="no-referrer"
-                            className="object-cover group-hover:scale-105 transition-transform"
-                          />
-                        ) : (
-                          <ImageIcon className="w-6 h-6 text-slate-400" />
-                        )}
+              return (
+                <>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-indigo-500" />
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                        Linked Ad Creatives ({linkedAds.length})
+                      </h4>
+                      {linkedAds.length > 0 && (
+                        <div className="flex items-center gap-1.5 text-xs">
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20">
+                            {activeLinkedAds.length} Active
+                          </span>
+                          {inactiveLinkedAds.length > 0 && (
+                            <span className="px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 font-semibold border border-rose-500/20">
+                              {inactiveLinkedAds.length} Stopped
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {activeLinkedAds.length >= 3 && (
+                      <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-bold border border-amber-500/20">
+                        High Scaling Winner
+                      </span>
+                    )}
+                  </div>
 
-                        {ad.mediaType === "video" && (
-                          <div className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-md">
-                            <Play className="w-2.5 h-2.5 fill-current ml-0.5" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="p-2 truncate text-[10px] font-medium text-slate-600 dark:text-slate-400">
-                        {ad.pageName || `Page ${ad.pageId}`}
-                      </div>
-                    </a>
-                  );
-                })}
-              </div>
-            )}
+                  {isAllInactive && (
+                    <div className="mb-3 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs font-medium flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span>All linked ad creatives have stopped running or were archived by the advertiser.</span>
+                    </div>
+                  )}
+
+                  {loadingAds ? (
+                    <div className="py-8 text-center text-xs text-slate-400">
+                      Loading linked creatives...
+                    </div>
+                  ) : linkedAds.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-200 dark:border-slate-800">
+                      No active ad creatives directly linked to this product ID yet.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                      {linkedAds.map((ad: any) => {
+                        const isAdArchived = Boolean(ad.isArchived || ad.isActive === false);
+                        const thumb = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.[0];
+                        return (
+                          <a
+                            key={ad.id}
+                            href={`https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&id=${ad.adArchiveId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`group relative flex flex-col bg-slate-50 dark:bg-slate-950 rounded-lg border overflow-hidden transition-all ${
+                              isAdArchived
+                                ? "border-rose-500/30 opacity-75 hover:opacity-100 hover:border-rose-500"
+                                : "border-slate-200 dark:border-slate-800 hover:border-indigo-500"
+                            }`}
+                            title={`${ad.title || ad.caption || "Ad Creative"} (${isAdArchived ? "Inactive" : "Active"})`}
+                          >
+                            <div className="relative aspect-square w-full bg-slate-200 dark:bg-slate-900 flex items-center justify-center">
+                              {thumb ? (
+                                <NextImage
+                                  src={thumb}
+                                  alt="Ad creative"
+                                  fill
+                                  unoptimized
+                                  referrerPolicy="no-referrer"
+                                  className={`object-cover transition-transform group-hover:scale-105 ${
+                                    isAdArchived ? "grayscale-[40%]" : ""
+                                  }`}
+                                />
+                              ) : (
+                                <ImageIcon className="w-6 h-6 text-slate-400" />
+                              )}
+
+                              {/* Status Badge */}
+                              <div className="absolute top-1.5 right-1.5 z-10">
+                                {isAdArchived ? (
+                                  <span className="px-1.5 py-0.5 rounded bg-rose-950/80 backdrop-blur-sm text-rose-300 text-[9px] font-bold border border-rose-500/40">
+                                    Inactive
+                                  </span>
+                                ) : (
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 backdrop-blur-sm text-emerald-300 text-[9px] font-bold border border-emerald-500/40">
+                                    Active
+                                  </span>
+                                )}
+                              </div>
+
+                              {ad.mediaType === "video" && (
+                                <div className="absolute bottom-1.5 left-1.5 w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-md">
+                                  <Play className="w-2.5 h-2.5 fill-current ml-0.5" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="p-2 truncate text-[10px] font-medium text-slate-600 dark:text-slate-400 flex items-center justify-between">
+                              <span className="truncate">{ad.pageName || `Page ${ad.pageId}`}</span>
+                              <ExternalLink className="w-3 h-3 text-slate-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity ml-1" />
+                            </div>
+                          </a>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
       </div>

@@ -232,8 +232,15 @@ export async function GET(req: NextRequest) {
       conditions.push(eq(ads.mediaType, mediaType));
     }
 
+    const includeArchived = searchParams.get("includeArchived") === "true" || !!productId;
     if (status === "archived") {
       conditions.push(eq(ads.isArchived, true));
+    } else if (includeArchived) {
+      if (status === "active") {
+        conditions.push(and(eq(adObservations.isActive, true), eq(ads.isArchived, false)));
+      } else if (status === "inactive") {
+        conditions.push(or(eq(adObservations.isActive, false), eq(ads.isArchived, true)));
+      }
     } else if (!smartPreset) {
       // Hide archived ads from main feed states (all, active, inactive)
       conditions.push(or(eq(ads.isArchived, false), sql`${ads.isArchived} IS NULL`));

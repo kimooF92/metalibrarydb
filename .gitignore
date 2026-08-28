@@ -47,5 +47,5 @@ next-env.d.ts
 .playwright_profile_fallback/
 
 # local runner scripts
-*.bat
+# *.bat
 

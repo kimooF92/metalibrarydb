@@ -40,9 +40,19 @@ export async function getBrowserSession(): Promise<{ context: BrowserContext; pa
   try {
     contextInstance = await chromium.launchPersistentContext(userDataDir, options);
   } catch (err: any) {
-    if (err?.message?.includes("existing browser session")) {
+    if (
+      err?.message?.includes("existing browser session") ||
+      err?.message?.includes("ProcessSingleton") ||
+      err?.message?.includes("already in use") ||
+      err?.message?.includes("Lock file")
+    ) {
       const fallbackDir = path.join(process.cwd(), ".playwright_profile_fallback");
-      contextInstance = await chromium.launchPersistentContext(fallbackDir, options);
+      try {
+        contextInstance = await chromium.launchPersistentContext(fallbackDir, options);
+      } catch {
+        const isolatedDir = path.join(process.cwd(), `.playwright_profile_${Date.now()}`);
+        contextInstance = await chromium.launchPersistentContext(isolatedDir, options);
+      }
     } else {
       throw err;
     }
