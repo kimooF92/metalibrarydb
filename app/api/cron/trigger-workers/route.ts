@@ -24,19 +24,18 @@ export async function POST(req: NextRequest) {
 
 async function handleCronTrigger(req: NextRequest) {
   try {
-    // 1. Authorization: verify Vercel Cron header or internal API secret
+    // 1. Extract GitHub PAT and Authorization tokens
     const authHeader = req.headers.get("authorization");
+    const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7).trim() : null;
+    const isGithubTokenInHeader = bearerToken && (bearerToken.startsWith("ghp_") || bearerToken.startsWith("github_pat_"));
+
     const cronSecret = process.env.CRON_SECRET || process.env.API_SECRET || process.env.APP_PASSWORD;
-
     const isVercelCron = req.headers.get("x-vercel-cron") === "1";
-    const isAuthorizedHeader = cronSecret && authHeader === `Bearer ${cronSecret}`;
+    const isAuthorizedSecret = cronSecret && (bearerToken === cronSecret || req.headers.get("x-api-secret") === cronSecret);
 
-    // Allow if triggered by Vercel native cron scheduler or valid bearer token
-    if (cronSecret && !isVercelCron && !isAuthorizedHeader) {
-      const clientSecret = req.headers.get("x-api-secret");
-      if (clientSecret !== cronSecret) {
-        return NextResponse.json({ error: "Unauthorized cron request" }, { status: 401 });
-      }
+    // Allow if: Vercel Cron, or matches CRON_SECRET, or provides a GitHub PAT token, or no CRON_SECRET is configured
+    if (cronSecret && !isVercelCron && !isAuthorizedSecret && !isGithubTokenInHeader) {
+      return NextResponse.json({ error: "Unauthorized cron request" }, { status: 401 });
     }
 
     const { searchParams } = new URL(req.url);
@@ -44,7 +43,8 @@ async function handleCronTrigger(req: NextRequest) {
 
     const repoOwner = "kimooF92";
     const repoName = "metalibrarydb";
-    const githubToken = process.env.GH_PAT_TOKEN || process.env.GITHUB_TOKEN;
+    // Use env var first, or fallback to the token passed in Authorization header from cron-job.org
+    const githubToken = process.env.GH_PAT_TOKEN || process.env.GITHUB_TOKEN || (isGithubTokenInHeader ? bearerToken : null);
 
     // 2. Touch Supabase Database (Resets Supabase 7-Day Inactivity Timer)
     const [dbCheck] = await db
