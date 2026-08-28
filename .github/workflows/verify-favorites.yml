@@ -1,0 +1,78 @@
+name: Verify Favorite Products Ads (Parallel Shards)
+
+on:
+  schedule:
+    # Runs daily at 03:00 UTC (04:00 AM Tunisia/UTC+1) - Nightly quiet window
+    - cron: '0 3 * * *'
+  workflow_dispatch: # Allows manual 1-click trigger from GitHub Actions UI anytime
+    inputs:
+      force:
+        description: 'Force recheck ALL ads (including inactive/archived to restore them)'
+        type: boolean
+        required: false
+        default: false
+      limit:
+        description: 'Maximum products to check per run (leave empty for all favorites)'
+        required: false
+        default: ''
+
+# Dedicated concurrency group: prevents duplicate runs from stomping over each other
+concurrency:
+  group: verify-favorite-ads-group
+  cancel-in-progress: true
+
+jobs:
+  verify-favorites-matrix:
+    name: Shard ${{ matrix.shard + 1 }}/4
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false # Keeps other shards running even if one encounters a transient error
+      matrix:
+        shard: [0, 1, 2, 3] # 4 parallel runners running simultaneously
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Cache Playwright Browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: playwright-chromium-${{ runner.os }}-
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium Browser
+        run: npx playwright install chromium --with-deps
+        continue-on-error: false
+
+      - name: Run Shard ${{ matrix.shard + 1 }}/4
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          PLAYWRIGHT_HEADLESS: "true"
+        run: |
+          FLAGS="--shard ${{ matrix.shard }}/4"
+
+          if [ "${{ inputs.force }}" = "true" ]; then
+            FLAGS="$FLAGS --force"
+          fi
+
+          if [ -n "${{ inputs.limit }}" ]; then
+            FLAGS="$FLAGS --limit ${{ inputs.limit }}"
+          fi
+
+          echo "Running favorite ads verifier shard [${{ matrix.shard + 1 }}/4] with flags: $FLAGS"
+          npx tsx scripts/verify-favorite-ads.ts $FLAGS

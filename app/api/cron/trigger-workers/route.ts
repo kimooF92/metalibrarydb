@@ -99,6 +99,9 @@ async function handleCronTrigger(req: NextRequest) {
     if (target === "scraper" || target === "all") {
       results.githubActionsDispatched.productScraper = await dispatchWorkflow("product-scraper.yml");
     }
+    if (target === "favorites" || target === "verify_favorites") {
+      results.githubActionsDispatched.verifyFavorites = await dispatchWorkflow("verify-favorites.yml");
+    }
 
     // 4. Pre-warm / refresh AI Market Intelligence & Opportunities in background if target is 'all' or 'insights'
     let aiRefreshStatus: { opportunities?: string; forecast?: string } = {};

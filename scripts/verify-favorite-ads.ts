@@ -23,6 +23,7 @@ interface CliOptions {
   adArchiveId?: string;
   forceAll: boolean;
   delayMs?: number;
+  shard?: string;
 }
 
 function parseArgs(): CliOptions {
@@ -44,6 +45,9 @@ function parseArgs(): CliOptions {
     } else if ((args[i] === "--delay" || args[i] === "-d") && args[i + 1]) {
       options.delayMs = parseInt(args[i + 1], 10);
       i++;
+    } else if ((args[i] === "--shard" || args[i] === "-s") && args[i + 1]) {
+      options.shard = args[i + 1];
+      i++;
     }
   }
 
@@ -58,8 +62,10 @@ async function runFavoriteAdsVerifier() {
   console.log("=================================================");
   console.log(
     `Config: forceAll=${options.forceAll}${options.limit ? `, limit=${options.limit}` : ""}${
-      options.productId ? `, singleProductId=${options.productId}` : ""
-    }${options.adArchiveId ? `, singleAdArchiveId=${options.adArchiveId}` : ""}\n`
+      options.shard ? `, shard=${options.shard}` : ""
+    }${options.productId ? `, singleProductId=${options.productId}` : ""}${
+      options.adArchiveId ? `, singleAdArchiveId=${options.adArchiveId}` : ""
+    }\n`
   );
 
   const startTime = Date.now();
@@ -93,12 +99,12 @@ async function runFavoriteAdsVerifier() {
       }
       targetProducts = [p];
     } else {
-      // Fetch all favorite products
+      // Fetch all favorite products ordered deterministically by ID
       targetProducts = await db.query.scrapedProducts.findMany({
         where: eq(scrapedProducts.isFavorite, true),
         columns: { id: true, title: true, url: true },
-        orderBy: [desc(scrapedProducts.updatedAt)],
-        limit: options.limit || 100,
+        orderBy: [desc(scrapedProducts.id)],
+        limit: options.limit || 500,
       });
     }
 
@@ -109,7 +115,22 @@ async function runFavoriteAdsVerifier() {
       process.exit(0);
     }
 
-    console.log(`Found ${targetProducts.length} favorite product(s) to evaluate.\n`);
+    // Apply Sharding if specified (e.g. 0/4, 1/4, 2/4, 3/4)
+    if (options.shard) {
+      const parts = options.shard.split("/");
+      const shardIndex = parseInt(parts[0], 10);
+      const shardTotal = parseInt(parts[1], 10);
+
+      if (!isNaN(shardIndex) && !isNaN(shardTotal) && shardTotal > 0) {
+        const totalBefore = targetProducts.length;
+        targetProducts = targetProducts.filter((_, idx) => idx % shardTotal === shardIndex);
+        console.log(
+          `🧩 Shard [${shardIndex + 1}/${shardTotal}]: Allocated ${targetProducts.length} of ${totalBefore} total favorite products.\n`
+        );
+      }
+    } else {
+      console.log(`Found ${targetProducts.length} favorite product(s) to evaluate.\n`);
+    }
 
     let totalCheckedProducts = 0;
     let totalSkippedProducts = 0;
