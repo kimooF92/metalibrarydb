@@ -1,4 +1,5 @@
-import { Flame, ShoppingBag, Zap, ShieldCheck, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { Flame, ShoppingBag, Zap, ShieldCheck, Sparkles, ArrowRight } from "lucide-react";
 
 interface PulseBannerProps {
   breakoutCount?: number;
@@ -58,22 +59,15 @@ export function PulseBanner({
           </span>
         </div>
 
-        {/* Signal 3: Dominant Scaled CTA */}
-        <div className="flex items-center space-x-1.5 bg-white/70 dark:bg-slate-900/70 px-2.5 py-1 rounded-xl border border-slate-200/60 dark:border-slate-800/60">
-          <Zap className="w-3.5 h-3.5 text-emerald-500" />
-          <span>
-            Top Scaled CTA: <strong>{dominantCTA}</strong>{" "}
-            {dominantCTAPct > 0 && <span className="text-[11px] text-emerald-600 font-bold">({dominantCTAPct}%)</span>}
-          </span>
-        </div>
-
-        {/* Signal 4: Catalog Health */}
-        <div className="hidden lg:flex items-center space-x-1.5 bg-white/70 dark:bg-slate-900/70 px-2.5 py-1 rounded-xl border border-slate-200/60 dark:border-slate-800/60">
-          <ShieldCheck className="w-3.5 h-3.5 text-cyan-500" />
-          <span>
-            Catalog Classified: <strong className="text-cyan-600 dark:text-cyan-400">{catalogHealthPct}%</strong>
-          </span>
-        </div>
+        {/* Opportunity Seeker CTA Link */}
+        <Link
+          href="/opportunities"
+          className="flex items-center space-x-1 px-2.5 py-1 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 shadow-xs transition-all"
+        >
+          <Sparkles className="w-3 h-3" />
+          <span>Opportunity Seeker</span>
+          <ArrowRight className="w-3 h-3" />
+        </Link>
       </div>
     </div>
   );

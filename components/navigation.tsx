@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  Sparkles,
 } from "lucide-react";
 import { NotificationCenter } from "./notification-center";
 import { ThemeToggle } from "./theme-toggle";
@@ -36,6 +37,7 @@ export function Navigation() {
 
   const navItems = [
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/opportunities", label: "Opportunity Seeker", icon: Sparkles, isAi: true },
     { href: "/discovery", label: "Discover Pages", icon: Globe },
     { href: "/spy", label: "Ad Spy Feed", icon: Eye },
     { href: "/products", label: "Products", icon: ShoppingBag },
@@ -121,18 +123,25 @@ export function Navigation() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all border ${
+                  className={`flex items-center justify-between px-4 py-3 rounded-lg text-sm font-semibold transition-all border ${
                     active
                       ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-650 dark:text-indigo-300 shadow-md shadow-indigo-600/[0.03]"
                       : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
                   }`}
                 >
-                  <Icon
-                    className={`w-4 h-4 ${
-                      active ? "text-indigo-650 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
-                    }`}
-                  />
-                  <span className="truncate">{item.label}</span>
+                  <div className="flex items-center space-x-3 truncate">
+                    <Icon
+                      className={`w-4 h-4 shrink-0 ${
+                        active ? "text-indigo-650 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
+                      }`}
+                    />
+                    <span className="truncate">{item.label}</span>
+                  </div>
+                  {item.isAi && (
+                    <span className="px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider rounded-md bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-xs ml-1.5 shrink-0">
+                      AI
+                    </span>
+                  )}
                 </Link>
               );
             })}
@@ -235,14 +244,21 @@ export function Navigation() {
                   key={item.href}
                   href={item.href}
                   onClick={() => setIsOpen(false)}
-                  className={`flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all border ${
+                  className={`flex items-center justify-between px-4 py-3 rounded-lg text-sm font-semibold transition-all border ${
                     active
                       ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-650 dark:text-indigo-300"
                       : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/40"
                   }`}
                 >
-                  <Icon className="w-4 h-4" />
-                  <span>{item.label}</span>
+                  <div className="flex items-center space-x-3">
+                    <Icon className="w-4 h-4" />
+                    <span>{item.label}</span>
+                  </div>
+                  {item.isAi && (
+                    <span className="px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider rounded-md bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-xs">
+                      AI
+                    </span>
+                  )}
                 </Link>
               );
             })}
