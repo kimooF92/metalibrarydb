@@ -13,6 +13,7 @@ import {
   Zap,
 } from "lucide-react";
 import { PulseBanner } from "@/components/analytics/pulse-banner";
+import { MarketForecastCard } from "@/components/analytics/market-forecast-card";
 import { ProductAnalyticsTab } from "@/components/analytics/product-analytics-tab";
 import { AdAnalyticsTab } from "@/components/analytics/ad-analytics-tab";
 import { BrandAnalyticsTab } from "@/components/analytics/brand-analytics-tab";
@@ -312,6 +313,9 @@ export default function AnalyticsPage() {
         catalogHealthPct={pulseMetrics.catalogHealthPct}
         isLoading={isGlobalLoading && !productsData && !adsData}
       />
+
+      {/* AI Market Forecast & Strategic Playbook (DeepSeek / OpenRouter) */}
+      <MarketForecastCard />
 
       {/* Primary 3-Pillar Tab Switcher */}
       <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800/80 pb-3">
