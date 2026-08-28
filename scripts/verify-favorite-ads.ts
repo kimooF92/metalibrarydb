@@ -8,7 +8,7 @@ if (typeof globalThis.WebSocket === "undefined") {
 
 import { db, client } from "../db";
 import { scrapedProducts, ads } from "../db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { getBrowserSession, closeBrowserSession } from "../worker/browser";
 import {
   checkSingleAdStatus,
@@ -24,6 +24,7 @@ interface CliOptions {
   url?: string;
   adArchiveId?: string;
   forceAll: boolean;
+  pendingOnly: boolean;
   delayMs?: number;
   shard?: string;
 }
@@ -32,6 +33,7 @@ function parseArgs(): CliOptions {
   const args = process.argv.slice(2);
   const options: CliOptions = {
     forceAll: args.includes("--force") || args.includes("-f"),
+    pendingOnly: args.includes("--pending") || args.includes("-P"),
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -132,6 +134,27 @@ async function runFavoriteAdsVerifier() {
         process.exit(1);
       }
       targetProducts = [p];
+    } else if (options.pendingOnly) {
+      // Direct fast query: only favorite products that have pending / un-archived ads
+      const pendingRows = await db
+        .selectDistinct({
+          id: scrapedProducts.id,
+          title: scrapedProducts.title,
+          url: scrapedProducts.url,
+        })
+        .from(scrapedProducts)
+        .innerJoin(ads, eq(ads.productId, scrapedProducts.id))
+        .where(
+          and(
+            eq(scrapedProducts.isFavorite, true),
+            sql`(${ads.isArchived} = false OR ${ads.isArchived} IS NULL)`
+          )
+        )
+        .orderBy(desc(scrapedProducts.id))
+        .limit(options.limit || 100);
+
+      targetProducts = pendingRows;
+      console.log(`🎯 [Pending Only Mode] Found ${targetProducts.length} favorite product(s) with queued/pending ads to verify.\n`);
     } else {
       // Fetch all favorite products ordered deterministically by ID
       targetProducts = await db.query.scrapedProducts.findMany({
