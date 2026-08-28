@@ -62,7 +62,7 @@ const DEEPSEEK_MODELS = [
   "deepseek/deepseek-r1",
 ];
 
-// Helper to strip markdown codeblocks, reasoning tags (<think>...</think>), and parse JSON safely
+// Helper to strip markdown codeblocks, reasoning tags (<think>...</think>), repair and parse JSON safely
 function cleanAndParseJson<T>(rawText: string): T | null {
   if (!rawText) return null;
   try {
@@ -81,12 +81,59 @@ function cleanAndParseJson<T>(rawText: string): T | null {
     }
 
     const firstBrace = cleaned.indexOf("{");
-    const lastBrace = cleaned.lastIndexOf("}");
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-      cleaned = cleaned.substring(firstBrace, lastBrace + 1);
-    }
+    if (firstBrace === -1) return null;
+    cleaned = cleaned.substring(firstBrace);
 
-    return JSON.parse(cleaned) as T;
+    // Try direct parse first
+    try {
+      return JSON.parse(cleaned) as T;
+    } catch {
+      // 3. Fallback: repair trailing comma or unclosed structure
+      let repaired = cleaned
+        .replace(/,\s*([\]}])/g, "$1") // remove trailing commas before closing brackets
+        .replace(/,\s*"[^"]*":?\s*$/, "") // remove trailing incomplete key-value pair
+        .replace(/,\s*$/, ""); // remove trailing comma
+
+      // Balance unmatched braces and brackets
+      let openBraces = 0;
+      let openBrackets = 0;
+      let inString = false;
+      let escape = false;
+
+      for (let i = 0; i < repaired.length; i++) {
+        const char = repaired[i];
+        if (escape) {
+          escape = false;
+          continue;
+        }
+        if (char === "\\") {
+          escape = true;
+          continue;
+        }
+        if (char === '"') {
+          inString = !inString;
+          continue;
+        }
+        if (!inString) {
+          if (char === "{") openBraces++;
+          else if (char === "}") openBraces = Math.max(0, openBraces - 1);
+          else if (char === "[") openBrackets++;
+          else if (char === "]") openBrackets = Math.max(0, openBrackets - 1);
+        }
+      }
+
+      if (inString) repaired += '"';
+      while (openBrackets > 0) {
+        repaired += "]";
+        openBrackets--;
+      }
+      while (openBraces > 0) {
+        repaired += "}";
+        openBraces--;
+      }
+
+      return JSON.parse(repaired) as T;
+    }
   } catch (err) {
     console.warn("[Forecast JSON Parse Error]:", err);
     return null;
@@ -307,6 +354,7 @@ ${JSON.stringify(top5Formatted, null, 2)}
   if (openRouterKey && openRouterKey.trim() !== "") {
     for (const model of DEEPSEEK_MODELS) {
       try {
+        console.log(`[Forecaster] Requesting ${model} on OpenRouter...`);
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
           headers: {
@@ -317,7 +365,7 @@ ${JSON.stringify(top5Formatted, null, 2)}
           },
           body: JSON.stringify({
             model,
-            temperature: 0.18,
+            temperature: 0.15,
             max_tokens: 3500,
             messages: [
               { role: "system", content: systemPrompt },
@@ -327,6 +375,8 @@ ${JSON.stringify(top5Formatted, null, 2)}
           }),
           signal: AbortSignal.timeout(30000),
         });
+
+        console.log(`[Forecaster] Model ${model} responded HTTP ${response.status}`);
 
         if (response.ok) {
           const data = await response.json();
