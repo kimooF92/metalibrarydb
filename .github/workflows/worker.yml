@@ -2,14 +2,14 @@ name: Meta Ad Tracker Worker
 
 on:
   schedule:
-    # Runs every 2 hours (00:00, 02:00, 04:00, 06:00, 08:00, 10:00, 12:00, 14:00, 16:00, 18:00, 20:00, 22:00 UTC)
-    - cron: '0 */2 * * *'
+    # Runs every 2 hours at minute 15 (00:15, 02:15, 04:15, 06:15, 08:15, 10:15, 12:15, 14:15, 16:15, 18:15, 20:15, 22:15 UTC)
+    - cron: '15 */2 * * *'
   workflow_dispatch: # Allows manual trigger from GitHub UI anytime
 
-# Global concurrency group to guarantee zero job overlap across workflows
+# Dedicated concurrency group with cancel-in-progress to prevent stalled runs from blocking the queue
 concurrency:
-  group: meta-ad-worker-group
-  cancel-in-progress: false
+  group: meta-ad-count-worker-group
+  cancel-in-progress: true
 
 jobs:
   run-worker:

@@ -2,8 +2,8 @@ name: Meta Ad Tracker Apify Spy Worker
 
 on:
   schedule:
-    # 2 rounds per day: Midday (12:00 PM UTC+1 / 11:00 UTC) & Midnight (00:00 AM UTC+1 / 23:00 UTC)
-    - cron: '0 11,23 * * *'
+    # 2 rounds per day: Midday (12:30 PM UTC+1 / 11:30 UTC) & Midnight (00:30 AM UTC+1 / 23:30 UTC)
+    - cron: '30 11,23 * * *'
   workflow_dispatch: # Allows manual trigger from GitHub UI anytime with optional inputs
     inputs:
       max_pages:
@@ -19,10 +19,10 @@ on:
         required: false
         default: ''
 
-# Global concurrency group to guarantee zero job overlap across workflows
+# Dedicated concurrency group with cancel-in-progress to avoid blocking count workers
 concurrency:
-  group: meta-ad-worker-group
-  cancel-in-progress: false
+  group: meta-ad-spy-worker-group
+  cancel-in-progress: true
 
 jobs:
   run-apify-spy-worker:
