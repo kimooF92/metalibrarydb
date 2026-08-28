@@ -28,12 +28,11 @@ export interface MarketForecastData {
   modelUsed: string;
 }
 
-// DeepSeek primary and fallback cascade on OpenRouter
+// DeepSeek primary and fallback cascade on OpenRouter (max 3 models for OpenRouter cascade)
 const DEEPSEEK_MODELS = [
-  "deepseek/deepseek-r1",
   "deepseek/deepseek-chat",
+  "deepseek/deepseek-r1",
   "meta-llama/llama-3.3-70b-instruct",
-  "google/gemini-2.0-flash-001",
 ];
 
 // Helper to strip markdown codeblocks, reasoning tags (<think>...</think>), and parse JSON safely
@@ -72,13 +71,11 @@ function cleanAndParseJson<T>(rawText: string): T | null {
  * 1. Collects live 7-day aggregate market signals from PostgreSQL
  */
 export async function extractMarketSignals() {
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-
   // 1. Active Ads & 7-day Launch Velocity
   const [adsSummary] = await db
     .select({
       totalActiveAds: count(),
-      newAdsLast7Days: sql<number>`COUNT(CASE WHEN ${ads.firstSeenAt} >= ${sevenDaysAgo} OR ${ads.startedRunningOn} >= ${sevenDaysAgo} THEN 1 END)`.mapWith(Number),
+      newAdsLast7Days: sql<number>`COUNT(CASE WHEN ${ads.firstSeenAt} >= NOW() - INTERVAL '7 days' OR ${ads.startedRunningOn} >= NOW() - INTERVAL '7 days' THEN 1 END)`.mapWith(Number),
       videoCount: sql<number>`COUNT(CASE WHEN ${ads.mediaType} = 'video' THEN 1 END)`.mapWith(Number),
       imageCount: sql<number>`COUNT(CASE WHEN ${ads.mediaType} = 'image' THEN 1 END)`.mapWith(Number),
     })
@@ -91,7 +88,7 @@ export async function extractMarketSignals() {
     .select({
       category: sql<string>`COALESCE(NULLIF(${scrapedProducts.category}, ''), 'General & Other')`,
       productCount: count(),
-      newThisWeek: sql<number>`COUNT(CASE WHEN ${scrapedProducts.createdAt} >= ${sevenDaysAgo} THEN 1 END)`.mapWith(Number),
+      newThisWeek: sql<number>`COUNT(CASE WHEN ${scrapedProducts.createdAt} >= NOW() - INTERVAL '7 days' THEN 1 END)`.mapWith(Number),
       avgPrice: sql<number>`ROUND(AVG(CASE WHEN ${priceExpr} > 0 THEN ${priceExpr} END), 1)`.mapWith(Number),
       minPrice: sql<number>`MIN(CASE WHEN ${priceExpr} > 0 THEN ${priceExpr} END)`.mapWith(Number),
       maxPrice: sql<number>`MAX(CASE WHEN ${priceExpr} > 0 THEN ${priceExpr} END)`.mapWith(Number),
@@ -109,7 +106,7 @@ export async function extractMarketSignals() {
     })
     .from(ads)
     .where(
-      sql`${ads.ctaText} IS NOT NULL AND ${ads.ctaText} != '' AND (${ads.firstSeenAt} >= ${sevenDaysAgo} OR ${ads.isArchived} = false)`
+      sql`${ads.ctaText} IS NOT NULL AND ${ads.ctaText} != '' AND (${ads.firstSeenAt} >= NOW() - INTERVAL '7 days' OR ${ads.isArchived} = false)`
     )
     .groupBy(ads.ctaText)
     .orderBy(desc(count()))
@@ -207,15 +204,15 @@ Rules:
           body: JSON.stringify({
             model,
             models: DEEPSEEK_MODELS, // OpenRouter native cascade
-            temperature: 0.15,
-            max_tokens: 1500,
+            temperature: 0.2,
+            max_tokens: 3000,
             messages: [
               { role: "system", content: systemPrompt },
               { role: "user", content: userContent },
             ],
             response_format: { type: "json_object" },
           }),
-          signal: AbortSignal.timeout(20000), // 20s timeout for DeepSeek R1 reasoning
+          signal: AbortSignal.timeout(35000), // 35s timeout for DeepSeek R1 reasoning
         });
 
         if (response.ok) {
@@ -230,7 +227,12 @@ Rules:
               telemetryWindowDays: 7,
               modelUsed: data.model || model,
             };
+          } else {
+            console.warn(`[OpenRouter DeepSeek] Parse validation failed for model ${model}. Raw:`, rawContent?.slice(0, 200));
           }
+        } else {
+          const errBody = await response.text().catch(() => "");
+          console.warn(`[OpenRouter DeepSeek] Model ${model} returned HTTP ${response.status}:`, errBody.slice(0, 300));
         }
       } catch (err: any) {
         console.warn(`[OpenRouter DeepSeek Warning] Model ${model} encountered an issue:`, err?.message || err);
