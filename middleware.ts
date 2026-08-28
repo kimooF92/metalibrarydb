@@ -18,12 +18,13 @@ const PUBLIC_PATHS = [
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
-  // 1. Skip static assets, Next.js system routes, and public media paths
+  // 1. Skip static assets, Next.js system routes, public media paths, and cron endpoints (handled internally)
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/static") ||
     pathname.startsWith("/api/spy/b2-media") ||
     pathname.startsWith("/api/spy/image-proxy") ||
+    pathname.startsWith("/api/cron/") ||
     PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith("/api/auth/"))
   ) {
     return NextResponse.next();
