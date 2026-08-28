@@ -32,16 +32,18 @@ export function MarketForecastCard() {
   const [activeTab, setActiveTab] = useState<"opportunities" | "playbook" | "roadmap">("opportunities");
   const [error, setError] = useState<string | null>(null);
 
-  // 1. Initial Load: Fetch ONLY previously saved research ($0 API cost)
+  // 1. Initial Load: Read immediately from localStorage if available, then sync with server
   const fetchExistingResearch = async () => {
     try {
-      setLoading(true);
       setError(null);
       const res = await fetch("/api/analytics/forecast");
       if (res.ok) {
         const json = await res.json();
         if (json.exists && json.forecast) {
           setResearch(json.forecast);
+          try {
+            localStorage.setItem("ai_market_forecast_data", JSON.stringify(json.forecast));
+          } catch {}
         }
       }
     } catch (err: any) {
@@ -52,6 +54,15 @@ export function MarketForecastCard() {
   };
 
   useEffect(() => {
+    try {
+      const localCached = localStorage.getItem("ai_market_forecast_data");
+      if (localCached) {
+        setResearch(JSON.parse(localCached));
+        setLoading(false);
+      }
+    } catch (e) {
+      console.warn("Failed to load forecast from localStorage", e);
+    }
     fetchExistingResearch();
   }, []);
 
@@ -73,6 +84,9 @@ export function MarketForecastCard() {
       if (json.forecast) {
         setResearch(json.forecast);
         setIsExpanded(true);
+        try {
+          localStorage.setItem("ai_market_forecast_data", JSON.stringify(json.forecast));
+        } catch {}
       }
     } catch (err: any) {
       console.error("Research Generation Error:", err);
