@@ -3,70 +3,62 @@
 import { useState, useEffect } from "react";
 import {
   Sparkles,
-  TrendingUp,
-  Lightbulb,
-  Video,
   RefreshCw,
-  Clock,
+  TrendingUp,
+  TrendingDown,
+  Activity,
+  Zap,
+  CheckCircle2,
+  Video,
   ChevronDown,
   ChevronUp,
-  Cpu,
+  AlertCircle,
   PlayCircle,
-  Compass,
-  DollarSign,
-  Calendar,
-  CheckCircle2,
-  Zap,
-  Target,
+  BarChart3,
   Layers,
-  ArrowRight,
-  ShieldCheck,
 } from "lucide-react";
-import { MarketOpportunityResearch } from "@/lib/market-forecaster";
+import { MarketAnalysisData } from "@/lib/market-forecaster";
 
 export function MarketForecastCard() {
-  const [research, setResearch] = useState<MarketOpportunityResearch | null>(null);
+  const [research, setResearch] = useState<MarketAnalysisData | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(true);
-  const [activeTab, setActiveTab] = useState<"opportunities" | "playbook" | "roadmap">("opportunities");
   const [error, setError] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(true);
 
-  // 1. Initial Load: Read immediately from localStorage if available, then sync with server
-  const fetchExistingResearch = async () => {
-    try {
-      setError(null);
-      const res = await fetch("/api/analytics/forecast");
-      if (res.ok) {
-        const json = await res.json();
-        if (json.exists && json.forecast) {
-          setResearch(json.forecast);
-          try {
-            localStorage.setItem("ai_market_forecast_data", JSON.stringify(json.forecast));
-          } catch {}
-        }
-      }
-    } catch (err: any) {
-      console.error("Failed to load existing research:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // 1. Initial Load: Load persistent forecast with 0ms localStorage cache
   useEffect(() => {
     try {
-      const localCached = localStorage.getItem("ai_market_forecast_data");
-      if (localCached) {
-        setResearch(JSON.parse(localCached));
+      const cached = localStorage.getItem("ai_market_intelligence_data");
+      if (cached) {
+        setResearch(JSON.parse(cached));
         setLoading(false);
       }
-    } catch (e) {
-      console.warn("Failed to load forecast from localStorage", e);
-    }
-    fetchExistingResearch();
+    } catch {}
+
+    const fetchPersistedResearch = async () => {
+      try {
+        const res = await fetch("/api/analytics/forecast");
+        if (res.ok) {
+          const json = await res.json();
+          if (json.forecast) {
+            setResearch(json.forecast);
+            try {
+              localStorage.setItem("ai_market_intelligence_data", JSON.stringify(json.forecast));
+            } catch {}
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load persisted intelligence:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPersistedResearch();
   }, []);
 
-  // 2. On-Demand Trigger: Call OpenRouter DeepSeek v4 pro ONLY when user clicks the button
+  // 2. On-Demand Trigger: Call OpenRouter DeepSeek
   const triggerGenerateResearch = async () => {
     try {
       setGenerating(true);
@@ -77,7 +69,7 @@ export function MarketForecastCard() {
 
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || "Failed to generate market opportunity research");
+        throw new Error(errJson.error || "Failed to generate market intelligence");
       }
 
       const json = await res.json();
@@ -85,18 +77,18 @@ export function MarketForecastCard() {
         setResearch(json.forecast);
         setIsExpanded(true);
         try {
-          localStorage.setItem("ai_market_forecast_data", JSON.stringify(json.forecast));
+          localStorage.setItem("ai_market_intelligence_data", JSON.stringify(json.forecast));
         } catch {}
       }
     } catch (err: any) {
-      console.error("Research Generation Error:", err);
-      setError(err?.message || "Error generating market research");
+      console.error("Intelligence Generation Error:", err);
+      setError(err?.message || "Error generating market analysis");
     } finally {
       setGenerating(false);
     }
   };
 
-  if (loading) {
+  if (loading && !research) {
     return (
       <div className="w-full rounded-2xl p-4 bg-slate-100/50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 animate-pulse flex items-center justify-between">
         <div className="h-4 w-48 bg-slate-200 dark:bg-slate-800 rounded" />
@@ -112,7 +104,7 @@ export function MarketForecastCard() {
         {error && (
           <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center justify-between">
             <span>⚠️ {error}</span>
-            <button onClick={() => setError(null)} className="text-xs font-bold underline ml-2">Dismiss</button>
+            <button onClick={() => setError(null)} className="text-xs font-bold underline ml-2 cursor-pointer">Dismiss</button>
           </div>
         )}
         <div className="w-full rounded-2xl p-4 sm:p-5 bg-gradient-to-r from-indigo-500/10 via-purple-500/5 to-slate-900/40 border border-indigo-500/20 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
@@ -123,17 +115,17 @@ export function MarketForecastCard() {
             <div>
               <div className="flex items-center flex-wrap gap-2">
                 <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-                  DeepSeek AI Market Opportunity Deep Dive & Strategy
+                  AI Market Health & Scaling Velocity Intelligence
                 </h2>
                 <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20">
-                  deepseek-v4-pro
+                  DeepSeek
                 </span>
                 <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                  Wave Strategy • Untapped Gaps • Unit Economics
+                  Real Scaling Counts • Market Health • Video %
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                Analyze the 5 top winning market drivers, formulate high-growth opportunity vectors, and build the 14-day scaling roadmap on demand.
+                Analyze live scale vs descale velocity, platform creative shifts, and actionable media buying directives on demand.
               </p>
             </div>
           </div>
@@ -146,12 +138,12 @@ export function MarketForecastCard() {
             {generating ? (
               <>
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                <span>Analyzing Market Wave Dynamics...</span>
+                <span>Analyzing Live Market Counts...</span>
               </>
             ) : (
               <>
                 <PlayCircle className="w-3.5 h-3.5" />
-                <span>Generate Market Deep Dive</span>
+                <span>Generate Market Analysis</span>
               </>
             )}
           </button>
@@ -161,50 +153,60 @@ export function MarketForecastCard() {
   }
 
   const isDeepSeek = research.modelUsed?.toLowerCase().includes("deepseek");
+  const isNetPositive = (research.telemetrySnapshot?.netAdDelta ?? 0) >= 0;
+  const healthScore = research.marketHealthScore;
+
+  const scoreColor =
+    healthScore >= 70
+      ? "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+      : healthScore >= 45
+      ? "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20"
+      : "text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/20";
 
   return (
-    <div className="w-full rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-white via-slate-50 to-indigo-50/30 dark:from-slate-900/90 dark:via-slate-900/60 dark:to-indigo-950/30 border border-indigo-500/20 dark:border-indigo-500/30 backdrop-blur-xl shadow-sm space-y-4">
+    <div className="w-full rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-white via-slate-50 to-indigo-50/20 dark:from-slate-900/90 dark:via-slate-900/60 dark:to-indigo-950/20 border border-indigo-500/20 dark:border-indigo-500/30 backdrop-blur-xl shadow-sm space-y-4">
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center space-x-3">
           <div className="p-2.5 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/20 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 shrink-0">
-            <Compass className="w-4 h-4 animate-pulse text-indigo-500" />
+            <Activity className="w-4 h-4 text-indigo-500" />
           </div>
           <div>
             <div className="flex items-center flex-wrap gap-2">
-              <h2 className="text-sm font-extrabold text-slate-900 dark:text-white tracking-tight">
-                Market Opportunity Deep Dive & Strategic Blueprint
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                AI Market Intelligence & Velocity Analysis
               </h2>
-              <span className="inline-flex items-center space-x-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20">
-                <Cpu className="w-3 h-3 text-indigo-500" />
-                <span>{isDeepSeek ? "DeepSeek v4-pro Engine" : "OpenRouter AI"}</span>
+              <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${scoreColor}`}>
+                Score {healthScore}/100 • {research.marketSentiment}
               </span>
-              <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                5 Wave Drivers • Strategy Playbook
+              <span className="px-2 py-0.5 text-[10px] font-mono font-bold rounded-full bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20">
+                {isDeepSeek ? "deepseek" : "heuristic"}
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex items-center space-x-1.5">
-              <span>Model: <code className="text-indigo-600 dark:text-indigo-300 font-mono text-[10px]">{research.modelUsed}</code></span>
-              <span>•</span>
-              <Clock className="w-3 h-3 text-slate-400 inline" />
-              <span>Generated {new Date(research.generatedAt).toLocaleDateString([], { month: "short", day: "numeric" })} at {new Date(research.generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              Telemetry grounded analysis based on {research.telemetrySnapshot?.scalingPagesCount ?? 0} scaling vs {research.telemetrySnapshot?.descalingPagesCount ?? 0} descaling pages
+              {research.generatedAt && (
+                <span className="ml-1 opacity-75">• {new Date(research.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              )}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center space-x-2 self-start sm:self-auto">
+        <div className="flex items-center space-x-2 shrink-0">
           <button
             onClick={triggerGenerateResearch}
             disabled={generating}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-all cursor-pointer disabled:opacity-50 shadow-xs"
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition-all cursor-pointer disabled:opacity-50"
+            title="Re-run market analysis with fresh telemetry"
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-indigo-500 ${generating ? "animate-spin" : ""}`} />
-            <span>{generating ? "Deep Diving Market Dynamics..." : "Re-run Strategy Deep Dive"}</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${generating ? "animate-spin" : ""}`} />
+            <span>{generating ? "Analyzing..." : "Re-run Analysis"}</span>
           </button>
+
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="p-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 cursor-pointer"
-            aria-label="Toggle details"
+            className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
+            title={isExpanded ? "Collapse" : "Expand"}
           >
             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
@@ -212,293 +214,136 @@ export function MarketForecastCard() {
       </div>
 
       {error && (
-        <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-medium">
-          {error}
+        <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center justify-between">
+          <span>⚠️ {error}</span>
+          <button onClick={() => setError(null)} className="text-xs font-bold underline ml-2 cursor-pointer">Dismiss</button>
         </div>
       )}
 
-      {/* Executive Macro Summary & Market Health Banner */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 p-3.5 rounded-xl bg-white/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80">
-        <div className="md:col-span-3 space-y-1">
-          <div className="flex items-center space-x-2">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Executive Market Synthesis</span>
-            <span className={`px-2 py-0.5 text-xs font-extrabold rounded-lg ${
-              research.marketSentiment.includes("Bullish")
-                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                : research.marketSentiment.includes("Saturated")
-                ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
-                : "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20"
-            }`}>
-              {research.marketSentiment}
+      {isExpanded && (
+        <div className="space-y-3.5 pt-1">
+          {/* Key Metrics Quick Strip */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div className="p-3 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80">
+              <div className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">
+                Net Ad Momentum
+              </div>
+              <div className={`text-sm font-extrabold mt-0.5 flex items-center gap-1 ${isNetPositive ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                {isNetPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                <span>{isNetPositive ? `+${research.telemetrySnapshot?.netAdDelta ?? 0}` : `${research.telemetrySnapshot?.netAdDelta ?? 0}`} ads</span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80">
+              <div className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">
+                Scaling Pages
+              </div>
+              <div className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                {research.telemetrySnapshot?.scalingPagesCount ?? 0} pages <span className="text-[11px] font-normal text-slate-500">(+{research.telemetrySnapshot?.totalAdsScaled ?? 0} ads)</span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80">
+              <div className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">
+                Descaling Pages
+              </div>
+              <div className="text-sm font-extrabold text-rose-600 dark:text-rose-400 mt-0.5">
+                {research.telemetrySnapshot?.descalingPagesCount ?? 0} pages <span className="text-[11px] font-normal text-slate-500">(-{research.telemetrySnapshot?.totalAdsDescaled ?? 0} ads)</span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80">
+              <div className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">
+                Format Share
+              </div>
+              <div className="text-sm font-extrabold text-indigo-600 dark:text-indigo-400 mt-0.5 flex items-center gap-1">
+                <Video className="w-3.5 h-3.5" />
+                <span>{research.telemetrySnapshot?.videoPercent ?? 60}% Video / {research.telemetrySnapshot?.imagePercent ?? 40}% Image</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Executive Overview */}
+          <div className="p-3.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+            <span className="font-bold text-slate-900 dark:text-white mr-1.5">⚡ Executive Summary:</span>
+            {research.executiveOverview}
+          </div>
+
+          {/* Velocity Dynamics & Creative Insights (2-Column Grid) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Scaling vs Descaling Dynamics */}
+            <div className="p-3.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Scaling Velocity & Competition</span>
+                </h3>
+                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                  Pressure: {research.velocityAnalysis?.competitivePressure ?? "Moderate"}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-normal">
+                {research.velocityAnalysis?.scalingVsDescalingSummary}
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal pt-1 border-t border-slate-100 dark:border-slate-800">
+                <span className="font-semibold text-slate-700 dark:text-slate-300">Churn Analysis: </span>
+                {research.velocityAnalysis?.churnRateAssessment}
+              </p>
+            </div>
+
+            {/* Creative Format & Platform Signals */}
+            <div className="p-3.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 space-y-2">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                <Video className="w-3.5 h-3.5 text-indigo-500" />
+                <span>Creative Format & CTA Signals</span>
+              </h3>
+              <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-normal">
+                {research.creativeFormatInsight?.videoDominanceNote}
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal pt-1 border-t border-slate-100 dark:border-slate-800">
+                <span className="font-semibold text-slate-700 dark:text-slate-300">CTA Strategy: </span>
+                {research.creativeFormatInsight?.topCtaRecommendation}
+              </p>
+            </div>
+          </div>
+
+          {/* Actionable Directives */}
+          {research.actionableDirectives && research.actionableDirectives.length > 0 && (
+            <div className="p-3.5 rounded-xl bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-slate-900/20 border border-indigo-500/20 space-y-2">
+              <h3 className="text-xs font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5 text-indigo-500" />
+                <span>Actionable Directives for Media Buying</span>
+              </h3>
+              <ul className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {research.actionableDirectives.map((directive, idx) => (
+                  <li
+                    key={idx}
+                    className="p-2.5 rounded-lg bg-white/70 dark:bg-slate-900/70 border border-slate-200/60 dark:border-slate-800/60 text-[11px] text-slate-700 dark:text-slate-300 flex items-start gap-2 leading-relaxed"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500 shrink-0 mt-0.5" />
+                    <span>{directive}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Live Telemetry Grounding Snapshot */}
+          <div className="flex items-center flex-wrap gap-2 pt-1 text-[10px] text-slate-500 dark:text-slate-400">
+            <span className="font-semibold text-slate-600 dark:text-slate-300">Grounded in Live Telemetry:</span>
+            <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+              {research.telemetrySnapshot?.totalActiveAds?.toLocaleString() ?? 0} Total Active Ads
+            </span>
+            <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+              {research.telemetrySnapshot?.newAdsLast7Days?.toLocaleString() ?? 0} New (7D)
+            </span>
+            <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+              {research.telemetrySnapshot?.monitoredPages ?? 0} Monitored Stores
+            </span>
+            <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+              {research.telemetrySnapshot?.stablePagesCount ?? 0} Stable Stores
             </span>
           </div>
-          <p className="text-xs text-slate-700 dark:text-slate-200 leading-relaxed font-medium">
-            {research.executiveSummary}
-          </p>
-        </div>
-        <div className="flex flex-col items-center justify-center p-2.5 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200/50 dark:border-indigo-500/20">
-          <span className="text-[10px] text-indigo-600 dark:text-indigo-300 uppercase font-bold tracking-wider">Opportunity Index</span>
-          <div className="flex items-baseline space-x-0.5 mt-0.5">
-            <span className="text-2xl font-black text-slate-900 dark:text-white">{research.marketHealthScore}</span>
-            <span className="text-xs text-indigo-500 font-bold">/100</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Navigation Tabs */}
-      <div className="flex items-center space-x-2 border-b border-slate-200 dark:border-slate-800/80 pb-2">
-        <button
-          onClick={() => setActiveTab("opportunities")}
-          className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-            activeTab === "opportunities"
-              ? "bg-indigo-600 text-white shadow-xs"
-              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-          }`}
-        >
-          <Zap className="w-3.5 h-3.5 text-amber-400" />
-          <span>Market Opportunities & Wave Drivers</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("playbook")}
-          className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-            activeTab === "playbook"
-              ? "bg-indigo-600 text-white shadow-xs"
-              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-          }`}
-        >
-          <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Economics & Media Buying Playbook</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("roadmap")}
-          className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-            activeTab === "roadmap"
-              ? "bg-indigo-600 text-white shadow-xs"
-              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-          }`}
-        >
-          <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-          <span>14-Day Tactical Execution Roadmap</span>
-        </button>
-      </div>
-
-      {/* Expandable Deep Content */}
-      {isExpanded && (
-        <div className="space-y-4 pt-1">
-          {/* TAB 1: OPPORTUNITIES & 5 WAVE DRIVERS */}
-          {activeTab === "opportunities" && (
-            <div className="space-y-4">
-              {/* Wave Drivers Box */}
-              <div className="p-3.5 rounded-xl bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-slate-900/30 border border-indigo-500/20 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Layers className="w-4 h-4 text-indigo-500" />
-                    <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                      🌊 The 5 Wave Drivers (Why Current Winners Dominate)
-                    </h3>
-                  </div>
-                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
-                    Sweet-Spot: {research.waveDriversAnalysis?.averageWinningPriceRange || "25 - 55 TND"}
-                  </span>
-                </div>
-
-                <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
-                  {research.waveDriversAnalysis?.underlyingPattern}
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-indigo-500/10">
-                  {(research.waveDriversAnalysis?.consumerTriggers || []).map((trigger, idx) => (
-                    <div key={idx} className="p-2 rounded-lg bg-white/70 dark:bg-slate-950/50 border border-slate-200/70 dark:border-slate-800/80 text-[11px] text-slate-700 dark:text-slate-300 flex items-start space-x-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
-                      <span>{trigger}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* High-Growth Market Opportunity Vectors */}
-              <div className="space-y-2.5">
-                <div className="flex items-center space-x-1.5 text-xs font-bold text-slate-900 dark:text-white">
-                  <Target className="w-4 h-4 text-emerald-500" />
-                  <span>Unexploited Market Opportunities & Gaps</span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {(research.unexploitedOpportunities || []).map((opp, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3.5 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80 space-y-2 flex flex-col justify-between shadow-2xs hover:border-indigo-500/30 transition-all"
-                    >
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                            {opp.potentialScore}/100 Potential
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-mono truncate max-w-[130px]">
-                            {opp.targetNiche}
-                          </span>
-                        </div>
-                        <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                          {opp.opportunityName}
-                        </h4>
-                        <div className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug">
-                          <strong className="text-rose-500">Market Gap:</strong> {opp.marketGap}
-                        </div>
-                      </div>
-
-                      <div className="p-2.5 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-500/20 text-[11px] text-slate-700 dark:text-slate-300 space-y-1">
-                        <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider block">
-                          Launch Entry Strategy
-                        </span>
-                        <p className="leading-snug">{opp.entryStrategy}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: UNIT ECONOMICS & MEDIA BUYING PLAYBOOK */}
-          {activeTab === "playbook" && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Unit Economics & Landed Cost Blueprint */}
-              <div className="p-4 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80 space-y-3">
-                <div className="flex items-center space-x-2 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                  <DollarSign className="w-4 h-4" />
-                  <span>Unit Economics & COD Blueprint</span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200/60 dark:border-slate-800/80 space-y-1">
-                    <span className="text-[10px] text-slate-400 uppercase font-bold">Target Margin Multiplier</span>
-                    <p className="font-extrabold text-slate-900 dark:text-white font-mono text-sm">
-                      {research.unitEconomicsBlueprint?.targetCogsMultiplier}
-                    </p>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200/60 dark:border-slate-800/80 space-y-1">
-                    <span className="text-[10px] text-slate-400 uppercase font-bold">Optimal Price Bands</span>
-                    <p className="font-bold text-indigo-600 dark:text-indigo-400 font-mono text-xs">
-                      {research.unitEconomicsBlueprint?.optimalPriceBands}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">85%+ COD Delivery Rate Tactics</span>
-                  <div className="space-y-1">
-                    {(research.unitEconomicsBlueprint?.codDeliveryTactics || []).map((tactic, idx) => (
-                      <div key={idx} className="p-2 rounded-lg bg-slate-50 dark:bg-slate-950/50 border border-slate-200/60 dark:border-slate-800/80 text-[11px] text-slate-700 dark:text-slate-300 flex items-start space-x-1.5">
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
-                        <span>{tactic}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="p-2.5 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-500/20 text-xs text-slate-700 dark:text-slate-300 space-y-1">
-                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">Bundle & Upsell Architecture</span>
-                  <p className="text-[11px] leading-snug">{research.unitEconomicsBlueprint?.bundleArchitecture}</p>
-                </div>
-              </div>
-
-              {/* Media Buying & Creative Scaling Strategy */}
-              <div className="p-4 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80 space-y-3">
-                <div className="flex items-center space-x-2 text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                  <Video className="w-4 h-4" />
-                  <span>Media Buying & Creative Playbook</span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200/60 dark:border-slate-800/80 space-y-1">
-                    <span className="text-[10px] text-slate-400 uppercase font-bold">Recommended Format</span>
-                    <p className="font-bold text-slate-900 dark:text-white text-xs">
-                      {research.mediaBuyingStrategy?.recommendedFormat}
-                    </p>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200/60 dark:border-slate-800/80 space-y-1">
-                    <span className="text-[10px] text-slate-400 uppercase font-bold">Testing Budget Split</span>
-                    <p className="font-bold text-indigo-600 dark:text-indigo-400 font-mono text-xs">
-                      {research.mediaBuyingStrategy?.testingBudgetSplit}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Top High-Converting Hook Formulas</span>
-                  <div className="space-y-1">
-                    {(research.mediaBuyingStrategy?.winningHookScripts || []).map((hook, idx) => (
-                      <div key={idx} className="p-2 rounded-lg bg-indigo-50/40 dark:bg-indigo-950/30 border border-indigo-200/50 dark:border-indigo-500/20 text-[11px] text-slate-700 dark:text-slate-300 flex items-start space-x-1.5">
-                        <span className="text-indigo-500 font-bold font-mono">#{idx + 1}</span>
-                        <span className="leading-snug italic">&ldquo;{hook}&rdquo;</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="p-2.5 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200/60 dark:border-indigo-500/20 text-xs text-slate-700 dark:text-slate-300 space-y-1">
-                  <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider block">Creative Fatigue Defense</span>
-                  <p className="text-[11px] leading-snug">{research.mediaBuyingStrategy?.fatigueDefensePlan}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: 14-DAY TACTICAL EXECUTION ROADMAP */}
-          {activeTab === "roadmap" && (
-            <div className="p-4 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80 space-y-3">
-              <div className="flex items-center space-x-2 text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                <Calendar className="w-4 h-4" />
-                <span>14-Day Step-by-Step Market Scaling Roadmap</span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {/* Phase 1 */}
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/70 dark:border-slate-800/80 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
-                      Phase 1: Day 1–3
-                    </span>
-                    <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-                  </div>
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-white">Validation & Angle Testing</h4>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                    {research.executionRoadmap?.phase1_Day1to3}
-                  </p>
-                </div>
-
-                {/* Phase 2 */}
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/70 dark:border-slate-800/80 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-                      Phase 2: Day 4–7
-                    </span>
-                    <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-                  </div>
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-white">Horizontal Scaling & Offer Polish</h4>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                    {research.executionRoadmap?.phase2_Day4to7}
-                  </p>
-                </div>
-
-                {/* Phase 3 */}
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/70 dark:border-slate-800/80 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                      Phase 3: Day 8–14
-                    </span>
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
-                  </div>
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-white">Vertical Scale & Recovery</h4>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                    {research.executionRoadmap?.phase3_Day8to14}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
