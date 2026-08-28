@@ -70,15 +70,35 @@ async function runFavoriteAdsVerifier() {
   console.log(" 🌟 Meta Favorite Products Ad Status Verifier    ");
   console.log("    (Zero Firecrawl / Zero Apify Credits Used)   ");
   console.log("=================================================");
-  console.log(
-    `Config: forceAll=${options.forceAll}${options.limit ? `, limit=${options.limit}` : ""}${
-      options.shard ? `, shard=${options.shard}` : ""
-    }${options.productId ? `, singleProductId=${options.productId}` : ""}${
-      options.search ? `, searchKeyword="${options.search}"` : ""
-    }${options.url ? `, searchUrl="${options.url}"` : ""}${
-      options.adArchiveId ? `, singleAdArchiveId=${options.adArchiveId}` : ""
-    }\n`
-  );
+  console.log(" Available Modes & Options:");
+  console.log("  1. npm run verify:pending       -> ⚡ Scan ONLY UI-queued products (fastest, ~3s)");
+  console.log("  2. npm run verify:favorites     -> 🔄 Routine favorites check (skips dead products)");
+  console.log("  3. ... -- --force               -> 🔴 Full re-check of ALL ads (including stopped)");
+  console.log("  4. ... -- --search \"keyword\"    -> 🔍 Scan 1 product by title keyword");
+  console.log("  5. ... -- --url \"store-url\"     -> 🔗 Scan 1 product by landing page URL");
+  console.log("  6. ... -- --ad-id <id>          -> 🎯 Instant check for 1 specific Meta Ad ID");
+  console.log("=================================================");
+
+  // Display Active Mode
+  let activeModeDescription = "🔵 DEFAULT INCREMENTAL (Routine favorites check)";
+  if (options.adArchiveId) {
+    activeModeDescription = `🎯 SINGLE AD DIRECT CHECK (Ad ID: ${options.adArchiveId})`;
+  } else if (options.productId) {
+    activeModeDescription = `📦 SINGLE PRODUCT ID (${options.productId})`;
+  } else if (options.search) {
+    activeModeDescription = `🔍 KEYWORD SEARCH ("${options.search}")`;
+  } else if (options.url) {
+    activeModeDescription = `🔗 URL MATCH ("${options.url}")`;
+  } else if (options.pendingOnly) {
+    activeModeDescription = "🟢 PENDING ONLY (Scanning products queued from the UI)";
+  } else if (options.forceAll) {
+    activeModeDescription = "🔴 FORCE ALL (Re-verifying all ads, including stopped)";
+  }
+
+  console.log(` Active Mode: ${activeModeDescription}`);
+  if (options.shard) console.log(` Shard:       ${options.shard}`);
+  if (options.limit) console.log(` Limit:       ${options.limit} products`);
+  console.log("-------------------------------------------------\n");
 
   const startTime = Date.now();
 
