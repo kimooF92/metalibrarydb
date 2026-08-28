@@ -88,7 +88,7 @@ export function ProductRow({
   };
 
   const isPendingScrape = product.scrapeStatus === "pending";
-  const isInactive = typeof product.activeAdsCount === "number" && product.activeAdsCount === 0;
+  const isInactive = typeof product.activeAdsCount === "number" && product.activeAdsCount === 0 && (product.linkedAdsCount || 0) > 0;
 
   return (
     <div
