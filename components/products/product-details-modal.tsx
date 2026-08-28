@@ -913,23 +913,6 @@ ${imagesText}`;
                         </button>
                       )}
 
-                      {/* Queue Ads Verification */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowActionsMenu(false);
-                          handleQueueVerify();
-                        }}
-                        disabled={isQueueingVerify}
-                        className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
-                      >
-                        <Sparkles className={`w-3.5 h-3.5 text-purple-500 ${isQueueingVerify ? "animate-spin" : ""}`} />
-                        <div>
-                          <div className="font-semibold text-slate-900 dark:text-slate-100">Queue Ads for Re-scan</div>
-                          <div className="text-[10px] text-slate-400">Marks all {linkedAds.length} linked ads as Pending</div>
-                        </div>
-                      </button>
-
                       {/* Delete Product */}
                       {onDelete && (
                         <div className="border-t border-slate-100 dark:border-slate-800 mt-1 pt-1">
