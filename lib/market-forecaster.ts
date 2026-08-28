@@ -57,8 +57,8 @@ export type MarketForecastData = MarketOpportunityResearch;
 
 // DeepSeek primary and fallback cascade on OpenRouter
 const DEEPSEEK_MODELS = [
-  "deepseek/deepseek-v4-pro",
   "deepseek/deepseek-chat",
+  "deepseek/deepseek-v4-pro",
   "deepseek/deepseek-r1",
 ];
 
@@ -206,26 +206,32 @@ export async function extractMarketSignals() {
       GROUP BY domain
       HAVING COUNT(*) >= 5
     ),
-    product_ad_counts AS (
+    active_products AS (
       SELECT 
-        p.id,
-        p.title,
-        p.domain,
-        p.current_price AS "currentPrice",
-        p.category,
-        p.sub_category AS "subCategory",
-        p.main_image_url AS "mainImageUrl",
-        p.url,
-        p.created_at AS "createdAt",
-        COUNT(a.id) AS "activeAdsCount"
+        p.id, 
+        p.title, 
+        p.domain, 
+        p.current_price AS "currentPrice", 
+        p.category, 
+        p.sub_category AS "subCategory", 
+        p.main_image_url AS "mainImageUrl", 
+        p.url, 
+        p.created_at AS "createdAt"
       FROM ${scrapedProducts} p
       INNER JOIN active_stores s ON p.domain = s.domain
-      LEFT JOIN ${ads} a ON (a.product_id = p.id OR a.link_url ILIKE '%' || p.domain || '%') AND a.is_archived = false
-      GROUP BY p.id, p.title, p.domain, p.current_price, p.category, p.sub_category, p.main_image_url, p.url, p.created_at
+      WHERE p.scrape_status = 'success'
     )
-    SELECT *
-    FROM product_ad_counts
-    ORDER BY "activeAdsCount" DESC, "createdAt" DESC
+    SELECT 
+      p.*,
+      COALESCE(ad_counts.cnt, 0) AS "activeAdsCount"
+    FROM active_products p
+    LEFT JOIN (
+      SELECT product_id, COUNT(*) as cnt
+      FROM ${ads}
+      WHERE is_archived = false AND product_id IS NOT NULL
+      GROUP BY product_id
+    ) ad_counts ON p.id = ad_counts.product_id
+    ORDER BY "activeAdsCount" DESC, p."createdAt" DESC
     LIMIT 5;
   `);
 
@@ -366,14 +372,14 @@ ${JSON.stringify(top5Formatted, null, 2)}
           body: JSON.stringify({
             model,
             temperature: 0.15,
-            max_tokens: 3500,
+            max_tokens: 2200,
             messages: [
               { role: "system", content: systemPrompt },
               { role: "user", content: userContent },
             ],
             response_format: { type: "json_object" },
           }),
-          signal: AbortSignal.timeout(30000),
+          signal: AbortSignal.timeout(60000), // 60s timeout for deep analysis
         });
 
         console.log(`[Forecaster] Model ${model} responded HTTP ${response.status}`);

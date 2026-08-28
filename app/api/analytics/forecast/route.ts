@@ -6,7 +6,7 @@ import path from "path";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const CACHE_DIR = path.join(process.cwd(), ".data");
 const CACHE_FILE = path.join(CACHE_DIR, "saved-market-forecast.json");
