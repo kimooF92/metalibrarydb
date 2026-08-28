@@ -1,6 +1,6 @@
 import { Page } from "playwright";
 import { db } from "../db";
-import { ads, scrapedProducts } from "../db/schema";
+import { ads, scrapedProducts, adObservations } from "../db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { randomDelay, DELAY_CONFIG } from "./throttle";
 
@@ -253,6 +253,11 @@ export async function verifyProductFavoriteAds(
         })
         .where(eq(ads.id, ad.id));
 
+      await db
+        .update(adObservations)
+        .set({ isActive: true })
+        .where(eq(adObservations.adId, ad.id));
+
       updatedAds.push({
         adArchiveId: ad.adArchiveId,
         previousStatus,
@@ -271,6 +276,11 @@ export async function verifyProductFavoriteAds(
           updatedAt: now,
         })
         .where(eq(ads.id, ad.id));
+
+      await db
+        .update(adObservations)
+        .set({ isActive: false })
+        .where(eq(adObservations.adId, ad.id));
 
       updatedAds.push({
         adArchiveId: ad.adArchiveId,
