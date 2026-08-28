@@ -20,6 +20,8 @@ import { randomDelay } from "../worker/throttle";
 interface CliOptions {
   limit?: number;
   productId?: string;
+  search?: string;
+  url?: string;
   adArchiveId?: string;
   forceAll: boolean;
   delayMs?: number;
@@ -38,6 +40,12 @@ function parseArgs(): CliOptions {
       i++;
     } else if ((args[i] === "--product-id" || args[i] === "-p") && args[i + 1]) {
       options.productId = args[i + 1];
+      i++;
+    } else if ((args[i] === "--search" || args[i] === "--query" || args[i] === "-q") && args[i + 1]) {
+      options.search = args[i + 1];
+      i++;
+    } else if (args[i] === "--url" && args[i + 1]) {
+      options.url = args[i + 1];
       i++;
     } else if ((args[i] === "--ad-id" || args[i] === "-a") && args[i + 1]) {
       options.adArchiveId = args[i + 1];
@@ -64,6 +72,8 @@ async function runFavoriteAdsVerifier() {
     `Config: forceAll=${options.forceAll}${options.limit ? `, limit=${options.limit}` : ""}${
       options.shard ? `, shard=${options.shard}` : ""
     }${options.productId ? `, singleProductId=${options.productId}` : ""}${
+      options.search ? `, searchKeyword="${options.search}"` : ""
+    }${options.url ? `, searchUrl="${options.url}"` : ""}${
       options.adArchiveId ? `, singleAdArchiveId=${options.adArchiveId}` : ""
     }\n`
   );
@@ -93,6 +103,30 @@ async function runFavoriteAdsVerifier() {
       });
       if (!p) {
         console.error(`❌ Product ID "${options.productId}" not found.`);
+        await closeBrowserSession();
+        await client.end();
+        process.exit(1);
+      }
+      targetProducts = [p];
+    } else if (options.url) {
+      const p = await db.query.scrapedProducts.findFirst({
+        where: (prod, { ilike }) => ilike(prod.url, `%${options.url!.trim()}%`),
+        columns: { id: true, title: true, url: true },
+      });
+      if (!p) {
+        console.error(`❌ Product matching URL "${options.url}" not found.`);
+        await closeBrowserSession();
+        await client.end();
+        process.exit(1);
+      }
+      targetProducts = [p];
+    } else if (options.search) {
+      const p = await db.query.scrapedProducts.findFirst({
+        where: (prod, { ilike }) => ilike(prod.title, `%${options.search!.trim()}%`),
+        columns: { id: true, title: true, url: true },
+      });
+      if (!p) {
+        console.error(`❌ Product matching title "${options.search}" not found.`);
         await closeBrowserSession();
         await client.end();
         process.exit(1);
