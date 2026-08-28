@@ -117,6 +117,85 @@ export function ProductDetailsModal({
   const [copiedSupplierIndex, setCopiedSupplierIndex] = useState<number | null>(null);
   const [isQueueingVerify, setIsQueueingVerify] = useState(false);
 
+  // Specific Ad Linking State
+  const [newAdInput, setNewAdInput] = useState("");
+  const [isLinkingAd, setIsLinkingAd] = useState(false);
+  const [unlinkingAdId, setUnlinkingAdId] = useState<string | null>(null);
+
+  const handleLinkAd = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!product?.id || !newAdInput.trim() || isLinkingAd) return;
+    setIsLinkingAd(true);
+    try {
+      const res = await fetch(`/api/products/${product.id}/ads`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adUrl: newAdInput.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast({
+          type: "success",
+          title: "Ad Linked",
+          message: data.message || "Specific Meta Ad creative linked to product.",
+        });
+        setNewAdInput("");
+        await fetchLinkedAds(product.id);
+        onRefresh?.(product.id);
+      } else {
+        showToast({
+          type: "error",
+          title: "Failed to Link Ad",
+          message: data.error || "Could not link ad",
+        });
+      }
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Network Error",
+        message: err.message || "Network error linking ad",
+      });
+    } finally {
+      setIsLinkingAd(false);
+    }
+  };
+
+  const handleUnlinkAd = async (adId: string, adArchiveId: string) => {
+    if (!product?.id || unlinkingAdId) return;
+    setUnlinkingAdId(adId);
+    try {
+      const res = await fetch(`/api/products/${product.id}/ads`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adId, adArchiveId }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast({
+          type: "success",
+          title: "Ad Unlinked",
+          message: "Ad creative removed from this product.",
+        });
+        await fetchLinkedAds(product.id);
+        onRefresh?.(product.id);
+      } else {
+        showToast({
+          type: "error",
+          title: "Error",
+          message: data.error || "Could not unlink ad",
+        });
+      }
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Network Error",
+        message: err.message || "Network error unlinking ad",
+      });
+    } finally {
+      setUnlinkingAdId(null);
+    }
+  };
+
   // Inline Edit Mode State
   const [isEditMode, setIsEditMode] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
@@ -1078,6 +1157,125 @@ ${imagesText}`;
                 </div>
               </div>
 
+              {/* Section 5: Specific Linked Meta Ad Creatives */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-indigo-500" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                      Specific Linked Meta Ad Creatives ({linkedAds.length})
+                    </h4>
+                  </div>
+                  <span className="text-[10px] text-slate-400">
+                    Paste specific Meta Ad URLs containing <code>id=...</code>
+                  </span>
+                </div>
+
+                {/* Add Specific Ad by URL / ID form */}
+                <form onSubmit={handleLinkAd} className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={newAdInput}
+                      onChange={(e) => setNewAdInput(e.target.value)}
+                      placeholder="Paste specific Ad URL (e.g. https://facebook.com/ads/library/?...&id=27539319635709933 or raw Ad ID)..."
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 font-mono"
+                      disabled={isLinkingAd}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={!newAdInput.trim() || isLinkingAd}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm transition-all cursor-pointer shrink-0"
+                  >
+                    {isLinkingAd ? (
+                      <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Plus className="w-3.5 h-3.5" />
+                    )}
+                    <span>Attach Ad</span>
+                  </button>
+                </form>
+
+                {/* List of currently linked ads with unlinking capability */}
+                {linkedAds.length > 0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2.5 pt-2">
+                    {linkedAds.map((ad: any) => {
+                      const isAdArchived = Boolean(ad.isArchived || ad.isActive === false);
+                      const thumb = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.[0];
+                      const isThisUnlinking = unlinkingAdId === ad.id;
+
+                      return (
+                        <div
+                          key={ad.id}
+                          className="relative group flex flex-col bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs"
+                        >
+                          <div className="relative aspect-square w-full bg-slate-100 dark:bg-slate-950 flex items-center justify-center">
+                            {thumb ? (
+                              <NextImage
+                                src={thumb}
+                                alt="Ad"
+                                fill
+                                unoptimized
+                                referrerPolicy="no-referrer"
+                                className="object-cover"
+                              />
+                            ) : (
+                              <ImageIcon className="w-5 h-5 text-slate-400" />
+                            )}
+
+                            {/* Unlink / Delete Button Overlay */}
+                            <button
+                              type="button"
+                              onClick={() => handleUnlinkAd(ad.id, ad.adArchiveId)}
+                              disabled={isThisUnlinking}
+                              className="absolute top-1 right-1 z-20 p-1 rounded-md bg-rose-600/90 hover:bg-rose-600 text-white shadow-sm transition-all cursor-pointer opacity-90 hover:opacity-100"
+                              title="Unlink this ad from product"
+                            >
+                              {isThisUnlinking ? (
+                                <RotateCw className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3 h-3" />
+                              )}
+                            </button>
+
+                            {/* Status */}
+                            <div className="absolute bottom-1 left-1 z-10">
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${
+                                  isAdArchived
+                                    ? "bg-rose-950/80 text-rose-300 border border-rose-500/40"
+                                    : "bg-emerald-950/80 text-emerald-300 border border-emerald-500/40"
+                                }`}
+                              >
+                                {isAdArchived ? "Inactive" : "Active"}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="p-1.5 text-[10px] font-mono truncate text-slate-500 flex items-center justify-between">
+                            <span className="truncate">{ad.adArchiveId}</span>
+                            <a
+                              href={`https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&id=${ad.adArchiveId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-slate-400 hover:text-indigo-600 ml-1"
+                              title="Open in Meta Library"
+                            >
+                              <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="py-3 text-center text-xs text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-lg">
+                    No specific ad creatives attached yet. Paste a Meta Ad Library URL with <code>id=...</code> above.
+                  </div>
+                )}
+              </div>
+
               {/* Bottom Actions inside Edit Form */}
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
                 <button
@@ -1602,33 +1800,64 @@ ${imagesText}`;
                     </div>
                   )}
 
+                  {/* Quick Add Ad Creative Form */}
+                  <form onSubmit={handleLinkAd} className="flex items-center gap-2 mb-3">
+                    <div className="relative flex-1">
+                      <Sparkles className="w-4 h-4 text-indigo-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={newAdInput}
+                        onChange={(e) => setNewAdInput(e.target.value)}
+                        placeholder="Paste specific Meta Ad URL (e.g. https://facebook.com/ads/library/?...&id=27539319635709933) or Ad ID to link..."
+                        className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all font-mono"
+                        disabled={isLinkingAd}
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={!newAdInput.trim() || isLinkingAd}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl shadow-sm transition-all cursor-pointer shrink-0"
+                    >
+                      {isLinkingAd ? (
+                        <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Plus className="w-3.5 h-3.5" />
+                      )}
+                      <span>Link Ad</span>
+                    </button>
+                  </form>
+
                   {loadingAds ? (
                     <div className="py-8 text-center text-xs text-slate-400">
                       Loading linked creatives...
                     </div>
                   ) : linkedAds.length === 0 ? (
-                    <div className="py-6 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-200 dark:border-slate-800">
-                      No active ad creatives directly linked to this product ID yet.
+                    <div className="py-6 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">
+                      No active ad creatives linked yet. Paste a Meta Ad Library URL with <code>id=...</code> above to link one.
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
                       {linkedAds.map((ad: any) => {
                         const isAdArchived = Boolean(ad.isArchived || ad.isActive === false);
                         const thumb = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.[0];
+                        const isThisUnlinking = unlinkingAdId === ad.id;
+
                         return (
-                          <a
+                          <div
                             key={ad.id}
-                            href={`https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&id=${ad.adArchiveId}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
                             className={`group relative flex flex-col bg-slate-50 dark:bg-slate-950 rounded-lg border overflow-hidden transition-all ${
                               isAdArchived
                                 ? "border-rose-500/30 opacity-75 hover:opacity-100 hover:border-rose-500"
                                 : "border-slate-200 dark:border-slate-800 hover:border-indigo-500"
                             }`}
-                            title={`${ad.title || ad.caption || "Ad Creative"} (${isAdArchived ? "Inactive" : "Active"})`}
                           >
-                            <div className="relative aspect-square w-full bg-slate-200 dark:bg-slate-900 flex items-center justify-center">
+                            <a
+                              href={`https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&id=${ad.adArchiveId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="relative aspect-square w-full bg-slate-200 dark:bg-slate-900 flex items-center justify-center"
+                              title={`${ad.title || ad.caption || "Ad Creative"} (${isAdArchived ? "Inactive" : "Active"})`}
+                            >
                               {thumb ? (
                                 <NextImage
                                   src={thumb}
@@ -1662,12 +1891,36 @@ ${imagesText}`;
                                   <Play className="w-2.5 h-2.5 fill-current ml-0.5" />
                                 </div>
                               )}
-                            </div>
+                            </a>
+
                             <div className="p-2 truncate text-[10px] font-medium text-slate-600 dark:text-slate-400 flex items-center justify-between">
                               <span className="truncate">{ad.pageName || `Page ${ad.pageId}`}</span>
-                              <ExternalLink className="w-3 h-3 text-slate-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity ml-1" />
+                              <div className="flex items-center gap-1">
+                                <a
+                                  href={`https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&id=${ad.adArchiveId}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-slate-400 hover:text-indigo-600"
+                                  title="Open in Meta Ad Library"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUnlinkAd(ad.id, ad.adArchiveId)}
+                                  disabled={isThisUnlinking}
+                                  className="text-slate-400 hover:text-rose-500 p-0.5 rounded transition-colors cursor-pointer"
+                                  title="Unlink ad from product"
+                                >
+                                  {isThisUnlinking ? (
+                                    <RotateCw className="w-3 h-3 animate-spin text-rose-500" />
+                                  ) : (
+                                    <Trash2 className="w-3 h-3" />
+                                  )}
+                                </button>
+                              </div>
                             </div>
-                          </a>
+                          </div>
                         );
                       })}
                     </div>
