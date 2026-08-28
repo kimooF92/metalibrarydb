@@ -32,10 +32,10 @@ export interface ProductClassificationResult {
 // In-memory cache for categorized titles (avoids redundant API requests)
 const categoryCache = new Map<string, ProductClassificationResult>();
 
-// 3 Best Free Models on OpenRouter (in cascade priority order)
+// OpenRouter Cascade: deepseek/deepseek-v4-pro as primary
 const AI_MODELS = [
-  "nvidia/nemotron-3.5-lightning:free",
-  "nvidia/nemotron-3-super-120b-a12b:free",
+  "deepseek/deepseek-v4-pro",
+  "deepseek/deepseek-chat",
   "minimax/minimax-m2.7:free",
 ];
 

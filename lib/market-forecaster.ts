@@ -2,50 +2,62 @@ import { db } from "@/db";
 import { ads, scrapedProducts, trackedPages } from "@/db/schema";
 import { sql, desc, count, eq } from "drizzle-orm";
 
-export interface RecommendedProduct {
-  id?: string;
-  title: string;
-  domain: string;
-  category: string;
-  currentPrice: string;
-  imageUrl?: string;
-  productUrl?: string;
-  activeAdsCount: number;
-  winningReason: string;
-  suggestedOfferStrategy: string;
-  targetAudience: string;
+export interface WaveDriverAnalysis {
+  underlyingPattern: string;
+  consumerTriggers: string[];
+  averageWinningPriceRange: string;
+  velocitySignals: string;
 }
 
-export interface MarketForecastData {
+export interface MarketOpportunity {
+  opportunityName: string;
+  targetNiche: string;
+  potentialScore: number; // 1 - 100
+  marketGap: string;
+  entryStrategy: string;
+}
+
+export interface UnitEconomicsBlueprint {
+  targetCogsMultiplier: string;
+  optimalPriceBands: string;
+  codDeliveryTactics: string[];
+  bundleArchitecture: string;
+}
+
+export interface MediaBuyingStrategy {
+  recommendedFormat: "UGC Video" | "Single Image" | "Carousel" | "Offers/Bundles";
+  testingBudgetSplit: string;
+  winningHookScripts: string[];
+  dominantCTA: string;
+  fatigueDefensePlan: string;
+}
+
+export interface ExecutionRoadmap {
+  phase1_Day1to3: string;
+  phase2_Day4to7: string;
+  phase3_Day8to14: string;
+}
+
+export interface MarketOpportunityResearch {
   generatedAt: string;
   telemetryWindowDays: number;
   marketHealthScore: number; // 0 - 100
   marketSentiment: "Bullish (High Scaling)" | "Moderate (Selective Winners)" | "Saturated / Cautious";
-  trendSummary: string;
-  risingNiches: {
-    niche: string;
-    velocityScore: number; // 1-100
-    suggestedPriceRange: string;
-    reasoning: string;
-  }[];
-  topWinningProducts: RecommendedProduct[];
-  saturationWarnings: {
-    nicheOrProduct: string;
-    warningLevel: "high" | "medium" | "low";
-    recommendation: string;
-  }[];
-  creativeRecommendations: {
-    recommendedFormat: "UGC Video" | "Single Image" | "Carousel" | "Offers/Bundles";
-    suggestedHooks: string[];
-    dominantCTA: string;
-  };
-  actionableInsights: string[];
+  executiveSummary: string;
+  waveDriversAnalysis: WaveDriverAnalysis;
+  unexploitedOpportunities: MarketOpportunity[];
+  unitEconomicsBlueprint: UnitEconomicsBlueprint;
+  mediaBuyingStrategy: MediaBuyingStrategy;
+  executionRoadmap: ExecutionRoadmap;
   modelUsed: string;
 }
 
-// DeepSeek primary and fallback cascade on OpenRouter (max 3 models for OpenRouter cascade)
+// Alias for backward compatibility
+export type MarketForecastData = MarketOpportunityResearch;
+
+// DeepSeek primary and fallback cascade on OpenRouter
 const DEEPSEEK_MODELS = [
-  "deepseek/deepseek-v4-pro-0813",
+  "deepseek/deepseek-v4-pro",
   "deepseek/deepseek-chat",
   "deepseek/deepseek-r1",
 ];
@@ -68,10 +80,9 @@ function cleanAndParseJson<T>(rawText: string): T | null {
       cleaned = (end !== -1 ? cleaned.substring(start, end) : cleaned.substring(start)).trim();
     }
 
-    // 3. Find outermost JSON object
     const firstBrace = cleaned.indexOf("{");
     const lastBrace = cleaned.lastIndexOf("}");
-    if (firstBrace !== -1 && lastBrace > firstBrace) {
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
       cleaned = cleaned.substring(firstBrace, lastBrace + 1);
     }
 
@@ -83,185 +94,214 @@ function cleanAndParseJson<T>(rawText: string): T | null {
 }
 
 /**
- * 1. Collects live aggregate market signals & 15-30 day candidate products from PostgreSQL
+ * Extracts 7-day telemetry and top 5 winning products from active stores (>=5 SKUs)
  */
 export async function extractMarketSignals() {
-  // 1. Active Ads & 7-day Launch Velocity
-  const [adsSummary] = await db
-    .select({
-      totalActiveAds: count(),
-      newAdsLast7Days: sql<number>`COUNT(CASE WHEN ${ads.firstSeenAt} >= NOW() - INTERVAL '7 days' OR ${ads.startedRunningOn} >= NOW() - INTERVAL '7 days' THEN 1 END)`.mapWith(Number),
-      videoCount: sql<number>`COUNT(CASE WHEN ${ads.mediaType} = 'video' THEN 1 END)`.mapWith(Number),
-      imageCount: sql<number>`COUNT(CASE WHEN ${ads.mediaType} = 'image' THEN 1 END)`.mapWith(Number),
-    })
+  const [activeAdsResult] = await db
+    .select({ count: count() })
     .from(ads)
     .where(eq(ads.isArchived, false));
+  const totalActiveAds = Number(activeAdsResult?.count || 0);
 
-  // 2. Category distributions & average price points
-  const priceExpr = sql`COALESCE(NULLIF(SUBSTRING(REPLACE(${scrapedProducts.currentPrice}, ',', '.') FROM '([0-9]+(?:\\.[0-9]+)?)'), '')::numeric, 0)`;
-  const topCategories = await db
+  const [newAds7dResult] = await db
+    .select({ count: count() })
+    .from(ads)
+    .where(
+      sql`"first_seen_at" >= NOW() - INTERVAL '7 days' OR "last_seen_at" >= NOW() - INTERVAL '7 days'`
+    );
+  const newAdsLast7Days = Number(newAds7dResult?.count || 0);
+
+  const [videoAdsResult] = await db
+    .select({ count: count() })
+    .from(ads)
+    .where(sql`"media_type" = 'video' AND "is_archived" = false`);
+  const videoCount = Number(videoAdsResult?.count || 0);
+  const imageCount = Math.max(0, totalActiveAds - videoCount);
+
+  const topCategoriesRaw = await db
     .select({
-      category: sql<string>`COALESCE(NULLIF(${scrapedProducts.category}, ''), 'General & Other')`,
-      productCount: count(),
-      newThisWeek: sql<number>`COUNT(CASE WHEN ${scrapedProducts.createdAt} >= NOW() - INTERVAL '7 days' THEN 1 END)`.mapWith(Number),
-      avgPrice: sql<number>`ROUND(AVG(CASE WHEN ${priceExpr} > 0 THEN ${priceExpr} END), 1)`.mapWith(Number),
-      minPrice: sql<number>`MIN(CASE WHEN ${priceExpr} > 0 THEN ${priceExpr} END)`.mapWith(Number),
-      maxPrice: sql<number>`MAX(CASE WHEN ${priceExpr} > 0 THEN ${priceExpr} END)`.mapWith(Number),
+      category: scrapedProducts.category,
+      count: count(),
     })
     .from(scrapedProducts)
-    .groupBy(sql`COALESCE(NULLIF(${scrapedProducts.category}, ''), 'General & Other')`)
+    .where(sql`"category" IS NOT NULL`)
+    .groupBy(scrapedProducts.category)
     .orderBy(desc(count()))
     .limit(8);
 
-  // 3. Top Call-to-Actions (CTAs)
-  const topCtas = await db
+  const topCtasRaw = await db
     .select({
       ctaText: ads.ctaText,
       count: count(),
     })
     .from(ads)
-    .where(
-      sql`${ads.ctaText} IS NOT NULL AND ${ads.ctaText} != '' AND (${ads.firstSeenAt} >= NOW() - INTERVAL '7 days' OR ${ads.isArchived} = false)`
-    )
+    .where(sql`"cta_text" IS NOT NULL AND "is_archived" = false`)
     .groupBy(ads.ctaText)
     .orderBy(desc(count()))
-    .limit(5);
+    .limit(6);
 
-  // 4. Tracked Brands scaling momentum
-  const [brandsSummary] = await db
-    .select({
-      monitoredPages: count(),
-      activePages: sql<number>`COUNT(CASE WHEN ${trackedPages.currentResults} > 0 THEN 1 END)`.mapWith(Number),
-    })
+  const [monitoredBrandsResult] = await db
+    .select({ count: count() })
     .from(trackedPages);
+  const monitoredBrands = Number(monitoredBrandsResult?.count || 0);
 
-  // 5. 15–30 Days Candidate Products from Stores with 5+ Active Products
-  // Enforces: No old products (>30d), and store must have 5+ active products
-  const candidateProducts = (await db.execute(sql`
+  const activeBrandsRaw = await db
+    .select({ distinctPageId: sql`DISTINCT ${ads.pageId}` })
+    .from(ads)
+    .where(eq(ads.isArchived, false));
+  const activeBrands = activeBrandsRaw.length;
+
+  // Query top 5 winning products from active stores (stores with >=5 active products)
+  const candidateProductsRaw = await db.execute(sql`
     WITH active_stores AS (
       SELECT domain
-      FROM scraped_products
-      WHERE domain IS NOT NULL AND domain != ''
+      FROM ${scrapedProducts}
       GROUP BY domain
       HAVING COUNT(*) >= 5
+    ),
+    product_ad_counts AS (
+      SELECT 
+        p.id,
+        p.title,
+        p.domain,
+        p.current_price AS "currentPrice",
+        p.category,
+        p.sub_category AS "subCategory",
+        p.main_image_url AS "mainImageUrl",
+        p.url,
+        p.created_at AS "createdAt",
+        COUNT(a.id) AS "activeAdsCount"
+      FROM ${scrapedProducts} p
+      INNER JOIN active_stores s ON p.domain = s.domain
+      LEFT JOIN ${ads} a ON (a.product_id = p.id OR a.link_url ILIKE '%' || p.domain || '%') AND a.is_archived = false
+      GROUP BY p.id, p.title, p.domain, p.current_price, p.category, p.sub_category, p.main_image_url, p.url, p.created_at
     )
-    SELECT 
-      p.id,
-      p.title,
-      p.domain,
-      p.current_price as "currentPrice",
-      p.category,
-      p.sub_category as "subCategory",
-      p.main_image_url as "mainImageUrl",
-      p.url,
-      p.created_at as "createdAt",
-      COUNT(a.id)::int as "activeAdsCount"
-    FROM scraped_products p
-    INNER JOIN active_stores s ON p.domain = s.domain
-    LEFT JOIN ads a ON (a.product_id = p.id OR a.link_url LIKE '%' || p.domain || '%') AND a.is_archived = false
-    WHERE p.created_at >= NOW() - INTERVAL '30 days'
-      AND p.title IS NOT NULL
-      AND p.title != ''
-    GROUP BY p.id, p.title, p.domain, p.current_price, p.category, p.sub_category, p.main_image_url, p.url, p.created_at
-    ORDER BY "activeAdsCount" DESC, p.created_at DESC
-    LIMIT 25
-  `)) as any[];
+    SELECT *
+    FROM product_ad_counts
+    ORDER BY "activeAdsCount" DESC, "createdAt" DESC
+    LIMIT 5;
+  `);
+
+  const top5Winners = (Array.isArray(candidateProductsRaw) ? candidateProductsRaw : (candidateProductsRaw as any).rows || []) as any[];
 
   return {
-    windowDays: 7,
-    totalActiveAds: Number(adsSummary?.totalActiveAds || 0),
-    newAdsLast7Days: Number(adsSummary?.newAdsLast7Days || 0),
+    totalActiveAds,
+    newAdsLast7Days,
     mediaFormatRatio: {
-      videoAds: Number(adsSummary?.videoCount || 0),
-      imageAds: Number(adsSummary?.imageCount || 0),
+      videoAds: videoCount,
+      imageAds: imageCount,
     },
-    topCategories,
-    topCtas,
-    monitoredBrands: Number(brandsSummary?.monitoredPages || 0),
-    activeBrands: Number(brandsSummary?.activePages || 0),
-    candidateProducts: candidateProducts || [],
+    topCategories: topCategoriesRaw.map((c) => ({
+      category: c.category || "Uncategorized",
+      productCount: Number(c.count),
+    })),
+    topCtas: topCtasRaw.map((cta) => ({
+      cta: cta.ctaText || "Unknown",
+      usageCount: Number(cta.count),
+    })),
+    monitoredBrands,
+    activeBrands,
+    top5Winners,
   };
 }
 
 /**
- * 2. Generates AI Market Forecast & Top 10 Winning Products via DeepSeek v4-pro on OpenRouter
+ * Executes Deep-Dive Market Opportunity & Strategy Generation via DeepSeek v4-pro on OpenRouter
  */
-export async function generateAiMarketForecast(): Promise<MarketForecastData> {
+export async function generateAiMarketForecast(): Promise<MarketOpportunityResearch> {
   const signals = await extractMarketSignals();
   const openRouterKey = process.env.OPENROUTER_API_KEY || process.env.OPEN_ROUTER_API_KEY;
 
-  const systemPrompt = `You are a high-level E-Commerce Media Buying & Winning Product Analyst.
-Analyze the provided real-time market telemetry and recent 15-30 day candidate products from active stores (5+ active products).
-
-Select and rank the TOP 10 WINNING PRODUCTS based on:
-1. Active ad density and scaling momentum.
-2. High conversion price points (healthy margins, sweet-spot COD pricing).
-3. Broad commercial appeal, problem-solving value, or high perceived value.
-4. Exclude weak or saturated products.
-
-Return ONLY a valid JSON object matching this exact schema:
-{
-  "marketHealthScore": <number between 0 and 100>,
-  "marketSentiment": "Bullish (High Scaling)" | "Moderate (Selective Winners)" | "Saturated / Cautious",
-  "trendSummary": "<2 concise sentences summarizing current e-commerce momentum and competition>",
-  "risingNiches": [
-    {
-      "niche": "<category/sub-category name>",
-      "velocityScore": <number 1-100>,
-      "suggestedPriceRange": "<e.g. 45 - 89 TND>",
-      "reasoning": "<why this niche is scaling right now>"
-    }
-  ],
-  "topWinningProducts": [
-    {
-      "id": "<candidate id>",
-      "title": "<product title>",
-      "domain": "<store domain>",
-      "category": "<category>",
-      "currentPrice": "<price e.g. 49.9 TND>",
-      "activeAdsCount": <number>,
-      "winningReason": "<Concise 1-sentence why it wins, e.g. High-conversion pain-point solver with strong impulse COD appeal>",
-      "suggestedOfferStrategy": "<Concise offer, e.g. Bundle 2 for 79 TND + Free Delivery>",
-      "targetAudience": "<Concise demographic, e.g. Women 25-45>"
-    }
-  ],
-  "saturationWarnings": [
-    {
-      "nicheOrProduct": "<saturated product or angle>",
-      "warningLevel": "high" | "medium" | "low",
-      "recommendation": "<concise pivot advice>"
-    }
-  ],
-  "creativeRecommendations": {
-    "recommendedFormat": "UGC Video" | "Single Image" | "Carousel" | "Offers/Bundles",
-    "suggestedHooks": ["<Hook 1>", "<Hook 2>", "<Hook 3>"],
-    "dominantCTA": "<e.g. Shop Now, Order via WhatsApp>"
-  },
-  "actionableInsights": [
-    "<Concise Directive 1>",
-    "<Concise Directive 2>",
-    "<Concise Directive 3>"
-  ]
-}`;
-
-  const candidatesFormatted = (signals.candidateProducts || []).slice(0, 10).map((p: any) => ({
-    id: p.id,
+  const top5Formatted = (signals.top5Winners || []).map((p: any, idx: number) => ({
+    rank: idx + 1,
     title: p.title,
     domain: p.domain,
     price: p.currentPrice,
     category: p.category,
-    activeAds: p.activeAdsCount,
+    activeAdsCount: Number(p.activeAdsCount || 0),
   }));
 
-  const userContent = `=== MARKET TELEMETRY & 15-30 DAY CANDIDATES ===
-- Active Ads: ${signals.totalActiveAds} (${signals.newAdsLast7Days} new 7D) | Formats: ${signals.mediaFormatRatio.videoAds} Videos vs ${signals.mediaFormatRatio.imageAds} Images
-- Monitored Stores: ${signals.monitoredBrands} (${signals.activeBrands} active)
+  const systemPrompt = `You are an elite E-Commerce Market Strategist & Media Buying Director.
+Your mission is to perform an in-depth market opportunity research deep dive based on real-time market signals and the TOP 5 WINNING PRODUCTS currently driving the market wave.
+
+Analyze WHY these 5 products are dominating and build an overarching commercial and media buying strategy to catch and ride this market wave.
+
+Return ONLY a valid JSON object matching this exact schema:
+{
+  "marketHealthScore": <number 0-100>,
+  "marketSentiment": "Bullish (High Scaling)" | "Moderate (Selective Winners)" | "Saturated / Cautious",
+  "executiveSummary": "<3 comprehensive sentences on macro consumer behavior, pricing momentum, and competition>",
+  
+  "waveDriversAnalysis": {
+    "underlyingPattern": "<What macro consumer behavioral shift unites these 5 winners?>",
+    "consumerTriggers": ["<Trigger 1: e.g. Immediate physical relief with low impulse threshold>", "<Trigger 2>", "<Trigger 3>"],
+    "averageWinningPriceRange": "<e.g. 25 - 55 TND>",
+    "velocitySignals": "<Why these specific problem-solvers are scaling exponentially right now>"
+  },
+
+  "unexploitedOpportunities": [
+    {
+      "opportunityName": "<Opportunity title>",
+      "targetNiche": "<Niche>",
+      "potentialScore": <number 1-100>,
+      "marketGap": "<What competitors are currently missing>",
+      "entryStrategy": "<Tactical launch angle to capture this gap immediately>"
+    },
+    {
+      "opportunityName": "<Opportunity title 2>",
+      "targetNiche": "<Niche 2>",
+      "potentialScore": <number 1-100>,
+      "marketGap": "<Market gap 2>",
+      "entryStrategy": "<Entry strategy 2>"
+    },
+    {
+      "opportunityName": "<Opportunity title 3>",
+      "targetNiche": "<Niche 3>",
+      "potentialScore": <number 1-100>,
+      "marketGap": "<Market gap 3>",
+      "entryStrategy": "<Entry strategy 3>"
+    }
+  ],
+
+  "unitEconomicsBlueprint": {
+    "targetCogsMultiplier": "<e.g. 3.5x - 4.0x retail to landed cost>",
+    "optimalPriceBands": "<e.g. 29.9 - 59.9 TND (Sweet spot for COD delivery)>",
+    "codDeliveryTactics": [
+      "<Tactic 1 to achieve 85%+ COD confirmation & delivery>",
+      "<Tactic 2>",
+      "<Tactic 3>"
+    ],
+    "bundleArchitecture": "<Specific bundle and quantity-break advice to maximize AOV>"
+  },
+
+  "mediaBuyingStrategy": {
+    "recommendedFormat": "UGC Video" | "Single Image" | "Carousel" | "Offers/Bundles",
+    "testingBudgetSplit": "<e.g. 65% Broad Testing / 35% Scale Campaigns>",
+    "winningHookScripts": [
+      "<Hook Script 1>",
+      "<Hook Script 2>",
+      "<Hook Script 3>"
+    ],
+    "dominantCTA": "<e.g. Shop now>",
+    "fatigueDefensePlan": "<Tactical plan to refresh angles past Day 14>"
+  },
+
+  "executionRoadmap": {
+    "phase1_Day1to3": "<Day 1-3 Validation & Creative Testing Protocol>",
+    "phase2_Day4to7": "<Day 4-7 Offer Optimization & Horizontal Scaling>",
+    "phase3_Day8to14": "<Day 8-14 Retargeting, WhatsApp Recovery & Vertical Scale>"
+  }
+}`;
+
+  const userContent = `=== LIVE MARKET TELEMETRY ===
+- Active Ads: ${signals.totalActiveAds} (${signals.newAdsLast7Days} new 7D) | Creative Split: ${signals.mediaFormatRatio.videoAds} Videos vs ${signals.mediaFormatRatio.imageAds} Images
+- Active Stores Monitored: ${signals.monitoredBrands} (${signals.activeBrands} actively running ads)
 - Top Categories: ${JSON.stringify(signals.topCategories)}
 - Top CTAs: ${JSON.stringify(signals.topCtas)}
 
---- CANDIDATES (FROM STORES WITH ≥5 ACTIVE PRODUCTS) ---
-${JSON.stringify(candidatesFormatted)}
-===================================================`;
+=== TOP 5 WINNING WAVE DRIVERS (Input for Opportunity & Strategy Formulation) ===
+${JSON.stringify(top5Formatted, null, 2)}
+===================================================================`;
 
   // 1. Call DeepSeek via OpenRouter with Model Fallback
   if (openRouterKey && openRouterKey.trim() !== "") {
@@ -273,124 +313,125 @@ ${JSON.stringify(candidatesFormatted)}
             Authorization: `Bearer ${openRouterKey.trim()}`,
             "Content-Type": "application/json",
             "HTTP-Referer": "https://meta-ad-tracker.local",
-            "X-Title": "DeepSeek Market Forecaster",
+            "X-Title": "DeepSeek Market Opportunity Deep-Dive",
           },
           body: JSON.stringify({
             model,
-            temperature: 0.15,
-            max_tokens: 2500,
+            temperature: 0.18,
+            max_tokens: 3500,
             messages: [
               { role: "system", content: systemPrompt },
               { role: "user", content: userContent },
             ],
             response_format: { type: "json_object" },
           }),
-          signal: AbortSignal.timeout(50000), // 50s timeout per model
+          signal: AbortSignal.timeout(30000),
         });
 
         if (response.ok) {
           const data = await response.json();
           const rawContent = data.choices?.[0]?.message?.content || data.choices?.[0]?.message?.reasoning;
-          const parsed = cleanAndParseJson<Omit<MarketForecastData, "generatedAt" | "telemetryWindowDays" | "modelUsed">>(rawContent);
+          const parsed = cleanAndParseJson<Omit<MarketOpportunityResearch, "generatedAt" | "telemetryWindowDays" | "modelUsed">>(rawContent);
 
           if (parsed && typeof parsed.marketHealthScore === "number") {
-            // Ensure candidate image/url fallbacks if model stripped them
-            const enrichedWinners = (parsed.topWinningProducts || []).map((w) => {
-              const matched = signals.candidateProducts.find((c: any) => c.id === w.id || c.title === w.title);
-              return {
-                ...w,
-                imageUrl: w.imageUrl || matched?.mainImageUrl || undefined,
-                productUrl: w.productUrl || matched?.url || undefined,
-              };
-            });
-
             return {
               ...parsed,
-              topWinningProducts: enrichedWinners,
               generatedAt: new Date().toISOString(),
               telemetryWindowDays: 7,
-              modelUsed: data.model || model,
+              modelUsed: model,
             };
           } else {
             console.warn(`[OpenRouter DeepSeek] Parse validation failed for model ${model}.`);
           }
         } else {
-          const errBody = await response.text().catch(() => "");
-          console.warn(`[OpenRouter DeepSeek] Model ${model} returned HTTP ${response.status}:`, errBody.slice(0, 300));
+          const errBody = await response.text();
+          console.warn(`[OpenRouter DeepSeek] Model ${model} returned HTTP ${response.status}: ${errBody}`);
         }
-      } catch (err: any) {
-        console.warn(`[OpenRouter DeepSeek Warning] Model ${model} encountered an issue:`, err?.message || err);
+      } catch (modelErr: any) {
+        console.warn(`[OpenRouter DeepSeek Warning] Model ${model} encountered an issue: ${modelErr?.message || modelErr}`);
       }
     }
   }
 
-  // 2. Deterministic Rule-Based Fallback (Zero Network / Zero Cost Guarantee)
-  return getOfflineFallbackForecast(signals);
+  // 2. Deterministic Rule-Based Fallback Engine
+  return buildDeterministicFallback(signals);
 }
 
-function getOfflineFallbackForecast(signals: Awaited<ReturnType<typeof extractMarketSignals>>): MarketForecastData {
-  const topCat = signals.topCategories[0]?.category || "Beauty, Health & Care";
-  const secondCat = signals.topCategories[1]?.category || "Electronics & Tech";
-  const avgP = signals.topCategories[0]?.avgPrice || 59;
+/**
+ * Deterministic heuristic fallback matching the new deep-dive strategy schema
+ */
+function buildDeterministicFallback(signals: any): MarketOpportunityResearch {
   const isVideoDominant = signals.mediaFormatRatio.videoAds >= signals.mediaFormatRatio.imageAds;
-
-  // Build top winning products from database candidate rows
-  const fallbackWinners: RecommendedProduct[] = (signals.candidateProducts || []).slice(0, 10).map((p: any, idx: number) => ({
-    id: p.id,
-    title: p.title || `Winning Product #${idx + 1}`,
-    domain: p.domain || "trusted-store.tn",
-    category: p.category || "General & Other",
-    currentPrice: p.currentPrice || "49 TND",
-    imageUrl: p.mainImageUrl || undefined,
-    productUrl: p.url || undefined,
-    activeAdsCount: Number(p.activeAdsCount || 5),
-    winningReason: "Strong active ad creative volume and consistent multi-creative scaling over the 15-30 day window.",
-    suggestedOfferStrategy: "Bundle 2 Units with Free Cash-on-Delivery Shipping to maximize AOV.",
-    targetAudience: "Unisex E-Commerce Buyers",
-  }));
+  const healthScore = Math.min(
+    95,
+    Math.max(45, Math.round(50 + (signals.newAdsLast7Days / Math.max(1, signals.totalActiveAds)) * 50))
+  );
 
   return {
     generatedAt: new Date().toISOString(),
     telemetryWindowDays: 7,
-    marketHealthScore: Math.min(95, Math.max(60, Math.round(50 + (signals.newAdsLast7Days / Math.max(1, signals.totalActiveAds)) * 50))),
-    marketSentiment: signals.newAdsLast7Days > 20 ? "Bullish (High Scaling)" : "Moderate (Selective Winners)",
-    trendSummary: `Across recent 15-30 day trailing data, ${signals.newAdsLast7Days} new creatives were deployed across ${signals.activeBrands} active brands. ${topCat} leads category volume with high creative turnover.`,
-    risingNiches: [
-      {
-        niche: topCat,
-        velocityScore: 88,
-        suggestedPriceRange: `${Math.max(29, Math.round(avgP * 0.8))} - ${Math.round(avgP * 1.3)} TND`,
-        reasoning: "Strong active duplication rates and consistent new ad launches over the trailing window.",
-      },
-      {
-        niche: secondCat,
-        velocityScore: 74,
-        suggestedPriceRange: "39 - 89 TND",
-        reasoning: "High demand for problem-solving gadgets and bundle offers with free shipping.",
-      },
-    ],
-    topWinningProducts: fallbackWinners,
-    saturationWarnings: [
-      {
-        nicheOrProduct: "Static Single-Image Ads with generic claims",
-        warningLevel: "medium",
-        recommendation: "Pivot to authentic UGC demonstration videos highlighting before/after results and cash-on-delivery trust.",
-      },
-    ],
-    creativeRecommendations: {
-      recommendedFormat: isVideoDominant ? "UGC Video" : "Offers/Bundles",
-      suggestedHooks: [
-        "Stop scrolling if you're tired of [Specific Daily Frustration]...",
-        "3 Reasons why this is currently selling out in Tunisia...",
-        "Before you buy another cheap alternative, watch this test!",
+    marketHealthScore: healthScore,
+    marketSentiment: healthScore >= 70 ? "Bullish (High Scaling)" : "Moderate (Selective Winners)",
+    executiveSummary: `The market displays solid momentum with ${signals.totalActiveAds} active creatives across ${signals.activeBrands} active stores. Video ads account for ${Math.round((signals.mediaFormatRatio.videoAds / Math.max(1, signals.totalActiveAds)) * 100)}% of placements, signaling intense competition around high-engagement visual hooks and problem-solving products.`,
+    waveDriversAnalysis: {
+      underlyingPattern: "Consumers gravitate towards immediately demonstrable problem-solvers in health, home convenience, and fitness with fast cash-on-delivery turnaround.",
+      consumerTriggers: [
+        "Instant relief from physical discomfort at a low-barrier price point",
+        "Home and personal convenience that eliminates daily friction",
+        "High perceived bundle value with zero upfront risk (COD)",
       ],
-      dominantCTA: signals.topCtas[0]?.ctaText || "Shop now",
+      averageWinningPriceRange: "29.9 - 59.9 TND",
+      velocitySignals: "Products with short before-and-after demo videos and straightforward pricing are monopolizing ad shelf space.",
     },
-    actionableInsights: [
-      "Test Sweet-Spot Pricing: Products priced between 39 TND and 69 TND maintain the highest checkout completion velocity.",
-      "Combat 7-Day Ad Fatigue: Launch at least 3 hook variations per winning SKU within the first week of scaling.",
-      "Codify WhatsApp Recovery: Integrate 1-click WhatsApp order confirmation to reduce COD cancellation rates.",
+    unexploitedOpportunities: [
+      {
+        opportunityName: "Orthopedic Ergonomic Support Line",
+        targetNiche: "Office workers and drivers (25-55)",
+        potentialScore: 88,
+        marketGap: "Existing competitors run generic image ads without focusing on long-shift relief or posture before/after proof.",
+        entryStrategy: "Deploy 15s UGC video showing desk fatigue contrast, priced at 39.9 DT with free shipping bonus.",
+      },
+      {
+        opportunityName: "Smart Kitchen & Drainage Maintenance",
+        targetNiche: "Homeowners & homemakers",
+        potentialScore: 82,
+        marketGap: "Low ad creative diversity; competitors fail to show multi-room versatility.",
+        entryStrategy: "Create relatable sink splash and odor prevention scenarios; bundle 3-pack for 49.9 DT.",
+      },
+      {
+        opportunityName: "Compact Resistance & Mobility Kits",
+        targetNiche: "Busy professionals & home fitness beginners",
+        potentialScore: 78,
+        marketGap: "High-ticket machines create price resistance; lack of lightweight guided workout bundles.",
+        entryStrategy: "Package portability and 10-min workout angle at 55 DT with quick-start PDF guide.",
+      },
     ],
+    unitEconomicsBlueprint: {
+      targetCogsMultiplier: "3.5x - 4.2x landed cost vs retail",
+      optimalPriceBands: "29.9 - 59.9 TND (Sweet spot for high-conversion COD delivery)",
+      codDeliveryTactics: [
+        "Automated WhatsApp confirmation message within 5 minutes of checkout",
+        "SMS reminder 1 hour before dispatch with driver contact",
+        "Pack bundle discounts directly on COD confirmation calls",
+      ],
+      bundleArchitecture: "Offer 2-for-1 quantity breaks or tiered complementary accessories (+15 TND add-on) to boost AOV.",
+    },
+    mediaBuyingStrategy: {
+      recommendedFormat: isVideoDominant ? "UGC Video" : "Single Image",
+      testingBudgetSplit: "65% Broad Testing / 35% Scale Duplications",
+      winningHookScripts: [
+        "'If you suffer from [problem], stop scrolling — this 10-second fix changes everything.'",
+        "'Why are thousands in Tunisia switching to this instead of expensive alternatives?'",
+        "'Watch what happens when you use this for just 3 days...'",
+      ],
+      dominantCTA: "Shop Now",
+      fatigueDefensePlan: "Rotate fresh opening 3-second visual hooks weekly while preserving the high-performing body copy.",
+    },
+    executionRoadmap: {
+      phase1_Day1to3: "Launch 4-5 UGC angle variants broad targeting (CBO). Kill ad sets with CTR < 1.8% by Day 3.",
+      phase2_Day4to7: "Duplicate top 2 winning creatives into dedicated scaling CBOs. Implement WhatsApp cart recovery.",
+      phase3_Day8to14: "Deploy retargeting (video 50%+ viewers) with exclusive 2-pack bundle offer; refresh top hook angles.",
+    },
     modelUsed: "offline_deterministic_rules",
   };
 }
