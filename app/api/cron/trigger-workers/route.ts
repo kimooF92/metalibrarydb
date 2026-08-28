@@ -59,6 +59,7 @@ async function handleCronTrigger(req: NextRequest) {
         worker?: string;
         spyWorker?: string;
         productScraper?: string;
+        verifyFavorites?: string;
       };
     } = {
       supabaseKeepAlive: true,

@@ -122,15 +122,27 @@ export function ProductDetailsModal({
         method: "POST",
       });
       if (res.ok) {
-        showToast("All linked ads marked as Pending for next scan.", "success");
+        showToast({
+          type: "success",
+          title: "Queued for Scan",
+          message: "All linked ads marked as Pending for next scan.",
+        });
         await fetchLinkedAds(product.id);
         onRefresh?.(product.id);
       } else {
-        showToast("Failed to queue product for ad verification", "error");
+        showToast({
+          type: "error",
+          title: "Error",
+          message: "Failed to queue product for ad verification",
+        });
       }
     } catch (err) {
       console.error("Failed to queue verify:", err);
-      showToast("Network error queueing ad verification", "error");
+      showToast({
+        type: "error",
+        title: "Network Error",
+        message: "Network error queueing ad verification",
+      });
     } finally {
       setIsQueueingVerify(false);
     }

@@ -15,6 +15,7 @@ import {
   Truck,
   Sparkles,
   Star,
+  CheckCircle2,
 } from "lucide-react";
 
 interface ProductRowProps {
