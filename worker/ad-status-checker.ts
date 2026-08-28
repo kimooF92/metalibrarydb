@@ -78,12 +78,18 @@ export async function checkSingleAdStatus(
       }
 
       // 3. Find target Ad Card container strictly containing the target ID
-      // When Meta Ad Library receives an expired/deleted ad ID, it redirects to the brand's general page
-      // which contains OTHER active ads. We MUST verify that THIS SPECIFIC adArchiveId is rendered.
       const allDivs = Array.from(document.querySelectorAll("div"));
-      const matchingDivs = allDivs.filter((d) => (d.textContent || "").includes(targetId));
+      const candidateDivs: HTMLDivElement[] = [];
 
-      if (matchingDivs.length === 0) {
+      for (const div of allDivs) {
+        const text = div.textContent || "";
+        const idRegex = new RegExp(`(?:Library ID|ID dans la bibliothèque|Identifiant|Identificador|معرّف المكتبة|ID)\\s*[:\\s]\\s*${targetId}`, "i");
+        if (idRegex.test(text) || text.includes(targetId)) {
+          candidateDivs.push(div as HTMLDivElement);
+        }
+      }
+
+      if (candidateDivs.length === 0) {
         // The specific ad ID does not exist on the rendered page (expired, deleted, or removed)
         return {
           status: "not_found",
@@ -91,18 +97,60 @@ export async function checkSingleAdStatus(
         };
       }
 
-      // Sort to find smallest container containing the target ID
-      matchingDivs.sort((a, b) => (a.textContent || "").length - (b.textContent || "").length);
-      const targetCard = matchingDivs[0];
-      const cardText = targetCard.innerText || targetCard.textContent || "";
+      // Sort candidate divs by textContent length ASC
+      candidateDivs.sort((a, b) => (a.textContent || "").length - (b.textContent || "").length);
+
+      // Find the card container that has Sponsored or See ad details or media or Active/Inactive label
+      let targetCard: HTMLDivElement | null = null;
+      for (const candidate of candidateDivs) {
+        const cText = candidate.textContent || "";
+        if (cText.length > 12000) continue;
+
+        const hasCardLabels =
+          cText.includes("Sponsored") ||
+          cText.includes("Sponsorisé") ||
+          cText.includes("إعلان ممول") ||
+          cText.includes("See ad details") ||
+          cText.includes("Voir les détails") ||
+          cText.includes("Started running") ||
+          cText.includes("Lancé le") ||
+          cText.includes("Active") ||
+          cText.includes("Inactive") ||
+          cText.includes("Inactif") ||
+          cText.includes("Actif") ||
+          cText.includes("غير نشط") ||
+          cText.includes("نشط");
+
+        const hasMedia =
+          candidate.querySelector('img[src*="fbcdn"], img[src*="scontent"], video, a[href*="l.facebook.com"]') !== null;
+
+        if (hasCardLabels || hasMedia) {
+          targetCard = candidate;
+          break;
+        }
+      }
+
+      if (!targetCard) {
+        targetCard = candidateDivs.find((d) => (d.textContent || "").length >= 80) || candidateDivs[0];
+      }
+
+      const cardText = targetCard ? targetCard.innerText || targetCard.textContent || "" : "";
 
       // 4. Check for Inactive badge (multilingual) strictly inside this ad's card
       const isInactive =
-        /\b(Inactive|Inactif|غير نشط|Inactivo|Inaktiv)\b/i.test(cardText);
+        cardText.includes("Inactive") ||
+        cardText.includes("غير نشط") ||
+        cardText.includes("Inactif") ||
+        cardText.includes("Inactivo") ||
+        cardText.includes("Inaktiv");
 
       // 5. Check for Active badge (multilingual) strictly inside this ad's card
       const isActive =
-        /\b(Active|Actif|نشط|Activo|Aktiv)\b/i.test(cardText);
+        cardText.includes("Active") ||
+        cardText.includes("نشط") ||
+        cardText.includes("Actif") ||
+        cardText.includes("Activo") ||
+        cardText.includes("Aktiv");
 
       if (isInactive) {
         return { status: "inactive", reason: "Ad card marked Inactive" };
