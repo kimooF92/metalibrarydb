@@ -49,11 +49,11 @@ export interface MarketAnalysisData {
 export type MarketForecastData = MarketAnalysisData;
 export type MarketOpportunityResearch = MarketAnalysisData;
 
-// DeepSeek primary and fallback cascade on OpenRouter
-const DEEPSEEK_MODELS = [
+// Fast Multi-Model Cascade on OpenRouter
+const FAST_AI_MODELS = [
+  "google/gemini-2.5-flash",
   "deepseek/deepseek-chat",
-  "deepseek/deepseek-v4-pro",
-  "deepseek/deepseek-r1",
+  "meta-llama/llama-3.3-70b-instruct",
 ];
 
 // Helper to strip markdown codeblocks, reasoning tags (<think>...</think>), repair and parse JSON safely
@@ -260,6 +260,9 @@ export async function extractMarketSignals(): Promise<MarketTelemetrySnapshot> {
 export async function generateAiMarketForecast(): Promise<MarketAnalysisData> {
   const telemetry = await extractMarketSignals();
   const openRouterKey = process.env.OPENROUTER_API_KEY || process.env.OPEN_ROUTER_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  const groqKey = process.env.GROQ_API_KEY;
+  const openAiKey = process.env.OPENAI_API_KEY;
 
   const systemPrompt = `You are a Meta E-Commerce Ad Intelligence Analyst.
 Analyze market health and scaling velocity based STRICTLY on the aggregated counts and telemetry provided.
@@ -290,52 +293,174 @@ Rules:
   const userContent = `LIVE AGGREGATED MARKET TELEMETRY:
 ${JSON.stringify(telemetry, null, 2)}`;
 
-  // 1. Call DeepSeek via OpenRouter with Model Fallback
+  // 1. Primary: OpenRouter Fast Cascade (Gemini Flash + DeepSeek + Llama 3.3)
   if (openRouterKey && openRouterKey.trim() !== "") {
-    for (const model of DEEPSEEK_MODELS) {
-      try {
-        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${openRouterKey.trim()}`,
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://meta-ad-tracker.local",
-            "X-Title": "DeepSeek Market Intelligence",
-          },
-          body: JSON.stringify({
-            model,
-            temperature: 0.15,
-            max_tokens: 1200,
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userContent },
-            ],
-            response_format: { type: "json_object" },
-          }),
-          signal: AbortSignal.timeout(45000),
-        });
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openRouterKey.trim()}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://meta-ad-tracker.local",
+          "X-Title": "Fast AI Market Intelligence",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          models: FAST_AI_MODELS.slice(0, 3),
+          temperature: 0.15,
+          max_tokens: 1500,
+          reasoning: { max_tokens: 0 },
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userContent },
+          ],
+          response_format: { type: "json_object" },
+        }),
+        signal: AbortSignal.timeout(18000),
+      });
 
-        if (response.ok) {
-          const data = await response.json();
-          const rawContent = data.choices?.[0]?.message?.content || data.choices?.[0]?.message?.reasoning;
-          const parsed = cleanAndParseJson<Omit<MarketAnalysisData, "generatedAt" | "modelUsed" | "telemetrySnapshot">>(rawContent);
+      if (response.ok) {
+        const data = await response.json();
+        const rawContent = data.choices?.[0]?.message?.content || data.choices?.[0]?.message?.reasoning;
+        const parsed = cleanAndParseJson<Omit<MarketAnalysisData, "generatedAt" | "modelUsed" | "telemetrySnapshot">>(rawContent);
 
-          if (parsed && typeof parsed.marketHealthScore === "number") {
-            return {
-              ...parsed,
-              generatedAt: new Date().toISOString(),
-              modelUsed: model,
-              telemetrySnapshot: telemetry,
-            };
-          }
+        if (parsed && typeof parsed.marketHealthScore === "number") {
+          return {
+            ...parsed,
+            generatedAt: new Date().toISOString(),
+            modelUsed: data.model || "openrouter/cascade",
+            telemetrySnapshot: telemetry,
+          };
         }
-      } catch (modelErr: any) {
-        console.warn(`[OpenRouter DeepSeek Warning] Model ${model}:`, modelErr?.message || modelErr);
       }
+    } catch (modelErr: any) {
+      console.warn("[OpenRouter AI Cascade Notice]:", modelErr?.message || modelErr);
     }
   }
 
-  // 2. Deterministic Rule-Based Fallback Engine
+  // 2. Direct Google Gemini API Fallback
+  if (geminiKey && geminiKey.trim() !== "") {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey.trim()}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [{ text: `${systemPrompt}\n\nUSER INPUT:\n${userContent}` }],
+              },
+            ],
+            generationConfig: {
+              responseMimeType: "application/json",
+              temperature: 0.15,
+              maxOutputTokens: 1500,
+            },
+          }),
+          signal: AbortSignal.timeout(15000),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        const parsed = cleanAndParseJson<Omit<MarketAnalysisData, "generatedAt" | "modelUsed" | "telemetrySnapshot">>(rawText);
+        if (parsed && typeof parsed.marketHealthScore === "number") {
+          return {
+            ...parsed,
+            generatedAt: new Date().toISOString(),
+            modelUsed: "google/gemini-2.0-flash",
+            telemetrySnapshot: telemetry,
+          };
+        }
+      }
+    } catch (geminiErr: any) {
+      console.warn("[Gemini Direct Notice]:", geminiErr?.message || geminiErr);
+    }
+  }
+
+  // 3. Direct Groq API Fallback
+  if (groqKey && groqKey.trim() !== "") {
+    try {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${groqKey.trim()}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          temperature: 0.15,
+          max_tokens: 1500,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userContent },
+          ],
+          response_format: { type: "json_object" },
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const rawContent = data.choices?.[0]?.message?.content;
+        const parsed = cleanAndParseJson<Omit<MarketAnalysisData, "generatedAt" | "modelUsed" | "telemetrySnapshot">>(rawContent);
+        if (parsed && typeof parsed.marketHealthScore === "number") {
+          return {
+            ...parsed,
+            generatedAt: new Date().toISOString(),
+            modelUsed: "groq/llama-3.3-70b",
+            telemetrySnapshot: telemetry,
+          };
+        }
+      }
+    } catch (groqErr: any) {
+      console.warn("[Groq Direct Notice]:", groqErr?.message || groqErr);
+    }
+  }
+
+  // 4. Direct OpenAI Fallback
+  if (openAiKey && openAiKey.trim() !== "") {
+    try {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openAiKey.trim()}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          temperature: 0.15,
+          max_tokens: 1500,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userContent },
+          ],
+          response_format: { type: "json_object" },
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const rawContent = data.choices?.[0]?.message?.content;
+        const parsed = cleanAndParseJson<Omit<MarketAnalysisData, "generatedAt" | "modelUsed" | "telemetrySnapshot">>(rawContent);
+        if (parsed && typeof parsed.marketHealthScore === "number") {
+          return {
+            ...parsed,
+            generatedAt: new Date().toISOString(),
+            modelUsed: "openai/gpt-4o-mini",
+            telemetrySnapshot: telemetry,
+          };
+        }
+      }
+    } catch (openAiErr: any) {
+      console.warn("[OpenAI Direct Notice]:", openAiErr?.message || openAiErr);
+    }
+  }
+
+  // 5. Deterministic Rule-Based Fallback Engine
   return buildDeterministicFallback(telemetry);
 }
 

@@ -100,11 +100,44 @@ async function handleCronTrigger(req: NextRequest) {
       results.githubActionsDispatched.productScraper = await dispatchWorkflow("product-scraper.yml");
     }
 
-    // 4. Record Activity Notification for Audit Trail
+    // 4. Pre-warm / refresh AI Market Intelligence & Opportunities in background if target is 'all' or 'insights'
+    let aiRefreshStatus: { opportunities?: string; forecast?: string } = {};
+    if (target === "all" || target === "insights" || target === "ai") {
+      try {
+        const { generateFullOpportunityReport } = await import("@/lib/opportunity-seeker");
+        const { generateAiMarketForecast } = await import("@/lib/market-forecaster");
+        const { appSettings } = await import("@/db/schema");
+        const { eq } = await import("drizzle-orm");
+
+        const [oppReport, forecastReport] = await Promise.allSettled([
+          generateFullOpportunityReport(),
+          generateAiMarketForecast(),
+        ]);
+
+        const updateData: any = { updatedAt: new Date() };
+        if (oppReport.status === "fulfilled") {
+          updateData.savedOpportunityReport = oppReport.value;
+          aiRefreshStatus.opportunities = "refreshed";
+        }
+        if (forecastReport.status === "fulfilled") {
+          updateData.savedMarketForecast = forecastReport.value;
+          aiRefreshStatus.forecast = "refreshed";
+        }
+
+        if (oppReport.status === "fulfilled" || forecastReport.status === "fulfilled") {
+          await db.update(appSettings).set(updateData).where(eq(appSettings.id, "default"));
+        }
+      } catch (aiErr: any) {
+        console.warn("[Cron AI Pre-warm Notice]:", aiErr?.message || aiErr);
+        aiRefreshStatus.opportunities = "failed_gracefully";
+      }
+    }
+
+    // 5. Record Activity Notification for Audit Trail
     await db.insert(activityNotifications).values({
       type: "system_alert",
       title: `⏰ Cron Trigger: ${target.toUpperCase()}`,
-      message: `External cron triggered GitHub Actions: ${JSON.stringify(results.githubActionsDispatched)}`,
+      message: `External cron triggered GitHub Actions: ${JSON.stringify(results.githubActionsDispatched)}${Object.keys(aiRefreshStatus).length > 0 ? ` | AI Refresh: ${JSON.stringify(aiRefreshStatus)}` : ""}`,
       severity: "info",
       actionUrl: "/analytics",
     });
@@ -112,7 +145,7 @@ async function handleCronTrigger(req: NextRequest) {
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
-      details: results,
+      details: { ...results, aiRefreshStatus },
     });
   } catch (err: any) {
     console.error("[Cron Trigger Error]:", err);

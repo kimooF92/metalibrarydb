@@ -556,25 +556,27 @@ function cleanAndParseJson<T>(rawText: string): T | null {
 }
 
 // ---------------------------------------------------------------------------
-// OPENROUTER CALL RUNNER (WITH CASCADE)
+// MULTI-PROVIDER HIGH-SPEED AI PIPELINE (OpenRouter / Gemini / Groq / OpenAI)
 // ---------------------------------------------------------------------------
 
-const DEEPSEEK_MODELS = [
+const FAST_AI_MODELS = [
+  "google/gemini-2.5-flash",
   "deepseek/deepseek-chat",
-  "deepseek/deepseek-v4-pro",
-  "deepseek/deepseek-r1",
+  "meta-llama/llama-3.3-70b-instruct",
 ];
 
-async function callOpenRouterWithFallback<T>(
+async function callAiWithFallback<T>(
   systemPrompt: string,
   userPrompt: string,
-  openRouterKey?: string
+  maxOutputTokens: number = 2200
 ): Promise<{ data: T | null; modelUsed: string }> {
-  if (!openRouterKey || openRouterKey.trim() === "") {
-    return { data: null, modelUsed: "offline" };
-  }
+  const openRouterKey = process.env.OPENROUTER_API_KEY || process.env.OPEN_ROUTER_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  const groqKey = process.env.GROQ_API_KEY;
+  const openAiKey = process.env.OPENAI_API_KEY;
 
-  for (const model of DEEPSEEK_MODELS) {
+  // 1. Primary: OpenRouter Fast Cascade (Gemini Flash + DeepSeek + Llama 3.3)
+  if (openRouterKey && openRouterKey.trim() !== "") {
     try {
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
@@ -585,16 +587,18 @@ async function callOpenRouterWithFallback<T>(
           "X-Title": "Tunisian Meta Opportunity Seeker",
         },
         body: JSON.stringify({
-          model,
+          model: "google/gemini-2.5-flash",
+          models: FAST_AI_MODELS.slice(0, 3),
           temperature: 0.2,
-          max_tokens: 1800,
+          max_tokens: maxOutputTokens,
+          reasoning: { max_tokens: 0 },
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
           ],
           response_format: { type: "json_object" },
         }),
-        signal: AbortSignal.timeout(45000),
+        signal: AbortSignal.timeout(18000),
       });
 
       if (response.ok) {
@@ -602,11 +606,118 @@ async function callOpenRouterWithFallback<T>(
         const content = json.choices?.[0]?.message?.content || json.choices?.[0]?.message?.reasoning;
         const parsed = cleanAndParseJson<T>(content);
         if (parsed) {
-          return { data: parsed, modelUsed: model };
+          return { data: parsed, modelUsed: json.model || "openrouter/cascade" };
         }
       }
     } catch (err: any) {
-      console.warn(`[OpenRouter Sub-Prompt Warning] Model ${model}:`, err?.message || err);
+      console.warn("[OpenRouter AI Cascade Notice]:", err?.message || err);
+    }
+  }
+
+  // 2. Direct Google Gemini API Fallback
+  if (geminiKey && geminiKey.trim() !== "") {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey.trim()}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [{ text: `${systemPrompt}\n\nUSER INPUT:\n${userPrompt}` }],
+              },
+            ],
+            generationConfig: {
+              responseMimeType: "application/json",
+              temperature: 0.2,
+              maxOutputTokens: maxOutputTokens,
+            },
+          }),
+          signal: AbortSignal.timeout(15000),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        const parsed = cleanAndParseJson<T>(rawText);
+        if (parsed) {
+          return { data: parsed, modelUsed: "google/gemini-2.0-flash" };
+        }
+      }
+    } catch (geminiErr: any) {
+      console.warn("[Gemini Direct Notice]:", geminiErr?.message || geminiErr);
+    }
+  }
+
+  // 3. Direct Groq API Fallback
+  if (groqKey && groqKey.trim() !== "") {
+    try {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${groqKey.trim()}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          temperature: 0.2,
+          max_tokens: maxOutputTokens,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          response_format: { type: "json_object" },
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const rawContent = data.choices?.[0]?.message?.content;
+        const parsed = cleanAndParseJson<T>(rawContent);
+        if (parsed) {
+          return { data: parsed, modelUsed: "groq/llama-3.3-70b" };
+        }
+      }
+    } catch (groqErr: any) {
+      console.warn("[Groq Direct Notice]:", groqErr?.message || groqErr);
+    }
+  }
+
+  // 4. Direct OpenAI Fallback
+  if (openAiKey && openAiKey.trim() !== "") {
+    try {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openAiKey.trim()}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          temperature: 0.2,
+          max_tokens: maxOutputTokens,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          response_format: { type: "json_object" },
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const rawContent = data.choices?.[0]?.message?.content;
+        const parsed = cleanAndParseJson<T>(rawContent);
+        if (parsed) {
+          return { data: parsed, modelUsed: "openai/gpt-4o-mini" };
+        }
+      }
+    } catch (openAiErr: any) {
+      console.warn("[OpenAI Direct Notice]:", openAiErr?.message || openAiErr);
     }
   }
 
@@ -621,11 +732,10 @@ async function callOpenRouterWithFallback<T>(
  * Stage 1: Market Velocity & Niche Saturation Specialist Prompt
  */
 async function runStage1NicheAnalysis(
-  telemetry: MarketOpportunityTelemetry,
-  openRouterKey?: string
+  telemetry: MarketOpportunityTelemetry
 ): Promise<{ result: Stage1NicheAnalysis; modelUsed: string }> {
   const systemPrompt = `You are a Senior Tunisian E-Commerce & Meta Media Buying Intelligence Specialist.
-Your mission: Analyze category velocity, scaling vs descaling brand signals, and clone saturation from the live telemetry.
+Analyze category velocity, scaling vs descaling brand signals, and clone saturation from the live telemetry.
 Evaluate which niches offer high-margin Blue Ocean opportunities vs Red Ocean saturated traps.
 
 Return ONLY a valid JSON object matching this schema:
@@ -652,20 +762,29 @@ Return ONLY a valid JSON object matching this schema:
   ]
 }`;
 
+  const topCatsCompact = telemetry.categoryBreakdown.slice(0, 7).map((c) => ({
+    category: c.category,
+    products: c.productCount,
+    stores: c.storeCount,
+    avgPriceTND: Math.round(c.avgPriceTND),
+    activeAds: c.activeAdsCount,
+    new7d: c.newAds7dCount,
+  }));
+
   const userContent = `LIVE TUNISIAN MARKET TELEMETRY:
 - Active Ads: ${telemetry.totalActiveAds} (${telemetry.newAdsLast7Days} new in 7d)
 - Scaling Brands: ${telemetry.scalingBrandsCount} (+${telemetry.totalAdsScaled} ads)
 - Descaling Brands: ${telemetry.descalingBrandsCount} (-${telemetry.totalAdsDescaled} ads)
 - Video Ad Dominance: ${telemetry.videoPercent}% video vs ${telemetry.imagePercent}% image
-- Category Matrix:
-${JSON.stringify(telemetry.categoryBreakdown, null, 2)}
-- Cross-Store Clone Saturation (Multi-domain products):
-${JSON.stringify(telemetry.topClonedProducts, null, 2)}`;
+- Category Breakdown:
+${JSON.stringify(topCatsCompact, null, 2)}
+- Top Cloned Multi-Store Products:
+${JSON.stringify(telemetry.topClonedProducts.slice(0, 5), null, 2)}`;
 
-  const { data, modelUsed } = await callOpenRouterWithFallback<Stage1NicheAnalysis>(
+  const { data, modelUsed } = await callAiWithFallback<Stage1NicheAnalysis>(
     systemPrompt,
     userContent,
-    openRouterKey
+    1800
   );
 
   if (data && Array.isArray(data.rankedNiches) && data.rankedNiches.length > 0) {
@@ -684,11 +803,10 @@ ${JSON.stringify(telemetry.topClonedProducts, null, 2)}`;
  */
 async function runStage2SeasonalityAnalysis(
   seasonalityCtx: TunisianSeasonalityContext,
-  telemetry: MarketOpportunityTelemetry,
-  openRouterKey?: string
+  telemetry: MarketOpportunityTelemetry
 ): Promise<{ result: Stage2SeasonalityAnalysis; modelUsed: string }> {
   const systemPrompt = `You are a Tunisian Consumer Behavior & Seasonality Strategist.
-Your mission: Analyze the current calendar date, upcoming Tunisian holidays (Ramadan, Eid al-Fitr, Eid al-Adha, Mouled, Summer wedding season, Rentrée Scolaire), and regional purchasing power across Tunisian governorates.
+Analyze the current calendar date, upcoming Tunisian holidays/events, and regional purchasing power across Tunisian governorates.
 Map out actionable macro waves and geographic directives for COD media buying.
 
 Return ONLY a valid JSON object matching this schema:
@@ -715,14 +833,12 @@ Return ONLY a valid JSON object matching this schema:
 - Active Seasonal Window: ${seasonalityCtx.activeSeasonalWindow}
 - Upcoming Key Events & Holidays:
 ${JSON.stringify(seasonalityCtx.upcomingKeyEvents, null, 2)}
-- Regional Demographics:
-${JSON.stringify(seasonalityCtx.regionalDemographics, null, 2)}
 - COD Economics: Confirmation ${seasonalityCtx.codEconomics.avgConfirmationRate}, Delivery ${seasonalityCtx.codEconomics.avgDeliverySuccessRate}`;
 
-  const { data, modelUsed } = await callOpenRouterWithFallback<Stage2SeasonalityAnalysis>(
+  const { data, modelUsed } = await callAiWithFallback<Stage2SeasonalityAnalysis>(
     systemPrompt,
     userContent,
-    openRouterKey
+    1600
   );
 
   if (data && data.currentSeasonalPhase && data.seasonalRoadmap) {
@@ -743,14 +859,13 @@ async function runStage3ProductBlueprints(
   stage1: Stage1NicheAnalysis,
   stage2: Stage2SeasonalityAnalysis,
   seasonalityCtx: TunisianSeasonalityContext,
-  telemetry: MarketOpportunityTelemetry,
-  openRouterKey?: string
+  telemetry: MarketOpportunityTelemetry
 ): Promise<{ result: Stage3ProductBlueprints; modelUsed: string }> {
   const systemPrompt = `You are an Elite Meta Direct-Response Creative Director & Sourcing Consultant for Tunisia.
-Your mission: Generate 4 to 6 HIGH-CONVICTION product testing blueprints to launch and test RIGHT NOW in the Tunisian market.
+Generate 4 to 5 HIGH-CONVICTION product testing blueprints to launch and test RIGHT NOW in the Tunisian market.
 
 Rules:
-- Realistic Tunisian Dinar pricing (e.g. 39 DT, 49 DT, 69 DT, 79 DT, 99 DT).
+- Realistic Tunisian Dinar pricing (e.g. 39 DT, 49 DT, 59 DT, 69 DT, 79 DT, 99 DT).
 - Hooks MUST be bilingual Tunisian Darija (Arabic script or Franco-Arabe) & French (the real language used in high-converting Tunisian Meta ads).
 - Format recommendation (Video hook-first vs Carousel).
 - 3-second visual hook (what the user actually sees on screen).
@@ -786,19 +901,22 @@ Return ONLY a valid JSON object matching this schema:
   ]
 }`;
 
+  const topNichesSummary = stage1.rankedNiches.slice(0, 3).map((n) => `${n.niche} (Score ${n.opportunityScore}/100)`).join(", ");
+  const redFlagsSummary = stage1.redFlagNiches.map((r) => r.niche).join(", ");
+
   const userContent = `SYNTHESIZED OPPORTUNITY CONTEXT:
-- Top Niches Identified: ${stage1.rankedNiches.slice(0, 3).map((n) => `${n.niche} (Score ${n.opportunityScore}/100)`).join(", ")}
+- Top Niches Identified: ${topNichesSummary}
 - Active Seasonal Phase: ${stage2.currentSeasonalPhase}
 - Active Seasonal Wave This Week: ${stage2.seasonalRoadmap.activeWaveThisWeek}
 - Next 30 Days Wave: ${stage2.seasonalRoadmap.next30DaysWave}
 - Video Ad Market Share: ${telemetry.videoPercent}%
 - Ad Copy Triggers: Arabic Script ${telemetry.copyPsychology.arabicScriptPercent}%, French ${telemetry.copyPsychology.frenchPercent}%, Free Delivery ${telemetry.copyPsychology.freeDeliveryTriggerPercent}%
-- Avoid Red Flags in: ${stage1.redFlagNiches.map((r) => r.niche).join(", ")}`;
+- Avoid Red Flags in: ${redFlagsSummary || "None"}`;
 
-  const { data, modelUsed } = await callOpenRouterWithFallback<Stage3ProductBlueprints>(
+  const { data, modelUsed } = await callAiWithFallback<Stage3ProductBlueprints>(
     systemPrompt,
     userContent,
-    openRouterKey
+    2200
   );
 
   if (data && Array.isArray(data.highConvictionProducts) && data.highConvictionProducts.length > 0) {
@@ -819,12 +937,11 @@ Return ONLY a valid JSON object matching this schema:
 export async function generateFullOpportunityReport(): Promise<UnifiedOpportunityReport> {
   const telemetry = await extractMarketOpportunityTelemetry();
   const seasonalityCtx = calculateTunisianSeasonalityContext();
-  const openRouterKey = process.env.OPENROUTER_API_KEY || process.env.OPEN_ROUTER_API_KEY;
 
   // Step 1 & Step 2: Run Stage 1 (Niche Velocity) and Stage 2 (Seasonality) IN PARALLEL
   const [stage1Res, stage2Res] = await Promise.all([
-    runStage1NicheAnalysis(telemetry, openRouterKey),
-    runStage2SeasonalityAnalysis(seasonalityCtx, telemetry, openRouterKey),
+    runStage1NicheAnalysis(telemetry),
+    runStage2SeasonalityAnalysis(seasonalityCtx, telemetry),
   ]);
 
   // Step 3: Run Stage 3 (Product Blueprints) with synthesized outputs from Stage 1 & Stage 2
@@ -832,8 +949,7 @@ export async function generateFullOpportunityReport(): Promise<UnifiedOpportunit
     stage1Res.result,
     stage2Res.result,
     seasonalityCtx,
-    telemetry,
-    openRouterKey
+    telemetry
   );
 
   const modelUsed = stage1Res.modelUsed !== "offline_rules" ? stage1Res.modelUsed : stage3Res.modelUsed;

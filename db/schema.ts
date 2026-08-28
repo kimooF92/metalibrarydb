@@ -350,7 +350,7 @@ export const activityNotifications = pgTable(
   ]
 );
 
-// 12. Application Settings Table (Dynamic Configuration)
+// 12. Application Settings Table (Dynamic Configuration & Persistent Intelligence Reports)
 export const appSettings = pgTable("app_settings", {
   id: text("id").primaryKey().default("default"),
   defaultCountry: text("default_country").default("TN").notNull(),
@@ -359,5 +359,7 @@ export const appSettings = pgTable("app_settings", {
   autoSpyThreshold: integer("auto_spy_threshold").default(1).notNull(),
   discoveryWindowDays: integer("discovery_window_days").default(7).notNull(),
   autoB2Backup: boolean("auto_b2_backup").default(true).notNull(),
+  savedOpportunityReport: json("saved_opportunity_report"),
+  savedMarketForecast: json("saved_market_forecast"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

@@ -46,7 +46,7 @@ export default function OpportunitiesPage() {
 
     const fetchPersistedReport = async () => {
       try {
-        const res = await fetch("/api/analytics/opportunities");
+        const res = await fetch("/api/analytics/opportunities?auto=true");
         if (res.ok) {
           const json = await res.json();
           if (json.report) {

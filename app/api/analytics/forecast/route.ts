@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateAiMarketForecast, MarketOpportunityResearch } from "@/lib/market-forecaster";
 import { validateApiSecret } from "@/lib/api-guard";
+import { db } from "@/db";
+import { appSettings } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import fs from "fs/promises";
 import path from "path";
 
@@ -16,6 +19,24 @@ let inMemoryForecast: MarketOpportunityResearch | null = null;
 
 async function loadPersistedForecast(): Promise<MarketOpportunityResearch | null> {
   if (inMemoryForecast) return inMemoryForecast;
+
+  // 1. Try Loading from Supabase PostgreSQL (Persistent across cold starts)
+  try {
+    const [settings] = await db
+      .select({ savedMarketForecast: appSettings.savedMarketForecast })
+      .from(appSettings)
+      .where(eq(appSettings.id, "default"))
+      .limit(1);
+
+    if (settings?.savedMarketForecast) {
+      inMemoryForecast = settings.savedMarketForecast as MarketOpportunityResearch;
+      return inMemoryForecast;
+    }
+  } catch (dbErr) {
+    console.warn("[Forecast DB Read Notice]:", dbErr);
+  }
+
+  // 2. Fallback to Local Filesystem Cache
   try {
     const data = await fs.readFile(CACHE_FILE, "utf-8");
     inMemoryForecast = JSON.parse(data) as MarketOpportunityResearch;
@@ -27,22 +48,51 @@ async function loadPersistedForecast(): Promise<MarketOpportunityResearch | null
 
 async function savePersistedForecast(forecast: MarketOpportunityResearch) {
   inMemoryForecast = forecast;
+
+  // 1. Save to Supabase PostgreSQL
+  try {
+    await db
+      .update(appSettings)
+      .set({
+        savedMarketForecast: forecast as any,
+        updatedAt: new Date(),
+      })
+      .where(eq(appSettings.id, "default"));
+  } catch (dbErr) {
+    console.error("[Forecast DB Write Error]:", dbErr);
+  }
+
+  // 2. Secondary Local Filesystem Cache
   try {
     await fs.mkdir(CACHE_DIR, { recursive: true });
     await fs.writeFile(CACHE_FILE, JSON.stringify(forecast, null, 2), "utf-8");
   } catch (err) {
-    console.error("[Forecast Cache Write Error]:", err);
+    console.error("[Forecast File Cache Write Error]:", err);
   }
 }
 
 /**
- * GET: Fetch the saved forecast from persistent storage ($0 OpenRouter tokens consumed)
+ * GET: Fetch the saved forecast from persistent database/cache.
+ * If no forecast exists yet or ?auto=true is passed, automatically generates live AI forecast.
  */
 export async function GET(req: NextRequest) {
   const authError = await validateApiSecret(req);
   if (authError) return authError;
 
-  const saved = await loadPersistedForecast();
+  const { searchParams } = new URL(req.url);
+  const autoGenerate = searchParams.get("auto") === "true";
+
+  let saved = await loadPersistedForecast();
+
+  // If no forecast exists yet, or autoGenerate requested, run AI generator automatically
+  if (!saved && autoGenerate) {
+    try {
+      saved = await generateAiMarketForecast();
+      await savePersistedForecast(saved);
+    } catch (err: any) {
+      console.error("[Auto Forecast Generation Error]:", err);
+    }
+  }
 
   return NextResponse.json({
     forecast: saved,
@@ -51,7 +101,7 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * POST: Explicit user trigger to generate a fresh forecast with DeepSeek on OpenRouter
+ * POST: Explicit user trigger to generate a fresh forecast with fast multi-model AI
  */
 export async function POST(req: NextRequest) {
   const authError = await validateApiSecret(req);

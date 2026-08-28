@@ -38,7 +38,7 @@ export function MarketForecastCard() {
 
     const fetchPersistedResearch = async () => {
       try {
-        const res = await fetch("/api/analytics/forecast");
+        const res = await fetch("/api/analytics/forecast?auto=true");
         if (res.ok) {
           const json = await res.json();
           if (json.forecast) {
