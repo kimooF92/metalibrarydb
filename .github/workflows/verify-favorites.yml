@@ -10,7 +10,7 @@ on:
         description: 'Force recheck ALL ads (including inactive/archived to restore them)'
         type: boolean
         required: false
-        default: false
+        default: true
       limit:
         description: 'Maximum products to check per run (leave empty for all favorites)'
         required: false
