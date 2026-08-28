@@ -10,12 +10,16 @@ echo.
 set "MODE_ARGS=%*"
 
 if "%~1"=="" (
-    echo Select Check Mode:
-    echo  [1] Quick Check  - Check active ads (skips already inactive products)
-    echo  [2] Full Recheck - Check ALL ads (re-checks inactive/archived to restore them)
+    echo Select Verification Mode:
+    echo  [1] Pending Only - Scan ONLY products queued from UI (Fastest, ~3s)
+    echo  [2] Quick Check  - Routine favorites check (skips inactive products)
+    echo  [3] Full Recheck - Check ALL ads from scratch (including stopped ones)
     echo.
-    set /p choice="Enter choice [1 or 2, default is 1]: "
-    if "%choice%"=="2" set "MODE_ARGS=--force"
+    set /p choice="Enter choice [1, 2, or 3, default is 1]: "
+    if "%choice%"=="1" set "MODE_ARGS=--pending"
+    if "%choice%"=="2" set "MODE_ARGS="
+    if "%choice%"=="3" set "MODE_ARGS=--force"
+    if "%choice%"=="" set "MODE_ARGS=--pending"
 )
 
 echo.
