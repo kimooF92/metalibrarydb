@@ -680,7 +680,7 @@ ${imagesText}`;
                   <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">
                     {product.title || "Product Landing Page"}
                   </h2>
-                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                     {product.brandPageId ? (
                       <a
                         href={`/spy/brand/${encodeURIComponent(product.brandPageId)}?tab=products`}
@@ -698,6 +698,19 @@ ${imagesText}`;
                       <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                         • {product.domain}
                       </span>
+                    )}
+
+                    {product.url && (
+                      <a
+                        href={product.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs font-mono text-indigo-600 dark:text-indigo-400 hover:underline truncate max-w-xs"
+                        title={product.url}
+                      >
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{product.url}</span>
+                      </a>
                     )}
 
                     {typeof product.activeAdsCount === "number" && product.activeAdsCount === 0 && (
@@ -876,6 +889,22 @@ ${imagesText}`;
                   <span>Visit Store</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
+
+                {/* Direct Visible Delete Product Button */}
+                {onDelete && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onDelete(product.id);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800/80 rounded-lg shadow-xs transition-all cursor-pointer"
+                    title="Delete Tracked Product"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                    <span>Delete</span>
+                  </button>
+                )}
 
                 {/* More Actions Dropdown */}
                 <div className="relative" ref={actionsMenuRef}>

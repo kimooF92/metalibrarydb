@@ -507,6 +507,11 @@ export function ProductAnalyticsTab({
           product={selectedProduct}
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
+          onDelete={async (productId) => {
+            await fetch(`/api/products?id=${productId}`, { method: "DELETE" });
+            setIsModalOpen(false);
+            onRefresh();
+          }}
         />
       )}
     </div>

@@ -306,6 +306,25 @@ export default function BrandDeepDivePage({
     }
   };
 
+  // Delete individual product
+  const handleDeleteProduct = async (productId: string) => {
+    try {
+      await fetch(`/api/products?id=${productId}`, { method: "DELETE" });
+      showToast({
+        type: "info",
+        title: "Product Deleted",
+        message: "Product removed from brand catalog.",
+      });
+      await fetchBrandData();
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Delete Error",
+        message: err.message || "Failed to delete product.",
+      });
+    }
+  };
+
   // View creatives for a specific product
   const handleViewCreativesForProduct = (product: any) => {
     setFilteredProductForCreatives({
@@ -1402,6 +1421,7 @@ export default function BrandDeepDivePage({
         }}
         product={selectedProductForModal}
         onRefresh={handleRefreshProduct}
+        onDelete={handleDeleteProduct}
       />
 
       {/* Export LLM Intelligence Dossier Modal */}

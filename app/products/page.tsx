@@ -202,6 +202,24 @@ export default function ProductsPage() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, [products]);
 
+  // Continuous sync between active modal state and URL address bar
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (isModalOpen && selectedProduct?.id) {
+      if (url.searchParams.get("id") !== selectedProduct.id) {
+        url.searchParams.set("id", selectedProduct.id);
+        window.history.replaceState(null, "", url.toString());
+      }
+    } else if (!isModalOpen) {
+      if (url.searchParams.has("id") || url.searchParams.has("productId")) {
+        url.searchParams.delete("id");
+        url.searchParams.delete("productId");
+        window.history.replaceState(null, "", url.toString());
+      }
+    }
+  }, [isModalOpen, selectedProduct]);
+
   const fetchProducts = useCallback(
     async (targetPage = 1, append = false) => {
       // Abort any in-flight requests to eliminate connection-pool pileups
@@ -545,7 +563,7 @@ export default function ProductsPage() {
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
       url.searchParams.set("id", product.id);
-      window.history.pushState({ productId: product.id }, "", url.toString());
+      window.history.replaceState(null, "", url.toString());
     }
   };
 
