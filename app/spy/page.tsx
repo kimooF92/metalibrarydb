@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { Ad } from "@/types";
 import { useAdFeed, useAdStats } from "@/hooks/use-spy";
@@ -11,7 +11,7 @@ import { ApifyCreditBadge } from "@/components/apify-credit-badge";
 import { useToast } from "@/components/toast-context";
 import { Layers, Calendar, Video, Image as ImageIcon, RefreshCw, Eye, ArrowUp } from "lucide-react";
 
-export default function AdSpyPage() {
+function AdSpyContent() {
   const {
     ads,
     pagination,
@@ -341,5 +341,13 @@ export default function AdSpyPage() {
         </button>
       )}
     </div>
+  );
+}
+
+export default function AdSpyPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdSpyContent />
+    </Suspense>
   );
 }

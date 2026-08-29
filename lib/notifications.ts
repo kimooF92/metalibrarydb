@@ -88,8 +88,10 @@ export async function logCountScanNotification(params: {
   currentResults: number | null;
   difference: number | null;
   status: "success" | "failed" | "unclear";
+  pageId?: string | null;
 }) {
-  const { trackedPageId, brandName, currentResults, difference, status } = params;
+  const { trackedPageId, brandName, currentResults, difference, status, pageId } = params;
+  const brandPath = `/spy/brand/${encodeURIComponent(pageId || trackedPageId)}`;
 
   // 1. Log errors or unclear navigation warnings
   if (status !== "success") {
@@ -100,7 +102,7 @@ export async function logCountScanNotification(params: {
       severity: "warning",
       trackedPageId,
       actionUrl: `/?search=${encodeURIComponent(brandName)}`,
-      metadata: { currentResults, difference, status },
+      metadata: { currentResults, difference, status, brandName, pageId },
     });
   }
 
@@ -115,8 +117,8 @@ export async function logCountScanNotification(params: {
       message: `"${brandName}" paused all active ads (${Math.abs(diffNum)} ads turned off, 0 active ads remaining).`,
       severity: "warning",
       trackedPageId,
-      actionUrl: `/spy?trackedPageId=${trackedPageId}`,
-      metadata: { currentResults: 0, difference: diffNum, brandName, wentDark: true },
+      actionUrl: brandPath,
+      metadata: { currentResults: 0, difference: diffNum, brandName, pageId, wentDark: true },
     });
   }
 
@@ -128,8 +130,8 @@ export async function logCountScanNotification(params: {
       message: `"${brandName}" is running a massive catalog of ${currentResults} active ads (+${diffNum} new). High-priority Apify cloud scan auto-triggered.`,
       severity: "success",
       trackedPageId,
-      actionUrl: `/spy?trackedPageId=${trackedPageId}`,
-      metadata: { currentResults, difference: diffNum, brandName, isMegaBrand: true, isSurge: diffNum >= 5, highPriority: true },
+      actionUrl: brandPath,
+      metadata: { currentResults, difference: diffNum, brandName, pageId, isMegaBrand: true, isSurge: diffNum >= 5, highPriority: true },
     });
   }
 
@@ -141,8 +143,8 @@ export async function logCountScanNotification(params: {
       message: `"${brandName}" aggressively launched +${diffNum} new ad creatives! Total active ads: ${currentResults ?? 0}. Apify cloud scan auto-triggered.`,
       severity: "success",
       trackedPageId,
-      actionUrl: `/spy?trackedPageId=${trackedPageId}`,
-      metadata: { currentResults, difference: diffNum, brandName, isSurge: true, highPriority: true },
+      actionUrl: brandPath,
+      metadata: { currentResults, difference: diffNum, brandName, pageId, isSurge: true, highPriority: true },
     });
   }
 
@@ -154,8 +156,8 @@ export async function logCountScanNotification(params: {
       message: `"${brandName}" launched +${diffNum} new ad(s). Queued for free local scan ($0 credits).`,
       severity: "info",
       trackedPageId,
-      actionUrl: `/spy?trackedPageId=${trackedPageId}`,
-      metadata: { currentResults, difference: diffNum, brandName, queuedForLocalScan: true },
+      actionUrl: brandPath,
+      metadata: { currentResults, difference: diffNum, brandName, pageId, queuedForLocalScan: true },
     });
   }
 
@@ -167,8 +169,8 @@ export async function logCountScanNotification(params: {
       message: `"${brandName}" paused ${Math.abs(diffNum)} ad(s). Total active ads: ${currentResults ?? 0}.`,
       severity: "info",
       trackedPageId,
-      actionUrl: `/spy?trackedPageId=${trackedPageId}`,
-      metadata: { currentResults, difference: diffNum, brandName },
+      actionUrl: brandPath,
+      metadata: { currentResults, difference: diffNum, brandName, pageId },
     });
   }
 
@@ -186,14 +188,16 @@ export async function logAdSpyNotification(params: {
   extractedCount: number;
   isFullScan?: boolean;
   archivedCount?: number;
+  pageId?: string | null;
 }) {
-  const { trackedPageId, brandName, extractedCount, isFullScan, archivedCount } = params;
+  const { trackedPageId, brandName, extractedCount, isFullScan, archivedCount, pageId } = params;
 
   // Don't log spammy 0-item notifications for delta scans where no new ads were found
   if (extractedCount === 0 && !isFullScan && (!archivedCount || archivedCount === 0)) {
     return null;
   }
 
+  const brandPath = `/spy/brand/${encodeURIComponent(pageId || trackedPageId)}`;
   const title = `✨ +${extractedCount} Creatives Synced: ${brandName}`;
   let message = `Ingested ${extractedCount} ad creative(s) for "${brandName}".`;
   if (archivedCount && archivedCount > 0) {
@@ -206,8 +210,8 @@ export async function logAdSpyNotification(params: {
     message,
     severity: "success",
     trackedPageId,
-    actionUrl: `/spy?trackedPageId=${trackedPageId}`,
-    metadata: { extractedCount, isFullScan, archivedCount, brandName },
+    actionUrl: brandPath,
+    metadata: { extractedCount, isFullScan, archivedCount, brandName, pageId },
   });
 }
 
@@ -217,6 +221,7 @@ export interface BatchSummaryMover {
   extractedCount?: number;
   currentResults?: number;
   trackedPageId?: string;
+  pageId?: string;
 }
 
 export interface LogBatchSummaryParams {
@@ -286,12 +291,19 @@ export async function logBatchSummaryNotification(params: LogBatchSummaryParams)
     message += ` (${timeStr})`;
   }
 
+  const defaultActionUrl =
+    runnerType === "apify_spy"
+      ? "/spy?sortBy=started_running_on&sortOrder=desc"
+      : runnerType === "count_worker"
+      ? "/?sortBy=difference&sortOrder=desc"
+      : "/discovery";
+
   return createNotification({
     type: "batch_summary",
     title,
     message,
     severity,
-    actionUrl: actionUrl || (runnerType === "apify_spy" ? "/spy" : "/"),
+    actionUrl: actionUrl || defaultActionUrl,
     metadata: {
       runnerType,
       totalScanned,

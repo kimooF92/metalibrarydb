@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Bell,
@@ -43,6 +44,7 @@ interface NotificationCenterProps {
 }
 
 export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: NotificationCenterProps) {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<ActivityNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -416,11 +418,38 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                 const isSurge = n.metadata?.isSurge === true;
                 const isQueued = n.metadata?.queuedForLocalScan === true;
 
+                const getActionLabel = () => {
+                  const runnerType = n.metadata?.runnerType as string | undefined;
+                  const newAdsCount = n.metadata?.newAdsCount as number | undefined;
+                  const moversCount = movers.length;
+
+                  if (n.type === "batch_summary" && runnerType === "apify_spy") {
+                    return newAdsCount ? `⚡ Explore ${newAdsCount} Creatives →` : "⚡ Explore Synced Feed →";
+                  }
+                  if (n.type === "batch_summary" && runnerType === "count_worker") {
+                    return moversCount > 0 ? `🚀 View ${moversCount} Movers on Dashboard →` : "📊 View Dashboard →";
+                  }
+                  if (n.type === "batch_summary" && runnerType === "discovery") {
+                    return "🌐 Review Discovered Brands →";
+                  }
+                  if (isWentDark) return "🚨 Inspect Brand History →";
+                  if (isMegaBrand) return "👑 Open Brand Profile →";
+                  if (isSurge) return "🚀 View Brand Surge →";
+                  if (isQueued) return "⚡ Open Brand Profile →";
+                  return "Open Brand Profile →";
+                };
+
                 return (
                   <div
                     key={n.id}
-                    onClick={() => !n.isRead && handleMarkSingleRead(n.id)}
-                    className={`relative p-3.5 flex items-start space-x-3 transition-colors cursor-pointer ${
+                    onClick={() => {
+                      if (!n.isRead) handleMarkSingleRead(n.id);
+                      if (n.actionUrl && n.type !== "multi_page_detected") {
+                        setIsOpen(false);
+                        router.push(n.actionUrl);
+                      }
+                    }}
+                    className={`relative p-3.5 flex items-start space-x-3 transition-colors cursor-pointer group ${
                       n.isRead
                         ? "bg-transparent hover:bg-slate-50/50 dark:hover:bg-slate-800/30 opacity-75 hover:opacity-100"
                         : isWentDark
@@ -479,19 +508,29 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                       {/* Movers Pills for Batch Count Summaries */}
                       {n.type === "batch_summary" && movers.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 pt-0.5">
-                          {movers.slice(0, 4).map((m, idx) => (
-                            <Link
-                              key={idx}
-                              href={m.trackedPageId ? `/spy?trackedPageId=${m.trackedPageId}` : `/?search=${encodeURIComponent(m.name)}`}
-                              onClick={() => setIsOpen(false)}
-                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/60 text-[10px] font-semibold text-slate-700 dark:text-slate-200 hover:border-indigo-500/40 dark:hover:border-indigo-500/40 transition-colors"
-                            >
-                              <span>{m.name}</span>
-                              <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">
-                                +{m.extractedCount || m.diff || 1}
-                              </span>
-                            </Link>
-                          ))}
+                          {movers.slice(0, 4).map((m, idx) => {
+                            const moverUrl = m.pageId
+                              ? `/spy/brand/${encodeURIComponent(m.pageId)}`
+                              : m.trackedPageId
+                              ? `/spy/brand/${encodeURIComponent(m.trackedPageId)}`
+                              : `/?search=${encodeURIComponent(m.name)}`;
+                            return (
+                              <Link
+                                key={idx}
+                                href={moverUrl}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setIsOpen(false);
+                                }}
+                                className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/60 text-[10px] font-semibold text-slate-700 dark:text-slate-200 hover:border-indigo-500/40 dark:hover:border-indigo-500/40 transition-colors"
+                              >
+                                <span>{m.name}</span>
+                                <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">
+                                  +{m.extractedCount || m.diff || 1}
+                                </span>
+                              </Link>
+                            );
+                          })}
                           {movers.length > 4 && (
                             <span className="text-[10px] text-slate-400 self-center">
                               +{movers.length - 4} more
@@ -507,7 +546,10 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                             <Link
                               key={idx}
                               href={`/?search=${encodeURIComponent(b.name)}`}
-                              onClick={() => setIsOpen(false)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setIsOpen(false);
+                              }}
                               className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-200/80 dark:border-cyan-800/60 text-[10px] font-semibold text-cyan-800 dark:text-cyan-200 hover:border-cyan-500 transition-colors"
                             >
                               <span>{b.name}</span>
@@ -538,10 +580,14 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                         {n.actionUrl && n.type !== "multi_page_detected" && (
                           <Link
                             href={n.actionUrl}
-                            onClick={() => setIsOpen(false)}
-                            className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200 dark:hover:bg-slate-700/80 text-[10px] font-semibold border border-slate-200 dark:border-slate-700/80 transition-all active:scale-95 shadow-2xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsOpen(false);
+                              if (!n.isRead) handleMarkSingleRead(n.id);
+                            }}
+                            className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 hover:bg-slate-200 dark:hover:bg-slate-700/80 text-[10px] font-semibold border border-slate-200 dark:border-slate-700/80 transition-all active:scale-95 shadow-2xs"
                           >
-                            <span>View Details</span>
+                            <span>{getActionLabel()}</span>
                             <ExternalLink className="w-2.5 h-2.5 opacity-70" />
                           </Link>
                         )}

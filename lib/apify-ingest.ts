@@ -633,6 +633,7 @@ export async function ingestApifyDatasetItems(
     brandName: detectedPageName || pageRecord?.displayName || "Tracked Brand",
     extractedCount,
     isFullScan,
+    pageId: detectedPageId || pageRecord?.pageId || null,
   });
 
   return { success: true, extractedCount };

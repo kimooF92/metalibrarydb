@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { Ad, AdSpyStats, AdFilterParams, PaginationMeta, BrandOption } from "@/types";
 
 const VALID_SPY_STATUSES = ["all", "active", "inactive", "archived", "unknown"] as const;
@@ -303,7 +304,32 @@ function syncSpyParamsToUrlAndStorage(params: AdFilterParams, skipStorage = fals
 }
 
 export function useSpy(initialParams?: AdFilterParams) {
+  const searchParams = useSearchParams();
   const [params, setParams] = useState<AdFilterParams>(() => getInitialSpyParams(initialParams));
+
+  // Re-sync params when searchParams changes (e.g. from internal router navigation or notification click)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (initialParams?.trackedPageId || initialParams?.enabled !== undefined || initialParams?.productId) {
+      return;
+    }
+    const newParams = getInitialSpyParams(initialParams);
+    setParams((prev) => {
+      const keys: (keyof AdFilterParams)[] = [
+        "trackedPageId",
+        "search",
+        "sortBy",
+        "sortOrder",
+        "smartPreset",
+        "mediaType",
+        "status",
+        "page",
+      ];
+      const hasChanged = keys.some((k) => prev[k] !== newParams[k]);
+      if (!hasChanged) return prev;
+      return { ...prev, ...newParams };
+    });
+  }, [searchParams, initialParams]);
 
   // Sync state if initialParams props explicitly update
   useEffect(() => {

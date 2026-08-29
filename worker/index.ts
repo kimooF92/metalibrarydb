@@ -153,7 +153,7 @@ async function runWorker() {
   let ranJobs = 0;
   let sessionScanned = 0;
   let sessionErrors = 0;
-  const sessionMovers: Array<{ name: string; diff: number; currentResults: number; trackedPageId: string }> = [];
+  const sessionMovers: Array<{ name: string; diff: number; currentResults: number; trackedPageId: string; pageId?: string }> = [];
   let sessionStartTime = Date.now();
   let lastBackoffNotifiedAt = 0;
   let lastRateCapNotifiedAt = 0;
@@ -170,7 +170,7 @@ async function runWorker() {
           unchangedCount: sessionScanned - sessionMovers.length - sessionErrors,
           failedCount: sessionErrors,
           durationSeconds: Math.round((Date.now() - sessionStartTime) / 1000),
-          actionUrl: "/",
+          actionUrl: "/?sortBy=difference&sortOrder=desc",
         });
       } catch (err) {
         console.error("[Worker] Failed to emit batch summary:", err);
@@ -459,6 +459,7 @@ async function runWorker() {
               diff: res.difference,
               currentResults: res.results || 0,
               trackedPageId: trackedPage.id,
+              pageId: trackedPage.pageId || undefined,
             });
           }
 

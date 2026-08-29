@@ -290,7 +290,7 @@ async function main() {
   let successCount = 0;
   let totalAdsIngested = 0;
   let failedCount = 0;
-  const movers: Array<{ name: string; extractedCount: number; currentResults?: number; trackedPageId: string }> = [];
+  const movers: Array<{ name: string; extractedCount: number; currentResults?: number; trackedPageId: string; pageId?: string }> = [];
 
   for (let i = 0; i < selectedPlans.length; i++) {
     const { page, delta, isFullScan } = selectedPlans[i];
@@ -375,6 +375,7 @@ async function main() {
             extractedCount: pollResult.extractedCount,
             currentResults: page.currentResults || 0,
             trackedPageId: page.id,
+            pageId: page.pageId || undefined,
           });
         }
       } else {
@@ -428,7 +429,7 @@ async function main() {
         movers,
         unchangedCount: selectedPlans.length - movers.length - failedCount,
         failedCount,
-        actionUrl: "/spy",
+        actionUrl: "/spy?sortBy=started_running_on&sortOrder=desc",
       });
     } catch (err) {
       console.error("Failed to log batch summary notification:", err);

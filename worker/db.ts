@@ -542,7 +542,7 @@ export async function markJobCompleted(
   try {
     const trackedPage = await db.query.trackedPages.findFirst({
       where: eq(trackedPages.id, pageId),
-      columns: { displayName: true, url: true },
+      columns: { displayName: true, url: true, pageId: true },
     });
     brandName = trackedPage?.displayName || trackedPage?.url || "Tracked Brand";
     const { logCountScanNotification } = await import("../lib/notifications");
@@ -552,6 +552,7 @@ export async function markJobCompleted(
       currentResults: results,
       difference,
       status,
+      pageId: trackedPage?.pageId || null,
     });
   } catch {}
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { TrackedPage, DashboardStats } from "@/types";
 import { StatsCards } from "@/components/stats-cards";
 import { AddUrlForm } from "@/components/add-url-form";
@@ -145,7 +146,8 @@ function syncDashboardStateToUrl(state: {
   }
 }
 
-export default function DashboardPage() {
+function DashboardContent() {
+  const searchParams = useSearchParams();
   const [initialLoaded] = useState(() => getInitialDashboardState());
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -168,6 +170,42 @@ export default function DashboardPage() {
   const [pageSize, setPageSize] = useState(initialLoaded.pageSize);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+
+  // Sync state when URL query params change (e.g. from internal router navigation or notification click)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has("search")) {
+      setSearch(urlParams.get("search") || "");
+    }
+    if (urlParams.has("status")) {
+      const s = urlParams.get("status");
+      if (s && VALID_STATUSES.includes(s as any)) setStatusFilter(s as any);
+    }
+    if (urlParams.has("searchType")) {
+      const st = urlParams.get("searchType");
+      if (st && VALID_SEARCH_TYPES.includes(st as any)) setSearchTypeFilter(st as any);
+    }
+    if (urlParams.has("tab")) {
+      const t = urlParams.get("tab");
+      if (t && VALID_TABS.includes(t as any)) setActiveTab(t as any);
+    }
+    if (urlParams.has("sortBy")) {
+      const sb = urlParams.get("sortBy");
+      if (sb && VALID_SORT_COLS.includes(sb as any)) setSortBy(sb as any);
+    }
+    if (urlParams.has("sortOrder")) {
+      const so = urlParams.get("sortOrder");
+      if (so === "asc" || so === "desc") setSortOrder(so);
+    }
+    if (urlParams.has("page")) {
+      setPage(Math.max(1, Number(urlParams.get("page")) || 1));
+    }
+    if (urlParams.has("limit")) {
+      const l = Number(urlParams.get("limit"));
+      if (VALID_PAGE_SIZES.includes(l as any)) setPageSize(l as any);
+    }
+  }, [searchParams]);
 
   // Sync state to URL and session storage
   useEffect(() => {
@@ -504,8 +542,8 @@ export default function DashboardPage() {
 
       {/* Track URL / Bulk File Import Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4">
-          <div className="bg-slate-950 border border-slate-800/80 p-5 sm:p-6 rounded-2xl max-w-2xl w-full shadow-2xl relative animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in">
+          <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
             <button
               onClick={() => {
                 setShowAddModal(false);
@@ -561,5 +599,13 @@ export default function DashboardPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <DashboardContent />
+    </Suspense>
   );
 }
