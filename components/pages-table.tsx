@@ -715,7 +715,54 @@ export function PagesTable({
                   <Star className="w-3 h-3 text-slate-400 dark:text-slate-500 mx-auto" />
                 </th>
                 <SortHeader col="displayName" label="Brand" className="min-w-[180px]" />
-                <SortHeader col="currentResults" label="Active Ads & Trend" className="w-48" />
+                <th className="px-3 py-2 whitespace-nowrap w-56">
+                  <div className="flex items-center gap-1.5 font-semibold text-[11px] select-none">
+                    <button
+                      onClick={() => onSortChange("currentResults")}
+                      className={`flex items-center gap-0.5 group transition-colors cursor-pointer ${
+                        sortBy === "currentResults"
+                          ? "text-indigo-600 dark:text-indigo-400 font-bold"
+                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                      }`}
+                      title="Sort by Total Active Ads volume"
+                    >
+                      <span>Active Ads</span>
+                      {sortBy === "currentResults" ? (
+                        sortOrder === "asc" ? (
+                          <ChevronUp className="w-3 h-3 text-indigo-500" />
+                        ) : (
+                          <ChevronDown className="w-3 h-3 text-indigo-500" />
+                        )
+                      ) : (
+                        <ChevronsUpDown className="w-2.5 h-2.5 opacity-30 group-hover:opacity-70" />
+                      )}
+                    </button>
+
+                    <span className="text-slate-300 dark:text-slate-700 font-normal">/</span>
+
+                    <button
+                      onClick={() => onSortChange("difference")}
+                      className={`flex items-center gap-0.5 group transition-colors cursor-pointer ${
+                        sortBy === "difference"
+                          ? "text-emerald-700 dark:text-emerald-400 font-bold"
+                          : "text-slate-600 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-emerald-300"
+                      }`}
+                      title="Sort by Net New Creatives Added (Top Gainers & Scalers)"
+                    >
+                      <ArrowUpRight className="w-3 h-3" />
+                      <span>+Δ New</span>
+                      {sortBy === "difference" ? (
+                        sortOrder === "asc" ? (
+                          <ChevronUp className="w-3 h-3 text-emerald-500" />
+                        ) : (
+                          <ChevronDown className="w-3 h-3 text-emerald-500" />
+                        )
+                      ) : (
+                        <ChevronsUpDown className="w-2.5 h-2.5 opacity-30 group-hover:opacity-70" />
+                      )}
+                    </button>
+                  </div>
+                </th>
                 <th className="px-3 py-2 text-center whitespace-nowrap text-slate-400 font-medium w-24" title="Unique products catalog">
                   <span className="inline-flex items-center justify-center gap-1">
                     <Package className="w-3 h-3 text-slate-400" />
