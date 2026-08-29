@@ -32,7 +32,6 @@ import {
   Star,
   AlertTriangle,
   StickyNote,
-  Eye,
   Sparkles,
   Clock,
   CheckCircle2,
@@ -769,6 +768,7 @@ export function PagesTable({
                     Products
                   </span>
                 </th>
+                <SortHeader col="status" label="Status" className="hidden lg:table-cell w-28" />
                 <SortHeader col="lastChecked" label="Last Checked" className="w-36" />
                 <th className="px-3 py-2 text-right whitespace-nowrap text-slate-400 font-medium w-28">Actions</th>
               </tr>
@@ -776,14 +776,14 @@ export function PagesTable({
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-slate-500 dark:text-slate-400">
+                  <td colSpan={8} className="px-4 py-12 text-center text-slate-500 dark:text-slate-400">
                     <Loader2 className="w-6 h-6 animate-spin text-indigo-500 dark:text-indigo-400 mx-auto mb-2" />
                     <span>Loading tracked pages...</span>
                   </td>
                 </tr>
               ) : pages.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-16 text-center">
+                  <td colSpan={8} className="px-4 py-16 text-center">
                     <div className="flex flex-col items-center justify-center max-w-md mx-auto space-y-3">
                       <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center text-slate-400">
                         <Filter className="w-6 h-6 opacity-60" />
@@ -1092,6 +1092,46 @@ export function PagesTable({
                         </Link>
                       </td>
 
+                      {/* Status (Wide Screens Only) */}
+                      <td className="px-3 py-2 hidden lg:table-cell whitespace-nowrap">
+                        {p.status === "success" && (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10.5px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                            <span>Succeeded</span>
+                          </span>
+                        )}
+                        {p.status === "pending" && (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10.5px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                            <Clock className="w-2.5 h-2.5 shrink-0" />
+                            <span>Pending</span>
+                          </span>
+                        )}
+                        {p.status === "scanning" && (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10.5px] font-semibold bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border border-cyan-500/20 animate-pulse">
+                            <Loader2 className="w-2.5 h-2.5 animate-spin shrink-0 text-cyan-500" />
+                            <span>Scanning</span>
+                          </span>
+                        )}
+                        {p.status === "failed" && (
+                          <span
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10.5px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20"
+                            title={p.failureReason || "Scan failed"}
+                          >
+                            <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                            <span>Failed</span>
+                          </span>
+                        )}
+                        {p.status === "unclear" && (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10.5px] font-semibold bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-500/20">
+                            <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                            <span>Unclear</span>
+                          </span>
+                        )}
+                        {!p.status && (
+                          <span className="text-slate-400 text-xs">—</span>
+                        )}
+                      </td>
+
                       {/* Last Checked (Relative Timestamps) */}
                       <td className="px-3 py-2 text-slate-500 dark:text-slate-400 text-[11px] whitespace-nowrap">
                         <div className="flex flex-col gap-0.5">
@@ -1142,15 +1182,6 @@ export function PagesTable({
                           >
                             <Sparkles className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
                           </button>
-
-                          <Link
-                            href={`/spy/brand/${encodeURIComponent(p.pageId || p.id || "")}`}
-                            className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer inline-flex items-center justify-center"
-                            title="Open Brand Deep-Dive & Analytics"
-                            aria-label={`Open Brand Deep-Dive & Analytics for ${p.displayName || "tracked page"}`}
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </Link>
 
                           <button
                             onClick={() => onRefresh([p.id])}
