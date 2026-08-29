@@ -67,7 +67,7 @@ async function pollAndIngestApifyRun(
   runId: string,
   defaultDatasetId: string | undefined,
   maxWaitSeconds: number
-): Promise<{ success: boolean; extractedCount: number; error?: string }> {
+): Promise<{ success: boolean; extractedCount: number; newProductsCount: number; error?: string }> {
   const startTime = Date.now();
   const maxWaitMs = maxWaitSeconds * 1000;
   let resolvedDatasetId = defaultDatasetId;
@@ -85,13 +85,17 @@ async function pollAndIngestApifyRun(
 
     if (status === "SUCCEEDED") {
       if (!resolvedDatasetId) {
-        return { success: false, extractedCount: 0, error: "Run succeeded but no dataset ID found" };
+        return { success: false, extractedCount: 0, newProductsCount: 0, error: "Run succeeded but no dataset ID found" };
       }
       console.log(`✅ [Apify Succeeded] Fetching dataset items for Dataset: ${resolvedDatasetId}...`);
       const items = await fetchApifyDatasetItems(resolvedDatasetId);
       console.log(`📦 [Apify Ingest] Received ${items.length} raw item(s). Ingesting to DB...`);
       const ingestResult = await ingestApifyDatasetItems(scanId, items);
-      return { success: true, extractedCount: ingestResult.extractedCount };
+      return {
+        success: true,
+        extractedCount: ingestResult.extractedCount,
+        newProductsCount: ingestResult.newProductsCount || 0,
+      };
     }
 
     if (status === "FAILED" || status === "ABORTED" || status === "TIMED-OUT") {
@@ -104,7 +108,7 @@ async function pollAndIngestApifyRun(
           finishedAt: new Date(),
         })
         .where(eq(creativeScans.id, scanId));
-      return { success: false, extractedCount: 0, error: `Apify run status: ${status}` };
+      return { success: false, extractedCount: 0, newProductsCount: 0, error: `Apify run status: ${status}` };
     }
 
     console.log(`⏳ [Apify Poller] Status: ${status} (elapsed: ${Math.round((Date.now() - startTime) / 1000)}s)...`);
@@ -122,7 +126,7 @@ async function pollAndIngestApifyRun(
     })
     .where(eq(creativeScans.id, scanId));
 
-  return { success: false, extractedCount: 0, error: `Timed out waiting for Apify run after ${maxWaitSeconds}s` };
+  return { success: false, extractedCount: 0, newProductsCount: 0, error: `Timed out waiting for Apify run after ${maxWaitSeconds}s` };
 }
 
 interface TargetScanPlan {
@@ -289,8 +293,16 @@ async function main() {
   // 4. Process each page sequentially with Apify
   let successCount = 0;
   let totalAdsIngested = 0;
+  let totalProductsIngested = 0;
   let failedCount = 0;
-  const movers: Array<{ name: string; extractedCount: number; currentResults?: number; trackedPageId: string; pageId?: string }> = [];
+  const movers: Array<{
+    name: string;
+    extractedCount: number;
+    newProductsCount?: number;
+    currentResults?: number;
+    trackedPageId: string;
+    pageId?: string;
+  }> = [];
 
   for (let i = 0; i < selectedPlans.length; i++) {
     const { page, delta, isFullScan } = selectedPlans[i];
@@ -366,13 +378,15 @@ async function main() {
       );
 
       if (pollResult.success) {
-        console.log(`🎉 Successfully ingested ${pollResult.extractedCount} ad(s) for "${pageName}".`);
+        console.log(`🎉 Successfully ingested ${pollResult.extractedCount} ad(s) and ${pollResult.newProductsCount} product(s) for "${pageName}".`);
         successCount++;
         totalAdsIngested += pollResult.extractedCount;
-        if (pollResult.extractedCount > 0) {
+        totalProductsIngested += pollResult.newProductsCount || 0;
+        if (pollResult.extractedCount > 0 || (pollResult.newProductsCount && pollResult.newProductsCount > 0)) {
           movers.push({
             name: pageName,
             extractedCount: pollResult.extractedCount,
+            newProductsCount: pollResult.newProductsCount || 0,
             currentResults: page.currentResults || 0,
             trackedPageId: page.id,
             pageId: page.pageId || undefined,
@@ -426,6 +440,7 @@ async function main() {
         runnerType: "apify_spy",
         totalScanned: selectedPlans.length,
         newAdsCount: totalAdsIngested,
+        newProductsCount: totalProductsIngested,
         movers,
         unchangedCount: selectedPlans.length - movers.length - failedCount,
         failedCount,
@@ -443,6 +458,7 @@ async function main() {
   console.log(`Successful Scans               : ${successCount}`);
   console.log(`Failed Scans                   : ${failedCount}`);
   console.log(`Total Ad Creatives Ingested    : ${totalAdsIngested}`);
+  console.log(`Total Product Pages Ingested   : ${totalProductsIngested}`);
   console.log("=================================================\n");
 
   process.exit(failedCount > 0 && successCount === 0 ? 1 : 0);

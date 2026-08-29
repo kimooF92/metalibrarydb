@@ -163,26 +163,35 @@ export async function logAdSpyNotification(params: {
   extractedCount: number;
   isFullScan?: boolean;
   archivedCount?: number;
+  newProductsCount?: number;
   pageId?: string | null;
 }) {
-  const { trackedPageId, brandName, extractedCount, isFullScan, archivedCount, pageId } = params;
+  const { trackedPageId, brandName, extractedCount, isFullScan, archivedCount, newProductsCount = 0, pageId } = params;
 
-  // Don't log spammy 0-item notifications for delta scans where no new ads were found
-  if (extractedCount === 0 && !isFullScan && (!archivedCount || archivedCount === 0)) {
+  // Don't log spammy 0-item notifications for delta scans where no new ads or products were found
+  if (extractedCount === 0 && !isFullScan && (!archivedCount || archivedCount === 0) && newProductsCount === 0) {
     return null;
   }
 
   const brandPath = `/spy/brand/${encodeURIComponent(pageId || trackedPageId)}`;
 
-  if (extractedCount > 0) {
+  if (extractedCount > 0 || newProductsCount > 0) {
+    let title = `✨ Ingested ${extractedCount} New Ad(s): ${brandName}`;
+    let message = `Extracted and stored ${extractedCount} new creative media assets & ad archive records for "${brandName}".`;
+
+    if (newProductsCount > 0) {
+      title = `✨ Ingested ${extractedCount} Ad(s) & ${newProductsCount} New Product(s): ${brandName}`;
+      message = `Extracted ${extractedCount} ad creative(s) and discovered ${newProductsCount} new product landing page(s) for "${brandName}".`;
+    }
+
     return createNotification({
       type: "ad_spy",
-      title: `✨ Ingested ${extractedCount} New Ad(s): ${brandName}`,
-      message: `Extracted and stored ${extractedCount} new creative media assets & ad archive records for "${brandName}".`,
+      title,
+      message,
       severity: "success",
       trackedPageId,
       actionUrl: brandPath,
-      metadata: { extractedCount, isFullScan, brandName, pageId },
+      metadata: { extractedCount, isFullScan, newProductsCount, brandName, pageId },
     });
   }
 
@@ -205,6 +214,7 @@ export interface BatchSummaryMover {
   name: string;
   diff?: number;
   extractedCount?: number;
+  newProductsCount?: number;
   currentResults?: number;
   trackedPageId?: string;
   pageId?: string;
@@ -214,6 +224,7 @@ export interface LogBatchSummaryParams {
   runnerType: "count_worker" | "apify_spy" | "discovery";
   totalScanned: number;
   newAdsCount?: number;
+  newProductsCount?: number;
   movers?: BatchSummaryMover[];
   unchangedCount?: number;
   failedCount?: number;
@@ -230,6 +241,7 @@ export async function logBatchSummaryNotification(params: LogBatchSummaryParams)
     runnerType,
     totalScanned,
     newAdsCount = 0,
+    newProductsCount = 0,
     movers = [],
     unchangedCount = 0,
     failedCount = 0,
@@ -252,10 +264,21 @@ export async function logBatchSummaryNotification(params: LogBatchSummaryParams)
 
   if (runnerType === "apify_spy") {
     title = `${shardPrefix}⚡ Apify Spy Sync (${totalScanned} Brands)`;
-    if (newAdsCount > 0) {
+    if (newAdsCount > 0 || newProductsCount > 0) {
       severity = "success";
-      const moverSummary = movers.slice(0, 3).map((m) => `${m.name} (+${m.extractedCount || m.diff || 1})`).join(", ");
-      message = `Ingested ${newAdsCount} new ad creatives across ${movers.length} active advertiser(s): ${moverSummary}${movers.length > 3 ? ` +${movers.length - 3} more` : ""}.`;
+      const moverSummary = movers.slice(0, 3).map((m) => {
+        const adCount = m.extractedCount || m.diff || 0;
+        const prodCount = m.newProductsCount || 0;
+        if (adCount > 0 && prodCount > 0) {
+          return `${m.name} (+${adCount} ads, +${prodCount} prods)`;
+        } else if (prodCount > 0) {
+          return `${m.name} (+${prodCount} prods)`;
+        }
+        return `${m.name} (+${adCount || 1})`;
+      }).join(", ");
+
+      const productPart = newProductsCount > 0 ? ` and ${newProductsCount} new product landing page(s)` : "";
+      message = `Ingested ${newAdsCount} new ad creatives${productPart} across ${movers.length} active advertiser(s): ${moverSummary}${movers.length > 3 ? ` +${movers.length - 3} more` : ""}.`;
     } else {
       message = `All ${totalScanned} advertiser catalogs up to date (no new creatives detected).`;
     }
@@ -302,6 +325,7 @@ export async function logBatchSummaryNotification(params: LogBatchSummaryParams)
       runnerType,
       totalScanned,
       newAdsCount,
+      newProductsCount,
       movers,
       unchangedCount,
       failedCount,

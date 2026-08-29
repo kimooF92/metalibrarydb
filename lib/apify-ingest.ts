@@ -214,7 +214,7 @@ export function extractPageInfo(item: any): { pageId: string | null; pageName: s
 export async function ingestApifyDatasetItems(
   creativeScanId: string,
   items: any[]
-): Promise<{ success: boolean; extractedCount: number }> {
+): Promise<{ success: boolean; extractedCount: number; newProductsCount: number }> {
   const scanRecord = await db.query.creativeScans.findFirst({
     where: eq(creativeScans.id, creativeScanId),
   });
@@ -225,7 +225,7 @@ export async function ingestApifyDatasetItems(
 
   if (scanRecord.status === "completed") {
     console.log(`[Apify Ingest] Scan ${creativeScanId} is already marked completed. Skipping duplicate ingestion.`);
-    return { success: true, extractedCount: scanRecord.extractedCount || 0 };
+    return { success: true, extractedCount: scanRecord.extractedCount || 0, newProductsCount: 0 };
   }
 
   const trackedPageId = scanRecord.trackedPageId;
@@ -235,6 +235,7 @@ export async function ingestApifyDatasetItems(
 
   const now = new Date();
   let extractedCount = 0;
+  let newProductsCount = 0;
   let detectedPageId: string | null = null;
   let detectedPageName: string | null = null;
   const discoveredPagesMap = new Map<string, { pageId: string; pageName: string | null; adCount: number }>();
@@ -464,12 +465,19 @@ export async function ingestApifyDatasetItems(
 
       // 3. Automated Product Landing Page Extraction & Background Scraper Trigger
       if (linkUrl) {
-        linkAndAutoScrapeProduct({
-          adId: upsertedAd.id,
-          linkUrl,
-          pageId: pageId || trackedPageId,
-          adCopy: caption,
-        }).catch((e) => console.warn(`[Apify Ingest] Auto-scrape product warning for ${adArchiveId}:`, e.message));
+        try {
+          const prodRes = await linkAndAutoScrapeProduct({
+            adId: upsertedAd.id,
+            linkUrl,
+            pageId: pageId || trackedPageId,
+            adCopy: caption,
+          });
+          if (prodRes?.isNew) {
+            newProductsCount++;
+          }
+        } catch (e: any) {
+          console.warn(`[Apify Ingest] Auto-scrape product warning for ${adArchiveId}:`, e.message);
+        }
       }
 
       extractedCount++;
@@ -633,8 +641,9 @@ export async function ingestApifyDatasetItems(
     brandName: detectedPageName || pageRecord?.displayName || "Tracked Brand",
     extractedCount,
     isFullScan,
+    newProductsCount,
     pageId: detectedPageId || pageRecord?.pageId || null,
   });
 
-  return { success: true, extractedCount };
+  return { success: true, extractedCount, newProductsCount };
 }

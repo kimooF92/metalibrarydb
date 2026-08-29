@@ -31,6 +31,7 @@ export interface ExtractedAdData {
 export interface SpyScanOutcome {
   status: "completed" | "partial" | "failed";
   extractedCount: number;
+  newProductsCount?: number;
   extractedPageIds?: string[];
   failureReason?: "captcha" | "rate_limited" | "payload_not_found" | "parse_error" | "timeout";
   outcomeDetails?: string;
@@ -563,6 +564,7 @@ export async function scanAdCreatives(
 
     // 4. Save extracted ads and observations transactionally
     let savedCount = 0;
+    let newProductsCount = 0;
 
     for (const adData of collectedAds.values()) {
       let finalMediaUrls = adData.mediaUrls || [];
@@ -713,12 +715,19 @@ export async function scanAdCreatives(
 
         // Automated Product Landing Page Extraction & Background Scraper Trigger
         if (adData.linkUrl) {
-          linkAndAutoScrapeProduct({
-            adId: upsertedAd.id,
-            linkUrl: adData.linkUrl,
-            pageId: trackedPageId,
-            adCopy: adData.caption,
-          }).catch((e) => console.warn(`[Worker Spy Scanner] Auto-scrape product warning:`, e.message));
+          try {
+            const prodRes = await linkAndAutoScrapeProduct({
+              adId: upsertedAd.id,
+              linkUrl: adData.linkUrl,
+              pageId: trackedPageId,
+              adCopy: adData.caption,
+            });
+            if (prodRes?.isNew) {
+              newProductsCount++;
+            }
+          } catch (e: any) {
+            console.warn(`[Worker Spy Scanner] Auto-scrape product warning:`, e.message);
+          }
         }
 
         savedCount++;
@@ -753,13 +762,15 @@ export async function scanAdCreatives(
     return {
       status: finalStatus,
       extractedCount: savedCount,
+      newProductsCount,
       extractedPageIds,
-      outcomeDetails: `Successfully extracted and normalized ${savedCount} ad creatives.`,
+      outcomeDetails: `Successfully extracted and normalized ${savedCount} ad creatives${newProductsCount > 0 ? ` and ${newProductsCount} new product(s)` : ""}.`,
     };
   } catch (err: any) {
     return {
       status: "failed",
       extractedCount: collectedAds.size,
+      newProductsCount: 0,
       failureReason: "timeout",
       outcomeDetails: err.message || "Creative scan failed",
     };

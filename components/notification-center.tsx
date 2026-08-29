@@ -417,6 +417,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                 const isMegaBrand = n.metadata?.isMegaBrand === true || (typeof n.metadata?.currentResults === "number" && n.metadata.currentResults >= 50);
                 const isSurge = n.metadata?.isSurge === true;
                 const isQueued = n.metadata?.queuedForLocalScan === true;
+                const newProductsCount = (n.metadata?.newProductsCount as number) || 0;
 
                 const getActionLabel = () => {
                   const runnerType = n.metadata?.runnerType as string | undefined;
@@ -424,7 +425,12 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                   const moversCount = movers.length;
 
                   if (n.type === "batch_summary" && runnerType === "apify_spy") {
-                    return newAdsCount ? `⚡ Explore ${newAdsCount} Creatives →` : "⚡ Explore Synced Feed →";
+                    if (newAdsCount && newProductsCount) {
+                      return `⚡ Explore ${newAdsCount} Creatives & ${newProductsCount} Products →`;
+                    }
+                    if (newAdsCount) return `⚡ Explore ${newAdsCount} Creatives →`;
+                    if (newProductsCount) return `🛍️ Explore ${newProductsCount} New Products →`;
+                    return "⚡ Explore Synced Feed →";
                   }
                   if (n.type === "batch_summary" && runnerType === "count_worker") {
                     return moversCount > 0 ? `🚀 View ${moversCount} Movers on Dashboard →` : "📊 View Dashboard →";
@@ -475,6 +481,11 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                           >
                             {n.title}
                           </h4>
+                          {newProductsCount > 0 && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 shrink-0 border border-indigo-500/30">
+                              🛍️ +{newProductsCount} {newProductsCount === 1 ? "Product" : "Products"}
+                            </span>
+                          )}
                           {isWentDark && (
                             <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-rose-500/20 text-rose-600 dark:text-rose-400 shrink-0">
                               DARK
@@ -528,6 +539,11 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                                 <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">
                                   +{m.extractedCount || m.diff || 1}
                                 </span>
+                                {m.newProductsCount && m.newProductsCount > 0 ? (
+                                  <span className="text-indigo-600 dark:text-indigo-400 font-extrabold text-[9.5px]">
+                                    🛍️+{m.newProductsCount}
+                                  </span>
+                                ) : null}
                               </Link>
                             );
                           })}
