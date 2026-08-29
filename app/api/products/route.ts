@@ -129,12 +129,12 @@ export async function GET(req: NextRequest) {
     if (smartPreset === "breakout") {
       conditions.push(
         sql`EXISTS (
-          SELECT 1 FROM ${ads} a
-          JOIN ${adObservations} ao ON ao.ad_id = a.id
-          WHERE a.product_id = ${scrapedProducts.id}
-          AND (a.is_archived = false OR a.is_archived IS NULL)
+          SELECT 1 FROM ${ads}
+          JOIN ${adObservations} ON ${adObservations.adId} = ${ads.id}
+          WHERE ${ads.productId} = ${scrapedProducts.id}
+          AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
           AND (${ads.startedRunningOn} >= NOW() - INTERVAL '7 days' OR ${ads.firstSeenAt} >= NOW() - INTERVAL '7 days')
-          AND ao.duplication_count >= 3
+          AND ${adObservations.duplicationCount} >= 3
         )`
       );
     }
