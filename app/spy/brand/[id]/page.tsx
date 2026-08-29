@@ -51,6 +51,7 @@ import {
   Zap,
   Check,
   RotateCw,
+  DollarSign,
 } from "lucide-react";
 
 interface BrandAnalyticsData {
@@ -102,6 +103,24 @@ interface BrandAnalyticsData {
     veteranPercent: number;
   };
   ctaDistribution: Array<{ cta: string; count: number; percent: number }>;
+  launchVelocity?: {
+    launchedLast7Days: number;
+    launchedLast30Days: number;
+    activeRetentionRate: number;
+    longestRunningDays: number;
+    avgLifespanDays: number;
+    testingIntensity: string;
+  };
+  commercialStrategy?: {
+    totalCatalogProducts: number;
+    scrapedProductsCount: number;
+    minPrice: number | null;
+    maxPrice: number | null;
+    avgPrice: number | null;
+    currency: string;
+    discountedProductsCount: number;
+    hasFreeDelivery: boolean;
+  };
   productClusters: Array<{
     productKey: string;
     productName: string;
@@ -439,7 +458,39 @@ export default function BrandDeepDivePage({
     );
   }
 
-  const { brand, summary, mediaDistribution, longevityDistribution, ctaDistribution, productClusters, topWinners, history, storeTech } = data;
+  const {
+    brand,
+    summary,
+    mediaDistribution,
+    longevityDistribution,
+    ctaDistribution,
+    launchVelocity: rawLaunchVelocity,
+    commercialStrategy: rawCommercialStrategy,
+    productClusters,
+    topWinners,
+    history,
+    storeTech,
+  } = data;
+
+  const launchVelocity = rawLaunchVelocity || {
+    launchedLast7Days: longevityDistribution?.fresh || 0,
+    launchedLast30Days: (longevityDistribution?.fresh || 0) + (longevityDistribution?.scaling || 0),
+    activeRetentionRate: summary.totalAdsCaptured > 0 ? Math.round((summary.activeAdsCount / summary.totalAdsCaptured) * 100) : 0,
+    longestRunningDays: topWinners[0]?.daysRunning || 0,
+    avgLifespanDays: 14,
+    testingIntensity: "Active Testing",
+  };
+
+  const commercialStrategy = rawCommercialStrategy || {
+    totalCatalogProducts: data.products?.length || 0,
+    scrapedProductsCount: data.products?.filter((p) => p.scrapeStatus === "success")?.length || 0,
+    minPrice: null,
+    maxPrice: null,
+    avgPrice: null,
+    currency: "TND",
+    discountedProductsCount: 0,
+    hasFreeDelivery: false,
+  };
 
   const historyPoints = [...(history || [])]
     .map((h) => h.results)
@@ -811,71 +862,123 @@ export default function BrandDeepDivePage({
             </div>
           </div>
 
-          {/* Funnel Diagnostics & Store Tech */}
+          {/* Diagnostic Cards: Creative Launch Velocity & Commercial Strategy */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Top CTAs */}
-            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 p-4 shadow-sm">
-              <div className="flex items-center gap-1.5 pb-2 mb-3 border-b border-slate-100 dark:border-slate-800 text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                <Tag className="w-4 h-4 text-blue-500" />
-                <span>Call to Actions (CTAs)</span>
+            {/* 1. Creative Launch Velocity & Testing Cadence */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 p-4 shadow-xs space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  <Zap className="w-4 h-4 text-amber-500" />
+                  <span>Creative Launch Velocity</span>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                  {launchVelocity.launchedLast7Days >= 10
+                    ? "⚡ High Velocity"
+                    : launchVelocity.launchedLast7Days >= 3
+                    ? "⚡ Active Testing"
+                    : "🟢 Maintenance"}
+                </span>
               </div>
-              <div className="space-y-1.5 text-xs">
-                {ctaDistribution.slice(0, 5).map((item) => (
-                  <div key={item.cta} className="flex items-center justify-between p-1.5 rounded-lg bg-slate-50 dark:bg-slate-900/60">
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">{item.cta}</span>
-                    <span className="text-slate-500 font-mono font-bold">{item.count} ads ({item.percent}%)</span>
-                  </div>
-                ))}
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800/60">
+                  <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider block">Last 7 Days</span>
+                  <span className="text-base font-black text-slate-900 dark:text-white mt-0.5 block">
+                    {launchVelocity.launchedLast7Days} <span className="text-[10px] font-medium text-slate-500">new ads</span>
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800/60">
+                  <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider block">Last 30 Days</span>
+                  <span className="text-base font-black text-slate-900 dark:text-white mt-0.5 block">
+                    {launchVelocity.launchedLast30Days} <span className="text-[10px] font-medium text-slate-500">new ads</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300 pt-1">
+                <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-slate-900">
+                  <span className="text-slate-500">Active Retention Rate:</span>
+                  <span className="font-bold text-slate-900 dark:text-white">{launchVelocity.activeRetentionRate}% of tested ads active</span>
+                </div>
+                <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-slate-900">
+                  <span className="text-slate-500">Longest Running Winner:</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">{launchVelocity.longestRunningDays} days active</span>
+                </div>
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-slate-500">Average Creative Lifespan:</span>
+                  <span className="font-bold text-slate-900 dark:text-white">{launchVelocity.avgLifespanDays} days</span>
+                </div>
               </div>
             </div>
 
-            {/* Store Platform & Tracking Tech */}
-            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 p-4 shadow-sm">
-              <div className="flex items-center gap-1.5 pb-2 mb-3 border-b border-slate-100 dark:border-slate-800 text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                <Globe className="w-4 h-4 text-indigo-500" />
-                <span>Detected Funnel & Tech Stack</span>
+            {/* 2. Commercial Strategy & Store Footprint */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 p-4 shadow-xs space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  <DollarSign className="w-4 h-4 text-emerald-500" />
+                  <span>Commercial & Store Footprint</span>
+                </div>
+                {commercialStrategy.minPrice && (
+                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                    {commercialStrategy.minPrice} – {commercialStrategy.maxPrice} {commercialStrategy.currency}
+                  </span>
+                )}
               </div>
-              <div className="space-y-2 text-xs">
-                <div>
-                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Store Platform:</span>
-                  <div className="flex gap-1.5 mt-1 flex-wrap">
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800/60">
+                  <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider block">Average Price Ticket</span>
+                  <span className="text-base font-black text-slate-900 dark:text-white mt-0.5 block font-mono">
+                    {commercialStrategy.avgPrice ? `${commercialStrategy.avgPrice} ${commercialStrategy.currency}` : "—"}
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800/60">
+                  <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider block">Store Platform</span>
+                  <div className="mt-1 flex gap-1 flex-wrap">
                     {storeTech.platforms.length > 0 ? (
                       storeTech.platforms.map((p) => (
-                        <span key={p} className="px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800 text-[11px]">
+                        <span key={p} className="px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold text-[10.5px]">
                           {p.toUpperCase()}
                         </span>
                       ))
                     ) : (
-                      <span className="text-slate-400">Standard Meta Ad Funnel</span>
+                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Standard Meta Store</span>
                     )}
                   </div>
                 </div>
+              </div>
 
+              <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300 pt-1">
                 {storeTech.pixelIds.length > 0 && (
-                  <div>
-                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Meta Pixel IDs:</span>
-                    <div className="flex gap-1.5 mt-1 flex-wrap font-mono text-[11px]">
-                      {storeTech.pixelIds.map((px) => (
-                        <span key={px} className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300">
+                  <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-slate-900">
+                    <span className="text-slate-500">Meta Pixels ({storeTech.pixelIds.length}):</span>
+                    <div className="flex gap-1 flex-wrap">
+                      {storeTech.pixelIds.slice(0, 2).map((px) => (
+                        <span key={px} className="font-mono text-[10px] text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-800">
                           {px}
                         </span>
                       ))}
                     </div>
                   </div>
                 )}
-
                 {storeTech.whatsappNumbers.length > 0 && (
-                  <div>
-                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">WhatsApp Channels:</span>
-                    <div className="flex gap-1.5 mt-1 flex-wrap text-[11px]">
-                      {storeTech.whatsappNumbers.map((w) => (
-                        <span key={w} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-semibold border border-emerald-200 dark:border-emerald-800">
-                          <MessageCircle className="w-3 h-3" /> {w}
-                        </span>
-                      ))}
-                    </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-slate-900">
+                    <span className="text-slate-500">WhatsApp Sales:</span>
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                      <MessageCircle className="w-3 h-3" /> {storeTech.whatsappNumbers[0]}
+                    </span>
                   </div>
                 )}
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-slate-500">Catalog Depth:</span>
+                  <button
+                    onClick={() => setActiveTab("products")}
+                    className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>{commercialStrategy.totalCatalogProducts} products detected</span>
+                    <ArrowUpRight className="w-3 h-3" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>

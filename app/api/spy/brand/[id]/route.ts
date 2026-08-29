@@ -462,6 +462,87 @@ export async function GET(
       if (p.whatsappNumbers) p.whatsappNumbers.forEach((w: string) => detectedWhatsapp.add(w));
     });
 
+    // 10. Creative Launch Velocity & Testing Cadence
+    const nowMs = Date.now();
+    const sevenDaysAgoMs = nowMs - 7 * 24 * 60 * 60 * 1000;
+    const thirtyDaysAgoMs = nowMs - 30 * 24 * 60 * 60 * 1000;
+
+    let launchedLast7Days = 0;
+    let launchedLast30Days = 0;
+    let maxDaysRunning = 0;
+    let totalDaysRunning = 0;
+
+    allEnrichedAds.forEach((a) => {
+      const days = a.daysRunning || 0;
+      totalDaysRunning += days;
+      if (a.isActive && days > maxDaysRunning) {
+        maxDaysRunning = days;
+      }
+      const startTime = a.startedRunningOn ? new Date(a.startedRunningOn).getTime() : 0;
+      if (startTime >= sevenDaysAgoMs || days <= 7) {
+        launchedLast7Days++;
+      }
+      if (startTime >= thirtyDaysAgoMs || days <= 30) {
+        launchedLast30Days++;
+      }
+    });
+
+    const activeRetentionRate = totalAdsCaptured > 0 ? Math.round((activeAdsCount / totalAdsCaptured) * 100) : 0;
+    const avgLifespanDays = totalAdsCaptured > 0 ? Math.round(totalDaysRunning / totalAdsCaptured) : 0;
+
+    const launchVelocity = {
+      launchedLast7Days,
+      launchedLast30Days,
+      activeRetentionRate,
+      longestRunningDays: maxDaysRunning,
+      avgLifespanDays,
+      testingIntensity:
+        launchedLast7Days >= 10
+          ? "High Velocity Testing"
+          : launchedLast7Days >= 3
+          ? "Active Testing"
+          : "Maintenance Mode",
+    };
+
+    // 11. Commercial Strategy & Pricing Intelligence
+    const validPrices: number[] = [];
+    let detectedCurrency: string = "TND";
+    let productsWithDiscountCount = 0;
+    let hasFreeDelivery = false;
+
+    linkedProducts.forEach((p) => {
+      if (p.currency && (!detectedCurrency || detectedCurrency === "TND")) detectedCurrency = p.currency;
+      if (p.deliveryCost && p.deliveryCost.toLowerCase().includes("gratuit")) {
+        hasFreeDelivery = true;
+      }
+      if (p.discountOrOffer || (p.originalPrice && p.currentPrice && p.originalPrice !== p.currentPrice)) {
+        productsWithDiscountCount++;
+      }
+
+      if (p.currentPrice) {
+        const cleanStr = p.currentPrice.replace(/[^0-9.,]/g, "").replace(",", ".");
+        const val = parseFloat(cleanStr);
+        if (!isNaN(val) && val > 0 && val < 50000) {
+          validPrices.push(val);
+        }
+      }
+    });
+
+    const minPrice = validPrices.length > 0 ? Math.min(...validPrices) : null;
+    const maxPrice = validPrices.length > 0 ? Math.max(...validPrices) : null;
+    const avgPrice = validPrices.length > 0 ? Math.round(validPrices.reduce((a, b) => a + b, 0) / validPrices.length) : null;
+
+    const commercialStrategy = {
+      totalCatalogProducts: brandProductsList.length,
+      scrapedProductsCount: linkedProducts.length,
+      minPrice,
+      maxPrice,
+      avgPrice,
+      currency: detectedCurrency,
+      discountedProductsCount: productsWithDiscountCount,
+      hasFreeDelivery,
+    };
+
     return NextResponse.json({
       success: true,
       brand: {
@@ -503,6 +584,8 @@ export async function GET(
         veteranPercent: totalAdsCaptured > 0 ? Math.round((longevityCounts.veteran / totalAdsCaptured) * 100) : 0,
       },
       ctaDistribution,
+      launchVelocity,
+      commercialStrategy,
       productClusters,
       products: brandProductsList,
       topWinners,
