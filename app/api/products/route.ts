@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
 
+    const id = searchParams.get("id") || searchParams.get("productId");
     const search = searchParams.get("search");
     const domain = searchParams.get("domain");
     const brand = searchParams.get("brand");
@@ -37,6 +38,17 @@ export async function GET(req: NextRequest) {
     const conditions: any[] = [
       sql`${scrapedProducts.scrapeStatus} NOT IN ('deleted', 'ignored')`,
     ];
+
+    // Filter by specific product ID if requested (for deep-linking & direct sharing)
+    if (id && id.trim() !== "") {
+      const trimmedId = id.trim();
+      const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(trimmedId);
+      if (isUuid) {
+        conditions.push(eq(scrapedProducts.id, trimmedId));
+      } else {
+        conditions.push(eq(scrapedProducts.url, trimmedId));
+      }
+    }
 
     // Filter by Active / Inactive (Off-Air) Ads status
     if (activeStatus === "active" || hideInactive) {

@@ -136,7 +136,7 @@ export default function ProductsPage() {
     return () => clearTimeout(timer);
   }, [brandInput]);
 
-  // Read URL query params on mount (e.g. ?brand=... or ?preset=favorites or ?hideInactive=true)
+  // Read URL query params on mount (e.g. ?brand=... or ?preset=favorites or ?hideInactive=true or ?id=...)
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -153,8 +153,54 @@ export default function ProductsPage() {
       if (hideInactiveParam === "true") {
         setHideInactive(true);
       }
+
+      // Check for deep-linked product ID (?id=... or ?productId=...)
+      const idParam = params.get("id") || params.get("productId");
+      if (idParam) {
+        fetch(`/api/products?id=${encodeURIComponent(idParam)}`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success && data.products && data.products.length > 0) {
+              setSelectedProduct(data.products[0]);
+              setIsModalOpen(true);
+            }
+          })
+          .catch((err) => console.error("[Products Page] Deep-link product fetch error:", err));
+      }
     }
   }, []);
+
+  // Listen to browser Back / Forward history events to keep URL bar & modal state in sync
+  useEffect(() => {
+    const handlePopState = () => {
+      if (typeof window === "undefined") return;
+      const params = new URLSearchParams(window.location.search);
+      const idParam = params.get("id") || params.get("productId");
+      if (idParam) {
+        const found = products.find((p) => p.id === idParam);
+        if (found) {
+          setSelectedProduct(found);
+          setIsModalOpen(true);
+        } else {
+          fetch(`/api/products?id=${encodeURIComponent(idParam)}`)
+            .then((res) => res.json())
+            .then((data) => {
+              if (data.success && data.products && data.products.length > 0) {
+                setSelectedProduct(data.products[0]);
+                setIsModalOpen(true);
+              }
+            })
+            .catch((err) => console.error("[Products Page] Popstate product fetch error:", err));
+        }
+      } else {
+        setIsModalOpen(false);
+        setSelectedProduct(null);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [products]);
 
   const fetchProducts = useCallback(
     async (targetPage = 1, append = false) => {
@@ -420,6 +466,19 @@ export default function ProductsPage() {
       );
     };
 
+  const handleCloseDetailsModal = () => {
+    setIsModalOpen(false);
+    setSelectedProduct(null);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("id") || url.searchParams.has("productId")) {
+        url.searchParams.delete("id");
+        url.searchParams.delete("productId");
+        window.history.pushState({}, "", url.toString());
+      }
+    }
+  };
+
   const handleDelete = async (productId: string) => {
     // 1. Find product and original index before removing
     const targetProduct = products.find((p) => p.id === productId);
@@ -429,8 +488,7 @@ export default function ProductsPage() {
     // 2. Fast Optimistic removal from UI state (instant response <1ms)
     setProducts((prev) => prev.filter((p) => p.id !== productId));
     if (selectedProduct?.id === productId) {
-      setIsModalOpen(false);
-      setSelectedProduct(null);
+      handleCloseDetailsModal();
     }
 
     // 3. Fire backend delete request in background
@@ -484,6 +542,11 @@ export default function ProductsPage() {
   const handleViewDetails = (product: ScrapedProduct) => {
     setSelectedProduct(product);
     setIsModalOpen(true);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("id", product.id);
+      window.history.pushState({ productId: product.id }, "", url.toString());
+    }
   };
 
   const handleViewCreatives = (product: ScrapedProduct) => {
@@ -1163,7 +1226,7 @@ export default function ProductsPage() {
       {/* Details & Competitor Benchmark Modal */}
       <ProductDetailsModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={handleCloseDetailsModal}
         product={selectedProduct}
         onRefresh={handleRefresh}
         onDelete={handleDelete}
