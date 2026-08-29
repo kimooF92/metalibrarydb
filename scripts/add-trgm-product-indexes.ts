@@ -7,9 +7,10 @@ async function addTrgmProductIndexes() {
   console.log("Applying pg_trgm extension and GIN indexes for fast product search...");
 
   try {
-    // 1. Enable pg_trgm extension if not already enabled
-    await client`CREATE EXTENSION IF NOT EXISTS pg_trgm;`;
-    console.log("✓ pg_trgm extension enabled");
+    // 1. Enable pg_trgm extension if not already enabled (in extensions schema)
+    await client`CREATE SCHEMA IF NOT EXISTS extensions;`;
+    await client`CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions;`;
+    console.log("✓ pg_trgm extension enabled in extensions schema");
 
     // 2. Create GIN index on title
     await client`
