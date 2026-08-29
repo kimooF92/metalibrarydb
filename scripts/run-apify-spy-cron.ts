@@ -139,7 +139,7 @@ async function main() {
   const dbSettings = await db.query.appSettings.findFirst({
     where: eq(appSettings.id, "default"),
   }).catch(() => null);
-  const autoSpyThreshold = dbSettings?.autoSpyThreshold || 1;
+  const autoSpyThreshold = Math.max(2, dbSettings?.autoSpyThreshold ?? 5);
 
   console.log("=================================================");
   console.log(" 🚀 Meta Ad Tracker — Apify Cloud Spy Worker   ");
@@ -227,18 +227,20 @@ async function main() {
       continue;
     }
 
-    // Rule 2: Check latest count scan history for difference >= autoSpyThreshold
+    // Rule 2: Check latest count scan history for difference >= autoSpyThreshold OR total results >= 50 (Mega-Brand)
     const latestHistory = await db.query.scanHistory.findFirst({
       where: eq(scanHistory.trackedPageId, page.id),
       orderBy: [desc(scanHistory.checkedAt)],
     });
 
-    if (!latestHistory || (latestHistory.difference || 0) < autoSpyThreshold) {
+    const diff = latestHistory?.difference || 0;
+    const isMegaBrand = (page.currentResults || 0) >= 50 && diff >= 1;
+
+    if (!latestHistory || (!isMegaBrand && diff < autoSpyThreshold)) {
       skippedNoDiffCount++;
       continue;
     }
 
-    const diff = latestHistory.difference!;
     const checkedAt = latestHistory.checkedAt ? new Date(latestHistory.checkedAt) : new Date();
 
     // Check if we ALREADY scanned this difference

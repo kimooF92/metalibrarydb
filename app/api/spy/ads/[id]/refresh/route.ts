@@ -33,6 +33,20 @@ export async function POST(
 
     const adArchiveUrl = `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&id=${adRecord.adArchiveId}`;
 
+    // 1. Check if media is already permanently preserved in Backblaze B2
+    const b2Endpoint = process.env.B2_ENDPOINT || "backblazeb2.com";
+    const hasB2Video = adRecord.mediaUrls?.some((u) => u.includes(b2Endpoint) || u.includes("b2/"));
+    const hasB2Thumb = adRecord.thumbnailUrl?.includes(b2Endpoint) || adRecord.thumbnailUrl?.includes("b2/");
+
+    if (hasB2Video && hasB2Thumb) {
+      return NextResponse.json({
+        success: true,
+        ad: adRecord,
+        message: "Media is permanently preserved in Backblaze B2 storage.",
+        adArchiveUrl,
+      });
+    }
+
     const tokens = getApifyTokens();
     if (tokens.length === 0) {
       return NextResponse.json({

@@ -19,6 +19,7 @@ import {
   Flame,
   Moon,
   Globe,
+  Crown,
 } from "lucide-react";
 import { useToast } from "@/components/toast-context";
 
@@ -160,6 +161,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
   const getNotificationIcon = (n: ActivityNotification) => {
     const type = n.type;
     const isWentDark = n.metadata?.wentDark === true;
+    const isMegaBrand = n.metadata?.isMegaBrand === true || (typeof n.metadata?.currentResults === "number" && n.metadata.currentResults >= 50);
     const isSurge = n.metadata?.isSurge === true;
     const isDiscovery = n.metadata?.runnerType === "discovery";
 
@@ -167,6 +169,13 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
       return (
         <div className="w-8 h-8 rounded-lg bg-rose-500/15 text-rose-500 border border-rose-500/30 flex items-center justify-center shrink-0 shadow-sm animate-pulse">
           <Moon className="w-4 h-4" />
+        </div>
+      );
+    }
+    if (isMegaBrand) {
+      return (
+        <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/35 flex items-center justify-center shrink-0 shadow-md ring-2 ring-purple-500/20 animate-pulse">
+          <Crown className="w-4 h-4" />
         </div>
       );
     }
@@ -403,7 +412,9 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                 const movers = (n.metadata?.movers as any[]) || [];
                 const topBrands = (n.metadata?.topBrands as any[]) || [];
                 const isWentDark = n.metadata?.wentDark === true;
+                const isMegaBrand = n.metadata?.isMegaBrand === true || (typeof n.metadata?.currentResults === "number" && n.metadata.currentResults >= 50);
                 const isSurge = n.metadata?.isSurge === true;
+                const isQueued = n.metadata?.queuedForLocalScan === true;
 
                 return (
                   <div
@@ -414,8 +425,12 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                         ? "bg-transparent hover:bg-slate-50/50 dark:hover:bg-slate-800/30 opacity-75 hover:opacity-100"
                         : isWentDark
                         ? "bg-rose-500/[0.06] dark:bg-rose-500/[0.1] hover:bg-rose-500/[0.09]"
+                        : isMegaBrand
+                        ? "bg-purple-500/[0.08] dark:bg-purple-500/[0.14] hover:bg-purple-500/[0.12] border-l-2 border-purple-500 shadow-xs"
                         : isSurge
                         ? "bg-amber-500/[0.06] dark:bg-amber-500/[0.1] hover:bg-amber-500/[0.09]"
+                        : isQueued
+                        ? "bg-emerald-500/[0.05] dark:bg-emerald-500/[0.08] hover:bg-emerald-500/[0.1]"
                         : "bg-indigo-500/[0.04] dark:bg-indigo-500/[0.07] hover:bg-indigo-500/[0.08] dark:hover:bg-indigo-500/[0.12]"
                     }`}
                   >
@@ -436,9 +451,19 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                               DARK
                             </span>
                           )}
-                          {isSurge && (
+                          {isMegaBrand && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-purple-500/20 text-purple-600 dark:text-purple-400 shrink-0 border border-purple-500/30">
+                              👑 MEGA 50+
+                            </span>
+                          )}
+                          {isSurge && !isMegaBrand && (
                             <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
                               SURGE
+                            </span>
+                          )}
+                          {isQueued && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 shrink-0">
+                              QUEUED ($0)
                             </span>
                           )}
                         </div>

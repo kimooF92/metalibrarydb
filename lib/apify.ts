@@ -203,7 +203,9 @@ export async function startApifyDeltaScan(params: {
   // Iterate over available tokens to launch actor run with automatic failover
   for (let idx = 0; idx < tokens.length; idx++) {
     const token = tokens[idx];
-    const runUrl = `${APIFY_BASE_URL}/acts/${actorIdPath}/runs?token=${token}`;
+    const memory = params.isFullScan ? 1024 : 512;
+    const timeout = params.isFullScan ? 90 : 60;
+    const runUrl = `${APIFY_BASE_URL}/acts/${actorIdPath}/runs?token=${token}&memory=${memory}&timeout=${timeout}`;
 
     try {
       console.log(`[Apify] Attempting actor launch using Token #${idx + 1} of ${tokens.length}...`);
@@ -305,7 +307,7 @@ export async function scrapeSingleAdViaApify(adArchiveId: string): Promise<any |
 
   for (let idx = 0; idx < tokens.length; idx++) {
     const token = tokens[idx];
-    const runUrl = `${APIFY_BASE_URL}/acts/${actorIdPath}/runs?token=${token}&waitForFinish=30`;
+    const runUrl = `${APIFY_BASE_URL}/acts/${actorIdPath}/runs?token=${token}&waitForFinish=30&memory=256&timeout=30`;
 
     try {
       console.log(`[Apify Single Ad] Refreshing ad ${adArchiveId} using Token #${idx + 1}...`);

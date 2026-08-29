@@ -555,11 +555,71 @@ export async function markJobCompleted(
     });
   } catch {}
 
-  // 5. Automatic Apify Delta Trigger: If new ads detected (difference >= 1), launch Apify Cloud scan in background
+  // 5. Intelligent Creative Routing:
+  // - Minor ad changes (< 50 total active ads AND 1 <= difference < autoSpyThreshold): Enqueue for free local Playwright worker ($0 cost)
+  // - Large catalog pages (50+ total active ads) OR Scaling surges (difference >= autoSpyThreshold, default 5): Launch Apify Cloud scan
   if (status === "success" && difference !== null && difference >= 1) {
-    tryAutoTriggerApifyDeltaScan(pageId, difference).catch((err) => {
-      console.error("[Apify Auto-Trigger] Error launching background delta scan:", err);
-    });
+    try {
+      const settings = await getAppSettings();
+      const autoSpyThreshold = Math.max(2, settings.autoSpyThreshold ?? 5);
+      const isMegaBrand = (results || 0) >= 50;
+      const isSurge = difference >= autoSpyThreshold;
+
+      if (!isMegaBrand && !isSurge) {
+        // Enqueue for free local Playwright worker (< 50 ads total & < 5 diff)
+        const existingJob = await db.query.queue.findFirst({
+          where: (q, { and, eq, inArray }) =>
+            and(
+              eq(q.trackedPageId, pageId),
+              eq(q.jobType, "creative"),
+              inArray(q.status, ["pending", "running"])
+            ),
+        });
+
+        if (!existingJob) {
+          const [scanRecord] = await db
+            .insert(creativeScans)
+            .values({
+              trackedPageId: pageId,
+              status: "pending",
+              configSnapshot: JSON.stringify({
+                runner: "playwright",
+                autoTriggered: true,
+                delta: difference,
+                totalResults: results,
+              }),
+              outcomeDetails: `Queued for local Playwright creative scan (+${difference} new ads, total ${results} < 50, delta < ${autoSpyThreshold})`,
+            })
+            .returning();
+
+          await db.insert(queue).values({
+            trackedPageId: pageId,
+            jobType: "creative",
+            creativeScanId: scanRecord.id,
+            status: "pending",
+            priority: 5,
+          });
+
+          console.log(
+            `[Local Creative Queue] 🟢 Enqueued "${brandName}" for free local Playwright scan (+${difference} ads, total: ${results}, threshold: ${autoSpyThreshold}).`
+          );
+        }
+      } else {
+        // 50+ total ads OR 5+ scaling surge: Trigger Apify Cloud runner for fast, high-volume residential proxy extraction
+        const reason = isMegaBrand
+          ? `Mega-Brand catalog (${results} active ads >= 50)`
+          : `Scaling surge (+${difference} ads >= threshold ${autoSpyThreshold})`;
+
+        console.log(
+          `[Apify Auto-Trigger] 🚀 ${reason} detected for "${brandName}". Triggering Apify Cloud scan...`
+        );
+        tryAutoTriggerApifyDeltaScan(pageId, difference).catch((err) => {
+          console.error("[Apify Auto-Trigger] Error launching background delta scan:", err);
+        });
+      }
+    } catch (routeErr) {
+      console.error("[Creative Routing] Error routing new ads:", routeErr);
+    }
   }
 
   return { difference, results, brandName };

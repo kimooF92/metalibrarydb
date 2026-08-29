@@ -29,12 +29,13 @@ export interface CreateNotificationParams {
  */
 export async function createNotification(params: CreateNotificationParams) {
   try {
-    // Deduplication window: Prevent duplicate identical notifications within the last 5 minutes (300s)
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    // Deduplication window: 6 hours for queued local scan notifications to avoid repeat spam, 5 minutes for general notifications
+    const dedupWindowMs = params.metadata?.queuedForLocalScan ? 6 * 60 * 60 * 1000 : 5 * 60 * 1000;
+    const windowStart = new Date(Date.now() - dedupWindowMs);
     const conditions = [
       eq(activityNotifications.type, params.type),
       eq(activityNotifications.title, params.title),
-      gte(activityNotifications.createdAt, fiveMinutesAgo),
+      gte(activityNotifications.createdAt, windowStart),
     ];
 
     if (params.trackedPageId) {
@@ -104,6 +105,7 @@ export async function logCountScanNotification(params: {
   }
 
   const diffNum = difference || 0;
+  const isMegaBrand = currentResults !== null && currentResults >= 50;
 
   // 2. High-Urgency: Brand completely shut off all ads (Active Ads -> 0)
   if (currentResults === 0 && diffNum < 0) {
@@ -118,29 +120,42 @@ export async function logCountScanNotification(params: {
     });
   }
 
-  // 3. High-Signal: Scaling Surge (5 or more new ads launched at once)
+  // 3a. Mega-Brand High-Priority: 50+ active ads running with positive changes
+  if (isMegaBrand && diffNum > 0) {
+    return createNotification({
+      type: "count_scan",
+      title: `👑 Mega-Brand: ${brandName} (+${diffNum} Ads | ${currentResults} Total)`,
+      message: `"${brandName}" is running a massive catalog of ${currentResults} active ads (+${diffNum} new). High-priority Apify cloud scan auto-triggered.`,
+      severity: "success",
+      trackedPageId,
+      actionUrl: `/spy?trackedPageId=${trackedPageId}`,
+      metadata: { currentResults, difference: diffNum, brandName, isMegaBrand: true, isSurge: diffNum >= 5, highPriority: true },
+    });
+  }
+
+  // 3b. High-Signal: Scaling Surge (5 or more new ads launched at once)
   if (diffNum >= 5) {
     return createNotification({
       type: "count_scan",
       title: `🚀 Ad Scaling Surge: +${diffNum} Ads on ${brandName}!`,
-      message: `"${brandName}" aggressively launched +${diffNum} new ad creatives! Total active ads: ${currentResults ?? 0}.`,
+      message: `"${brandName}" aggressively launched +${diffNum} new ad creatives! Total active ads: ${currentResults ?? 0}. Apify cloud scan auto-triggered.`,
       severity: "success",
       trackedPageId,
       actionUrl: `/spy?trackedPageId=${trackedPageId}`,
-      metadata: { currentResults, difference: diffNum, brandName, isSurge: true },
+      metadata: { currentResults, difference: diffNum, brandName, isSurge: true, highPriority: true },
     });
   }
 
-  // 4. Positive difference (+new ads launched)
+  // 4. Positive difference (+new ads launched, minor churn < 5 on small/medium page)
   if (diffNum > 0) {
     return createNotification({
       type: "count_scan",
-      title: `+${diffNum} New Ads on ${brandName}!`,
-      message: `"${brandName}" launched +${diffNum} new ad(s)! Total active ads: ${currentResults ?? 0}.`,
-      severity: "success",
+      title: `+${diffNum} New Ads on ${brandName}`,
+      message: `"${brandName}" launched +${diffNum} new ad(s). Queued for free local scan ($0 credits).`,
+      severity: "info",
       trackedPageId,
       actionUrl: `/spy?trackedPageId=${trackedPageId}`,
-      metadata: { currentResults, difference: diffNum, brandName },
+      metadata: { currentResults, difference: diffNum, brandName, queuedForLocalScan: true },
     });
   }
 
