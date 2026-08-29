@@ -35,9 +35,10 @@ import {
   Building2,
   ArrowUp,
   Loader2,
+  Rocket,
 } from "lucide-react";
 
-type SmartPreset = "all" | "most_scaled" | "new_discovered" | "top_lasting" | "with_offers" | "favorites";
+type SmartPreset = "all" | "breakout" | "most_scaled" | "new_discovered" | "top_lasting" | "with_offers" | "favorites";
 
 export default function ProductsPage() {
   const router = useRouter();
@@ -670,6 +671,22 @@ export default function ProductsPage() {
         >
           <Star className={`w-3.5 h-3.5 ${smartPreset === "favorites" ? "fill-current" : "text-amber-500"}`} />
           <span>⭐ Starred Favorites ({stats.favoritesCount})</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setSmartPreset("breakout");
+            setSortBy("breakout");
+            setPage(1);
+          }}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            smartPreset === "breakout"
+              ? "bg-gradient-to-r from-pink-600 to-rose-600 text-white font-bold shadow-sm shadow-rose-600/25"
+              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800"
+          }`}
+        >
+          <Rocket className="w-3.5 h-3.5 text-pink-400" />
+          <span>🚀 Breakout Winners</span>
         </button>
 
         <button

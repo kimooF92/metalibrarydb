@@ -5,6 +5,7 @@ import { addSingleUrl } from "@/actions/add-url";
 import { singleUrlSchema } from "@/lib/validators";
 import { eq, ilike, or, and, sql, desc, asc, inArray, gte, lte, isNotNull } from "drizzle-orm";
 import { extractProductClusterKey } from "@/lib/product-clustering";
+import { classifyScalingPattern } from "@/lib/scaling-classifier";
 
 export async function GET(request: Request) {
   try {
@@ -298,6 +299,7 @@ export async function GET(request: Request) {
         isWatchlisted: p.isWatchlisted ?? false,
         isCreativeQueued: Boolean(activeCreativeJobMap[p.id]),
         historyPoints,
+        scalingPattern: classifyScalingPattern(historyPoints, p.currentResults),
         extractedAdCount: extractedAdCountMap[p.id] ?? 0,
         approxProductCount: approxProductCountMap[p.id] ?? null,
       };

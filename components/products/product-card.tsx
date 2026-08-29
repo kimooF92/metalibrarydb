@@ -18,6 +18,7 @@ import {
   Eye,
   Truck,
   Star,
+  Rocket,
 } from "lucide-react";
 
 interface ProductCardProps {
@@ -122,7 +123,13 @@ export function ProductCard({
     }
   };
 
-  const isWinning = (product.linkedAdsCount || 0) >= 3 && (product.activeAdsCount || 0) > 0;
+  const isBreakout = Boolean(
+    product.isBreakout ||
+    ((product.activeAdsCount || 0) > 0 &&
+      (product.daysRunning || 1) <= 7 &&
+      (product.maxDuplications || 1) >= 3)
+  );
+  const isWinning = !isBreakout && (product.linkedAdsCount || 0) >= 3 && (product.activeAdsCount || 0) > 0;
   const isInactive = typeof product.activeAdsCount === "number" && product.activeAdsCount === 0 && (product.linkedAdsCount || 0) > 0;
   const isPendingScrape = product.scrapeStatus === "pending";
   const isFailedScrape = product.scrapeStatus === "failed";
@@ -133,7 +140,9 @@ export function ProductCard({
       className={`group relative flex flex-col bg-white dark:bg-slate-900/60 rounded-xl border transition-all duration-200 overflow-hidden cursor-pointer ${
         isInactive
           ? "border-slate-200/80 dark:border-slate-800/80 opacity-80 hover:opacity-100 hover:border-slate-400 dark:hover:border-slate-600 shadow-xs"
-          : "border-slate-200 dark:border-slate-800/80 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 shadow-sm hover:shadow-lg"
+          : isBreakout
+            ? "border-pink-500/40 dark:border-pink-500/40 hover:border-pink-500 shadow-sm hover:shadow-lg"
+            : "border-slate-200 dark:border-slate-800/80 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 shadow-sm hover:shadow-lg"
       }`}
     >
       {/* Top Banner / Badges */}
@@ -156,6 +165,14 @@ export function ProductCard({
             <span className="text-xs font-medium text-slate-400">
               {isPendingScrape ? "Pending Scrape" : "No Image Available"}
             </span>
+          </div>
+        )}
+
+        {/* Breakout Winner Badge */}
+        {isBreakout && (
+          <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-pink-600 via-rose-500 to-amber-500 text-white text-[10px] font-extrabold shadow-md shadow-pink-500/25">
+            <Rocket className="w-3 h-3 animate-bounce" />
+            <span>🚀 Breakout ({product.maxDuplications || 3}x Copies)</span>
           </div>
         )}
 

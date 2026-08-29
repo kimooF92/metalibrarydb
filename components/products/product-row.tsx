@@ -16,6 +16,7 @@ import {
   Sparkles,
   Star,
   CheckCircle2,
+  Rocket,
 } from "lucide-react";
 
 interface ProductRowProps {
@@ -105,6 +106,12 @@ export function ProductRow({
     }
   };
 
+  const isBreakout = Boolean(
+    product.isBreakout ||
+    ((product.activeAdsCount || 0) > 0 &&
+      (product.daysRunning || 1) <= 7 &&
+      (product.maxDuplications || 1) >= 3)
+  );
   const isPendingScrape = product.scrapeStatus === "pending";
   const isInactive = typeof product.activeAdsCount === "number" && product.activeAdsCount === 0 && (product.linkedAdsCount || 0) > 0;
 
@@ -114,7 +121,9 @@ export function ProductRow({
       className={`group flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 bg-white dark:bg-slate-900/60 rounded-xl border transition-all duration-150 cursor-pointer ${
         isInactive
           ? "border-slate-200/60 dark:border-slate-800/60 opacity-80 hover:opacity-100 shadow-xs"
-          : "border-slate-200 dark:border-slate-800/80 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 shadow-xs hover:shadow-md"
+          : isBreakout
+            ? "border-pink-500/40 dark:border-pink-500/40 hover:border-pink-500 shadow-xs hover:shadow-md"
+            : "border-slate-200 dark:border-slate-800/80 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 shadow-xs hover:shadow-md"
       }`}
     >
       {/* Left: Star + Thumbnail & Main Info */}
@@ -155,6 +164,13 @@ export function ProductRow({
         {/* Details */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
+            {isBreakout && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-gradient-to-r from-pink-600 via-rose-500 to-amber-500 text-white shadow-2xs">
+                <Rocket className="w-2.5 h-2.5" />
+                <span>🚀 Breakout ({product.maxDuplications || 3}x Copies)</span>
+              </span>
+            )}
+
             {product.brandPageId ? (
               <Link
                 href={`/spy/brand/${encodeURIComponent(product.brandPageId)}?tab=products`}

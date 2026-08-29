@@ -1,3 +1,6 @@
+import type { ScalingArchetype, ScalingPatternResult } from "@/lib/scaling-classifier";
+export type { ScalingArchetype, ScalingPatternResult };
+
 export interface TrackedPage {
   id: string;
   url: string;
@@ -22,6 +25,7 @@ export interface TrackedPage {
   lastCreativeScan?: string | null;
   isCreativeQueued?: boolean;
   historyPoints?: number[];
+  scalingPattern?: ScalingPatternResult;
   approxProductCount?: number | null;
   extractedAdCount?: number | null;
   discoveredPagesCount?: number | null;
@@ -133,6 +137,7 @@ export interface ScrapedProduct {
   topCreativeThumbnail?: string | null;
   earliestAdDate?: string | null;
   latestAdDate?: string | null;
+  isBreakout?: boolean;
 }
 
 export interface Ad {

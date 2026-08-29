@@ -125,6 +125,20 @@ export async function GET(req: NextRequest) {
       conditions.push(sql`${scrapedProducts.createdAt} >= NOW() - INTERVAL '7 days'`);
     }
 
+    // Smart Preset: Breakout Scalers (new ads <= 7 days with >= 3 duplications)
+    if (smartPreset === "breakout") {
+      conditions.push(
+        sql`EXISTS (
+          SELECT 1 FROM ${ads} a
+          JOIN ${adObservations} ao ON ao.ad_id = a.id
+          WHERE a.product_id = ${scrapedProducts.id}
+          AND (a.is_archived = false OR a.is_archived IS NULL)
+          AND (${ads.startedRunningOn} >= NOW() - INTERVAL '7 days' OR ${ads.firstSeenAt} >= NOW() - INTERVAL '7 days')
+          AND ao.duplication_count >= 3
+        )`
+      );
+    }
+
     // Search filter across title, domain, URL, offer, category
     if (search && search.trim() !== "") {
       const term = `%${search.trim()}%`;
@@ -245,6 +259,12 @@ export async function GET(req: NextRequest) {
         ? Math.max(1, Math.round((Date.now() - new Date(earliest).getTime()) / 86400000))
         : 1;
 
+      const isBreakout = Boolean(
+        (m?.activeAdsCount || 0) > 0 &&
+        daysRunning <= 7 &&
+        (m?.maxDuplications || 1) >= 3
+      );
+
       return {
         ...p,
         linkedAdsCount: m?.linkedAdsCount || 0,
@@ -256,11 +276,14 @@ export async function GET(req: NextRequest) {
         brandPageId: m?.brandPageId || p.pageId || null,
         topCreativeThumbnail: m?.topCreativeThumbnail || null,
         daysRunning,
+        isBreakout,
       };
     });
 
-    // In-memory sort fallback for ad-metrics specific presets (most_scaled / top_lasting)
-    if (sortBy === "most_scaled" || sortBy === "ads" || smartPreset === "most_scaled") {
+    // In-memory sort fallback for ad-metrics specific presets (breakout / most_scaled / top_lasting)
+    if (sortBy === "breakout" || smartPreset === "breakout") {
+      products.sort((a, b) => (b.maxDuplications || 1) - (a.maxDuplications || 1) || (b.activeAdsCount || 0) - (a.activeAdsCount || 0));
+    } else if (sortBy === "most_scaled" || sortBy === "ads" || smartPreset === "most_scaled") {
       products.sort((a, b) => (b.activeAdsCount || 0) - (a.activeAdsCount || 0) || (b.maxDuplications || 1) - (a.maxDuplications || 1));
     } else if (sortBy === "top_lasting" || sortBy === "longevity" || smartPreset === "top_lasting") {
       products.sort((a, b) => (b.daysRunning || 1) - (a.daysRunning || 1));

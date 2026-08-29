@@ -1,15 +1,20 @@
 "use client";
 
-import { TopMover } from "@/types";
-import { ArrowUpRight, ArrowDownRight, TrendingUp, TrendingDown } from "lucide-react";
+import Link from "next/link";
+import { TopMover, TrackedPage } from "@/types";
+import { ArrowUpRight, ArrowDownRight, TrendingUp, TrendingDown, Flame, Sparkles } from "lucide-react";
+import { classifyScalingPattern } from "@/lib/scaling-classifier";
 
 interface TopMoversProps {
-  pages: Array<{
+  pages: TrackedPage[] | Array<{
     id: string;
+    pageId?: string | null;
     displayName: string | null;
     url: string;
     currentResults: number | null;
     difference?: number | null;
+    historyPoints?: number[];
+    scalingPattern?: any;
   }>;
 }
 
@@ -18,29 +23,39 @@ export function TopMovers({ pages }: TopMoversProps) {
     (p) => p.difference !== null && p.difference !== undefined && p.difference !== 0
   );
 
-  const gainers: TopMover[] = withDiff
+  const gainers = withDiff
     .filter((p) => (p.difference ?? 0) > 0)
     .sort((a, b) => (b.difference ?? 0) - (a.difference ?? 0))
     .slice(0, 5)
-    .map((p) => ({
-      id: p.id,
-      displayName: p.displayName,
-      url: p.url,
-      currentResults: p.currentResults,
-      difference: p.difference as number,
-    }));
+    .map((p) => {
+      const scaling = p.scalingPattern || classifyScalingPattern(p.historyPoints, p.currentResults);
+      return {
+        id: p.id,
+        pageId: p.pageId,
+        displayName: p.displayName,
+        url: p.url,
+        currentResults: p.currentResults,
+        difference: p.difference as number,
+        scaling,
+      };
+    });
 
-  const losers: TopMover[] = withDiff
+  const losers = withDiff
     .filter((p) => (p.difference ?? 0) < 0)
     .sort((a, b) => (a.difference ?? 0) - (b.difference ?? 0))
     .slice(0, 5)
-    .map((p) => ({
-      id: p.id,
-      displayName: p.displayName,
-      url: p.url,
-      currentResults: p.currentResults,
-      difference: p.difference as number,
-    }));
+    .map((p) => {
+      const scaling = p.scalingPattern || classifyScalingPattern(p.historyPoints, p.currentResults);
+      return {
+        id: p.id,
+        pageId: p.pageId,
+        displayName: p.displayName,
+        url: p.url,
+        currentResults: p.currentResults,
+        difference: p.difference as number,
+        scaling,
+      };
+    });
 
   if (gainers.length === 0 && losers.length === 0) return null;
 
@@ -61,15 +76,24 @@ export function TopMovers({ pages }: TopMoversProps) {
                 key={p.id}
                 className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-all group"
               >
-                <a
-                  href={p.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs font-medium text-slate-800 dark:text-slate-200 hover:text-emerald-700 dark:hover:text-emerald-300 truncate max-w-[160px] transition-colors"
-                  title={p.url}
-                >
-                  {p.displayName || "Meta Ad Search"}
-                </a>
+                <div className="flex items-center space-x-2 min-w-0 mr-2">
+                  <Link
+                    href={`/spy/brand/${encodeURIComponent(p.pageId || p.id)}`}
+                    className="text-xs font-semibold text-slate-800 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 truncate max-w-[150px] transition-colors"
+                    title={`Open ${p.displayName || "brand"} Analytics`}
+                  >
+                    {p.displayName || "Meta Ad Search"}
+                  </Link>
+                  {p.scaling && p.scaling.archetype !== "emerging" && (
+                    <span
+                      className={`inline-flex items-center gap-0.5 text-[9px] font-extrabold px-1.5 py-0.2 rounded border shrink-0 ${p.scaling.badgeClass}`}
+                      title={`${p.scaling.label}: ${p.scaling.description}`}
+                    >
+                      <span>{p.scaling.icon}</span>
+                      <span>{p.scaling.shortLabel}</span>
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center space-x-2 shrink-0">
                   <span className="text-xs text-slate-600 dark:text-slate-400 font-mono font-medium">
                     {p.currentResults?.toLocaleString() ?? "—"}
@@ -100,15 +124,24 @@ export function TopMovers({ pages }: TopMoversProps) {
                 key={p.id}
                 className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-all group"
               >
-                <a
-                  href={p.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs font-medium text-slate-800 dark:text-slate-200 hover:text-rose-600 dark:hover:text-rose-300 truncate max-w-[160px] transition-colors"
-                  title={p.url}
-                >
-                  {p.displayName || "Meta Ad Search"}
-                </a>
+                <div className="flex items-center space-x-2 min-w-0 mr-2">
+                  <Link
+                    href={`/spy/brand/${encodeURIComponent(p.pageId || p.id)}`}
+                    className="text-xs font-semibold text-slate-800 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 truncate max-w-[150px] transition-colors"
+                    title={`Open ${p.displayName || "brand"} Analytics`}
+                  >
+                    {p.displayName || "Meta Ad Search"}
+                  </Link>
+                  {p.scaling && p.scaling.archetype !== "emerging" && (
+                    <span
+                      className={`inline-flex items-center gap-0.5 text-[9px] font-extrabold px-1.5 py-0.2 rounded border shrink-0 ${p.scaling.badgeClass}`}
+                      title={`${p.scaling.label}: ${p.scaling.description}`}
+                    >
+                      <span>{p.scaling.icon}</span>
+                      <span>{p.scaling.shortLabel}</span>
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center space-x-2 shrink-0">
                   <span className="text-xs text-slate-600 dark:text-slate-400 font-mono font-medium">
                     {p.currentResults?.toLocaleString() ?? "—"}

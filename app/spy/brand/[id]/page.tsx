@@ -11,6 +11,7 @@ import { ProductDetailsModal } from "@/components/products/product-details-modal
 import { ExportDossierModal } from "@/components/export-dossier-modal";
 import { useToast } from "@/components/toast-context";
 import { Ad, ScrapedProduct } from "@/types";
+import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import {
   ArrowLeft,
   Eye,
@@ -440,6 +441,12 @@ export default function BrandDeepDivePage({
 
   const { brand, summary, mediaDistribution, longevityDistribution, ctaDistribution, productClusters, topWinners, history, storeTech } = data;
 
+  const historyPoints = (history || [])
+    .map((h) => h.results)
+    .filter((r): r is number => r !== null)
+    .reverse();
+  const scalingPattern = classifyScalingPattern(historyPoints, brand.currentResults);
+
   return (
     <div className="space-y-5 pb-16 animate-in fade-in duration-150">
       {/* 1. Header & Navigation */}
@@ -461,6 +468,15 @@ export default function BrandDeepDivePage({
                   {brand.displayName}
                 </h1>
 
+                {/* Scaling Archetype Badge */}
+                <span
+                  className={`inline-flex items-center gap-1 text-[11px] font-extrabold px-2 py-0.5 rounded-md border shadow-xs ${scalingPattern.badgeClass}`}
+                  title={`${scalingPattern.label} (${scalingPattern.confidence} confidence): ${scalingPattern.description}`}
+                >
+                  <span>{scalingPattern.icon}</span>
+                  <span>{scalingPattern.label}</span>
+                </span>
+
                 {brand.isWatchlisted && (
                   <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
                     <Star className="w-3 h-3 fill-amber-500 text-amber-500" /> Starred Competitor
@@ -474,10 +490,15 @@ export default function BrandDeepDivePage({
                 )}
               </div>
 
-              <div className="flex items-center gap-2 mt-1 text-xs text-slate-500 dark:text-slate-400 flex-wrap font-mono">
+              <div className="flex items-center gap-2 mt-1.5 text-xs text-slate-500 dark:text-slate-400 flex-wrap font-mono">
                 <span>Page ID: {brand.pageId}</span>
                 {brand.country && <span>• Country: {brand.country}</span>}
                 <span>• {summary.totalAdsCaptured} total ads captured</span>
+                {scalingPattern.archetype !== "emerging" && (
+                  <span className="text-slate-600 dark:text-slate-300 font-sans font-medium">
+                    • <span>{scalingPattern.description}</span>
+                  </span>
+                )}
               </div>
             </div>
           </div>

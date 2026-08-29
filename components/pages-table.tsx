@@ -7,6 +7,7 @@ import { HistoryModal } from "./history-modal";
 import { DeleteConfirmModal } from "./delete-confirm-modal";
 import { ScanRunnerModal } from "./scan-runner-modal";
 import { ResolveBrandModal } from "./resolve-brand-modal";
+import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import {
   Search,
   Filter,
@@ -801,6 +802,7 @@ export function PagesTable({
               ) : (
                 pages.map((p) => {
                   const diff = p.difference;
+                  const scaling = p.scalingPattern || classifyScalingPattern(p.historyPoints, p.currentResults);
                   let diffBadge = (
                     <span className="text-slate-400 dark:text-slate-600 font-medium text-xs">—</span>
                   );
@@ -962,11 +964,22 @@ export function PagesTable({
                             </button>
                           </div>
                         )}
-                        {p.pageId && (
-                          <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono mt-0.5">
-                            ID: {p.pageId}
-                          </div>
-                        )}
+                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          {scaling.archetype !== "emerging" && (
+                            <span
+                              className={`inline-flex items-center gap-1 text-[10px] font-extrabold px-1.5 py-0.2 rounded border shadow-2xs ${scaling.badgeClass}`}
+                              title={`${scaling.label} (${scaling.confidence} confidence): ${scaling.description}`}
+                            >
+                              <span>{scaling.icon}</span>
+                              <span>{scaling.shortLabel}</span>
+                            </span>
+                          )}
+                          {p.pageId && (
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                              ID: {p.pageId}
+                            </span>
+                          )}
+                        </div>
                         {Boolean(
                           (p.discoveredPagesCount && p.discoveredPagesCount >= 2) ||
                           (p.searchType !== "page" && p.discoveredPagesCount && p.discoveredPagesCount > 0)
