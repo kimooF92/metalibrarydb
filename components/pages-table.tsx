@@ -965,7 +965,7 @@ export function PagesTable({
                           </div>
                         )}
                         <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                          {scaling.archetype !== "emerging" && (
+                          {scaling.archetype !== "emerging" && scaling.archetype !== "inactive" && (
                             <span
                               className={`inline-flex items-center gap-1 text-[10px] font-extrabold px-1.5 py-0.2 rounded border shadow-2xs ${scaling.badgeClass}`}
                               title={`${scaling.label} (${scaling.confidence} confidence): ${scaling.description}`}

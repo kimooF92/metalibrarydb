@@ -441,7 +441,7 @@ export default function BrandDeepDivePage({
 
   const { brand, summary, mediaDistribution, longevityDistribution, ctaDistribution, productClusters, topWinners, history, storeTech } = data;
 
-  const historyPoints = (history || [])
+  const historyPoints = [...(history || [])]
     .map((h) => h.results)
     .filter((r): r is number => r !== null)
     .reverse();
@@ -469,13 +469,15 @@ export default function BrandDeepDivePage({
                 </h1>
 
                 {/* Scaling Archetype Badge */}
-                <span
-                  className={`inline-flex items-center gap-1 text-[11px] font-extrabold px-2 py-0.5 rounded-md border shadow-xs ${scalingPattern.badgeClass}`}
-                  title={`${scalingPattern.label} (${scalingPattern.confidence} confidence): ${scalingPattern.description}`}
-                >
-                  <span>{scalingPattern.icon}</span>
-                  <span>{scalingPattern.label}</span>
-                </span>
+                {scalingPattern.archetype !== "inactive" && (
+                  <span
+                    className={`inline-flex items-center gap-1 text-[11px] font-extrabold px-2 py-0.5 rounded-md border shadow-xs ${scalingPattern.badgeClass}`}
+                    title={`${scalingPattern.label} (${scalingPattern.confidence} confidence): ${scalingPattern.description}`}
+                  >
+                    <span>{scalingPattern.icon}</span>
+                    <span>{scalingPattern.label}</span>
+                  </span>
+                )}
 
                 {brand.isWatchlisted && (
                   <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">

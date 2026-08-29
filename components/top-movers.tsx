@@ -84,7 +84,7 @@ export function TopMovers({ pages }: TopMoversProps) {
                   >
                     {p.displayName || "Meta Ad Search"}
                   </Link>
-                  {p.scaling && p.scaling.archetype !== "emerging" && (
+                  {p.scaling && p.scaling.archetype !== "emerging" && p.scaling.archetype !== "inactive" && (
                     <span
                       className={`inline-flex items-center gap-0.5 text-[9px] font-extrabold px-1.5 py-0.2 rounded border shrink-0 ${p.scaling.badgeClass}`}
                       title={`${p.scaling.label}: ${p.scaling.description}`}
@@ -132,7 +132,7 @@ export function TopMovers({ pages }: TopMoversProps) {
                   >
                     {p.displayName || "Meta Ad Search"}
                   </Link>
-                  {p.scaling && p.scaling.archetype !== "emerging" && (
+                  {p.scaling && p.scaling.archetype !== "emerging" && p.scaling.archetype !== "inactive" && (
                     <span
                       className={`inline-flex items-center gap-0.5 text-[9px] font-extrabold px-1.5 py-0.2 rounded border shrink-0 ${p.scaling.badgeClass}`}
                       title={`${p.scaling.label}: ${p.scaling.description}`}

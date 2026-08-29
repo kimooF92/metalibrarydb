@@ -4,7 +4,8 @@ export type ScalingArchetype =
   | "stable"
   | "heavy_tester"
   | "descaling"
-  | "emerging";
+  | "emerging"
+  | "inactive";
 
 export interface ScalingPatternResult {
   archetype: ScalingArchetype;
@@ -32,9 +33,52 @@ export function classifyScalingPattern(
   currentResults?: number | null
 ): ScalingPatternResult {
   const current = typeof currentResults === "number" ? currentResults : 0;
+  const rawPoints = historyPoints || [];
+  const points =
+    rawPoints.length > 0
+      ? rawPoints
+      : currentResults !== null && currentResults !== undefined
+      ? [currentResults]
+      : [];
+  const n = points.length;
 
-  // 1. If we have fewer than 3 historical scans, classify as Emerging
-  if (!historyPoints || historyPoints.length < 3) {
+  // 1. INACTIVE GUARD (Immediate check)
+  // If brand currently has 0 active ads, NEVER flag as Stable or Scaling
+  if (current === 0) {
+    const maxHistorical = points.length > 0 ? Math.max(...points) : 0;
+    if (maxHistorical >= 15) {
+      // Was previously running real volume, now pulled to 0 -> Descaling / Off-Air
+      return {
+        archetype: "descaling",
+        label: "Descaling / Off-Air",
+        shortLabel: "Off-Air",
+        icon: "⚠️",
+        badgeClass: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
+        pillClass: "bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300",
+        description: "Previously running active campaigns, now reduced to 0 active ads.",
+        confidence: n >= 3 ? "high" : "medium",
+        netChange: -maxHistorical,
+        percentChange: -100,
+        volatility: 0,
+      };
+    }
+    return {
+      archetype: "inactive",
+      label: "Inactive / 0 Ads",
+      shortLabel: "Inactive",
+      icon: "⚫",
+      badgeClass: "bg-slate-500/10 text-slate-500 dark:text-slate-400 border-slate-500/20",
+      pillClass: "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400",
+      description: "0 active ads currently running on Meta Ad Library.",
+      confidence: n >= 3 ? "high" : "low",
+      netChange: 0,
+      percentChange: 0,
+      volatility: 0,
+    };
+  }
+
+  // 2. If we have fewer than 3 historical scans, classify as Emerging
+  if (n < 3) {
     return {
       archetype: "emerging",
       label: "Emerging / New",
@@ -50,14 +94,11 @@ export function classifyScalingPattern(
     };
   }
 
-  const points = historyPoints;
-  const n = points.length;
   const oldest = points[0];
   const latest = points[n - 1];
   const maxPoint = Math.max(...points);
-  const minPoint = Math.min(...points);
 
-  // 2. Compute Scan-to-Scan Deltas
+  // 3. Compute Scan-to-Scan Deltas & Mathematical Metrics
   const deltas: number[] = [];
   for (let i = 1; i < n; i++) {
     deltas.push(points[i] - points[i - 1]);
@@ -67,13 +108,13 @@ export function classifyScalingPattern(
   const baseline = oldest > 0 ? oldest : 1;
   const percentChange = Math.round((netChange / baseline) * 100);
 
-  // Mean delta
   const meanDelta = deltas.reduce((sum, d) => sum + d, 0) / deltas.length;
-
-  // Standard Deviation of Deltas (Volatility)
   const variance =
     deltas.reduce((sum, d) => sum + Math.pow(d - meanDelta, 2), 0) / deltas.length;
   const volatility = Math.round(Math.sqrt(variance));
+
+  const meanAdCount = points.reduce((sum, p) => sum + p, 0) / n;
+  const coefficientOfVariation = meanAdCount > 0 ? volatility / meanAdCount : 0;
 
   // Count positive and negative swings (>= 15 ads change)
   const largePositiveSwings = deltas.filter((d) => d >= 15).length;
@@ -83,7 +124,7 @@ export function classifyScalingPattern(
   const confidence: "high" | "medium" | "low" =
     n >= 6 ? "high" : n >= 4 ? "medium" : "low";
 
-  // 3. Archetype Decision Tree
+  // 4. ARCHETYPE DECISION TREE
 
   // A. Burst Scaler: Both large positive expansions AND large negative contractions
   // Classic pattern: Launches 50+ test ads, prunes 40 losers in 48-72h cycles (e.g. Lemdina)
@@ -103,9 +144,13 @@ export function classifyScalingPattern(
     };
   }
 
-  // B. Descaling: Significant ad drop (> 25% drop from peak or net negative >= 30%)
-  const dropFromPeakPercent = maxPoint > 0 ? ((maxPoint - latest) / maxPoint) * 100 : 0;
-  if (dropFromPeakPercent >= 25 || percentChange <= -25 || (latest < 10 && oldest >= 30)) {
+  // B. Descaling: Sustained ad reduction (net negative >= 25% with downward trend, or major collapse from peak >= 40%)
+  const dropFromPeakPercent = maxPoint > 0 ? ((maxPoint - current) / maxPoint) * 100 : 0;
+  if (
+    (percentChange <= -25 && netChange <= -10) ||
+    (dropFromPeakPercent >= 40 && netChange < 0) ||
+    (current < 10 && maxPoint >= 30)
+  ) {
     return {
       archetype: "descaling",
       label: "Descaling / Pulling Budget",
@@ -121,8 +166,12 @@ export function classifyScalingPattern(
     };
   }
 
-  // C. Aggressive Scaler: Consistent upward ad count growth (> +25% net growth and positive recent deltas)
-  if (percentChange >= 25 && netChange >= 10 && latest > oldest) {
+  // C. Aggressive Scaler: Substantial upward growth (>= +30% growth AND >= 15 net ads, or >= 50% growth)
+  const aggressiveAbsThreshold = Math.max(15, Math.round(baseline * 0.25));
+  if (
+    (percentChange >= 30 && netChange >= aggressiveAbsThreshold && current > oldest) ||
+    (percentChange >= 50 && netChange >= 10 && current > oldest)
+  ) {
     return {
       archetype: "aggressive",
       label: "Aggressive Scaler",
@@ -130,7 +179,7 @@ export function classifyScalingPattern(
       icon: "🚀",
       badgeClass: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
       pillClass: "bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200",
-      description: "Rapidly expanding active ads (+25%+ growth). Increasing spend behind winning products.",
+      description: "Rapidly expanding active ads (+30%+ growth). Increasing spend behind winning products.",
       confidence,
       netChange,
       percentChange,
@@ -138,8 +187,12 @@ export function classifyScalingPattern(
     };
   }
 
-  // D. Heavy Tester: Low active ads, but frequent micro-fluctuations (testing without scaling)
-  if (volatility >= 8 && Math.abs(percentChange) <= 20 && current < 40) {
+  // D. Heavy Tester: High coefficient of variation with low net drift (testing creatives without scaling copies)
+  if (
+    (coefficientOfVariation >= 0.25 || volatility >= 8) &&
+    Math.abs(percentChange) <= 25 &&
+    current < 60
+  ) {
     return {
       archetype: "heavy_tester",
       label: "Heavy Tester",
@@ -155,16 +208,33 @@ export function classifyScalingPattern(
     };
   }
 
-  // E. Stable Evergreen: Steady ad count (fluctuation within +/- 15%)
+  // E. Explicit Stable Evergreen: Steady volume with low fluctuation (>= 5 ads, within +/- 15%)
+  if (current >= 5 && Math.abs(percentChange) <= 15 && dropFromPeakPercent <= 15) {
+    return {
+      archetype: "stable",
+      label: "Stable Evergreen",
+      shortLabel: "Stable",
+      icon: "🟢",
+      badgeClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+      pillClass: "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300",
+      description: "Consistent ad volume with minimal fluctuation. Maintaining established profitable evergreen creatives.",
+      confidence,
+      netChange,
+      percentChange,
+      volatility,
+    };
+  }
+
+  // F. Fallback for unclassified / low-volume activity: Moderate Activity
   return {
-    archetype: "stable",
-    label: "Stable Evergreen",
-    shortLabel: "Stable",
-    icon: "🟢",
-    badgeClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
-    pillClass: "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300",
-    description: "Consistent ad volume with minimal fluctuation. Maintaining established profitable evergreen creatives.",
-    confidence,
+    archetype: "emerging",
+    label: "Moderate Activity",
+    shortLabel: "Moderate",
+    icon: "📊",
+    badgeClass: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20",
+    pillClass: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300",
+    description: "Moderate ad volume with mixed or steady baseline signals.",
+    confidence: "low",
     netChange,
     percentChange,
     volatility,
