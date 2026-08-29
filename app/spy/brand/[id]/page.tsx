@@ -8,6 +8,7 @@ import { AdCard } from "@/components/spy/ad-card";
 import { AdRow } from "@/components/spy/ad-row";
 import { ProductCard } from "@/components/products/product-card";
 import { ProductDetailsModal } from "@/components/products/product-details-modal";
+import { ExportDossierModal } from "@/components/export-dossier-modal";
 import { useToast } from "@/components/toast-context";
 import { Ad, ScrapedProduct } from "@/types";
 import {
@@ -149,6 +150,7 @@ export default function BrandDeepDivePage({
 
   // Products Tab State
   const [isSyncingProducts, setIsSyncingProducts] = useState(false);
+  const [isDossierModalOpen, setIsDossierModalOpen] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [productStatusFilter, setProductStatusFilter] = useState<"all" | "scraped" | "pending">("all");
   const [productOfferOnly, setProductOfferOnly] = useState(false);
@@ -481,7 +483,18 @@ export default function BrandDeepDivePage({
           </div>
 
           {/* Quick Action Buttons */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            {/* Export LLM Intelligence Dossier */}
+            <button
+              onClick={() => setIsDossierModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-650 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 transition-all cursor-pointer shadow-2xs"
+              title="Export structured LLM intelligence prompt for Claude, ChatGPT, Gemini, or DeepSeek"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+              <span className="hidden sm:inline">Export LLM Dossier</span>
+              <span className="sm:hidden">Dossier</span>
+            </button>
+
             {/* Watchlist Toggle */}
             <button
               onClick={handleToggleWatchlist}
@@ -1359,6 +1372,28 @@ export default function BrandDeepDivePage({
         product={selectedProductForModal}
         onRefresh={handleRefreshProduct}
       />
+
+      {/* Export LLM Intelligence Dossier Modal */}
+      {brand && (
+        <ExportDossierModal
+          page={{
+            id: brand.id || brand.pageId,
+            displayName: brand.displayName,
+            pageId: brand.pageId,
+            url: brand.url,
+            country: brand.country,
+            currentResults: brand.currentResults,
+            searchType: "page",
+            lastChecked: brand.lastChecked,
+            lastSuccessAt: brand.lastChecked,
+            createdAt: "",
+            updatedAt: "",
+            status: (brand.status as any) || "success",
+          }}
+          isOpen={isDossierModalOpen}
+          onClose={() => setIsDossierModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

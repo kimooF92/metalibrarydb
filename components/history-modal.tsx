@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { TrackedPage, ScanHistoryEntry } from "@/types";
-import { X, Calendar, Loader2, ExternalLink, ArrowUpRight, ArrowDownRight, Minus, ChevronUp, ChevronDown } from "lucide-react";
+import { X, Calendar, Loader2, ExternalLink, ArrowUpRight, ArrowDownRight, Minus, ChevronUp, ChevronDown, Sparkles } from "lucide-react";
+import { ExportDossierModal } from "@/components/export-dossier-modal";
 
 interface HistoryModalProps {
   page: TrackedPage | null;
@@ -65,6 +66,7 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
   const [history, setHistory] = useState<ScanHistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [sortAsc, setSortAsc] = useState(false); // newest first by default
+  const [showDossierModal, setShowDossierModal] = useState(false);
 
   useEffect(() => {
     if (isOpen && page) {
@@ -101,48 +103,61 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
     .map((h) => h.results);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-20 px-4 bg-slate-950/70 animate-in fade-in duration-150"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
+    <>
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="history-modal-title"
-        className="relative w-full max-w-2xl glass-panel rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+        className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-20 px-4 bg-slate-950/70 animate-in fade-in duration-150"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900/50">
-          <div>
-            <div className="flex items-center space-x-2">
-              <h2 id="history-modal-title" className="text-base font-bold text-slate-900 dark:text-slate-100">
-                Scan History
-              </h2>
-              <a
-                href={page.url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-indigo-650 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-305 flex items-center space-x-1"
-              >
-                <span>View Meta Ad Library</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="history-modal-title"
+          className="relative w-full max-w-2xl glass-panel rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900/50">
+            <div>
+              <div className="flex items-center space-x-2">
+                <h2 id="history-modal-title" className="text-base font-bold text-slate-900 dark:text-slate-100">
+                  Scan History
+                </h2>
+                <a
+                  href={page.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-indigo-650 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-305 flex items-center space-x-1"
+                >
+                  <span>View Meta Ad Library</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                {page.displayName || page.url}
+              </p>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              {page.displayName || page.url}
-            </p>
-          </div>
 
-          <button
-            onClick={onClose}
-            aria-label="Close modal"
-            className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setShowDossierModal(true)}
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800/80 text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+                title="Export structured prompt for Claude, ChatGPT, Gemini, or DeepSeek"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                <span className="hidden sm:inline">Export LLM Dossier</span>
+                <span className="sm:hidden">Dossier</span>
+              </button>
+
+              <button
+                onClick={onClose}
+                aria-label="Close modal"
+                className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
 
         {/* Content Body */}
         <div className="p-6 overflow-y-auto flex-1 text-slate-800 dark:text-slate-100">
@@ -261,5 +276,13 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
         </div>
       </div>
     </div>
+
+    {/* Export Dossier Modal */}
+    <ExportDossierModal
+      page={page}
+      isOpen={showDossierModal}
+      onClose={() => setShowDossierModal(false)}
+    />
+  </>
   );
 }

@@ -13,6 +13,8 @@ export interface TrackedPage {
   createdAt: string;
   updatedAt: string;
   // Extended fields
+  country?: string | null;
+  landingPage?: string | null;
   failureReason?: string | null;
   attempts?: number | null;
   notes?: string | null;
