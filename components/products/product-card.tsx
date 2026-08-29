@@ -215,7 +215,7 @@ export function ProductCard({
           </div>
         )}
 
-        {/* Top Right: Favorite Star & Brand Badge */}
+        {/* Top Right: Favorite Star & Delete Button */}
         <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1.5">
           <button
             type="button"
@@ -229,6 +229,18 @@ export function ProductCard({
           >
             <Star className={`w-3.5 h-3.5 ${isFavorite ? "fill-current text-slate-950" : ""}`} />
           </button>
+
+          {onDelete && (
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="p-1.5 rounded-lg backdrop-blur-md border border-white/10 bg-slate-900/70 text-slate-300 hover:text-rose-400 hover:bg-rose-950/80 hover:border-rose-500/40 transition-all cursor-pointer shadow-sm disabled:opacity-50"
+              title="Delete Tracked Product"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Offer Overlay Ribbon */}

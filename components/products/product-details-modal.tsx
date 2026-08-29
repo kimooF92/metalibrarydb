@@ -1988,34 +1988,6 @@ ${imagesText}`;
               );
             })()}
           </div>
-
-          {/* Danger Zone: Delete Product from Database */}
-          {onDelete && (
-              <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
-                <div className="flex items-center justify-between gap-4 p-3 rounded-xl bg-rose-500/5 border border-rose-500/15">
-                  <div>
-                    <div className="text-xs font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Delete Product</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      Permanently remove this tracked product and its scraped landing page data from your library.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      onDelete(product.id);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-lg shadow-sm transition-all cursor-pointer shrink-0"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Delete Product</span>
-                  </button>
-                </div>
-              </div>
-            )}
             </>
           )}
         </div>
