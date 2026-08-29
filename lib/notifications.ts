@@ -148,33 +148,8 @@ export async function logCountScanNotification(params: {
     });
   }
 
-  // 4. Positive difference (+new ads launched, minor churn < 5 on small/medium page)
-  if (diffNum > 0) {
-    return createNotification({
-      type: "count_scan",
-      title: `+${diffNum} New Ads on ${brandName}`,
-      message: `"${brandName}" launched +${diffNum} new ad(s). Queued for free local scan ($0 credits).`,
-      severity: "info",
-      trackedPageId,
-      actionUrl: brandPath,
-      metadata: { currentResults, difference: diffNum, brandName, pageId, queuedForLocalScan: true },
-    });
-  }
-
-  // 5. Noticeable drop: 3 or more ads turned off
-  if (diffNum <= -3) {
-    return createNotification({
-      type: "count_scan",
-      title: `${Math.abs(diffNum)} Ads Paused on ${brandName}`,
-      message: `"${brandName}" paused ${Math.abs(diffNum)} ad(s). Total active ads: ${currentResults ?? 0}.`,
-      severity: "info",
-      trackedPageId,
-      actionUrl: brandPath,
-      metadata: { currentResults, difference: diffNum, brandName, pageId },
-    });
-  }
-
-  // 6. Routine check with 0 or minor (-1, -2) difference -> SILENT (recorded to scan_history only)
+  // Minor changes (1 to 4 new ads, and pauses) are cleanly summarized in the Batch Summary digest
+  // to avoid flooding the notification center with dozens of individual cards.
   return null;
 }
 
@@ -198,21 +173,32 @@ export async function logAdSpyNotification(params: {
   }
 
   const brandPath = `/spy/brand/${encodeURIComponent(pageId || trackedPageId)}`;
-  const title = `✨ +${extractedCount} Creatives Synced: ${brandName}`;
-  let message = `Ingested ${extractedCount} ad creative(s) for "${brandName}".`;
-  if (archivedCount && archivedCount > 0) {
-    message += ` Archived ${archivedCount} turned-off ad(s).`;
+
+  if (extractedCount > 0) {
+    return createNotification({
+      type: "ad_spy",
+      title: `✨ Ingested ${extractedCount} New Ad(s): ${brandName}`,
+      message: `Extracted and stored ${extractedCount} new creative media assets & ad archive records for "${brandName}".`,
+      severity: "success",
+      trackedPageId,
+      actionUrl: brandPath,
+      metadata: { extractedCount, isFullScan, brandName, pageId },
+    });
   }
 
-  return createNotification({
-    type: "ad_spy",
-    title,
-    message,
-    severity: "success",
-    trackedPageId,
-    actionUrl: brandPath,
-    metadata: { extractedCount, isFullScan, archivedCount, brandName, pageId },
-  });
+  if (archivedCount && archivedCount > 0) {
+    return createNotification({
+      type: "ad_spy",
+      title: `📦 Archived ${archivedCount} Inactive Ad(s): ${brandName}`,
+      message: `Marked ${archivedCount} ad(s) as archived (no longer seen in active library).`,
+      severity: "info",
+      trackedPageId,
+      actionUrl: brandPath,
+      metadata: { archivedCount, brandName, pageId },
+    });
+  }
+
+  return null;
 }
 
 export interface BatchSummaryMover {
@@ -233,6 +219,7 @@ export interface LogBatchSummaryParams {
   failedCount?: number;
   durationSeconds?: number;
   actionUrl?: string;
+  shardInfo?: string;
 }
 
 /**
@@ -248,16 +235,23 @@ export async function logBatchSummaryNotification(params: LogBatchSummaryParams)
     failedCount = 0,
     durationSeconds = 0,
     actionUrl,
+    shardInfo,
   } = params;
 
   if (totalScanned === 0) return null;
 
-  let title = "🏁 Scan Round Complete";
+  // If a shard found 0 movers and 0 errors, stay silent to avoid spamming "0 unchanged" cards
+  if (runnerType === "count_worker" && movers.length === 0 && failedCount === 0) {
+    return null;
+  }
+
+  const shardPrefix = shardInfo ? `[${shardInfo}] ` : "";
+  let title = `${shardPrefix}🏁 Scan Round Complete`;
   let message = "";
   let severity: NotificationSeverity = "info";
 
   if (runnerType === "apify_spy") {
-    title = `⚡ Apify Spy Sync (${totalScanned} Brands)`;
+    title = `${shardPrefix}⚡ Apify Spy Sync (${totalScanned} Brands)`;
     if (newAdsCount > 0) {
       severity = "success";
       const moverSummary = movers.slice(0, 3).map((m) => `${m.name} (+${m.extractedCount || m.diff || 1})`).join(", ");
@@ -266,16 +260,16 @@ export async function logBatchSummaryNotification(params: LogBatchSummaryParams)
       message = `All ${totalScanned} advertiser catalogs up to date (no new creatives detected).`;
     }
   } else if (runnerType === "count_worker") {
-    title = `🏁 Count Check Complete (${totalScanned} Brands)`;
+    title = `${shardPrefix}🏁 Count Check (${totalScanned} Brands)`;
     if (movers.length > 0) {
       severity = "success";
       const moverSummary = movers.slice(0, 3).map((m) => `${m.name} (+${m.diff})`).join(", ");
-      message = `🚀 ${movers.length} brand(s) launched new ads: ${moverSummary}${movers.length > 3 ? ` +${movers.length - 3} more` : ""}. (${unchangedCount} unchanged)`;
+      message = `🚀 ${movers.length} brand(s) scaled new ads: ${moverSummary}${movers.length > 3 ? ` +${movers.length - 3} more` : ""}. (${unchangedCount} unchanged)`;
     } else {
-      message = `Verified ${totalScanned} tracked pages. All counts unchanged.`;
+      message = `Verified ${totalScanned} tracked pages.`;
     }
   } else {
-    title = `🌐 Discovery Round Complete (${totalScanned} Pages)`;
+    title = `${shardPrefix}🌐 Discovery Round Complete (${totalScanned} Pages)`;
     message = `Processed discovery scan across ${totalScanned} candidates.`;
   }
 

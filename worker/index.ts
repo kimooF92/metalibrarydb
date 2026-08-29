@@ -14,7 +14,7 @@ import { scanAdCreatives } from "./spy-scanner";
 import { runDiscoveryScan } from "./discovery-scanner";
 import { mergeExactMatchWithPageId } from "../actions/merge-pages";
 import { isValidPageId } from "../lib/utils";
-import { eq, asc, desc } from "drizzle-orm";
+import { eq, asc, desc, sql } from "drizzle-orm";
 import {
   getNextPendingJob,
   markJobCompleted,
@@ -43,12 +43,20 @@ import {
 } from "./backoff";
 
 async function runWorker() {
+  const shardIndex = process.env.SHARD_INDEX !== undefined ? parseInt(process.env.SHARD_INDEX, 10) : 0;
+  const totalShards = process.env.TOTAL_SHARDS !== undefined ? parseInt(process.env.TOTAL_SHARDS, 10) : 1;
+  const isMultiShard = totalShards > 1;
+  const shardTag = isMultiShard ? ` [Shard ${shardIndex + 1}/${totalShards}]` : "";
+  const isCoordinator = shardIndex === 0;
+
   console.log("==========================================");
-  console.log(" Meta Ad Library Tracker — Worker Started ");
+  console.log(` Meta Ad Library Tracker — Worker Started${shardTag} `);
   console.log("==========================================");
 
-  // Clear any orphaned scanning/running jobs from previous unexpected shutdowns
-  await resetStuckJobs();
+  // Only the primary coordinator (Shard 0 or standalone runner) clears orphaned jobs
+  if (isCoordinator) {
+    await resetStuckJobs();
+  }
 
   // Load live application settings from database (with fallback defaults)
   const settings = await getAppSettings();
@@ -65,7 +73,8 @@ async function runWorker() {
     isForceRefresh ||
     process.env.AUTO_BURST_ENQUEUE !== "false";
 
-  if (shouldRefreshAll) {
+  // Only the primary coordinator (Shard 0) triggers the initial enqueue check
+  if (shouldRefreshAll && isCoordinator) {
     const cooldownHours = isForceRefresh
       ? 0
       : parseInt(process.env.AUTO_REFRESH_COOLDOWN_HOURS || String(settings.staleHours || 12), 10);
@@ -76,7 +85,7 @@ async function runWorker() {
   }
 
   const shouldEnqueueSpy = args.includes("--enqueue-spy") || process.env.ENQUEUE_SPY === "true";
-  if (shouldEnqueueSpy) {
+  if (shouldEnqueueSpy && isCoordinator) {
     const spyCooldownDays = parseInt(process.env.SPY_COOLDOWN_DAYS || "3", 10);
     const spyMaxPages = parseInt(process.env.SPY_MAX_PAGES_PER_RUN || "25", 10);
     const spyThreshold = settings.autoSpyThreshold || 1;
@@ -171,6 +180,7 @@ async function runWorker() {
           failedCount: sessionErrors,
           durationSeconds: Math.round((Date.now() - sessionStartTime) / 1000),
           actionUrl: "/?sortBy=difference&sortOrder=desc",
+          shardInfo: isMultiShard ? `Shard ${shardIndex + 1}/${totalShards}` : undefined,
         });
       } catch (err) {
         console.error("[Worker] Failed to emit batch summary:", err);
@@ -187,11 +197,21 @@ async function runWorker() {
       // Heartbeat update
       await updateWorkerState({ updatedAt: new Date() }).catch(() => {});
 
-      // 0. Check for pending country discovery runs first
-      const pendingDiscoveryRun = await db.query.discoveryRuns.findFirst({
-        where: eq(discoveryRuns.status, "pending"),
-        orderBy: [asc(discoveryRuns.createdAt)],
-      });
+      // 0. Check for pending country discovery runs first (claimed atomically with FOR UPDATE SKIP LOCKED)
+      const claimedDiscoveryResult = await db.execute(sql`
+        UPDATE discovery_runs
+        SET status = 'running', started_at = NOW()
+        WHERE id = (
+          SELECT id FROM discovery_runs
+          WHERE status = 'pending'
+          ORDER BY created_at ASC
+          FOR UPDATE SKIP LOCKED
+          LIMIT 1
+        )
+        RETURNING *;
+      `);
+      const claimedDiscoveryRuns = (Array.isArray(claimedDiscoveryResult) ? claimedDiscoveryResult : (claimedDiscoveryResult as any)?.rows || []) as any[];
+      const pendingDiscoveryRun = claimedDiscoveryRuns.length > 0 ? claimedDiscoveryRuns[0] : null;
 
       if (pendingDiscoveryRun) {
         console.log(

@@ -1,10 +1,7 @@
 name: Meta Ad Tracker Worker
 
 on:
-  schedule:
-    # Runs every 2 hours at minute 15 (00:15, 02:15, 04:15, 06:15, 08:15, 10:15, 12:15, 14:15, 16:15, 18:15, 20:15, 22:15 UTC)
-    - cron: '15 */2 * * *'
-  workflow_dispatch: # Allows manual trigger from GitHub UI anytime
+  workflow_dispatch: # Triggered exclusively via external cron (cron-job.org) or manual UI trigger
 
 # Dedicated concurrency group with cancel-in-progress to prevent stalled runs from blocking the queue
 concurrency:
@@ -12,9 +9,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  run-worker:
+  run-worker-matrix:
+    name: Shard ${{ matrix.shard_num }}/4
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false # Keeps other shards running even if one encounters a transient error
+      matrix:
+        include:
+          - shard: 0
+            shard_num: 1
+          - shard: 1
+            shard_num: 2
+          - shard: 2
+            shard_num: 3
+          - shard: 3
+            shard_num: 4
 
     steps:
       - name: Checkout Code
@@ -41,7 +52,7 @@ jobs:
         run: npx playwright install chromium --with-deps
         continue-on-error: false
 
-      - name: Run Background Worker Queue
+      - name: Run Background Worker Shard ${{ matrix.shard_num }}/4
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -59,5 +70,7 @@ jobs:
           PLAYWRIGHT_HEADLESS: "true"
           MAX_SCANS_PER_HOUR: "0"
           MAX_SCANS_PER_DAY: "0"
-          AUTO_REFRESH_COOLDOWN_HOURS: "12"
+          AUTO_REFRESH_COOLDOWN_HOURS: "11"
+          SHARD_INDEX: ${{ matrix.shard }}
+          TOTAL_SHARDS: 4
         run: npm run worker
