@@ -1,15 +1,16 @@
 import { db } from "@/db";
-import { trackedPages, creativeScans, queue } from "@/db/schema";
+import { trackedPages, creativeScans, queue, discoveryRuns } from "@/db/schema";
 import { eq, and, or, lt, isNull, inArray } from "drizzle-orm";
 
 /**
- * Cleans up orphaned or stuck scans across trackedPages, creativeScans, and queue tables.
+ * Cleans up orphaned or stuck scans across trackedPages, creativeScans, queue, and discoveryRuns tables.
  * @param timeoutMinutes Age threshold in minutes for considering a scan orphaned (default: 5 mins, 0 for immediate reset of all)
  */
 export async function cleanOrphanedScans(timeoutMinutes: number = 5): Promise<{
   fixedPages: number;
   fixedScans: number;
   fixedQueue: number;
+  fixedDiscoveryRuns: number;
 }> {
   const cutoff = new Date(Date.now() - timeoutMinutes * 60 * 1000);
   const now = new Date();
@@ -17,6 +18,7 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 5): Promise<{
   let fixedPages = 0;
   let fixedScans = 0;
   let fixedQueue = 0;
+  let fixedDiscoveryRuns = 0;
 
   // 1. Reset orphaned creative_scans
   const stuckScans = timeoutMinutes === 0
@@ -77,7 +79,37 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 5): Promise<{
     fixedQueue = queueIds.length;
   }
 
-  // 3. Reset orphaned tracked_pages in "scanning" status
+  // 3. Reset orphaned discovery_runs in "running" status
+  const stuckDiscoveryRuns = timeoutMinutes === 0
+    ? await db.query.discoveryRuns.findMany({
+        where: eq(discoveryRuns.status, "running"),
+      })
+    : await db.query.discoveryRuns.findMany({
+        where: and(
+          eq(discoveryRuns.status, "running"),
+          or(
+            isNull(discoveryRuns.startedAt),
+            lt(discoveryRuns.startedAt, cutoff),
+            and(isNull(discoveryRuns.startedAt), lt(discoveryRuns.createdAt, cutoff))
+          )
+        ),
+      });
+
+  if (stuckDiscoveryRuns.length > 0) {
+    const runIds = stuckDiscoveryRuns.map((r) => r.id);
+    await db
+      .update(discoveryRuns)
+      .set({
+        status: "failed",
+        failureReason: "timeout",
+        outcomeDetails: `Discovery run automatically marked failed after ${timeoutMinutes > 0 ? `${timeoutMinutes}m of inactivity` : "orphaned job cleanup"}`,
+        finishedAt: now,
+      })
+      .where(inArray(discoveryRuns.id, runIds));
+    fixedDiscoveryRuns = runIds.length;
+  }
+
+  // 4. Reset orphaned tracked_pages in "scanning" status
   const scanningPages = timeoutMinutes === 0
     ? await db.query.trackedPages.findMany({
         where: eq(trackedPages.status, "scanning"),
@@ -108,5 +140,6 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 5): Promise<{
     fixedPages++;
   }
 
-  return { fixedPages, fixedScans, fixedQueue };
+  return { fixedPages, fixedScans, fixedQueue, fixedDiscoveryRuns };
 }
+

@@ -17,6 +17,7 @@ async function main() {
   console.log(`   • ${result.fixedPages} tracked page(s) reset from 'scanning'`);
   console.log(`   • ${result.fixedScans} creative scan(s) marked failed from 'running'`);
   console.log(`   • ${result.fixedQueue} queue job(s) marked failed from 'running'`);
+  console.log(`   • ${result.fixedDiscoveryRuns} discovery run(s) marked failed from 'running'`);
   console.log("==========================================");
 
   process.exit(0);

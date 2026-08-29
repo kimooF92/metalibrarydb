@@ -17,6 +17,7 @@ import { isValidPageId } from "../lib/utils";
 import { eq, asc, desc, sql } from "drizzle-orm";
 import {
   getNextPendingJob,
+  claimNextPendingDiscoveryRun,
   markJobCompleted,
   markJobFailed,
   markCreativeJobCompleted,
@@ -198,20 +199,7 @@ async function runWorker() {
       await updateWorkerState({ updatedAt: new Date() }).catch(() => {});
 
       // 0. Check for pending country discovery runs first (claimed atomically with FOR UPDATE SKIP LOCKED)
-      const claimedDiscoveryResult = await db.execute(sql`
-        UPDATE discovery_runs
-        SET status = 'running', started_at = NOW()
-        WHERE id = (
-          SELECT id FROM discovery_runs
-          WHERE status = 'pending'
-          ORDER BY created_at ASC
-          FOR UPDATE SKIP LOCKED
-          LIMIT 1
-        )
-        RETURNING *;
-      `);
-      const claimedDiscoveryRuns = (Array.isArray(claimedDiscoveryResult) ? claimedDiscoveryResult : (claimedDiscoveryResult as any)?.rows || []) as any[];
-      const pendingDiscoveryRun = claimedDiscoveryRuns.length > 0 ? claimedDiscoveryRuns[0] : null;
+      const pendingDiscoveryRun = await claimNextPendingDiscoveryRun();
 
       if (pendingDiscoveryRun) {
         console.log(

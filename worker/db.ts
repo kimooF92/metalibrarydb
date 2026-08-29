@@ -970,4 +970,37 @@ export async function markDiscoveryJobFailed(
     .where(eq(queue.id, queueId));
 }
 
+/**
+ * Atomically claims the next pending country discovery run using PostgreSQL FOR UPDATE SKIP LOCKED
+ */
+export async function claimNextPendingDiscoveryRun() {
+  const result = await db.execute(sql`
+    UPDATE discovery_runs
+    SET status = 'running', started_at = NOW()
+    WHERE id = (
+      SELECT id FROM discovery_runs
+      WHERE status = 'pending'
+      ORDER BY created_at ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT 1
+    )
+    RETURNING *;
+  `);
+
+  const claimedRows = (Array.isArray(result) ? result : (result as any)?.rows || []) as any[];
+  if (!claimedRows || claimedRows.length === 0) return null;
+  const row = claimedRows[0];
+
+  return {
+    id: String(row.id),
+    country: String(row.country || "TN"),
+    searchUrl: String(row.search_url || row.searchUrl || ""),
+    query: row.query ? String(row.query) : null,
+    startDateMin: row.start_date_min ? new Date(row.start_date_min) : null,
+    startDateMax: row.start_date_max ? new Date(row.start_date_max) : null,
+    status: String(row.status || "running"),
+  };
+}
+
+
 

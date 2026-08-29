@@ -346,6 +346,10 @@ export async function runDiscoveryScan(
   page.on("response", handleResponse);
 
   try {
+    if (!targetUrl || typeof targetUrl !== "string" || !targetUrl.trim().startsWith("http")) {
+      throw new Error(`Invalid or missing target search URL (received: ${targetUrl})`);
+    }
+
     // 1. Update run status to running
     const now = new Date();
     await db
@@ -353,10 +357,10 @@ export async function runDiscoveryScan(
       .set({ status: "running", startedAt: now })
       .where(eq(discoveryRuns.id, runId));
 
-    let cleanTargetUrl = targetUrl;
+    let cleanTargetUrl = targetUrl.trim();
     try {
       // Prevent double encoding of zero-width joiner query parameter
-      cleanTargetUrl = targetUrl.replace(/q=%E2%80%8D/gi, "q=" + encodeURIComponent("\u200D"));
+      cleanTargetUrl = cleanTargetUrl.replace(/q=%E2%80%8D/gi, "q=" + encodeURIComponent("\u200D"));
     } catch {}
 
     console.log(`[Discovery Scanner] Navigating to broad search URL: ${cleanTargetUrl}`);
