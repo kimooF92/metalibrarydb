@@ -30,6 +30,10 @@ async function syncSettingsSchema() {
     `;
     console.log("✓ Ensured default app_settings row exists");
 
+    // 3. Enable Row Level Security
+    await client`ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;`;
+    console.log("✓ Enabled Row Level Security on app_settings");
+
     console.log("Successfully synchronized app_settings table schema!");
     process.exit(0);
   } catch (err) {

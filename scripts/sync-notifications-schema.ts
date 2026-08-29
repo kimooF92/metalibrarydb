@@ -38,6 +38,10 @@ async function syncNotificationsSchema() {
     await client`CREATE INDEX IF NOT EXISTS idx_notifications_tracked_page_id ON activity_notifications (tracked_page_id);`;
     console.log("✓ Created indexes for activity_notifications");
 
+    // 4. Enable Row Level Security
+    await client`ALTER TABLE activity_notifications ENABLE ROW LEVEL SECURITY;`;
+    console.log("✓ Enabled Row Level Security on activity_notifications");
+
     console.log("Successfully synchronized activity_notifications table schema!");
     process.exit(0);
   } catch (err) {
