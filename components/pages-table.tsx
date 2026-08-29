@@ -701,9 +701,9 @@ export function PagesTable({
       <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 flex-1 min-h-[400px] md:min-h-0 flex flex-col overflow-hidden">
         <div className="overflow-auto flex-1 min-h-0 relative">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-900 sticky top-0 z-20 text-[11px] font-semibold text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800/80 uppercase tracking-wider select-none shadow-sm">
+            <thead className="bg-slate-50 dark:bg-slate-900 sticky top-0 z-20 text-[11px] font-semibold text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800/80 uppercase tracking-wider select-none shadow-xs">
               <tr>
-                <th className="px-3 py-1.5 w-8">
+                <th className="px-3 py-2 w-8">
                   <input
                     type="checkbox"
                     checked={allVisibleSelected}
@@ -711,35 +711,32 @@ export function PagesTable({
                     className="rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-slate-900 cursor-pointer"
                   />
                 </th>
-                <th className="px-2 py-1.5 w-7 text-center">
+                <th className="px-2 py-2 w-7 text-center">
                   <Star className="w-3 h-3 text-slate-400 dark:text-slate-500 mx-auto" />
                 </th>
-                <SortHeader col="displayName" label="Brand / Page Name" className="min-w-[180px]" />
-                <SortHeader col="currentResults" label="Active Ads" className="w-36" />
-                <th className="px-3 py-1.5 whitespace-nowrap text-slate-400 font-medium" title="Approximate number of unique products advertised by this brand (clustered by landing page URLs and ad copy fingerprints)">
-                  <span className="flex items-center gap-1">
-                    <Package className="w-3 h-3 text-indigo-400" />
-                    Approx Products
+                <SortHeader col="displayName" label="Brand" className="min-w-[180px]" />
+                <SortHeader col="currentResults" label="Active Ads & Trend" className="w-48" />
+                <th className="px-3 py-2 text-center whitespace-nowrap text-slate-400 font-medium w-24" title="Unique products catalog">
+                  <span className="inline-flex items-center justify-center gap-1">
+                    <Package className="w-3 h-3 text-slate-400" />
+                    Products
                   </span>
                 </th>
-                <th className="px-3 py-1.5 whitespace-nowrap text-slate-400 font-medium">Prev Ads</th>
-                <SortHeader col="difference" label="Difference" className="w-32" />
-                <SortHeader col="status" label="Status" className="w-28" />
                 <SortHeader col="lastChecked" label="Last Checked" className="w-36" />
-                <th className="px-3 py-1.5 text-right whitespace-nowrap text-slate-400 font-medium">Actions</th>
+                <th className="px-3 py-2 text-right whitespace-nowrap text-slate-400 font-medium w-28">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center text-slate-500 dark:text-slate-400">
+                  <td colSpan={7} className="px-4 py-12 text-center text-slate-500 dark:text-slate-400">
                     <Loader2 className="w-6 h-6 animate-spin text-indigo-500 dark:text-indigo-400 mx-auto mb-2" />
                     <span>Loading tracked pages...</span>
                   </td>
                 </tr>
               ) : pages.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-16 text-center">
+                  <td colSpan={7} className="px-4 py-16 text-center">
                     <div className="flex flex-col items-center justify-center max-w-md mx-auto space-y-3">
                       <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center text-slate-400">
                         <Filter className="w-6 h-6 opacity-60" />
@@ -803,59 +800,16 @@ export function PagesTable({
                 pages.map((p) => {
                   const diff = p.difference;
                   const scaling = p.scalingPattern || classifyScalingPattern(p.historyPoints, p.currentResults);
-                  let diffBadge = (
-                    <span className="text-slate-400 dark:text-slate-600 font-medium text-xs">—</span>
-                  );
-
-                  if (diff === 0) {
-                    diffBadge = (
-                      <span className="inline-flex items-center text-xs text-slate-500 dark:text-slate-400 font-medium px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
-                        <Minus className="w-3 h-3 mr-1 text-slate-400" /> 0
-                      </span>
-                    );
-                  } else if (diff !== null && diff !== undefined) {
-                    if (diff >= 20) {
-                      diffBadge = (
-                        <span className="inline-flex items-center gap-1 font-extrabold text-xs text-amber-700 dark:text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-md shadow-sm shadow-amber-500/10" title="Rapidly Scaling (+20 or more ads)">
-                          <Flame className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 fill-amber-500/20 animate-pulse shrink-0" />
-                          <span>+{diff}</span>
-                          <span className="text-[9px] uppercase tracking-wide font-black px-1 py-0.2 bg-amber-500/25 rounded text-amber-800 dark:text-amber-200">Scaling</span>
-                        </span>
-                      );
-                    } else if (diff > 0) {
-                      diffBadge = (
-                        <span className="inline-flex items-center gap-0.5 font-bold text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-500/12 border border-emerald-500/25 px-2 py-0.5 rounded-md shadow-sm">
-                          <ArrowUpRight className="w-3.5 h-3.5 text-emerald-500 stroke-[2.5]" />
-                          <span>+{diff}</span>
-                        </span>
-                      );
-                    } else if (diff <= -20) {
-                      diffBadge = (
-                        <span className="inline-flex items-center gap-1 font-extrabold text-xs text-rose-800 dark:text-rose-200 bg-rose-500/20 border border-rose-500/40 px-2 py-0.5 rounded-md shadow-sm" title="Heavy Descaling (-20 or more ads)">
-                          <ArrowDownRight className="w-3.5 h-3.5 text-rose-500 stroke-[3]" />
-                          <span>{diff}</span>
-                          <span className="text-[9px] uppercase tracking-wide font-black px-1 py-0.2 bg-rose-500/30 rounded text-rose-300">Dropped</span>
-                        </span>
-                      );
-                    } else {
-                      diffBadge = (
-                        <span className="inline-flex items-center gap-0.5 font-bold text-xs text-rose-700 dark:text-rose-300 bg-rose-500/12 border border-rose-500/25 px-2 py-0.5 rounded-md shadow-sm">
-                          <ArrowDownRight className="w-3.5 h-3.5 text-rose-500 stroke-[2.5]" />
-                          <span>{diff}</span>
-                        </span>
-                      );
-                    }
-                  }
 
                   const isHighVolume = p.currentResults !== null && p.currentResults >= 50;
                   const isDimmed = p.currentResults === 0 || p.status === "unclear";
-
                   const isSelected = selectedIds.includes(p.id);
 
                   return (
                     <tr
                       key={p.id}
-                      className={`transition-all group ${isSelected
+                      className={`transition-all group ${
+                        isSelected
                           ? "bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-950/60"
                           : watchlisted[p.id]
                             ? "bg-amber-500/[0.03] border-l-2 border-l-yellow-500 dark:border-l-yellow-400/70 hover:bg-amber-500/[0.07]"
@@ -864,23 +818,10 @@ export function PagesTable({
                               : isDimmed
                                 ? "opacity-60 hover:opacity-100 hover:bg-slate-100 dark:hover:bg-slate-900/40"
                                 : "hover:bg-slate-50 dark:hover:bg-slate-900/60"
-                        }`}
+                      }`}
                     >
-                      {/* Watchlist Star */}
-                      <td className="px-2 py-1.5 text-center">
-                        <button
-                          onClick={() => toggleWatchlist(p.id)}
-                          title={watchlisted[p.id] ? "Remove from watchlist" : "Add to watchlist"}
-                          className={`p-0.5 rounded transition-all ${watchlisted[p.id]
-                              ? "text-yellow-500 dark:text-yellow-400"
-                              : "text-slate-400 dark:text-slate-700 hover:text-yellow-500 dark:hover:text-yellow-400/60 opacity-0 group-hover:opacity-100"
-                            }`}
-                        >
-                          <Star className={`w-3 h-3 ${watchlisted[p.id] ? "fill-yellow-500 dark:fill-yellow-400" : ""}`} />
-                        </button>
-                      </td>
                       {/* Checkbox */}
-                      <td className="px-2.5 py-1.5 text-center">
+                      <td className="px-3 py-2 text-center">
                         <label className="relative inline-flex items-center justify-center cursor-pointer">
                           <input
                             type="checkbox"
@@ -889,10 +830,11 @@ export function PagesTable({
                             aria-label={`Select ${p.displayName || "tracked page"}`}
                             className="sr-only"
                           />
-                          <div className={`w-4 h-4 rounded border transition-all flex items-center justify-center shadow-sm ${isSelected
+                          <div className={`w-4 h-4 rounded border transition-all flex items-center justify-center shadow-2xs ${
+                            isSelected
                               ? "bg-indigo-600 border-indigo-500 shadow-indigo-600/30"
-                              : "bg-white dark:bg-slate-900/90 border-slate-200 dark:border-slate-700/80 hover:border-slate-450 dark:hover:border-slate-500"
-                            }`}>
+                              : "bg-white dark:bg-slate-900/90 border-slate-200 dark:border-slate-700/80 hover:border-slate-400"
+                          }`}>
                             {isSelected && (
                               <Check className="w-3 h-3 text-white stroke-[3]" />
                             )}
@@ -900,8 +842,23 @@ export function PagesTable({
                         </label>
                       </td>
 
-                      {/* Display Name & Link */}
-                      <td className="px-3 py-1.5">
+                      {/* Watchlist Star */}
+                      <td className="px-2 py-2 text-center">
+                        <button
+                          onClick={() => toggleWatchlist(p.id)}
+                          title={watchlisted[p.id] ? "Remove from watchlist" : "Add to watchlist"}
+                          className={`p-0.5 rounded transition-all cursor-pointer ${
+                            watchlisted[p.id]
+                              ? "text-yellow-500 dark:text-yellow-400"
+                              : "text-slate-400 dark:text-slate-600 hover:text-yellow-500 opacity-0 group-hover:opacity-100"
+                          }`}
+                        >
+                          <Star className={`w-3.5 h-3.5 ${watchlisted[p.id] ? "fill-yellow-500 dark:fill-yellow-400" : ""}`} />
+                        </button>
+                      </td>
+
+                      {/* Brand Name & Archetype Badge */}
+                      <td className="px-3 py-2">
                         {editingId === p.id ? (
                           <div className="flex items-center space-x-1.5">
                             <input
@@ -912,18 +869,18 @@ export function PagesTable({
                                 if (e.key === "Enter") saveEditing(p.id);
                                 if (e.key === "Escape") cancelEditing();
                               }}
-                              className="bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white px-2 py-1 rounded border border-slate-200 dark:border-indigo-500 focus:outline-none w-44"
+                              className="bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white px-2 py-1 rounded border border-indigo-500 focus:outline-none w-44"
                               autoFocus
                               disabled={savingEdit}
                             />
                             <button
                               onClick={() => saveEditing(p.id)}
                               disabled={savingEdit}
-                              className="p-1 text-emerald-500 dark:text-emerald-400 hover:text-emerald-400 dark:hover:text-emerald-300 transition-colors"
+                              className="p-1 text-emerald-500 hover:text-emerald-400 transition-colors cursor-pointer"
                               title="Save Display Name"
                             >
                               {savingEdit ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-500 dark:text-indigo-400" />
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-500" />
                               ) : (
                                 <Check className="w-3.5 h-3.5" />
                               )}
@@ -931,221 +888,175 @@ export function PagesTable({
                             <button
                               onClick={cancelEditing}
                               disabled={savingEdit}
-                              className="p-1 text-slate-550 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                              className="p-1 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
                               title="Cancel"
                             >
                               <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         ) : (
-                          <div className="flex items-center space-x-1.5 min-w-0">
-                            <Link
-                              href={`/spy/brand/${encodeURIComponent(p.pageId || p.id || "")}`}
-                              title={`Open ${p.displayName || "brand"} Analytics & Ad Library`}
-                              className="font-semibold text-slate-800 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-300 underline-offset-2 hover:underline transition-colors truncate max-w-[180px]"
-                            >
-                              {p.displayName || "Meta Ad Search"}
-                            </Link>
-                            <a
-                              href={p.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              title="Open Meta Ad Library in new tab"
-                              className="text-slate-400 hover:text-indigo-500 transition-colors p-0.5 shrink-0"
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                            <button
-                              onClick={() => startEditing(p)}
-                              className="opacity-0 group-hover:opacity-100 text-slate-400 dark:text-slate-500 hover:text-indigo-650 dark:hover:text-indigo-400 transition-all p-0.5 flex-shrink-0"
-                              title="Edit Display Name"
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </button>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                          {scaling.archetype !== "emerging" && scaling.archetype !== "inactive" && (
-                            <span
-                              className={`inline-flex items-center gap-1 text-[10px] font-extrabold px-1.5 py-0.2 rounded border shadow-2xs ${scaling.badgeClass}`}
-                              title={`${scaling.label} (${scaling.confidence} confidence): ${scaling.description}`}
-                            >
-                              <span>{scaling.icon}</span>
-                              <span>{scaling.shortLabel}</span>
-                            </span>
-                          )}
-                          {p.pageId && (
-                            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-                              ID: {p.pageId}
-                            </span>
-                          )}
-                        </div>
-                        {Boolean(
-                          (p.discoveredPagesCount && p.discoveredPagesCount >= 2) ||
-                          (p.searchType !== "page" && p.discoveredPagesCount && p.discoveredPagesCount > 0)
-                        ) && (
-                          <div>
-                            <button
-                              onClick={() => setResolveModalPageId(p.id)}
-                              className="mt-1 inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 text-[10px] font-bold border border-amber-500/25 transition-all shadow-sm active:scale-95 cursor-pointer"
-                              title="Multiple Facebook Pages detected for this domain. Click to review and resolve."
-                            >
-                              <AlertTriangle className="w-2.5 h-2.5" />
-                              <span>{p.discoveredPagesCount} Pages Found — Review</span>
-                            </button>
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center space-x-1.5 min-w-0">
+                              <Link
+                                href={`/spy/brand/${encodeURIComponent(p.pageId || p.id || "")}`}
+                                title={`Open ${p.displayName || "brand"} Analytics${p.pageId ? ` (ID: ${p.pageId})` : ""}`}
+                                className="font-bold text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 underline-offset-2 hover:underline transition-colors truncate max-w-[200px]"
+                              >
+                                {p.displayName || "Meta Ad Search"}
+                              </Link>
+                              <a
+                                href={p.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                title="Open Meta Ad Library in new tab"
+                                className="text-slate-400 hover:text-indigo-500 transition-colors p-0.5 shrink-0 opacity-40 group-hover:opacity-100"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                              <button
+                                onClick={() => startEditing(p)}
+                                className="opacity-0 group-hover:opacity-100 text-slate-400 dark:text-slate-500 hover:text-indigo-500 transition-all p-0.5 flex-shrink-0 cursor-pointer"
+                                title="Edit Display Name"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+
+                              {/* Scanning indicator */}
+                              {p.status === "scanning" && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-500 animate-pulse ml-1 shrink-0">
+                                  <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                  <span>Scanning</span>
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Subline: Scaling Archetype Badge + Faint ID */}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {scaling.archetype !== "emerging" && scaling.archetype !== "inactive" && (
+                                <span
+                                  className={`inline-flex items-center gap-1 text-[9.5px] font-extrabold px-1.5 py-0.2 rounded border shadow-2xs ${scaling.badgeClass}`}
+                                  title={`${scaling.label} (${scaling.confidence} confidence): ${scaling.description}`}
+                                >
+                                  <span>{scaling.icon}</span>
+                                  <span>{scaling.shortLabel}</span>
+                                </span>
+                              )}
+
+                              {p.status === "failed" && (
+                                <span
+                                  className="inline-flex items-center gap-0.5 text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.2 rounded border border-rose-500/20"
+                                  title={`Scan failed: ${p.failureReason || "Unknown error"}`}
+                                >
+                                  <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                                  <span>Failed</span>
+                                </span>
+                              )}
+
+                              {p.status === "unclear" && (
+                                <span
+                                  className="text-[9px] font-medium text-purple-600 dark:text-purple-400 bg-purple-500/10 px-1 py-0.2 rounded"
+                                  title="Unclear page layout"
+                                >
+                                  Unclear
+                                </span>
+                              )}
+
+                              {p.pageId && (
+                                <span className="text-[9px] text-slate-400/50 dark:text-slate-500/50 font-mono tracking-tight">
+                                  #{p.pageId}
+                                </span>
+                              )}
+                            </div>
+
+                            {Boolean(
+                              (p.discoveredPagesCount && p.discoveredPagesCount >= 2) ||
+                              (p.searchType !== "page" && p.discoveredPagesCount && p.discoveredPagesCount > 0)
+                            ) && (
+                              <div>
+                                <button
+                                  onClick={() => setResolveModalPageId(p.id)}
+                                  className="mt-0.5 inline-flex items-center space-x-1 px-1.5 py-0.2 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 text-[9.5px] font-bold border border-amber-500/25 transition-all shadow-2xs cursor-pointer"
+                                  title="Multiple Facebook Pages detected for this domain. Click to review and resolve."
+                                >
+                                  <AlertTriangle className="w-2.5 h-2.5" />
+                                  <span>{p.discoveredPagesCount} Pages Found — Resolve</span>
+                                </button>
+                              </div>
+                            )}
                           </div>
                         )}
                       </td>
 
-                      {/* Current Results & Inline Sparkline */}
-                      <td className="px-3 py-1.5 text-sm">
-                        <div className="flex items-center gap-2.5">
-                          {p.currentResults !== null ? (
-                            p.currentResults >= 50 ? (
-                              <span
-                                className="inline-flex items-center space-x-1 font-extrabold text-amber-700 dark:text-amber-300 bg-amber-500/10 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 px-2 py-0.5 rounded-md shadow-sm text-xs shrink-0"
-                                title="High Volume Brand (50+ active ads)"
-                              >
-                                <Flame className="w-3 h-3 text-amber-500 dark:text-amber-400 fill-amber-500/20 animate-pulse shrink-0" />
-                                <span>{p.currentResults.toLocaleString()}</span>
+                      {/* Active Ads, Delta & Sparkline (Combined Unified Cell) */}
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-baseline gap-1.5 shrink-0 min-w-[72px]">
+                            {p.currentResults !== null ? (
+                              <span className={`text-xs font-black font-mono ${
+                                p.currentResults >= 50
+                                  ? "text-amber-500 dark:text-amber-400"
+                                  : p.currentResults === 0
+                                  ? "text-slate-400 dark:text-slate-600 font-normal"
+                                  : "text-slate-900 dark:text-slate-100"
+                              }`}>
+                                {p.currentResults.toLocaleString()}
                               </span>
-                            ) : p.currentResults === 0 ? (
-                              <span className="font-semibold text-slate-400 dark:text-slate-500 text-xs shrink-0">0 ads</span>
                             ) : (
-                              <span className="font-bold text-slate-900 dark:text-slate-100 text-xs shrink-0">{p.currentResults.toLocaleString()}</span>
-                            )
-                          ) : (
-                            <span className="text-slate-400 dark:text-slate-600 text-xs shrink-0">—</span>
-                          )}
+                              <span className="text-slate-400 text-xs">—</span>
+                            )}
+
+                            {/* Clean Delta text */}
+                            {diff !== null && diff !== undefined && diff !== 0 && (
+                              <span
+                                className={`inline-flex items-center text-[10.5px] font-extrabold ${
+                                  diff > 0
+                                    ? "text-emerald-700 dark:text-emerald-400"
+                                    : "text-rose-600 dark:text-rose-400"
+                                }`}
+                                title={`Previous scan: ${p.previousResults ?? "—"} (${diff > 0 ? "+" : ""}${diff} ads)`}
+                              >
+                                {diff > 0 ? (
+                                  <ArrowUpRight className="w-2.5 h-2.5 mr-0.5 stroke-[2.5]" />
+                                ) : (
+                                  <ArrowDownRight className="w-2.5 h-2.5 mr-0.5 stroke-[2.5]" />
+                                )}
+                                {diff > 0 ? `+${diff}` : diff}
+                              </span>
+                            )}
+                          </div>
 
                           <InlineSparkline points={p.historyPoints} difference={p.difference} />
                         </div>
                       </td>
 
-                      {/* Exact Products Count (Canonical Scraped Products & Distinct Landing Pages) */}
-                      <td className="px-3 py-1.5 text-center">
+                      {/* Exact Products Count */}
+                      <td className="px-3 py-2 text-center">
                         <Link
                           href={`/spy/brand/${encodeURIComponent(p.pageId || p.id || "")}?tab=products`}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 hover:border-indigo-500/40 transition-all cursor-pointer shadow-xs"
-                          title={`Open ${p.displayName || "brand"} Product Catalog (${p.approxProductCount || 0} distinct products listed)`}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-all cursor-pointer"
+                          title={`Open ${p.displayName || "brand"} Product Catalog (${p.approxProductCount || 0} products)`}
                         >
-                          <Package className="w-2.5 h-2.5 shrink-0" />
+                          <Package className="w-3 h-3 text-slate-400" />
                           <span>
                             {p.approxProductCount !== null && p.approxProductCount !== undefined && p.approxProductCount > 0
-                              ? `${p.approxProductCount} ${p.approxProductCount === 1 ? "prod" : "prods"}`
-                              : "Catalog"}
+                              ? `${p.approxProductCount}`
+                              : "—"}
                           </span>
                         </Link>
                       </td>
 
-                      {/* Previous Results */}
-                      <td className="px-3 py-1.5 text-slate-550 dark:text-slate-400 font-medium">
-                        {p.previousResults !== null && p.previousResults !== undefined
-                          ? p.previousResults.toLocaleString()
-                          : "—"}
-                      </td>
-
-                      {/* Difference */}
-                      <td className="px-3 py-1.5">{diffBadge}</td>
-
-                      {/* Status */}
-                      <td className="px-3 py-1.5">
+                      {/* Last Checked (Relative Timestamps) */}
+                      <td className="px-3 py-2 text-slate-500 dark:text-slate-400 text-[11px] whitespace-nowrap">
                         <div className="flex flex-col gap-0.5">
-                          {p.status === "success" && p.currentResults === 0 ? (
-                            <span
-                              className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-900/80 text-slate-500 border border-slate-200 dark:border-slate-800/80"
-                              title="Confirmed 0 active ads found on Meta Ad Library"
-                            >
-                              0 Active Ads
-                            </span>
-                          ) : p.status === "unclear" ? (
-                            <span
-                              className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400/70 border border-purple-250 dark:border-purple-500/15 cursor-help"
-                              title="Unclear: Page layout pattern not recognized automatically. Verify URL or click Refresh."
-                            >
-                              Unclear
-                            </span>
-                          ) : p.status === "scanning" ? (
-                            <span
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 animate-pulse shadow-sm"
-                              title="Apify creative extraction scan is actively running for this brand"
-                            >
-                              <Loader2 className="w-2.5 h-2.5 animate-spin text-indigo-500" />
-                              <span>Scanning...</span>
-                            </span>
-                          ) : (
-                            <span
-                              className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${p.status === "success"
-                                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                                  : p.status === "pending"
-                                    ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
-                                    : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
-                                }`}
-                            >
-                              {p.status}
-                            </span>
-                          )}
-                          {/* Failure reason micro-badge */}
-                          {p.status === "failed" && p.failureReason && (
-                            <span
-                              className="inline-flex items-center gap-0.5 text-[9px] text-rose-500 dark:text-rose-400/70 font-mono"
-                              title={`Failure reason: ${p.failureReason}`}
-                            >
-                              <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
-                              {p.failureReason}
-                            </span>
-                          )}
-
-                          {/* Ad Spy Creative Badges */}
-                          {p.isCreativeQueued && (
-                            <span
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-pulse mt-0.5"
-                              title="Ad Spy creative extraction scan is queued in progress"
-                            >
-                              <Clock className="w-2.5 h-2.5 shrink-0" />
-                              <span>Spy Queued</span>
-                            </span>
-                          )}
-
-                          {p.lastCreativeScan &&
-                            new Date(p.lastCreativeScan).toDateString() === new Date().toDateString() &&
-                            !p.isCreativeQueued && (
-                              <span
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 mt-0.5"
-                                title={`Ad Spy creative scan completed today at ${new Date(p.lastCreativeScan).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
-                              >
-                                <Sparkles className="w-2.5 h-2.5 shrink-0" />
-                                <span>Scanned Today</span>
-                              </span>
-                            )}
-                        </div>
-                      </td>
-
-                      {/* Last Checked (Count & Spy) */}
-                      <td className="px-3 py-1.5 text-slate-500 dark:text-slate-400 font-mono text-[11px]">
-                        <div className="flex flex-col gap-0.5 whitespace-nowrap">
-                          {/* Ad Count Check */}
-                          <div
-                            className="flex items-center gap-1.5 text-[11px] text-slate-700 dark:text-slate-300 font-medium"
-                            title={p.lastChecked ? `Ad Count checked: ${new Date(p.lastChecked).toLocaleString()}` : "Count never checked"}
-                          >
-                            <span className="text-[9.5px] uppercase tracking-wider text-slate-400 font-sans font-semibold">Count:</span>
-                            <span>{formatRelativeTime(p.lastChecked)}</span>
-                          </div>
-
-                          {/* Ad Spy Scan */}
-                          <div
-                            className={`flex items-center gap-1.5 text-[10.5px] ${
-                              p.lastCreativeScan ? "text-purple-600 dark:text-purple-400 font-medium" : "text-slate-400 dark:text-slate-500"
-                            }`}
-                            title={p.lastCreativeScan ? `Ad Spy scan: ${new Date(p.lastCreativeScan).toLocaleString()}` : "Ad Spy never scanned"}
-                          >
-                            <span className="text-[9.5px] uppercase tracking-wider text-slate-400 dark:text-slate-500 font-sans font-semibold">Spy:</span>
-                            <span className="inline-flex items-center gap-1">
-                              <Sparkles className={`w-2.5 h-2.5 shrink-0 ${p.lastCreativeScan ? "text-purple-500 dark:text-purple-400" : "text-slate-400 opacity-60"}`} />
+                          <span className="font-medium text-slate-700 dark:text-slate-300" title={p.lastChecked ? `Ad count checked: ${new Date(p.lastChecked).toLocaleString()}` : "Never checked"}>
+                            {formatRelativeTime(p.lastChecked)}
+                          </span>
+                          {p.lastCreativeScan && (
+                            <span className="text-[9.5px] text-purple-600 dark:text-purple-400 flex items-center gap-0.5" title={`Ad Spy scan: ${new Date(p.lastCreativeScan).toLocaleString()}`}>
+                              <Sparkles className="w-2.5 h-2.5 shrink-0" />
                               {formatRelativeTime(p.lastCreativeScan)}
                             </span>
-                          </div>
+                          )}
                         </div>
                       </td>
 
