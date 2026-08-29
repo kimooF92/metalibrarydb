@@ -226,6 +226,11 @@ export function pollApifyRunUntilDone(
         if (status === "FAILED" || status === "ABORTED" || status === "TIMED-OUT") {
           clearInterval(timer);
           console.warn(`[Apify Poller] Run ${runId} ${status} on attempt #${attempts}.`);
+          const scan = await db.query.creativeScans.findFirst({
+            where: eq(creativeScans.id, creativeScanId),
+          });
+          const actualTrackedPageId = scan?.trackedPageId || null;
+
           await db
             .update(creativeScans)
             .set({
@@ -243,7 +248,8 @@ export function pollApifyRunUntilDone(
             title: "⚠️ Apify Scan Failed",
             message: `Apify run ended with status: ${status}.`,
             severity: "error",
-            trackedPageId: creativeScanId,
+            trackedPageId: actualTrackedPageId,
+            actionUrl: actualTrackedPageId ? `/spy?trackedPageId=${actualTrackedPageId}` : "/spy",
           });
           resolve(false);
           return;
@@ -252,6 +258,11 @@ export function pollApifyRunUntilDone(
         if (attempts >= maxAttempts) {
           clearInterval(timer);
           console.log(`[Apify Poller] Reached max polling attempts (${maxAttempts}) for run ${runId}.`);
+          const scan = await db.query.creativeScans.findFirst({
+            where: eq(creativeScans.id, creativeScanId),
+          });
+          const actualTrackedPageId = scan?.trackedPageId || null;
+
           await db
             .update(creativeScans)
             .set({
@@ -269,7 +280,8 @@ export function pollApifyRunUntilDone(
             title: "⏱️ Apify Polling Timeout",
             message: `Apify run is still processing after ${Math.round((maxAttempts * intervalMs) / 1000)}s. Sync will finalize once complete.`,
             severity: "warning",
-            trackedPageId: creativeScanId,
+            trackedPageId: actualTrackedPageId,
+            actionUrl: actualTrackedPageId ? `/spy?trackedPageId=${actualTrackedPageId}` : "/spy",
           });
           resolve(false);
         }

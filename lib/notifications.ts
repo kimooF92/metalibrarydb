@@ -25,16 +25,16 @@ export interface CreateNotificationParams {
 
 /**
  * Creates a persistent in-app notification record.
- * Deduplicates identical notifications created within the last 60 seconds.
+ * Deduplicates identical notifications created within the last 5 minutes.
  */
 export async function createNotification(params: CreateNotificationParams) {
   try {
-    // Deduplication window: Prevent duplicate identical notifications within the last 60 seconds
-    const sixtySecondsAgo = new Date(Date.now() - 60 * 1000);
+    // Deduplication window: Prevent duplicate identical notifications within the last 5 minutes (300s)
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     const conditions = [
       eq(activityNotifications.type, params.type),
       eq(activityNotifications.title, params.title),
-      gte(activityNotifications.createdAt, sixtySecondsAgo),
+      gte(activityNotifications.createdAt, fiveMinutesAgo),
     ];
 
     if (params.trackedPageId) {
@@ -78,8 +78,8 @@ export async function createNotification(params: CreateNotificationParams) {
 
 /**
  * Convenience helper to log Count Scan activities.
- * SMART FILTER: Silences routine 'no-change' scans (difference = 0) to avoid spamming the notification center.
- * Only logs high-signal events: positive differences (+new ads), significant drops, or errors.
+ * SMART FILTER: Silences routine 'no-change' scans (difference = 0) and minor 1-2 ad churn to avoid spam.
+ * Logs high-signal events: positive differences (+new ads), scaling surges (+5+), zero-ad drops ("Brand Went Dark"), notice drops (<= -3), or errors.
  */
 export async function logCountScanNotification(params: {
   trackedPageId: string;
@@ -105,7 +105,33 @@ export async function logCountScanNotification(params: {
 
   const diffNum = difference || 0;
 
-  // 2. High-Signal: Positive difference (+new ads launched!)
+  // 2. High-Urgency: Brand completely shut off all ads (Active Ads -> 0)
+  if (currentResults === 0 && diffNum < 0) {
+    return createNotification({
+      type: "count_scan",
+      title: `🚨 Brand Went Dark: ${brandName}`,
+      message: `"${brandName}" paused all active ads (${Math.abs(diffNum)} ads turned off, 0 active ads remaining).`,
+      severity: "warning",
+      trackedPageId,
+      actionUrl: `/spy?trackedPageId=${trackedPageId}`,
+      metadata: { currentResults: 0, difference: diffNum, brandName, wentDark: true },
+    });
+  }
+
+  // 3. High-Signal: Scaling Surge (5 or more new ads launched at once)
+  if (diffNum >= 5) {
+    return createNotification({
+      type: "count_scan",
+      title: `🚀 Ad Scaling Surge: +${diffNum} Ads on ${brandName}!`,
+      message: `"${brandName}" aggressively launched +${diffNum} new ad creatives! Total active ads: ${currentResults ?? 0}.`,
+      severity: "success",
+      trackedPageId,
+      actionUrl: `/spy?trackedPageId=${trackedPageId}`,
+      metadata: { currentResults, difference: diffNum, brandName, isSurge: true },
+    });
+  }
+
+  // 4. Positive difference (+new ads launched)
   if (diffNum > 0) {
     return createNotification({
       type: "count_scan",
@@ -118,8 +144,8 @@ export async function logCountScanNotification(params: {
     });
   }
 
-  // 3. Significant drop: 5 or more ads turned off at once
-  if (diffNum <= -5) {
+  // 5. Noticeable drop: 3 or more ads turned off
+  if (diffNum <= -3) {
     return createNotification({
       type: "count_scan",
       title: `${Math.abs(diffNum)} Ads Paused on ${brandName}`,
@@ -131,7 +157,7 @@ export async function logCountScanNotification(params: {
     });
   }
 
-  // 4. Routine check with 0 difference -> SILENT (recorded to scan_history only)
+  // 6. Routine check with 0 or minor (-1, -2) difference -> SILENT (recorded to scan_history only)
   return null;
 }
 
@@ -259,6 +285,70 @@ export async function logBatchSummaryNotification(params: LogBatchSummaryParams)
       unchangedCount,
       failedCount,
       durationSeconds,
+    },
+  });
+}
+
+export interface DiscoverySummaryTopBrand {
+  name: string;
+  pageId: string;
+  adCount: number;
+}
+
+export interface LogDiscoverySummaryParams {
+  country: string;
+  totalAdsScanned: number;
+  totalPagesDiscovered: number;
+  topBrands?: DiscoverySummaryTopBrand[];
+  durationSeconds?: number;
+  runId?: string;
+}
+
+/**
+ * Creates a single consolidated Executive Summary Notification for a completed Discovery Run.
+ */
+export async function logDiscoverySummaryNotification(params: LogDiscoverySummaryParams) {
+  const {
+    country,
+    totalAdsScanned,
+    totalPagesDiscovered,
+    topBrands = [],
+    durationSeconds = 0,
+    runId,
+  } = params;
+
+  const title = `🌐 Discovery Complete: ${totalPagesDiscovered} Brands in ${country}`;
+  let message = `Scanned ${totalAdsScanned} live ads across ${country} and discovered ${totalPagesDiscovered} active brand pages.`;
+
+  if (topBrands.length > 0) {
+    const topSummary = topBrands
+      .slice(0, 3)
+      .map((b) => `${b.name} (${b.adCount} ads)`)
+      .join(", ");
+    message += ` Top advertisers: ${topSummary}${topBrands.length > 3 ? ` +${topBrands.length - 3} more` : ""}.`;
+  }
+
+  if (durationSeconds > 0) {
+    const mins = Math.floor(durationSeconds / 60);
+    const secs = durationSeconds % 60;
+    const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+    message += ` (${timeStr})`;
+  }
+
+  return createNotification({
+    type: "batch_summary",
+    title,
+    message,
+    severity: totalPagesDiscovered > 0 ? "success" : "info",
+    actionUrl: `/discovery?country=${encodeURIComponent(country)}`,
+    metadata: {
+      runnerType: "discovery",
+      country,
+      totalAdsScanned,
+      totalPagesDiscovered,
+      topBrands,
+      durationSeconds,
+      runId,
     },
   });
 }

@@ -7,18 +7,16 @@ if (typeof globalThis.WebSocket === "undefined") {
 }
 
 import { db } from "../db";
-import { trackedPages, creativeScans, discoveryRuns } from "../db/schema";
+import { trackedPages, creativeScans, discoveryRuns, discoveredPages } from "../db/schema";
 import { getBrowserSession, closeBrowserSession } from "./browser";
 import { scanMetaAdPage } from "./scanner";
 import { scanAdCreatives } from "./spy-scanner";
 import { runDiscoveryScan } from "./discovery-scanner";
-import { extractUrlMetadata } from "../lib/url-parser";
 import { mergeExactMatchWithPageId } from "../actions/merge-pages";
 import { isValidPageId } from "../lib/utils";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, desc } from "drizzle-orm";
 import {
   getNextPendingJob,
-  markJobRunning,
   markJobCompleted,
   markJobFailed,
   markCreativeJobCompleted,
@@ -157,6 +155,8 @@ async function runWorker() {
   let sessionErrors = 0;
   const sessionMovers: Array<{ name: string; diff: number; currentResults: number; trackedPageId: string }> = [];
   let sessionStartTime = Date.now();
+  let lastBackoffNotifiedAt = 0;
+  let lastRateCapNotifiedAt = 0;
 
   const emitSessionSummary = async () => {
     if (sessionScanned > 0) {
@@ -197,6 +197,7 @@ async function runWorker() {
         console.log(
           `\n[Processing DISCOVERY Job] ID: ${pendingDiscoveryRun.id} | Country: ${pendingDiscoveryRun.country}`
         );
+        const discoveryStartTime = Date.now();
         const { page } = await getBrowserSession();
         const outcome = await runDiscoveryScan(
           page,
@@ -210,8 +211,43 @@ async function runWorker() {
         if (outcome.status === "completed" || outcome.status === "partial") {
           await recordSuccessfulScan();
           await handleSuccess();
+
+          // Rich Executive Summary for Discovery Run
+          try {
+            const topPages = await db.query.discoveredPages.findMany({
+              where: eq(discoveredPages.runId, pendingDiscoveryRun.id),
+              orderBy: [desc(discoveredPages.matchingAdCount)],
+              limit: 5,
+            });
+
+            const { logDiscoverySummaryNotification } = await import("../lib/notifications");
+            await logDiscoverySummaryNotification({
+              country: pendingDiscoveryRun.country || "TN",
+              totalAdsScanned: outcome.totalAdsScanned || 0,
+              totalPagesDiscovered: outcome.totalPagesDiscovered || 0,
+              topBrands: topPages.map((p) => ({
+                name: p.displayName || `Page ${p.pageId}`,
+                pageId: p.pageId,
+                adCount: p.matchingAdCount || p.verifiedAdCount || 0,
+              })),
+              durationSeconds: Math.round((Date.now() - discoveryStartTime) / 1000),
+              runId: pendingDiscoveryRun.id,
+            });
+          } catch (notifErr) {
+            console.error("[Worker] Failed to emit discovery notification:", notifErr);
+          }
         } else {
           await handleFailure();
+          try {
+            const { createNotification } = await import("../lib/notifications");
+            await createNotification({
+              type: "system_alert",
+              title: `⚠️ Discovery Scan Failed (${pendingDiscoveryRun.country})`,
+              message: `Discovery run ended with status: ${outcome.status}. Reason: ${outcome.failureReason || outcome.outcomeDetails || "Scan error"}.`,
+              severity: "warning",
+              actionUrl: `/discovery?country=${encodeURIComponent(pendingDiscoveryRun.country)}`,
+            });
+          } catch {}
         }
         ranJobs++;
         continue;
@@ -220,6 +256,18 @@ async function runWorker() {
       const backoff = await checkBackoffStatus();
       if (backoff.inBackoff) {
         console.log(`[Worker Paused] ${backoff.reason}`);
+        if (Date.now() - lastBackoffNotifiedAt > 30 * 60 * 1000) {
+          lastBackoffNotifiedAt = Date.now();
+          try {
+            const { createNotification } = await import("../lib/notifications");
+            await createNotification({
+              type: "system_alert",
+              title: "⏸️ Scraper Backoff Active",
+              message: backoff.reason || "Worker paused temporarily due to rate detection.",
+              severity: "warning",
+            });
+          } catch {}
+        }
         if (isSingleRun) {
           console.log("[Single Run] Worker paused due to backoff. Exiting.");
           await emitSessionSummary();
@@ -233,6 +281,18 @@ async function runWorker() {
       const caps = await checkRateCaps();
       if (!caps.allowed) {
         console.log(`[Rate Limit] ${caps.reason}`);
+        if (Date.now() - lastRateCapNotifiedAt > 60 * 60 * 1000) {
+          lastRateCapNotifiedAt = Date.now();
+          try {
+            const { createNotification } = await import("../lib/notifications");
+            await createNotification({
+              type: "system_alert",
+              title: "🛑 Daily / Hourly Scan Cap Reached",
+              message: caps.reason || "Worker reached safety limits. Scanning will resume in next window.",
+              severity: "info",
+            });
+          } catch {}
+        }
         if (isSingleRun) {
           console.log("[Single Run] Rate cap reached. Exiting.");
           await emitSessionSummary();
@@ -479,12 +539,51 @@ async function runWorker() {
         DELAY_CONFIG.beforeNextPageMax
       );
     }
-  } catch (err) {
-    console.error("Worker process error:", err);
+  } catch (err: any) {
+    console.error("Worker process fatal error:", err);
+    try {
+      const { createNotification } = await import("../lib/notifications");
+      await createNotification({
+        type: "system_alert",
+        title: "🚨 Worker Process Stopped",
+        message: `Worker encountered an unexpected error: ${err?.message || "Unknown error"}. Restarting worker is recommended.`,
+        severity: "error",
+      });
+    } catch {}
   } finally {
     await closeBrowserSession();
   }
 }
+
+// Global Process Exception Handlers
+process.on("uncaughtException", async (err) => {
+  console.error("Worker fatal uncaughtException:", err);
+  try {
+    const { createNotification } = await import("../lib/notifications");
+    await createNotification({
+      type: "system_alert",
+      title: "🚨 Worker Crash (Uncaught Exception)",
+      message: `Fatal error: ${err?.message || "Unknown exception"}. Worker is halting.`,
+      severity: "error",
+    });
+  } catch {}
+  await resetStuckJobs().catch(() => {});
+  await closeBrowserSession().catch(() => {});
+  process.exit(1);
+});
+
+process.on("unhandledRejection", async (reason: any) => {
+  console.error("Worker unhandledRejection:", reason);
+  try {
+    const { createNotification } = await import("../lib/notifications");
+    await createNotification({
+      type: "system_alert",
+      title: "⚠️ Worker Unhandled Rejection",
+      message: `Asynchronous error: ${reason?.message || String(reason) || "Unknown promise rejection"}.`,
+      severity: "warning",
+    });
+  } catch {}
+});
 
 // Graceful shutdown
 process.on("SIGINT", async () => {
