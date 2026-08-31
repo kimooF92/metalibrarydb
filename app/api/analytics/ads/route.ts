@@ -13,8 +13,11 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const range = req.nextUrl.searchParams.get("range") ?? "7d";
+    const rangeDays = ({ today: 1, "7d": 7, "15d": 15, "30d": 30 } as Record<string, number>)[range] ?? 7;
+    const windowStart = new Date();
+    windowStart.setDate(windowStart.getDate() - rangeDays);
+    const observationWindow = gte(adObservations.observedAt, windowStart);
 
     // 1. Safe Date Expression for Longevity (Fallback to firstSeenAt or createdAt if startedRunningOn is missing)
     const dateExpr = sql`COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}, ${ads.createdAt})`;
@@ -29,12 +32,13 @@ export async function GET(req: NextRequest) {
         imageAds: sql<number>`COUNT(CASE WHEN ${ads.mediaType} = 'image' THEN 1 END)`.mapWith(Number),
         carouselAds: sql<number>`COUNT(CASE WHEN ${ads.mediaType} = 'carousel' THEN 1 END)`.mapWith(Number),
         scaledAdsCount: sql<number>`COUNT(CASE WHEN ${adObservations.duplicationCount} >= 5 THEN 1 END)`.mapWith(Number),
-        breakoutAdsCount: sql<number>`COUNT(CASE WHEN ${dateExpr} >= NOW() - INTERVAL '7 days' AND ${adObservations.duplicationCount} >= 3 THEN 1 END)`.mapWith(Number),
+        breakoutAdsCount: sql<number>`COUNT(CASE WHEN ${dateExpr} >= ${windowStart} AND ${adObservations.duplicationCount} >= 3 THEN 1 END)`.mapWith(Number),
         avgDuplication: sql<number>`ROUND(AVG(${adObservations.duplicationCount}), 1)`.mapWith(Number),
         maxDuplication: sql<number>`MAX(${adObservations.duplicationCount})`.mapWith(Number),
       })
       .from(ads)
-      .innerJoin(adObservations, eq(ads.id, adObservations.adId));
+      .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .where(observationWindow);
 
     const totalAdsCount = Math.max(1, Number(summaryRes?.totalAds || 0));
 
@@ -77,6 +81,7 @@ export async function GET(req: NextRequest) {
       })
       .from(ads)
       .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .where(observationWindow)
       .groupBy(sql`1`, sql`2`, sql`3`)
       .orderBy(sql`3`);
 
@@ -91,6 +96,7 @@ export async function GET(req: NextRequest) {
       })
       .from(ads)
       .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .where(observationWindow)
       .groupBy(sql`COALESCE(${ads.mediaType}, 'unknown')`)
       .orderBy(desc(count()));
 
@@ -103,6 +109,7 @@ export async function GET(req: NextRequest) {
       })
       .from(ads)
       .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .where(observationWindow)
       .groupBy(sql`1`)
       .orderBy(desc(count()))
       .limit(10);
@@ -114,7 +121,7 @@ export async function GET(req: NextRequest) {
       })
       .from(ads)
       .innerJoin(adObservations, eq(ads.id, adObservations.adId))
-      .where(gte(adObservations.duplicationCount, 5))
+      .where(and(observationWindow, gte(adObservations.duplicationCount, 5)))
       .groupBy(sql`1`)
       .orderBy(desc(count()))
       .limit(10);
@@ -145,6 +152,7 @@ export async function GET(req: NextRequest) {
       })
       .from(ads)
       .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .where(observationWindow)
       .groupBy(sql`1`, sql`2`)
       .orderBy(desc(count()));
 
@@ -164,7 +172,9 @@ export async function GET(req: NextRequest) {
           COUNT(CASE WHEN ${ads.caption} ~* '(livraison|commande|prix|qualité|gratuit|boutique|disponible|tunisie)' THEN 1 END)
         `.mapWith(Number),
       })
-      .from(ads);
+      .from(ads)
+      .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .where(observationWindow);
 
     // 7. Duplication / Scale Tiers Distribution
     const duplicationTierRows = await db
@@ -191,10 +201,11 @@ export async function GET(req: NextRequest) {
       })
       .from(ads)
       .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .where(observationWindow)
       .groupBy(sql`1`, sql`2`)
       .orderBy(desc(count()));
 
-    // 8. Top 10 Breakout Scalers Leaderboard (Launched in last 7 days + High Duplication >= 3)
+    // 8. Top 10 Breakout Scalers Leaderboard (Launched in the selected window + High Duplication >= 3)
     const breakoutAds = await db
       .select({
         id: ads.id,
@@ -217,7 +228,8 @@ export async function GET(req: NextRequest) {
       .innerJoin(adObservations, eq(ads.id, adObservations.adId))
       .where(
         and(
-          gte(dateExpr, sevenDaysAgo),
+          observationWindow,
+          gte(dateExpr, windowStart),
           gte(adObservations.duplicationCount, 3),
           eq(adObservations.isActive, true)
         )
@@ -250,6 +262,7 @@ export async function GET(req: NextRequest) {
       .from(ads)
       .innerJoin(adObservations, eq(ads.id, adObservations.adId))
       .leftJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+      .where(observationWindow)
       .groupBy(sql`1`, ads.pageId)
       .orderBy(desc(count()))
       .limit(10);

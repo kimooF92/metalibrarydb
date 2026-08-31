@@ -17,6 +17,10 @@ import { MarketForecastCard } from "@/components/analytics/market-forecast-card"
 import { ProductAnalyticsTab } from "@/components/analytics/product-analytics-tab";
 import { AdAnalyticsTab } from "@/components/analytics/ad-analytics-tab";
 import { BrandAnalyticsTab } from "@/components/analytics/brand-analytics-tab";
+import {
+  DateRange,
+  DateRangeFilter,
+} from "@/components/analytics/date-range-filter";
 
 type MainAnalyticsTab = "products" | "ads" | "pages";
 
@@ -40,19 +44,38 @@ function getInitialTab(): MainAnalyticsTab {
   return "products";
 }
 
-function syncTabToUrl(tab: MainAnalyticsTab) {
+function isDateRange(value: string | null): value is DateRange {
+  return value === "today" || value === "7d" || value === "15d" || value === "30d";
+}
+
+function getInitialDateRange(): DateRange {
+  if (typeof window === "undefined") return "7d";
+  try {
+    const urlRange = new URLSearchParams(window.location.search).get("range");
+    if (isDateRange(urlRange)) return urlRange;
+
+    const saved = localStorage.getItem("analytics_date_range");
+    if (isDateRange(saved)) return saved;
+  } catch {}
+  return "7d";
+}
+
+function syncStateToUrl(tab: MainAnalyticsTab, range: DateRange) {
   if (typeof window === "undefined") return;
   try {
     const query = new URLSearchParams(window.location.search);
     query.set("tab", tab);
+    query.set("range", range);
     const newUrl = `${window.location.pathname}?${query.toString()}`;
     window.history.replaceState(null, "", newUrl);
     localStorage.setItem("analytics_main_tab", tab);
+    localStorage.setItem("analytics_date_range", range);
   } catch {}
 }
 
 export default function AnalyticsPage() {
   const [activeTab, setActiveTab] = useState<MainAnalyticsTab>(() => getInitialTab());
+  const [dateRange, setDateRange] = useState<DateRange>(() => getInitialDateRange());
 
   // Data states
   const [productsData, setProductsData] = useState<any>(null);
@@ -70,13 +93,19 @@ export default function AnalyticsPage() {
   // Sync tab with URL
   const handleTabChange = (tab: MainAnalyticsTab) => {
     setActiveTab(tab);
-    syncTabToUrl(tab);
+    syncStateToUrl(tab, dateRange);
+  };
+
+  const handleDateRangeChange = (range: DateRange) => {
+    setDateRange(range);
+    syncStateToUrl(activeTab, range);
   };
 
   // Popstate listener for back/forward navigation
   useEffect(() => {
     const handlePopState = () => {
       setActiveTab(getInitialTab());
+      setDateRange(getInitialDateRange());
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
@@ -86,7 +115,7 @@ export default function AnalyticsPage() {
   const fetchProductsAnalytics = useCallback(async () => {
     try {
       setLoadingProducts(true);
-      const res = await fetch("/api/analytics/products");
+      const res = await fetch(`/api/analytics/products?range=${dateRange}`);
       if (res.ok) {
         const json = await res.json();
         setProductsData(json);
@@ -96,13 +125,13 @@ export default function AnalyticsPage() {
     } finally {
       setLoadingProducts(false);
     }
-  }, []);
+  }, [dateRange]);
 
   // 2. Fetch Ads Analytics
   const fetchAdsAnalytics = useCallback(async () => {
     try {
       setLoadingAds(true);
-      const res = await fetch("/api/analytics/ads");
+      const res = await fetch(`/api/analytics/ads?range=${dateRange}`);
       if (res.ok) {
         const json = await res.json();
         setAdsData(json);
@@ -112,14 +141,14 @@ export default function AnalyticsPage() {
     } finally {
       setLoadingAds(false);
     }
-  }, []);
+  }, [dateRange]);
 
   // 3. Fetch Pages Analytics
   const fetchPagesData = useCallback(async () => {
     try {
       setLoadingPages(true);
       const [pagesRes, statsRes] = await Promise.all([
-        fetch("/api/pages?limit=5000&sortBy=currentResults&sortOrder=desc"),
+        fetch(`/api/pages?limit=5000&range=${dateRange}&sortBy=currentResults&sortOrder=desc`),
         fetch("/api/stats"),
       ]);
 
@@ -136,7 +165,7 @@ export default function AnalyticsPage() {
     } finally {
       setLoadingPages(false);
     }
-  }, []);
+  }, [dateRange]);
 
   // Fetch all in parallel
   const fetchAll = useCallback(async () => {
@@ -175,35 +204,36 @@ export default function AnalyticsPage() {
 
   // Calculations for Page Velocity tab
   const pageAnalytics = useMemo(() => {
+    const getDelta = (page: TrackedPage) => page.windowDelta ?? page.difference;
     const completed = pages.filter((p) => p.status === "success");
     const withResults = pages.filter((p) => p.currentResults !== null && p.currentResults > 0);
     const zeroAds = pages.filter((p) => p.status === "success" && p.currentResults === 0);
     const failed = pages.filter((p) => p.status === "failed");
     const unclear = pages.filter((p) => p.status === "unclear");
-    const withDiff = pages.filter((p) => p.difference !== null && p.difference !== undefined);
+    const withDiff = pages.filter((p) => getDelta(p) !== null && getDelta(p) !== undefined);
 
     const scalingPages = withDiff
-      .filter((p) => (p.difference ?? 0) > 0)
-      .sort((a, b) => (b.difference ?? 0) - (a.difference ?? 0));
+      .filter((p) => (getDelta(p) ?? 0) > 0)
+      .sort((a, b) => (getDelta(b) ?? 0) - (getDelta(a) ?? 0));
 
     const descalingPages = withDiff
-      .filter((p) => (p.difference ?? 0) < 0)
-      .sort((a, b) => (a.difference ?? 0) - (b.difference ?? 0));
+      .filter((p) => (getDelta(p) ?? 0) < 0)
+      .sort((a, b) => (getDelta(a) ?? 0) - (getDelta(b) ?? 0));
 
-    const totalAdsScaled = scalingPages.reduce((sum, p) => sum + (p.difference ?? 0), 0);
-    const totalAdsDescaled = descalingPages.reduce((sum, p) => sum + Math.abs(p.difference ?? 0), 0);
+    const totalAdsScaled = scalingPages.reduce((sum, p) => sum + (getDelta(p) ?? 0), 0);
+    const totalAdsDescaled = descalingPages.reduce((sum, p) => sum + Math.abs(getDelta(p) ?? 0), 0);
     const netAdsDelta = totalAdsScaled - totalAdsDescaled;
 
     const avgScalingDelta = scalingPages.length > 0 ? (totalAdsScaled / scalingPages.length).toFixed(1) : "0";
     const avgDescalingDelta = descalingPages.length > 0 ? (totalAdsDescaled / descalingPages.length).toFixed(1) : "0";
 
-    const aggressiveScaling = scalingPages.filter((p) => (p.difference ?? 0) >= 20);
-    const rapidScaling = scalingPages.filter((p) => (p.difference ?? 0) >= 10 && (p.difference ?? 0) < 20);
-    const moderateScaling = scalingPages.filter((p) => (p.difference ?? 0) >= 1 && (p.difference ?? 0) < 10);
+    const aggressiveScaling = scalingPages.filter((p) => (getDelta(p) ?? 0) >= 20);
+    const rapidScaling = scalingPages.filter((p) => (getDelta(p) ?? 0) >= 10 && (getDelta(p) ?? 0) < 20);
+    const moderateScaling = scalingPages.filter((p) => (getDelta(p) ?? 0) >= 1 && (getDelta(p) ?? 0) < 10);
 
-    const heavyDescaling = descalingPages.filter((p) => (p.difference ?? 0) <= -20);
-    const moderateDescaling = descalingPages.filter((p) => (p.difference ?? 0) <= -10 && (p.difference ?? 0) > -20);
-    const lightDescaling = descalingPages.filter((p) => (p.difference ?? 0) <= -1 && (p.difference ?? 0) > -10);
+    const heavyDescaling = descalingPages.filter((p) => (getDelta(p) ?? 0) <= -20);
+    const moderateDescaling = descalingPages.filter((p) => (getDelta(p) ?? 0) <= -10 && (getDelta(p) ?? 0) > -20);
+    const lightDescaling = descalingPages.filter((p) => (getDelta(p) ?? 0) <= -1 && (getDelta(p) ?? 0) > -10);
 
     const megaVolume = pages.filter((p) => (p.currentResults ?? 0) >= 100);
     const highVolume = pages.filter((p) => (p.currentResults ?? 0) >= 50 && (p.currentResults ?? 0) < 100);
@@ -211,8 +241,8 @@ export default function AnalyticsPage() {
     const lowVolume = pages.filter((p) => (p.currentResults ?? 0) >= 1 && (p.currentResults ?? 0) < 20);
 
     const watchlistedPages = pages.filter((p) => p.isWatchlisted);
-    const watchlistedScaling = watchlistedPages.filter((p) => (p.difference ?? 0) > 0);
-    const watchlistedDescaling = watchlistedPages.filter((p) => (p.difference ?? 0) < 0);
+    const watchlistedScaling = watchlistedPages.filter((p) => (getDelta(p) ?? 0) > 0);
+    const watchlistedDescaling = watchlistedPages.filter((p) => (getDelta(p) ?? 0) < 0);
 
     const totalAds = pages.reduce((sum, p) => sum + (p.currentResults ?? 0), 0);
     const maxResults = Math.max(...pages.map((p) => p.currentResults ?? 0), 1);
@@ -287,11 +317,12 @@ export default function AnalyticsPage() {
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
-          {lastRefreshed && (
+            {lastRefreshed && (
             <span className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:inline-block">
               Updated {lastRefreshed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </span>
           )}
+          <DateRangeFilter value={dateRange} onChange={handleDateRangeChange} />
           <button
             onClick={fetchAll}
             disabled={isGlobalLoading}
@@ -311,6 +342,7 @@ export default function AnalyticsPage() {
         dominantCTA={pulseMetrics.dominantCTA}
         dominantCTAPct={pulseMetrics.dominantCTAPct}
         catalogHealthPct={pulseMetrics.catalogHealthPct}
+        dateRange={dateRange}
         isLoading={isGlobalLoading && !productsData && !adsData}
       />
 
@@ -394,6 +426,7 @@ export default function AnalyticsPage() {
           data={productsData}
           isLoading={loadingProducts}
           onRefresh={fetchProductsAnalytics}
+          dateRange={dateRange}
         />
       )}
 
@@ -402,6 +435,7 @@ export default function AnalyticsPage() {
           data={adsData}
           isLoading={loadingAds}
           onRefresh={fetchAdsAnalytics}
+          dateRange={dateRange}
         />
       )}
 

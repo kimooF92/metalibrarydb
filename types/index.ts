@@ -10,6 +10,7 @@ export interface TrackedPage {
   currentResults: number | null;
   previousResults?: number | null;
   difference?: number | null;
+  windowDelta?: number | null;
   lastChecked: string | null;
   lastSuccessAt: string | null;
   status: "pending" | "scanning" | "success" | "failed" | "unclear";

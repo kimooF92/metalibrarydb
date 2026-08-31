@@ -25,17 +25,20 @@ import { ProgressBarRow } from "./progress-bar-row";
 import { LeaderboardRow } from "./leaderboard-row";
 import { ProductDetailsModal } from "@/components/products/product-details-modal";
 import { ScrapedProduct } from "@/types";
+import { DateRange, getDateRangeDescription } from "./date-range-filter";
 
 interface ProductAnalyticsTabProps {
   data: any;
   isLoading: boolean;
   onRefresh: () => void;
+  dateRange?: DateRange;
 }
 
 export function ProductAnalyticsTab({
   data,
   isLoading,
   onRefresh,
+  dateRange = "7d",
 }: ProductAnalyticsTabProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [productSearch, setProductSearch] = useState<string>("");
@@ -87,7 +90,7 @@ export function ProductAnalyticsTab({
           icon={ShoppingBag}
           colorTheme="indigo"
           badge={{
-            text: `+${summary.newThisWeek || 0} this week`,
+            text: `+${summary.newInWindow || 0} ${getDateRangeDescription(dateRange).toLowerCase()}`,
             variant: "indigo",
           }}
           subtext={`${summary.successfulScrapes || 0} extracted successfully`}

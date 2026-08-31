@@ -17,6 +17,10 @@ export async function GET(request: Request) {
     const tab = searchParams.get("tab")?.trim() || "all";
     const sortBy = searchParams.get("sortBy")?.trim() || "createdAt";
     const sortOrder = searchParams.get("sortOrder")?.toLowerCase() === "asc" ? "asc" : "desc";
+    const range = searchParams.get("range") ?? "7d";
+    const rangeDays = ({ today: 1, "7d": 7, "15d": 15, "30d": 30 } as Record<string, number>)[range] ?? 7;
+    const windowStart = new Date();
+    windowStart.setDate(windowStart.getDate() - rangeDays);
 
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.min(5000, Math.max(1, parseInt(searchParams.get("limit") || "25", 10)));
@@ -118,6 +122,7 @@ export async function GET(request: Request) {
     const pageIds = pages.map((p) => p.id);
     let prevResultsMap: Record<string, number | null> = {};
     let historyPointsMap: Record<string, number[]> = {};
+    let windowDeltaMap: Record<string, number> = {};
 
     if (pageIds.length > 0) {
       const rankedScans = db
@@ -154,6 +159,36 @@ export async function GET(request: Request) {
       // Reverse to chronological order (oldest -> newest) for sparklines
       for (const pId in historyPointsMap) {
         historyPointsMap[pId].reverse();
+      }
+
+      const windowScans = await db
+        .select({
+          trackedPageId: scanHistory.trackedPageId,
+          results: scanHistory.results,
+        })
+        .from(scanHistory)
+        .where(
+          and(
+            inArray(scanHistory.trackedPageId, pageIds),
+            gte(scanHistory.checkedAt, windowStart),
+            isNotNull(scanHistory.results)
+          )
+        )
+        .orderBy(asc(scanHistory.checkedAt));
+
+      const windowResultsMap: Record<string, { first: number; last: number }> = {};
+      for (const scan of windowScans) {
+        if (scan.results === null) continue;
+        const result = Number(scan.results);
+        if (!windowResultsMap[scan.trackedPageId]) {
+          windowResultsMap[scan.trackedPageId] = { first: result, last: result };
+        } else {
+          windowResultsMap[scan.trackedPageId].last = result;
+        }
+      }
+
+      for (const [trackedPageId, results] of Object.entries(windowResultsMap)) {
+        windowDeltaMap[trackedPageId] = results.last - results.first;
       }
     }
 
@@ -293,6 +328,9 @@ export async function GET(request: Request) {
         ...p,
         previousResults: prev,
         difference,
+        windowDelta: Object.prototype.hasOwnProperty.call(windowDeltaMap, p.id)
+          ? windowDeltaMap[p.id]
+          : null,
         failureReason: queueEntry?.failureReason ?? null,
         attempts: queueEntry?.attempts ?? 0,
         notes: p.notes ?? null,

@@ -442,7 +442,7 @@ export function BrandAnalyticsTab({
               ) : (
                 paginatedTablePages.map((p, idx) => {
                   const rank = (tablePage - 1) * pageSize + idx + 1;
-                  const diff = p.difference ?? 0;
+                  const diff = p.windowDelta ?? p.difference ?? 0;
                   const prev = p.previousResults;
                   const curr = p.currentResults ?? 0;
                   const pctChange = prev && prev > 0 && diff !== 0 ? Math.round((diff / prev) * 100) : null;

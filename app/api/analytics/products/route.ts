@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ads, scrapedProducts } from "@/db/schema";
-import { sql, desc, count, and, eq, or, isNull } from "drizzle-orm";
+import { sql, desc, count, and, eq, or, isNull, gte } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +13,12 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    const range = req.nextUrl.searchParams.get("range") ?? "7d";
+    const rangeDays = ({ today: 1, "7d": 7, "15d": 15, "30d": 30 } as Record<string, number>)[range] ?? 7;
+    const windowStart = new Date();
+    windowStart.setDate(windowStart.getDate() - rangeDays);
+    const productWindow = gte(scrapedProducts.createdAt, windowStart);
+
     // 1. Price Extraction Helper in SQL
     // Handles decimal and comma formats (e.g. 49.00, 49,900, DT, TND)
     const priceExpr = sql`COALESCE(NULLIF(SUBSTRING(REPLACE(${scrapedProducts.currentPrice}, ',', '.') FROM '([0-9]+(?:\\.[0-9]+)?)'), '')::numeric, 0)`;
@@ -26,12 +32,13 @@ export async function GET(req: NextRequest) {
         parsedPriceCount: sql<number>`COUNT(CASE WHEN ${priceExpr} > 0 THEN 1 END)`.mapWith(Number),
         withOffersCount: sql<number>`COUNT(CASE WHEN ${scrapedProducts.discountOrOffer} IS NOT NULL AND ${scrapedProducts.discountOrOffer} != '' THEN 1 END)`.mapWith(Number),
         favoritesCount: sql<number>`COUNT(CASE WHEN ${scrapedProducts.isFavorite} = true THEN 1 END)`.mapWith(Number),
-        newThisWeek: sql<number>`COUNT(CASE WHEN ${scrapedProducts.createdAt} >= NOW() - INTERVAL '7 days' THEN 1 END)`.mapWith(Number),
+        newInWindow: sql<number>`COUNT(CASE WHEN ${scrapedProducts.createdAt} >= ${windowStart} THEN 1 END)`.mapWith(Number),
         hasMetaPixel: sql<number>`COUNT(CASE WHEN ${scrapedProducts.metaPixelIds} IS NOT NULL AND array_length(${scrapedProducts.metaPixelIds}, 1) > 0 THEN 1 END)`.mapWith(Number),
         hasWhatsApp: sql<number>`COUNT(CASE WHEN ${scrapedProducts.whatsappNumbers} IS NOT NULL AND array_length(${scrapedProducts.whatsappNumbers}, 1) > 0 THEN 1 END)`.mapWith(Number),
         hasFreeDelivery: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.deliveryCost}) LIKE '%gratuit%' OR LOWER(${scrapedProducts.deliveryCost}) LIKE '%free%' OR ${scrapedProducts.deliveryCost} = '0' THEN 1 END)`.mapWith(Number),
       })
-      .from(scrapedProducts);
+      .from(scrapedProducts)
+      .where(productWindow);
 
     const totalProd = Number(summaryRes?.totalProducts || 0);
     const classifiedCount = Number(summaryRes?.classifiedCount || 0);
@@ -60,6 +67,7 @@ export async function GET(req: NextRequest) {
         woocommerceCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%woocommerce%' THEN 1 END)`.mapWith(Number),
       })
       .from(scrapedProducts)
+      .where(productWindow)
       .groupBy(sql`COALESCE(NULLIF(${scrapedProducts.category}, ''), 'General & Other')`)
       .orderBy(desc(count()));
 
@@ -72,7 +80,7 @@ export async function GET(req: NextRequest) {
         avgPrice: sql<number>`ROUND(AVG(CASE WHEN ${priceExpr} > 0 THEN ${priceExpr} END), 1)`.mapWith(Number),
       })
       .from(scrapedProducts)
-      .where(sql`${scrapedProducts.subCategory} IS NOT NULL AND ${scrapedProducts.subCategory} != ''`)
+      .where(and(productWindow, sql`${scrapedProducts.subCategory} IS NOT NULL AND ${scrapedProducts.subCategory} != ''`))
       .groupBy(
         sql`COALESCE(NULLIF(${scrapedProducts.category}, ''), 'General & Other')`,
         sql`COALESCE(NULLIF(${scrapedProducts.subCategory}, ''), 'General')`
@@ -107,6 +115,7 @@ export async function GET(req: NextRequest) {
         avgPrice: sql<number>`ROUND(AVG(CASE WHEN ${priceExpr} > 0 THEN ${priceExpr} END), 1)`.mapWith(Number),
       })
       .from(scrapedProducts)
+      .where(productWindow)
       .groupBy(sql`1`, sql`2`);
 
     // 6. Platform Share breakdown
@@ -125,6 +134,7 @@ export async function GET(req: NextRequest) {
         count: count(),
       })
       .from(scrapedProducts)
+      .where(productWindow)
       .groupBy(sql`1`)
       .orderBy(desc(count()));
 
@@ -154,6 +164,7 @@ export async function GET(req: NextRequest) {
       })
       .from(scrapedProducts)
       .leftJoin(ads, eq(scrapedProducts.id, ads.productId))
+      .where(productWindow)
       .groupBy(scrapedProducts.id)
       .orderBy(
         desc(sql`COUNT(${ads.id})`),
@@ -195,7 +206,7 @@ export async function GET(req: NextRequest) {
         maxPrice: sql<number>`MAX(CASE WHEN ${priceExpr} > 0 THEN ${priceExpr} END)`.mapWith(Number),
       })
       .from(scrapedProducts)
-      .where(sql`${scrapedProducts.title} IS NOT NULL AND length(${scrapedProducts.title}) > 5`)
+      .where(and(productWindow, sql`${scrapedProducts.title} IS NOT NULL AND length(${scrapedProducts.title}) > 5`))
       .groupBy(scrapedProducts.title)
       .having(sql`COUNT(DISTINCT ${scrapedProducts.domain}) > 1`)
       .orderBy(desc(sql`COUNT(DISTINCT ${scrapedProducts.domain})`))
@@ -209,7 +220,7 @@ export async function GET(req: NextRequest) {
           successfulScrapes: Number(summaryRes?.successfulScrapes || 0),
           withOffersCount: Number(summaryRes?.withOffersCount || 0),
           favoritesCount: Number(summaryRes?.favoritesCount || 0),
-          newThisWeek: Number(summaryRes?.newThisWeek || 0),
+          newInWindow: Number(summaryRes?.newInWindow || 0),
           hasMetaPixel: Number(summaryRes?.hasMetaPixel || 0),
           hasWhatsApp: Number(summaryRes?.hasWhatsApp || 0),
           hasFreeDelivery: Number(summaryRes?.hasFreeDelivery || 0),

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Flame, ShoppingBag, Zap, ShieldCheck, Sparkles, ArrowRight } from "lucide-react";
+import { DateRange, getDateRangeDescription } from "./date-range-filter";
 
 interface PulseBannerProps {
   breakoutCount?: number;
@@ -8,6 +9,7 @@ interface PulseBannerProps {
   dominantCTA?: string;
   dominantCTAPct?: number;
   catalogHealthPct?: number;
+  dateRange?: DateRange;
   isLoading?: boolean;
 }
 
@@ -18,6 +20,7 @@ export function PulseBanner({
   dominantCTA = "Shop Now",
   dominantCTAPct = 0,
   catalogHealthPct = 100,
+  dateRange = "7d",
   isLoading = false,
 }: PulseBannerProps) {
   if (isLoading) {
@@ -46,7 +49,7 @@ export function PulseBanner({
         <div className="flex items-center space-x-1.5 bg-white/70 dark:bg-slate-900/70 px-2.5 py-1 rounded-xl border border-slate-200/60 dark:border-slate-800/60">
           <Flame className="w-3.5 h-3.5 text-amber-500" />
           <span>
-            <strong>{breakoutCount}</strong> Breakout Ads this week
+            <strong>{breakoutCount}</strong> Breakout Ads ({getDateRangeDescription(dateRange)})
           </span>
         </div>
 

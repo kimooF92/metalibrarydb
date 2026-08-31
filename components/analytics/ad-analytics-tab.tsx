@@ -22,17 +22,20 @@ import {
 import { KPICard } from "./kpi-card";
 import { ProgressBarRow } from "./progress-bar-row";
 import { LeaderboardRow } from "./leaderboard-row";
+import { DateRange, getDateRangeDescription } from "./date-range-filter";
 
 interface AdAnalyticsTabProps {
   data: any;
   isLoading: boolean;
   onRefresh: () => void;
+  dateRange?: DateRange;
 }
 
 export function AdAnalyticsTab({
   data,
   isLoading,
   onRefresh,
+  dateRange = "7d",
 }: AdAnalyticsTabProps) {
   const [breakoutSearch, setBreakoutSearch] = useState<string>("");
 
@@ -96,7 +99,7 @@ export function AdAnalyticsTab({
           icon={Flame}
           colorTheme="amber"
           badge={{
-            text: "< 7 days old",
+            text: `In ${getDateRangeDescription(dateRange).toLowerCase()}`,
             variant: "amber",
           }}
           subtext={`${summary.scaledAdsCount || 0} scaled ads (5+ copies)`}
@@ -377,7 +380,7 @@ export function AdAnalyticsTab({
         <div className="space-y-2.5">
           {filteredBreakoutAds.length === 0 ? (
             <div className="py-12 text-center text-slate-400 text-xs">
-              No breakout ads detected in the last 7 days.
+              No breakout ads detected in the selected window.
             </div>
           ) : (
             filteredBreakoutAds.map((ad, idx) => (
