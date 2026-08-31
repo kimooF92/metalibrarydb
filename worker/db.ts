@@ -1,6 +1,7 @@
 import { db } from "../db";
 import { trackedPages, queue, scanHistory, workerState, creativeScans, discoveredPages, discoveryRuns, appSettings } from "../db/schema";
 import { eq, asc, desc, sql, inArray } from "drizzle-orm";
+import { shouldArchiveZeroCount } from "../lib/ad-reconciliation";
 
 export async function getAppSettings() {
   try {
@@ -517,6 +518,29 @@ export async function markJobCompleted(
       updatedAt: now,
     })
     .where(eq(trackedPages.id, pageId));
+
+  if (shouldArchiveZeroCount(status, results)) {
+    try {
+      const { reconcileZeroResultCount } = await import("../lib/ad-reconciliation");
+      const archivedCount = await reconcileZeroResultCount(
+        pageId,
+        status,
+        results,
+        now
+      );
+
+      if (archivedCount > 0) {
+        console.log(
+          `[Count Scan] Archived ${archivedCount} linked ad(s) after verified zero-result scan for ${pageId}.`
+        );
+      }
+    } catch (archiveErr) {
+      console.error(
+        `[Count Scan] Failed to archive linked ads after zero-result scan for ${pageId}:`,
+        archiveErr
+      );
+    }
+  }
 
   // Update matching discovered_pages record with verified count & reset status from verifying to discovered
   await db
