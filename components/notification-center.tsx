@@ -176,7 +176,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
     }
     if (isMegaBrand) {
       return (
-        <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/35 flex items-center justify-center shrink-0 shadow-md ring-2 ring-purple-500/20 animate-pulse">
+        <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/35 flex items-center justify-center shrink-0 shadow-sm">
           <Crown className="w-4 h-4" />
         </div>
       );
@@ -461,7 +461,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                         : isWentDark
                         ? "bg-rose-500/[0.06] dark:bg-rose-500/[0.1] hover:bg-rose-500/[0.09]"
                         : isMegaBrand
-                        ? "bg-purple-500/[0.08] dark:bg-purple-500/[0.14] hover:bg-purple-500/[0.12] border-l-2 border-purple-500 shadow-xs"
+                        ? "bg-purple-500/[0.08] dark:bg-purple-500/[0.14] hover:bg-purple-500/[0.12]"
                         : isSurge
                         ? "bg-amber-500/[0.06] dark:bg-amber-500/[0.1] hover:bg-amber-500/[0.09]"
                         : isQueued
