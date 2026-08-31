@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
     const rangeDays = ({ today: 1, "7d": 7, "15d": 15, "30d": 30 } as Record<string, number>)[range] ?? 7;
     const windowStart = new Date();
     windowStart.setDate(windowStart.getDate() - rangeDays);
+    const windowStartIso = windowStart.toISOString();
     const observationWindow = gte(adObservations.observedAt, windowStart);
 
     // 1. Safe Date Expression for Longevity (Fallback to firstSeenAt or createdAt if startedRunningOn is missing)
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
         imageAds: sql<number>`COUNT(CASE WHEN ${ads.mediaType} = 'image' THEN 1 END)`.mapWith(Number),
         carouselAds: sql<number>`COUNT(CASE WHEN ${ads.mediaType} = 'carousel' THEN 1 END)`.mapWith(Number),
         scaledAdsCount: sql<number>`COUNT(CASE WHEN ${adObservations.duplicationCount} >= 5 THEN 1 END)`.mapWith(Number),
-        breakoutAdsCount: sql<number>`COUNT(CASE WHEN ${dateExpr} >= ${windowStart} AND ${adObservations.duplicationCount} >= 3 THEN 1 END)`.mapWith(Number),
+        breakoutAdsCount: sql<number>`COUNT(CASE WHEN ${dateExpr} >= ${windowStartIso} AND ${adObservations.duplicationCount} >= 3 THEN 1 END)`.mapWith(Number),
         avgDuplication: sql<number>`ROUND(AVG(${adObservations.duplicationCount}), 1)`.mapWith(Number),
         maxDuplication: sql<number>`MAX(${adObservations.duplicationCount})`.mapWith(Number),
       })
@@ -229,7 +230,7 @@ export async function GET(req: NextRequest) {
       .where(
         and(
           observationWindow,
-          gte(dateExpr, windowStart),
+          gte(dateExpr, windowStartIso),
           gte(adObservations.duplicationCount, 3),
           eq(adObservations.isActive, true)
         )

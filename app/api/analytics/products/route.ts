@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
     const rangeDays = ({ today: 1, "7d": 7, "15d": 15, "30d": 30 } as Record<string, number>)[range] ?? 7;
     const windowStart = new Date();
     windowStart.setDate(windowStart.getDate() - rangeDays);
+    const windowStartIso = windowStart.toISOString();
     const productWindow = gte(scrapedProducts.createdAt, windowStart);
 
     // 1. Price Extraction Helper in SQL
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
         parsedPriceCount: sql<number>`COUNT(CASE WHEN ${priceExpr} > 0 THEN 1 END)`.mapWith(Number),
         withOffersCount: sql<number>`COUNT(CASE WHEN ${scrapedProducts.discountOrOffer} IS NOT NULL AND ${scrapedProducts.discountOrOffer} != '' THEN 1 END)`.mapWith(Number),
         favoritesCount: sql<number>`COUNT(CASE WHEN ${scrapedProducts.isFavorite} = true THEN 1 END)`.mapWith(Number),
-        newInWindow: sql<number>`COUNT(CASE WHEN ${scrapedProducts.createdAt} >= ${windowStart} THEN 1 END)`.mapWith(Number),
+        newInWindow: sql<number>`COUNT(CASE WHEN ${scrapedProducts.createdAt} >= ${windowStartIso} THEN 1 END)`.mapWith(Number),
         hasMetaPixel: sql<number>`COUNT(CASE WHEN ${scrapedProducts.metaPixelIds} IS NOT NULL AND array_length(${scrapedProducts.metaPixelIds}, 1) > 0 THEN 1 END)`.mapWith(Number),
         hasWhatsApp: sql<number>`COUNT(CASE WHEN ${scrapedProducts.whatsappNumbers} IS NOT NULL AND array_length(${scrapedProducts.whatsappNumbers}, 1) > 0 THEN 1 END)`.mapWith(Number),
         hasFreeDelivery: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.deliveryCost}) LIKE '%gratuit%' OR LOWER(${scrapedProducts.deliveryCost}) LIKE '%free%' OR ${scrapedProducts.deliveryCost} = '0' THEN 1 END)`.mapWith(Number),
