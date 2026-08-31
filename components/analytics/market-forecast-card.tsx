@@ -24,7 +24,7 @@ export function MarketForecastCard() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   // 1. Initial Load: Load persistent forecast with 0ms localStorage cache
   useEffect(() => {

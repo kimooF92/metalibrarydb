@@ -25,7 +25,7 @@ import {
 type MainAnalyticsTab = "products" | "ads" | "pages";
 
 function getInitialTab(): MainAnalyticsTab {
-  if (typeof window === "undefined") return "products";
+  if (typeof window === "undefined") return "pages";
   try {
     const urlParams = new URLSearchParams(window.location.search);
     const tabParam = urlParams.get("tab");
@@ -41,7 +41,7 @@ function getInitialTab(): MainAnalyticsTab {
       return saved as MainAnalyticsTab;
     }
   } catch {}
-  return "products";
+  return "pages";
 }
 
 function isDateRange(value: string | null): value is DateRange {
