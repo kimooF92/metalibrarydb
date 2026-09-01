@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import NextImage from "next/image";
 import Link from "next/link";
 import { Ad, ScrapedProduct } from "@/types";
@@ -9,7 +9,6 @@ import { calculateWinnerScore } from "@/lib/winner-score";
 import { ImagePreviewModal } from "./image-preview-modal";
 import { ProductClusterModal } from "./product-cluster-modal";
 import { CreativeClusterModal } from "./creative-cluster-modal";
-import { VideoHoverScrubber } from "./video-hover-scrubber";
 import { useToast } from "@/components/toast-context";
 import {
   Calendar,
@@ -28,7 +27,6 @@ import {
   Clock,
   RotateCw,
   Ban,
-  X,
   VolumeX,
   Volume2,
   Award,
@@ -55,11 +53,9 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
   const { showToast } = useToast();
   const [currentAd, setCurrentAd] = useState<Ad>(ad);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isPlayingVideo, setIsPlayingVideo] = useState(false);
   const [isProxied, setIsProxied] = useState(false);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [imgError, setImgError] = useState(false);
-  const [videoError, setVideoError] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isClusterModalOpen, setIsClusterModalOpen] = useState(false);
   const [isCreativeClusterModalOpen, setIsCreativeClusterModalOpen] = useState(false);
@@ -68,9 +64,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
   const [isRefreshingMedia, setIsRefreshingMedia] = useState(false);
   const [isExtractingProduct, setIsExtractingProduct] = useState(false);
   const [extractedProduct, setExtractedProduct] = useState<ScrapedProduct | null>(ad.product || null);
-  const [isHovered, setIsHovered] = useState(false);
   const [showScoreTooltip, setShowScoreTooltip] = useState(false);
-  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Sync when prop updates
   useEffect(() => {
@@ -79,16 +73,6 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
     if (ad.product) setExtractedProduct(ad.product);
   }, [ad]);
 
-  // Clean up hover timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const hasStoryboard = Boolean(currentAd.storyboardUrls && currentAd.storyboardUrls.length > 0);
   const firstVideoUrl = currentAd.mediaUrls?.find(
     (url) =>
       url.includes(".mp4") ||
@@ -97,7 +81,9 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
       url.includes("fbcdn.net/o1/v/")
   ) || (currentAd.mediaType === "video" && currentAd.mediaUrls?.[0]?.includes("http") ? currentAd.mediaUrls[0] : null);
 
-  const isVideoAd = currentAd.mediaType === "video" || hasStoryboard || Boolean(firstVideoUrl);
+  // Keep historical storyboard-backed records classified as video so their
+  // thumbnails remain static and non-downloadable without rendering frames.
+  const isVideoAd = currentAd.mediaType === "video" || Boolean(firstVideoUrl) || Boolean(currentAd.storyboardUrls?.length);
 
   const imageSlides = currentAd.mediaUrls?.filter(
     (url) =>
@@ -168,7 +154,6 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
       const data = await res.json();
       if (data.success && data.ad) {
         setCurrentAd(data.ad);
-        setVideoError(false);
         setImgError(false);
         setIsProxied(false);
         onMediaRefreshed?.(data.ad);
@@ -283,21 +268,6 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
 
   const destinationUrl = resolveDestinationUrl(currentAd.linkUrl);
   const targetDomain = getCleanDomain(currentAd.linkUrl);
-
-  const handleMouseEnter = () => {
-    if (!firstVideoUrl || isPlayingVideo || videoError) return;
-    hoverTimeoutRef.current = setTimeout(() => {
-      setIsHovered(true);
-    }, 150);
-  };
-
-  const handleMouseLeave = () => {
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
-      hoverTimeoutRef.current = null;
-    }
-    setIsHovered(false);
-  };
 
   const creativeCount = currentAd.productCreativeCount || 1;
   const isMultiCreative = creativeCount > 1;
@@ -518,58 +488,8 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
         {/* Media Container */}
         <div
           className="relative w-full h-[280px] sm:h-[320px] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800/80 bg-slate-900/95 dark:bg-slate-950 mb-3 flex items-center justify-center"
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
         >
-          {isPlayingVideo && firstVideoUrl && !videoError ? (
-            <div className="relative w-full h-full bg-black rounded-xl overflow-hidden flex items-center justify-center">
-              <video
-                src={firstVideoUrl}
-                controls
-                autoPlay
-                {...({ referrerPolicy: "no-referrer" } as any)}
-                onError={() => setVideoError(true)}
-                className="w-full h-full object-contain bg-black rounded-xl"
-              />
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsPlayingVideo(false);
-                }}
-                className="absolute top-2.5 right-2.5 p-1.5 rounded-full bg-black/80 hover:bg-black text-white hover:text-rose-400 transition-all cursor-pointer z-30 shadow-lg border border-white/20"
-                title="Close Video (Back to Poster)"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ) : isPlayingVideo && videoError ? (
-            <div className="flex flex-col items-center justify-center p-6 text-center bg-slate-950 text-slate-200 w-full h-full gap-3">
-              <Play className="w-10 h-10 text-indigo-400 opacity-60" />
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-semibold text-white">Direct CDN stream expired</span>
-                <span className="text-[11px] text-slate-400">Meta CDN links expire after 24–72 hours</span>
-              </div>
-              <a
-                href={`https://www.facebook.com/ads/library/?id=${currentAd.adArchiveId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium shadow-md transition-all"
-              >
-                Watch on Meta Ad Library
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            </div>
-          ) : isVideoAd ? (
-            <VideoHoverScrubber
-              storyboardUrls={currentAd.storyboardUrls}
-              fallbackThumbnailUrl={displayThumbnail}
-              videoUrl={firstVideoUrl}
-              adArchiveId={currentAd.adArchiveId}
-              onPlayClick={() => setIsPlayingVideo(true)}
-            />
-          ) : (
-            <div className="relative w-full h-full group/media cursor-pointer flex items-center justify-center" onClick={() => setIsPreviewOpen(true)}>
+            <div className="relative w-full h-full group/media flex items-center justify-center" onClick={isVideoAd ? undefined : () => setIsPreviewOpen(true)}>
               {activeImageSrc && !imgError ? (
                 <>
                   {/* Ambient Blurred Background Canvas */}
@@ -642,20 +562,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
                 </>
               )}
 
-              {firstVideoUrl && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsPlayingVideo(true);
-                  }}
-                  className="absolute inset-0 m-auto w-12 h-12 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-xl hover:bg-indigo-500 hover:scale-110 transition-all cursor-pointer z-30"
-                  title="Play Video Creative"
-                >
-                  <Play className="w-6 h-6 fill-current ml-0.5" />
-                </button>
-              )}
             </div>
-          )}
         </div>
 
         {/* Extracted Product Info Pill */}
@@ -790,9 +697,9 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
               {isArchived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
             </button>
 
-            {(firstVideoUrl || displayThumbnail) && (
+            {!isVideoAd && displayThumbnail && (
               <a
-                href={firstVideoUrl || displayThumbnail || undefined}
+                href={displayThumbnail}
                 target="_blank"
                 rel="noopener noreferrer"
                 download

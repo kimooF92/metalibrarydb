@@ -4,8 +4,7 @@ import { ads, adObservations, creativeScans, trackedPages, scanHistory } from ".
 import { eq, sql } from "drizzle-orm";
 import { cacheThumbnail } from "./thumbnail-cache";
 import { extractAdsFromDOM, extractPageIdsFromPage } from "./dom-scanner";
-import { uploadMediaFromUrlToB2, uploadMediaWithHashing, uploadStoryboardFrames, isB2Configured } from "../lib/b2-storage";
-import { extractStoryboardFrames } from "../lib/video-storyboard";
+import { uploadMediaWithHashing, isB2Configured } from "../lib/b2-storage";
 import { extractMedia } from "../lib/apify-ingest";
 import { parseResultCountFromText } from "./scanner";
 import { resolveDestinationUrl } from "../lib/utils";
@@ -572,7 +571,6 @@ export async function scanAdCreatives(
       let storagePath: string | null = null;
       let mediaHash: string | null = null;
       let perceptualHash: string | null = null;
-      let storyboardUrls: string[] | null = null;
 
       if (isB2Configured()) {
         // 1. Best-effort B2 thumbnail caching & perceptual hash
@@ -592,24 +590,6 @@ export async function scanAdCreatives(
 
         // 2. Best-effort B2 media caching for all types (video, image, carousel slides)
         if (finalMediaUrls.length > 0) {
-          const isVid = adData.mediaType === "video" || finalMediaUrls.some((u) => u.includes(".mp4"));
-          const firstVid = finalMediaUrls.find((u) => u.includes(".mp4") || u.includes("/videos/"));
-
-          // 2a. Extract 5-shot storyboard frames for video ad hover scrubbing
-          if (isVid && firstVid) {
-            try {
-              const frames = await extractStoryboardFrames(firstVid, 5);
-              if (frames.length > 0) {
-                const uploaded = await uploadStoryboardFrames(frames, adData.adArchiveId);
-                if (uploaded.length > 0) {
-                  storyboardUrls = uploaded;
-                }
-              }
-            } catch (e: any) {
-              console.warn(`[Spy Scanner] Storyboard extraction error for ${adData.adArchiveId}:`, e.message);
-            }
-          }
-
           const b2MediaUrls = await Promise.all(
             finalMediaUrls.map(async (url, idx) => {
               if (url.includes("backblazeb2.com") || url.includes("/api/spy/b2-media") || url.includes("files.catbox.moe")) return url;
@@ -670,7 +650,6 @@ export async function scanAdCreatives(
           mediaUrls: finalMediaUrls,
           thumbnailUrl: finalThumbnailUrl,
           thumbnailStoragePath: storagePath,
-          storyboardUrls: storyboardUrls,
           mediaHash,
           perceptualHash,
           firstSeenAt: now,
@@ -690,7 +669,6 @@ export async function scanAdCreatives(
             mediaUrls: finalMediaUrls,
             thumbnailUrl: finalThumbnailUrl || ads.thumbnailUrl,
             thumbnailStoragePath: storagePath || ads.thumbnailStoragePath,
-            ...(storyboardUrls && storyboardUrls.length > 0 ? { storyboardUrls } : {}),
             ...(mediaHash ? { mediaHash } : {}),
             ...(perceptualHash ? { perceptualHash } : {}),
             lastSeenAt: now,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Ad, ScrapedProduct } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
@@ -8,7 +8,6 @@ import { calculateWinnerScore } from "@/lib/winner-score";
 import { ImagePreviewModal } from "./image-preview-modal";
 import { ProductClusterModal } from "./product-cluster-modal";
 import { CreativeClusterModal } from "./creative-cluster-modal";
-import { VideoHoverScrubber } from "./video-hover-scrubber";
 import { useToast } from "@/components/toast-context";
 import {
   Calendar,
@@ -51,10 +50,8 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
   const { showToast } = useToast();
   const [currentAd, setCurrentAd] = useState<Ad>(ad);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isPlayingVideo, setIsPlayingVideo] = useState(false);
   const [isProxied, setIsProxied] = useState(false);
   const [imgError, setImgError] = useState(false);
-  const [videoError, setVideoError] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isClusterModalOpen, setIsClusterModalOpen] = useState(false);
   const [isCreativeClusterModalOpen, setIsCreativeClusterModalOpen] = useState(false);
@@ -63,8 +60,6 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
   const [isRefreshingMedia, setIsRefreshingMedia] = useState(false);
   const [isExtractingProduct, setIsExtractingProduct] = useState(false);
   const [extractedProduct, setExtractedProduct] = useState<ScrapedProduct | null>(ad.product || null);
-  const [isHovered, setIsHovered] = useState(false);
-  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Sync when prop updates
   useEffect(() => {
@@ -73,16 +68,6 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
     if (ad.product) setExtractedProduct(ad.product);
   }, [ad]);
 
-  // Clean up hover timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const hasStoryboard = Boolean(currentAd.storyboardUrls && currentAd.storyboardUrls.length > 0);
   const firstVideoUrl = currentAd.mediaUrls?.find(
     (url: string) =>
       url.includes(".mp4") ||
@@ -91,7 +76,9 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
       url.includes("fbcdn.net/o1/v/")
   ) || (currentAd.mediaType === "video" && currentAd.mediaUrls?.[0]?.includes("http") ? currentAd.mediaUrls[0] : null);
 
-  const isVideoAd = currentAd.mediaType === "video" || hasStoryboard || Boolean(firstVideoUrl);
+  // Keep historical storyboard-backed records classified as video so their
+  // thumbnails remain static and non-downloadable without rendering frames.
+  const isVideoAd = currentAd.mediaType === "video" || Boolean(firstVideoUrl) || Boolean(currentAd.storyboardUrls?.length);
 
   const imageSlides = currentAd.mediaUrls?.filter(
     (url: string) =>
@@ -153,7 +140,6 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
       const data = await res.json();
       if (data.success && data.ad) {
         setCurrentAd(data.ad);
-        setVideoError(false);
         setImgError(false);
         setIsProxied(false);
         onMediaRefreshed?.(data.ad);
@@ -263,21 +249,6 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
   const destinationUrl = resolveDestinationUrl(currentAd.linkUrl);
   const targetDomain = getCleanDomain(currentAd.linkUrl);
 
-  const handleMouseEnter = () => {
-    if (!firstVideoUrl || isPlayingVideo || videoError) return;
-    hoverTimeoutRef.current = setTimeout(() => {
-      setIsHovered(true);
-    }, 150);
-  };
-
-  const handleMouseLeave = () => {
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
-      hoverTimeoutRef.current = null;
-    }
-    setIsHovered(false);
-  };
-
   const creativeCount = currentAd.productCreativeCount || 1;
   const isMultiCreative = creativeCount > 1;
 
@@ -287,53 +258,9 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
       <div className="flex items-center gap-3.5 min-w-0 flex-1">
         {/* Media Thumbnail */}
         <div
-          className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 shrink-0 flex items-center justify-center"
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
+          className={`relative w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 shrink-0 flex items-center justify-center ${isVideoAd ? "" : "cursor-pointer"}`}
         >
-          {isPlayingVideo && firstVideoUrl && !videoError ? (
-            <div className="relative w-full h-full bg-black flex items-center justify-center">
-              <video
-                src={firstVideoUrl}
-                controls
-                autoPlay
-                {...({ referrerPolicy: "no-referrer" } as any)}
-                onError={() => setVideoError(true)}
-                className="w-full h-full object-contain bg-black"
-              />
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsPlayingVideo(false);
-                }}
-                className="absolute top-1 right-1 p-1 rounded-full bg-black/80 hover:bg-black text-white hover:text-rose-400 transition-all cursor-pointer z-30 shadow-md border border-white/20"
-                title="Close Video"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          ) : isPlayingVideo && videoError ? (
-            <a
-              href={`https://www.facebook.com/ads/library/?id=${currentAd.adArchiveId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex flex-col items-center justify-center p-2 text-center bg-slate-950 text-indigo-300 w-full h-full gap-1 hover:text-indigo-200"
-              title="Watch on Meta Ad Library"
-            >
-              <Play className="w-5 h-5 text-indigo-400" />
-              <span className="text-[9px] font-semibold">Meta Library</span>
-            </a>
-          ) : isVideoAd ? (
-            <VideoHoverScrubber
-              storyboardUrls={currentAd.storyboardUrls}
-              fallbackThumbnailUrl={displayThumbnail}
-              videoUrl={firstVideoUrl}
-              adArchiveId={currentAd.adArchiveId}
-              onPlayClick={() => setIsPlayingVideo(true)}
-            />
-          ) : (
-            <div className="relative w-full h-full group/media cursor-pointer flex items-center justify-center bg-slate-900 overflow-hidden" onClick={() => setIsPreviewOpen(true)}>
+          <div className="relative w-full h-full group/media flex items-center justify-center bg-slate-900 overflow-hidden" onClick={isVideoAd ? undefined : () => setIsPreviewOpen(true)}>
               {activeImageSrc && !imgError ? (
                 /* eslint-disable-next-html-shortcut */
                 <img
@@ -353,8 +280,7 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
                 </div>
               )}
             </div>
-          )}
-        </div>
+          </div>
 
         {/* Info Column */}
         <div className="flex flex-col min-w-0 flex-1 gap-1">
@@ -633,9 +559,9 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
             {isArchived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
           </button>
 
-          {(firstVideoUrl || displayThumbnail) && (
+          {!isVideoAd && displayThumbnail && (
             <a
-              href={firstVideoUrl || displayThumbnail || undefined}
+              href={displayThumbnail}
               target="_blank"
               rel="noopener noreferrer"
               download

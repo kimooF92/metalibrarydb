@@ -1,8 +1,7 @@
 import { db } from "@/db";
 import { ads, adObservations, creativeScans, trackedPages } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
-import { uploadMediaFromUrlToB2, uploadMediaWithHashing, uploadStoryboardFrames, isB2Configured } from "@/lib/b2-storage";
-import { extractStoryboardFrames } from "@/lib/video-storyboard";
+import { uploadMediaWithHashing, isB2Configured } from "@/lib/b2-storage";
 import { linkAndAutoScrapeProduct } from "@/lib/product-ingest";
 
 /**
@@ -350,34 +349,14 @@ export async function ingestApifyDatasetItems(
           let updatedThumb = rawThumbnailUrl;
           let detectedMediaHash: string | null = null;
           let detectedPerceptualHash: string | null = null;
-          let detectedStoryboardUrls: string[] | null = null;
           let hasChange = false;
 
           // 1. Process all media assets (Videos, Image Ads, Carousel cards)
           if (rawMediaUrls.length > 0) {
-            const isVideo = mediaType === "video" || rawMediaUrls.some((u) => u.includes(".mp4") || u.includes("/videos/") || u.includes("video.") || u.includes("fbcdn.net/o1/v/"));
-            const firstVid = rawMediaUrls.find((u) => u.includes(".mp4") || u.includes("/videos/") || u.includes("video.") || u.includes("fbcdn.net/o1/v/"));
-
-            // 1a. Extract 5-shot storyboard frames for video ad hover scrubbing
-            if (isVideo && firstVid) {
-              try {
-                const frames = await extractStoryboardFrames(firstVid, 5);
-                if (frames.length > 0) {
-                  const uploaded = await uploadStoryboardFrames(frames, adArchiveId);
-                  if (uploaded.length > 0) {
-                    detectedStoryboardUrls = uploaded;
-                    hasChange = true;
-                  }
-                }
-              } catch (e: any) {
-                console.warn(`[Apify Ingest] Storyboard extraction error for ${adArchiveId}:`, e.message);
-              }
-            }
-
             const storedMediaUrls = await Promise.all(
               rawMediaUrls.map(async (url, idx) => {
                 if (url.includes("backblazeb2.com") || url.includes("/api/spy/b2-media") || url.includes("files.catbox.moe")) return url;
-                const isUrlVid = isVideo || url.includes(".mp4");
+                const isUrlVid = mediaType === "video" || url.includes(".mp4") || url.includes("/videos/") || url.includes("video.") || url.includes("fbcdn.net/o1/v/");
                 
                 // Skip uploading heavy full MP4 to storage to save 99.8% bandwidth & storage
                 if (isUrlVid) return url;
@@ -408,15 +387,13 @@ export async function ingestApifyDatasetItems(
             }
           }
 
-          if (hasChange || detectedMediaHash || detectedPerceptualHash || detectedStoryboardUrls) {
+          if (hasChange || detectedMediaHash || detectedPerceptualHash) {
             const updatePayload: Record<string, any> = {
               mediaUrls: updatedMediaUrls,
               thumbnailUrl: updatedThumb,
             };
             if (detectedMediaHash) updatePayload.mediaHash = detectedMediaHash;
             if (detectedPerceptualHash) updatePayload.perceptualHash = detectedPerceptualHash;
-            if (detectedStoryboardUrls) updatePayload.storyboardUrls = detectedStoryboardUrls;
-
             await db
               .update(ads)
               .set(updatePayload)
