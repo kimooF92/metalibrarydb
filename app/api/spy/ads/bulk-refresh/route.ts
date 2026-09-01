@@ -160,6 +160,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         success: false,
+        message: err.message || "Failed to bulk refresh brand ads",
         error: err.message || "Failed to bulk refresh brand ads",
       },
       { status: 200 }

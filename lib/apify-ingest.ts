@@ -233,6 +233,45 @@ export async function ingestApifyDatasetItems(
   });
 
   const now = new Date();
+
+  // Apify can report actor/input failures as dataset items while the run
+  // itself still has a SUCCEEDED status. Never treat those items as ads or a
+  // successful zero-result scan.
+  const datasetError = items.find(
+    (item) => item && typeof item.error === "string" && item.error.trim()
+  );
+  if (datasetError) {
+    const message = `Apify dataset returned an error: ${datasetError.error.trim()}`;
+    const pageStatus = pageRecord && (pageRecord.lastSuccessAt || pageRecord.currentResults !== null) ? "success" : "failed";
+
+    await db
+      .update(creativeScans)
+      .set({
+        status: "failed",
+        failureReason: "apify_dataset_error",
+        outcomeDetails: message,
+        finishedAt: now,
+      })
+      .where(eq(creativeScans.id, creativeScanId));
+
+    await db
+      .update(trackedPages)
+      .set({ status: pageStatus, updatedAt: now })
+      .where(eq(trackedPages.id, trackedPageId));
+
+    const { createNotification } = await import("@/lib/notifications");
+    await createNotification({
+      type: "system_alert",
+      title: "⚠️ Apify Scan Failed",
+      message,
+      severity: "error",
+      trackedPageId,
+      actionUrl: `/spy?trackedPageId=${trackedPageId}`,
+    });
+
+    throw new Error(message);
+  }
+
   let extractedCount = 0;
   let newProductsCount = 0;
   let detectedPageId: string | null = null;

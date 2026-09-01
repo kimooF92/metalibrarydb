@@ -203,7 +203,9 @@ export async function startApifyDeltaScan(params: {
   // Iterate over available tokens to launch actor run with automatic failover
   for (let idx = 0; idx < tokens.length; idx++) {
     const token = tokens[idx];
-    const memory = params.isFullScan ? 1024 : 512;
+    // Each scan submits one URL. The actor requires 512MB per input URL;
+    // allocating 1GB for a single URL causes it to return a dataset error.
+    const memory = 512;
     const timeout = params.isFullScan ? 90 : 60;
     const runUrl = `${APIFY_BASE_URL}/acts/${actorIdPath}/runs?token=${token}&memory=${memory}&timeout=${timeout}`;
 
