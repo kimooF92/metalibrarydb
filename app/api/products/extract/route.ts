@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ads, scrapedProducts } from "@/db/schema";
-import { eq, sql, inArray } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { normalizeProductUrl, extractProductFromUrl } from "@/lib/firecrawl";
 import { getCleanDomain } from "@/lib/utils";
@@ -12,11 +12,18 @@ import {
   detectStorePlatform,
   extractDeliveryInfo,
 } from "@/lib/network-extractor";
-import { classifyProductWithAI } from "@/lib/product-classifier";
+import { createNotification } from "@/lib/notifications";
+import { buildProductExtractionNotification } from "@/lib/product-extraction";
 
 export async function POST(req: NextRequest) {
   const authError = await validateApiSecret(req);
   if (authError) return authError;
+
+  let notificationContext: {
+    url: string;
+    domain?: string | null;
+    productId?: string | null;
+  } | null = null;
 
   try {
     const body = await req.json();
@@ -37,6 +44,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    notificationContext = {
+      url: normalizedUrl,
+      domain: getCleanDomain(normalizedUrl),
+    };
+
     // 1. Check for existing product in DB (Deduplication)
     const existing = await db
       .select()
@@ -45,6 +57,8 @@ export async function POST(req: NextRequest) {
       .limit(1);
 
     const existingProduct = existing[0];
+    const wasExistingProduct = Boolean(existingProduct);
+    notificationContext.productId = existingProduct?.id;
 
     // If already extracted successfully and not forcing a refresh, return cached data immediately (0 credits used)
     if (existingProduct && existingProduct.scrapeStatus === "success" && !forceRefresh) {
@@ -82,6 +96,14 @@ export async function POST(req: NextRequest) {
           })
           .where(eq(scrapedProducts.id, existingProduct.id));
       }
+
+      await createNotification(buildProductExtractionNotification({
+        success: false,
+        productId: existingProduct?.id,
+        url: normalizedUrl,
+        domain,
+        error: extractionResult.error,
+      }));
 
       return NextResponse.json(
         {
@@ -127,11 +149,6 @@ export async function POST(req: NextRequest) {
       extracted.all_offers
     );
 
-    const classification = await classifyProductWithAI(extracted.title || "", {
-      domain: resolvedDomain,
-      adText: adCaptionText,
-    });
-
     // 3. Save or update product in DB
     let savedProduct;
     if (existingProduct) {
@@ -154,9 +171,6 @@ export async function POST(req: NextRequest) {
           metaPixelIds: metaPixelIds.length > 0 ? metaPixelIds : existingProduct.metaPixelIds,
           storePlatform: storePlatform !== "other" ? storePlatform : existingProduct.storePlatform,
           deliveryCost: deliveryInfo.label || existingProduct.deliveryCost,
-          category: classification.category || existingProduct.category,
-          subCategory: classification.subCategory || existingProduct.subCategory,
-          targetAudience: classification.targetAudience || existingProduct.targetAudience,
           scrapeStatus: "success",
           failureReason: null,
           lastScrapedAt: new Date(),
@@ -186,9 +200,6 @@ export async function POST(req: NextRequest) {
           metaPixelIds: metaPixelIds.length > 0 ? metaPixelIds : [],
           storePlatform: storePlatform || "other",
           deliveryCost: deliveryInfo.label || null,
-          category: classification.category || null,
-          subCategory: classification.subCategory || null,
-          targetAudience: classification.targetAudience || null,
           scrapeStatus: "success",
           lastScrapedAt: new Date(),
         })
@@ -204,9 +215,22 @@ export async function POST(req: NextRequest) {
         .where(eq(ads.id, adId));
     }
 
+    if (!savedProduct) {
+      throw new Error("Product save returned no row.");
+    }
+
     // Link any other ads that share this destination URL
     if (savedProduct) {
       linkMatchingAds(savedProduct.id, normalizedUrl).catch(console.error);
+
+      await createNotification(buildProductExtractionNotification({
+        success: true,
+        wasExistingProduct,
+        productId: savedProduct.id,
+        title: savedProduct.title,
+        url: normalizedUrl,
+        domain: resolvedDomain,
+      }));
     }
 
     return NextResponse.json({
@@ -214,10 +238,23 @@ export async function POST(req: NextRequest) {
       cached: false,
       product: savedProduct,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[Product Extract API] Error:", err);
+
+    const errorMessage = err instanceof Error ? err.message : "Internal server error";
+
+    if (notificationContext) {
+      await createNotification(buildProductExtractionNotification({
+        success: false,
+        productId: notificationContext.productId,
+        url: notificationContext.url,
+        domain: notificationContext.domain,
+        error: errorMessage,
+      }));
+    }
+
     return NextResponse.json(
-      { success: false, error: err.message || "Internal server error" },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

@@ -87,7 +87,7 @@ interface ProductDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
   product: ScrapedProduct | null;
-  onRefresh?: (productId: string) => Promise<void>;
+  onRefresh?: (productId: string, product?: ScrapedProduct) => Promise<void>;
   onDelete?: (productId: string) => Promise<void>;
   onProductUpdate?: (updatedProduct: ScrapedProduct) => void;
 }
@@ -392,7 +392,7 @@ export function ProductDetailsModal({
     if (!onRefresh || isRefreshing) return;
     setIsRefreshing(true);
     try {
-      await onRefresh(product.id);
+      await onRefresh(product.id, product);
     } finally {
       setIsRefreshing(false);
     }

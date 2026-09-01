@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test lib/ad-reconciliation.test.ts",
+    "test": "tsx --test lib/ad-reconciliation.test.ts lib/product-extraction.test.ts",
     "worker": "npx tsx worker/index.ts",
     "spy:apify": "npx tsx scripts/run-apify-spy-cron.ts",
     "scrape:products": "npx tsx scripts/run-product-scraper.ts",

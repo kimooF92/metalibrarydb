@@ -7,6 +7,7 @@ import { ScrapedProduct } from "@/types";
 import { ProductCard } from "@/components/products/product-card";
 import { ProductRow } from "@/components/products/product-row";
 import { ProductDetailsModal } from "@/components/products/product-details-modal";
+import { resolveProductForRefresh } from "@/lib/product-extraction";
 import { useToast } from "@/components/toast-context";
 import {
   ShoppingBag,
@@ -437,9 +438,16 @@ export default function ProductsPage() {
     }
   };
 
-  const handleRefresh = async (productId: string) => {
-    const prod = products.find((p) => p.id === productId);
-    if (!prod || !prod.url) return;
+  const handleRefresh = async (productId: string, productOverride?: ScrapedProduct) => {
+    const prod = resolveProductForRefresh(productId, products, productOverride || selectedProduct);
+    if (!prod || !prod.url) {
+      showToast({
+        type: "error",
+        title: "Refresh Unavailable",
+        message: "This product has no usable landing-page URL to re-extract.",
+      });
+      return;
+    }
 
     try {
       const res = await fetch("/api/products/extract", {

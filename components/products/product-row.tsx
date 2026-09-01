@@ -21,7 +21,7 @@ import {
 
 interface ProductRowProps {
   product: ScrapedProduct;
-  onRefresh?: (productId: string) => Promise<void>;
+  onRefresh?: (productId: string, product?: ScrapedProduct) => Promise<void>;
   onDelete?: (productId: string) => Promise<void>;
   onToggleFavorite?: (productId: string, nextFavorite: boolean) => Promise<void>;
   onViewDetails?: (product: ScrapedProduct) => void;
@@ -54,7 +54,7 @@ export function ProductRow({
         method: "POST",
       });
       if (res.ok && onRefresh) {
-        await onRefresh(product.id);
+        await onRefresh(product.id, product);
       }
     } finally {
       setIsQueueingVerify(false);
@@ -89,7 +89,7 @@ export function ProductRow({
     if (!onRefresh || isRefreshing) return;
     setIsRefreshing(true);
     try {
-      await onRefresh(product.id);
+      await onRefresh(product.id, product);
     } finally {
       setIsRefreshing(false);
     }
@@ -346,6 +346,7 @@ export function ProductRow({
 
         {onRefresh && (
           <button
+            type="button"
             onClick={handleRefresh}
             disabled={isRefreshing}
             className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors cursor-pointer"

@@ -196,7 +196,7 @@ export interface ExtractedProductData {
 }
 
 /**
- * Scrapes a landing page URL using Firecrawl AI extraction, with seamless direct HTML/OpenGraph fallback.
+ * Scrapes a landing page URL using direct HTML first and Firecrawl rendered content as fallback.
  */
 export async function extractProductFromUrl(url: string): Promise<{
   success: boolean;
@@ -237,71 +237,26 @@ export async function extractProductFromUrl(url: string): Promise<{
     console.warn(`[Product Scraper] Direct scraper error for ${normalized}:`, directErr?.message);
   }
 
-  // 2. Backup: Firecrawl Cloud AI Extraction (Only called if Direct Scraper fails/incomplete)
+  // 2. Backup: Firecrawl rendered HTML/Markdown (no AI extraction dependency)
   const apiKey = process.env.FIRECRAWL_API_KEY;
   if (apiKey && apiKey.trim() !== "") {
     try {
-      console.log(`[Product Scraper] Invoking Firecrawl AI rescue fallback for ${normalized}...`);
+      console.log(`[Product Scraper] Invoking Firecrawl rendered-content fallback for ${normalized}...`);
       const firecrawl = new FirecrawlApp({ apiKey: apiKey.trim() });
 
       const scrapeResponse: any = await firecrawl.scrapeUrl(normalized, {
-        formats: [
-          {
-            type: "json",
-            schema: productJsonSchema,
-            prompt:
-              "Extract the main product title, current selling price, original/crossed-out price, discount/offer summary, main product photo URL, and any quantity/bundle discount tiers.",
-          },
-          "markdown",
-          "html",
-        ],
+        formats: ["markdown", "html"],
         waitFor: 3000,
       });
 
-      const rawData =
-        scrapeResponse?.json ||
-        scrapeResponse?.extract ||
-        scrapeResponse?.data?.json ||
-        scrapeResponse?.data?.extract;
+      const renderedHtml = scrapeResponse?.html || scrapeResponse?.data?.html || "";
+      const renderedMarkdown = scrapeResponse?.markdown || scrapeResponse?.data?.markdown;
 
-      if (scrapeResponse && rawData && rawData.title && (rawData.current_price || rawData.main_image_url)) {
-        const extract = rawData as ExtractedProductData;
-
-        // Resolve relative image URLs if returned
-        if (extract.main_image_url && !extract.main_image_url.startsWith("http") && !extract.main_image_url.startsWith("data:")) {
-          try {
-            const base = new URL(normalized);
-            extract.main_image_url = new URL(extract.main_image_url, base.origin).toString();
-          } catch {}
-        }
-
-        if (extract.gallery_images && Array.isArray(extract.gallery_images)) {
-          extract.gallery_images = extract.gallery_images.map((img) => {
-            if (!img.startsWith("http") && !img.startsWith("data:")) {
-              try {
-                const base = new URL(normalized);
-                return new URL(img, base.origin).toString();
-              } catch {
-                return img;
-              }
-            }
-            return img;
-          });
-        }
-
-        return {
-          success: true,
-          data: extract,
-          raw: { ...scrapeResponse, engine: "firecrawl_json" },
-        };
-      }
-
-      // If JSON format was empty/null (common in Arabic/RTL SPAs), parse rendered HTML + Markdown
-      if (scrapeResponse && (scrapeResponse.html || scrapeResponse.markdown)) {
+      if (renderedHtml || renderedMarkdown) {
         const parsed = parseProductHtmlContent(
-          scrapeResponse.html || "",
+          renderedHtml,
           normalized,
-          scrapeResponse.markdown
+          renderedMarkdown
         );
         if (parsed.success && parsed.data && (parsed.data.title || parsed.data.current_price)) {
           return {

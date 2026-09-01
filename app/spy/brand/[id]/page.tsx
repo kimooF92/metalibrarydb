@@ -7,6 +7,7 @@ import { useAdFeed } from "@/hooks/use-spy";
 import { AdCard } from "@/components/spy/ad-card";
 import { AdRow } from "@/components/spy/ad-row";
 import { ProductCard } from "@/components/products/product-card";
+import { resolveProductForRefresh } from "@/lib/product-extraction";
 import { ProductDetailsModal } from "@/components/products/product-details-modal";
 import { ExportDossierModal } from "@/components/export-dossier-modal";
 import { useToast } from "@/components/toast-context";
@@ -277,9 +278,16 @@ export default function BrandDeepDivePage({
   };
 
   // Re-extract individual product
-  const handleRefreshProduct = async (productId: string) => {
-    const prod = data?.products?.find((p: any) => p.id === productId);
-    if (!prod || !prod.url) return;
+  const handleRefreshProduct = async (productId: string, productOverride?: ScrapedProduct) => {
+    const prod = resolveProductForRefresh(productId, data?.products || [], productOverride);
+    if (!prod || !prod.url) {
+      showToast({
+        type: "error",
+        title: "Refresh Unavailable",
+        message: "This product has no usable landing-page URL to re-extract.",
+      });
+      return;
+    }
     try {
       const res = await fetch("/api/products/extract", {
         method: "POST",
