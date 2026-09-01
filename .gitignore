@@ -53,3 +53,7 @@ next-env.d.ts
 # local runner scripts
 # *.bat
 
+# BMAD-generated files
+/_bmad/
+/.agents/
+_bmad-output/implementation-artifacts/sprint-status.yaml
