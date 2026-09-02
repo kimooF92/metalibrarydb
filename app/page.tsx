@@ -248,12 +248,13 @@ function DashboardContent() {
     setTimeout(() => setToast(null), 4000);
   }, []);
 
-  const fetchStats = useCallback(async (silent = false) => {
+  const fetchStats = useCallback(async (silent = false, forceRefresh = false) => {
     if (!silent) setStatsLoading(true);
     try {
-      const res = await fetch(`/api/stats?_t=${Date.now()}`, {
-        cache: "no-store",
-        headers: { "Cache-Control": "no-cache" },
+      const cacheBust = forceRefresh ? `?_t=${Date.now()}` : "";
+      const res = await fetch(`/api/stats${cacheBust}`, {
+        cache: forceRefresh ? "no-store" : "default",
+        headers: forceRefresh ? { "Cache-Control": "no-cache" } : undefined,
       });
       if (res.ok) {
         const data = await res.json();
@@ -266,7 +267,7 @@ function DashboardContent() {
     }
   }, []);
 
-  const fetchPages = useCallback(async (silent = false) => {
+  const fetchPages = useCallback(async (silent = false, forceRefresh = false) => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     if (!silent) setPagesLoading(true);
@@ -280,11 +281,11 @@ function DashboardContent() {
       if (activeTab !== "all") params.set("tab", activeTab);
       params.set("sortBy", sortBy);
       params.set("sortOrder", sortOrder);
-      params.set("_t", String(Date.now()));
+      if (forceRefresh) params.set("_t", String(Date.now()));
 
       const res = await fetch(`/api/pages?${params.toString()}`, {
-        cache: "no-store",
-        headers: { "Cache-Control": "no-cache" },
+        cache: forceRefresh ? "no-store" : "default",
+        headers: forceRefresh ? { "Cache-Control": "no-cache" } : undefined,
       });
       if (res.ok) {
         const data = await res.json();
@@ -304,9 +305,9 @@ function DashboardContent() {
     }
   }, [page, pageSize, search, statusFilter, searchTypeFilter, activeTab, sortBy, sortOrder, showToast]);
 
-  const loadData = useCallback((silent = false) => {
-    fetchStats(silent);
-    fetchPages(silent);
+  const loadData = useCallback((silent = false, forceRefresh = false) => {
+    fetchStats(silent, forceRefresh);
+    fetchPages(silent, forceRefresh);
   }, [fetchStats, fetchPages]);
 
   const handleSortChange = (col: string) => {
@@ -346,18 +347,19 @@ function DashboardContent() {
     (stats && stats.scanning > 0) ||
     pages.some((p) => p.status === "scanning");
 
-  // Bounded real-time polling when scraper jobs are actively scanning (max 6 cycles = 30s)
+  // Bounded real-time polling when scraper jobs are actively scanning (max 4 cycles = 60s)
   useEffect(() => {
     if (!isScanningActive) return;
 
     let pollCount = 0;
     const interval = setInterval(() => {
+      if (document.hidden) return;
       pollCount++;
       loadData(true);
-      if (pollCount >= 6) {
+      if (pollCount >= 4) {
         clearInterval(interval);
       }
-    }, 5000);
+    }, 15000);
 
     return () => clearInterval(interval);
   }, [isScanningActive, loadData]);
@@ -372,7 +374,7 @@ function DashboardContent() {
       });
       if (res.ok) {
         showToast("info", "Scan refresh queued successfully.");
-        loadData();
+        loadData(false, true);
       }
     } catch (err) {
       console.error("Refresh action failed", err);
@@ -389,7 +391,7 @@ function DashboardContent() {
       });
       if (res.ok) {
         showToast("info", "Failed scans queued for retry.");
-        loadData();
+        loadData(false, true);
       }
     } catch (err) {
       console.error("Retry action failed", err);
@@ -402,7 +404,7 @@ function DashboardContent() {
       const res = await fetch(`/api/page/${id}`, { method: "DELETE" });
       if (res.ok) {
         showToast("success", "Tracked page deleted successfully.");
-        loadData();
+        loadData(false, true);
       } else {
         showToast("error", "Failed to delete tracked page.");
       }
@@ -416,7 +418,7 @@ function DashboardContent() {
     try {
       await Promise.all(ids.map((id) => fetch(`/api/page/${id}`, { method: "DELETE" })));
       showToast("success", `Deleted ${ids.length} page(s) successfully.`);
-      loadData();
+      loadData(false, true);
     } catch (err) {
       console.error("Bulk delete failed", err);
       showToast("error", "Failed to delete some pages.");
@@ -485,7 +487,7 @@ function DashboardContent() {
           </button>
 
           <button
-            onClick={() => loadData()}
+            onClick={() => loadData(false, true)}
             title="Refresh dashboard data"
             className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
           >
@@ -536,7 +538,7 @@ function DashboardContent() {
         sortBy={sortBy}
         sortOrder={sortOrder}
         onSortChange={handleSortChange}
-        onWatchlistToggle={() => loadData(true)}
+        onWatchlistToggle={() => loadData(true, true)}
         onResetFilters={handleResetFilters}
       />
 
@@ -587,7 +589,7 @@ function DashboardContent() {
               <AddUrlForm
                 onSuccess={() => {
                   setShowAddModal(false);
-                  loadData();
+                  loadData(false, true);
                 }}
               />
             ) : (

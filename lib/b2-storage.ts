@@ -7,7 +7,27 @@ const BROWSER_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 // Max buffer size to store in Supabase Storage (1.5MB) to protect the 1GB free tier quota
-const MAX_SUPABASE_STORAGE_BYTES = 1.5 * 1024 * 1024;
+export const MAX_SUPABASE_STORAGE_BYTES = 1.5 * 1024 * 1024;
+
+export function canUseSupabaseStorageFallback(
+  keyPrefix: "videos" | "thumbnails" | "images",
+  byteLength: number,
+  isVideo = false
+): boolean {
+  return keyPrefix === "thumbnails" && !isVideo && byteLength <= MAX_SUPABASE_STORAGE_BYTES;
+}
+
+export function isVideoMedia(
+  keyPrefix: "videos" | "thumbnails" | "images",
+  sourceUrl: string,
+  contentType?: string | null
+): boolean {
+  return (
+    keyPrefix === "videos" ||
+    sourceUrl.toLowerCase().includes(".mp4") ||
+    contentType?.toLowerCase().startsWith("video/") === true
+  );
+}
 
 export function isB2Configured(): boolean {
   const keyId = process.env.B2_APPLICATION_KEY_ID?.trim() || process.env.B2_KEY_ID?.trim();
@@ -107,9 +127,9 @@ export async function uploadMediaWithHashing(
   }
 
   try {
-    const isVideo = keyPrefix === "videos" || sourceUrl.includes(".mp4");
+    const isVideoByHint = isVideoMedia(keyPrefix, sourceUrl);
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), isVideo ? 45000 : 25000);
+    const timeoutId = setTimeout(() => controller.abort(), isVideoByHint ? 45000 : 25000);
 
     const res = await fetch(sourceUrl, {
       signal: controller.signal,
@@ -144,6 +164,9 @@ export async function uploadMediaWithHashing(
     // 1. Compute SHA-256 binary hash
     const mediaHash = computeSha256(buffer);
 
+    let contentType = res.headers.get("content-type") || "application/octet-stream";
+    const isVideo = isVideoMedia(keyPrefix, sourceUrl, contentType);
+
     // 2. Compute 64-bit Perceptual dHash for thumbnails and images
     let perceptualHash: string | null = null;
     if (keyPrefix === "thumbnails" || !isVideo) {
@@ -152,7 +175,6 @@ export async function uploadMediaWithHashing(
       } catch {}
     }
 
-    let contentType = res.headers.get("content-type") || "application/octet-stream";
     let ext = ".jpg";
     if (isVideo || contentType.includes("video")) {
       ext = ".mp4";
@@ -186,7 +208,18 @@ export async function uploadMediaWithHashing(
       };
     }
 
-    // Tier 3: Supabase Storage Fallback (Ultra-fast & 100% reliable fallback)
+    // Tier 3: Supabase is only an emergency thumbnail fallback. Never place
+    // full-size images or videos there because every later read counts toward
+    // the project's Supabase egress quota.
+    if (!canUseSupabaseStorageFallback(keyPrefix, buffer.length, isVideo)) {
+      return {
+        url: sourceUrl,
+        mediaHash,
+        perceptualHash,
+        wasReused: false,
+      };
+    }
+
     const supabaseUrl = await uploadBufferToSupabase(buffer, contentKey, contentType);
     if (supabaseUrl) {
       console.log(`[Storage Engine] Stored to Supabase Storage fallback: ${supabaseUrl}`);

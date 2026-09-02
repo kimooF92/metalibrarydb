@@ -131,6 +131,8 @@ export function ProductCard({
   );
   const isWinning = !isBreakout && (product.linkedAdsCount || 0) >= 3 && (product.activeAdsCount || 0) > 0;
   const isInactive = typeof product.activeAdsCount === "number" && product.activeAdsCount === 0 && (product.linkedAdsCount || 0) > 0;
+  const supplierCount = product.supplierCount ?? product.supplierUrls?.length ?? 0;
+  const offerCount = product.offerCount ?? product.allOffers?.length ?? 0;
   const isPendingScrape = product.scrapeStatus === "pending";
   const isFailedScrape = product.scrapeStatus === "failed";
 
@@ -368,16 +370,16 @@ export function ProductCard({
             </span>
           )}
 
-          {product.supplierUrls && product.supplierUrls.length > 0 && (
+          {supplierCount > 0 && (
             <span
               className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
                 isInactive
                   ? "bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
                   : "bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800"
               }`}
-              title={`${product.supplierUrls.length} Supplier link${product.supplierUrls.length === 1 ? "" : "s"} attached`}
+              title={`${supplierCount} Supplier links attached`}
             >
-              📦 {product.supplierUrls.length} {product.supplierUrls.length === 1 ? "Supplier" : "Suppliers"}
+              📦 {supplierCount} {supplierCount === 1 ? "Supplier" : "Suppliers"}
             </span>
           )}
         </div>
@@ -452,11 +454,11 @@ export function ProductCard({
         </div>
 
         {/* Multi-tier offers counter if available */}
-        {product.allOffers && Array.isArray(product.allOffers) && product.allOffers.length > 0 && (
+        {offerCount > 0 && (
           <div className="mb-3 flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/50 px-2.5 py-1 rounded-md">
             <Layers className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
             <span className="truncate font-medium">
-              {product.allOffers.length} bundle {product.allOffers.length === 1 ? "tier" : "tiers"} available
+              {offerCount} bundle {offerCount === 1 ? "tier" : "tiers"} available
             </span>
           </div>
         )}

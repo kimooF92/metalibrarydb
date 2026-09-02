@@ -53,6 +53,7 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
   const [isProxied, setIsProxied] = useState(false);
   const [imgError, setImgError] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isLoadingMedia, setIsLoadingMedia] = useState(false);
   const [isClusterModalOpen, setIsClusterModalOpen] = useState(false);
   const [isCreativeClusterModalOpen, setIsCreativeClusterModalOpen] = useState(false);
   const [isArchived, setIsArchived] = useState(Boolean(ad.isArchived));
@@ -100,6 +101,27 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
       setIsProxied(true);
     } else {
       setImgError(true);
+    }
+  };
+
+  const openPreview = async () => {
+    if (currentAd.mediaUrls?.length || currentAd.storyboardUrls?.length) {
+      setIsPreviewOpen(true);
+      return;
+    }
+
+    setIsLoadingMedia(true);
+    try {
+      const res = await fetch(`/api/spy/ads/${encodeURIComponent(currentAd.id)}`);
+      const data = await res.json();
+      if (res.ok && data.success && data.ad) {
+        setCurrentAd((prev) => ({ ...prev, ...data.ad }));
+      }
+    } catch {
+      // Keep the thumbnail preview available if detail loading fails.
+    } finally {
+      setIsLoadingMedia(false);
+      setIsPreviewOpen(true);
     }
   };
 
@@ -260,7 +282,7 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
         <div
           className={`relative w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 shrink-0 flex items-center justify-center ${isVideoAd ? "" : "cursor-pointer"}`}
         >
-          <div className="relative w-full h-full group/media flex items-center justify-center bg-slate-900 overflow-hidden" onClick={isVideoAd ? undefined : () => setIsPreviewOpen(true)}>
+          <div className="relative w-full h-full group/media flex items-center justify-center bg-slate-900 overflow-hidden" onClick={isVideoAd ? undefined : openPreview}>
               {activeImageSrc && !imgError ? (
                 /* eslint-disable-next-html-shortcut */
                 <img

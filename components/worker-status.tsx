@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { WorkerState } from "@/types";
 import { PauseCircle, PlayCircle, ShieldAlert, Cpu, Trash2, CheckCircle2, Loader2, Sparkles } from "lucide-react";
 
@@ -21,13 +21,16 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
   const [pruneCount, setPruneCount] = useState<number | null>(null);
   const [pruneToast, setPruneToast] = useState<string | null>(null);
   const [activeScans, setActiveScans] = useState<ActiveCreativeScan[]>([]);
+  const requestInFlightRef = useRef(false);
 
   const [maxHour, setMaxHour] = useState(100);
   const [maxDay, setMaxDay] = useState(0);
 
   const fetchWorkerState = async () => {
+    if (requestInFlightRef.current || document.hidden) return;
+    requestInFlightRef.current = true;
     try {
-      const res = await fetch("/api/worker");
+      const res = await fetch("/api/worker", { signal: AbortSignal.timeout(10000) });
       if (res.ok) {
         const data = await res.json();
         setState(data.state);
@@ -38,13 +41,19 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
       }
     } catch {
       // Quiet failure
+    } finally {
+      requestInFlightRef.current = false;
     }
   };
 
   useEffect(() => {
     fetchWorkerState();
-    const interval = setInterval(fetchWorkerState, 10000);
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchWorkerState, 30000);
+    document.addEventListener("visibilitychange", fetchWorkerState);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", fetchWorkerState);
+    };
   }, []);
 
   useEffect(() => {

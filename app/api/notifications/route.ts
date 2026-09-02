@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
       success: true,
       notifications,
       unreadCount,
-    });
+    }, { headers: { "Cache-Control": "private, no-cache, must-revalidate" } });
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || "Failed to fetch notifications" },

@@ -98,6 +98,7 @@ export default function ProductsPage() {
   // Modal state
   const [selectedProduct, setSelectedProduct] = useState<ScrapedProduct | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const detailRequestIdRef = useRef(0);
 
   // Async stats fetcher (cached on backend, does not block product feed)
   const fetchStats = useCallback(async (forceRefresh = false) => {
@@ -565,13 +566,24 @@ export default function ProductsPage() {
     });
   };
 
-  const handleViewDetails = (product: ScrapedProduct) => {
+  const handleViewDetails = async (product: ScrapedProduct) => {
+    const requestId = ++detailRequestIdRef.current;
     setSelectedProduct(product);
     setIsModalOpen(true);
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
       url.searchParams.set("id", product.id);
       window.history.replaceState(null, "", url.toString());
+    }
+    try {
+      const res = await fetch(`/api/products?id=${encodeURIComponent(product.id)}&details=true`);
+      const json = await res.json();
+      const detailedProduct = json.products?.[0];
+      if (requestId === detailRequestIdRef.current && res.ok && detailedProduct) {
+        setSelectedProduct(detailedProduct);
+      }
+    } catch {
+      // Keep the lean product card available if detail loading fails.
     }
   };
 

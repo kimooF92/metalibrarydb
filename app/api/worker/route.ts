@@ -4,6 +4,7 @@ import { workerState, creativeScans, trackedPages } from "@/db/schema";
 import { eq, desc, and, lt, gte } from "drizzle-orm";
 
 import { cleanOrphanedScans } from "@/lib/clean-scans";
+import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 
 async function getOrCreateWorkerState() {
   let state = await db.query.workerState.findFirst({
@@ -58,7 +59,7 @@ export async function GET() {
       maxHour,
       maxDay,
       activeScans,
-    });
+    }, { headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY } });
   } catch (error) {
     console.error("Error in GET /api/worker:", error);
     return NextResponse.json(

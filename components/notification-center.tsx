@@ -52,16 +52,18 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const requestInFlightRef = useRef(false);
   const { showToast } = useToast();
 
   const fetchNotifications = useCallback(async (showLoading = false) => {
+    if (requestInFlightRef.current || document.hidden) return;
+    requestInFlightRef.current = true;
     if (showLoading) setIsRefreshing(true);
     try {
-      // Best-effort background sync for active Apify cloud scans
-      fetch("/api/spy/scans/sync", { method: "POST" }).catch(() => {});
-
       const typeParam = activeTab === "all" ? "" : `&type=${activeTab}`;
-      const res = await fetch(`/api/notifications?limit=40${typeParam}`);
+      const res = await fetch(`/api/notifications?limit=40${typeParam}`, {
+        signal: AbortSignal.timeout(10000),
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
@@ -72,18 +74,25 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
     } catch (err) {
       console.error("Error fetching notifications:", err);
     } finally {
+      requestInFlightRef.current = false;
       if (showLoading) {
         setTimeout(() => setIsRefreshing(false), 400);
       }
     }
   }, [activeTab]);
 
-  // Adaptive Polling: 8 seconds when panel is open, 25 seconds when idle
+  // Adaptive polling: notifications are secondary UI state, so avoid frequent
+  // database reads and pause entirely while the tab is hidden.
   useEffect(() => {
-    fetchNotifications();
-    const pollIntervalMs = isOpen ? 8000 : 25000;
-    const interval = setInterval(() => fetchNotifications(), pollIntervalMs);
-    return () => clearInterval(interval);
+    const refresh = () => fetchNotifications();
+    refresh();
+    const pollIntervalMs = isOpen ? 30000 : 60000;
+    const interval = setInterval(refresh, pollIntervalMs);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [activeTab, isOpen, fetchNotifications]);
 
   // Close on outside click and reset confirmation state

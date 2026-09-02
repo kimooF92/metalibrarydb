@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
+import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { trackedPages, importJobs } from "@/db/schema";
 import { sql, desc } from "drizzle-orm";
 import { cleanOrphanedScans } from "@/lib/clean-scans";
@@ -67,7 +68,7 @@ export async function GET() {
             totalRows: lastImport.totalRows,
           }
         : null,
-    });
+    }, { headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY } });
   } catch (error) {
     console.error("Error in GET /api/stats:", error);
     return NextResponse.json(

@@ -378,7 +378,7 @@ export async function ingestApifyDatasetItems(
           archivedAt: null,
         },
       })
-      .returning();
+      .returning({ id: ads.id });
 
     // 2. Best-effort background Backblaze B2 media backup (non-blocking for high speed)
     if (isB2Configured()) {

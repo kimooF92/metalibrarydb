@@ -6,6 +6,7 @@ import { singleUrlSchema } from "@/lib/validators";
 import { eq, ilike, or, and, sql, desc, asc, inArray, gte, lte, isNotNull } from "drizzle-orm";
 import { extractProductClusterKey } from "@/lib/product-clustering";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
+import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 
 export async function GET(request: Request) {
   try {
@@ -351,7 +352,7 @@ export async function GET(request: Request) {
         total: totalCount,
         totalPages,
       },
-    });
+    }, { headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY } });
   } catch (error) {
     console.error("Error in GET /api/pages:", error);
     const message = process.env.DATABASE_URL?.includes("[YOUR-PASSWORD]")

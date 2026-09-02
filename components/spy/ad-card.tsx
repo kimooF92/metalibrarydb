@@ -57,6 +57,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [imgError, setImgError] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isLoadingMedia, setIsLoadingMedia] = useState(false);
   const [isClusterModalOpen, setIsClusterModalOpen] = useState(false);
   const [isCreativeClusterModalOpen, setIsCreativeClusterModalOpen] = useState(false);
   const [isArchived, setIsArchived] = useState(Boolean(ad.isArchived));
@@ -114,6 +115,27 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
       setIsProxied(true);
     } else {
       setImgError(true);
+    }
+  };
+
+  const openPreview = async () => {
+    if (currentAd.mediaUrls?.length || currentAd.storyboardUrls?.length) {
+      setIsPreviewOpen(true);
+      return;
+    }
+
+    setIsLoadingMedia(true);
+    try {
+      const res = await fetch(`/api/spy/ads/${encodeURIComponent(currentAd.id)}`);
+      const data = await res.json();
+      if (res.ok && data.success && data.ad) {
+        setCurrentAd((prev) => ({ ...prev, ...data.ad }));
+      }
+    } catch {
+      // Keep the thumbnail preview available if detail loading fails.
+    } finally {
+      setIsLoadingMedia(false);
+      setIsPreviewOpen(true);
     }
   };
 
@@ -489,8 +511,10 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
         <div
           className="relative w-full h-[280px] sm:h-[320px] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800/80 bg-slate-900/95 dark:bg-slate-950 mb-3 flex items-center justify-center"
         >
-            <div className="relative w-full h-full group/media flex items-center justify-center" onClick={isVideoAd ? undefined : () => setIsPreviewOpen(true)}>
-              {activeImageSrc && !imgError ? (
+            <div className="relative w-full h-full group/media flex items-center justify-center" onClick={isVideoAd ? undefined : openPreview}>
+              {isLoadingMedia ? (
+                <div className="text-[11px] text-slate-400">Loading media…</div>
+              ) : activeImageSrc && !imgError ? (
                 <>
                   {/* Ambient Blurred Background Canvas */}
                   <NextImage

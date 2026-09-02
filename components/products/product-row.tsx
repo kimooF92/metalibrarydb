@@ -114,6 +114,7 @@ export function ProductRow({
   );
   const isPendingScrape = product.scrapeStatus === "pending";
   const isInactive = typeof product.activeAdsCount === "number" && product.activeAdsCount === 0 && (product.linkedAdsCount || 0) > 0;
+  const supplierCount = product.supplierCount ?? product.supplierUrls?.length ?? 0;
 
   return (
     <div
@@ -234,16 +235,16 @@ export function ProductRow({
               </span>
             )}
 
-            {product.supplierUrls && product.supplierUrls.length > 0 && (
+            {supplierCount > 0 && (
               <span
                 className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
                   isInactive
                     ? "bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
                     : "bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800"
                 }`}
-                title={`${product.supplierUrls.length} Supplier link${product.supplierUrls.length === 1 ? "" : "s"} attached`}
+                title={`${supplierCount} Supplier links attached`}
               >
-                📦 {product.supplierUrls.length} {product.supplierUrls.length === 1 ? "Supplier" : "Suppliers"}
+                  📦 {supplierCount} {supplierCount === 1 ? "Supplier" : "Suppliers"}
               </span>
             )}
           </div>

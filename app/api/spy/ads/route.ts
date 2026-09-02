@@ -7,6 +7,7 @@ import { syncApifyRuns } from "@/lib/apify-sync";
 import { calculateWinnerScore } from "@/lib/winner-score";
 import { enrichAdsWithProductClusters } from "@/lib/product-clustering";
 import { enrichAdsWithCreativeClusters, getDeduplicatedCreativeHeroAds } from "@/lib/creative-clustering";
+import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -41,6 +42,7 @@ export async function GET(req: NextRequest) {
     let sortBy = searchParams.get("sortBy") || "started_running_on";
     const sortOrder = searchParams.get("sortOrder") || "desc";
     const groupBy = searchParams.get("groupBy") || (searchParams.get("groupByCreative") === "true" ? "creative" : "none");
+    const includeMedia = searchParams.get("includeMedia") === "true";
 
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "24", 10)));
@@ -270,12 +272,14 @@ export async function GET(req: NextRequest) {
         linkUrl: ads.linkUrl,
         productId: ads.productId,
         mediaType: ads.mediaType,
-        mediaUrls: ads.mediaUrls,
+        ...(includeMedia
+          ? {
+              mediaUrls: ads.mediaUrls,
+              storyboardUrls: ads.storyboardUrls,
+            }
+          : {}),
         thumbnailUrl: ads.thumbnailUrl,
         thumbnailStoragePath: ads.thumbnailStoragePath,
-        storyboardUrls: ads.storyboardUrls,
-        mediaHash: ads.mediaHash,
-        perceptualHash: ads.perceptualHash,
         firstSeenAt: ads.firstSeenAt,
         lastSeenAt: ads.lastSeenAt,
         isArchived: ads.isArchived,
@@ -432,7 +436,29 @@ export async function GET(req: NextRequest) {
     if (productIds.length > 0) {
       try {
         const fetchedProducts = await db
-          .select()
+          .select({
+            id: scrapedProducts.id,
+            url: scrapedProducts.url,
+            domain: scrapedProducts.domain,
+            pageId: scrapedProducts.pageId,
+            title: scrapedProducts.title,
+            currentPrice: scrapedProducts.currentPrice,
+            originalPrice: scrapedProducts.originalPrice,
+            currency: scrapedProducts.currency,
+            discountOrOffer: scrapedProducts.discountOrOffer,
+            mainImageUrl: scrapedProducts.mainImageUrl,
+            storePlatform: scrapedProducts.storePlatform,
+            deliveryCost: scrapedProducts.deliveryCost,
+            category: scrapedProducts.category,
+            subCategory: scrapedProducts.subCategory,
+            targetAudience: scrapedProducts.targetAudience,
+            isFavorite: scrapedProducts.isFavorite,
+            scrapeStatus: scrapedProducts.scrapeStatus,
+            failureReason: scrapedProducts.failureReason,
+            lastScrapedAt: scrapedProducts.lastScrapedAt,
+            createdAt: scrapedProducts.createdAt,
+            updatedAt: scrapedProducts.updatedAt,
+          })
           .from(scrapedProducts)
           .where(inArray(scrapedProducts.id, productIds));
         fetchedProducts.forEach((p) => {
@@ -482,12 +508,14 @@ export async function GET(req: NextRequest) {
         productId: row.productId,
         product: row.productId ? productMap.get(row.productId) || null : null,
         mediaType: row.mediaType,
-        mediaUrls: row.mediaUrls,
         thumbnailUrl: row.thumbnailUrl,
         thumbnailStoragePath: row.thumbnailStoragePath,
-        storyboardUrls: row.storyboardUrls,
-        mediaHash: row.mediaHash,
-        perceptualHash: row.perceptualHash,
+        ...(includeMedia
+          ? {
+              mediaUrls: row.mediaUrls,
+              storyboardUrls: row.storyboardUrls,
+            }
+          : {}),
         firstSeenAt: row.firstSeenAt,
         lastSeenAt: row.lastSeenAt,
         createdAt: row.createdAt,
@@ -562,7 +590,8 @@ export async function GET(req: NextRequest) {
       },
       {
         headers: {
-          "Cache-Control": "no-store, no-cache, must-revalidate",
+          "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
+          Vary: PRIVATE_AUTH_VARY,
         },
       }
     );

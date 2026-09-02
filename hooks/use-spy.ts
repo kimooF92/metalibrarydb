@@ -430,11 +430,13 @@ export function useSpy(initialParams?: AdFilterParams) {
       if (params.sortOrder) query.set("sortOrder", params.sortOrder);
       query.set("page", currentPage.toString());
       query.set("limit", (params.limit || 24).toString());
-      query.set("_t", Date.now().toString()); // Cache buster
+      if (isManualRefresh) query.set("_t", Date.now().toString());
 
       const res = await fetch(`/api/spy/ads?${query.toString()}`, {
-        cache: "no-store",
-        headers: { "Cache-Control": "no-cache", Accept: "application/json" },
+        cache: isManualRefresh ? "no-store" : "default",
+        headers: isManualRefresh
+          ? { "Cache-Control": "no-cache", Accept: "application/json" }
+          : { Accept: "application/json" },
       });
       const data = await parseJsonResponse(res, "Failed to fetch ad feed");
 
@@ -603,13 +605,16 @@ export function useAdStats() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchStats = useCallback(async () => {
+  const fetchStats = useCallback(async (forceRefresh = false) => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/spy/stats?_t=${Date.now()}`, {
-        cache: "no-store",
-        headers: { "Cache-Control": "no-cache", Accept: "application/json" },
+      const cacheBust = forceRefresh ? `?_t=${Date.now()}` : "";
+      const res = await fetch(`/api/spy/stats${cacheBust}`, {
+        cache: forceRefresh ? "no-store" : "default",
+        headers: forceRefresh
+          ? { "Cache-Control": "no-cache", Accept: "application/json" }
+          : { Accept: "application/json" },
       });
       const data = await parseJsonResponse(res, "Failed to fetch ad stats");
       setStats(data);
@@ -624,7 +629,7 @@ export function useAdStats() {
     fetchStats();
   }, [fetchStats]);
 
-  return { stats, isLoading, error, refetch: fetchStats };
+  return { stats, isLoading, error, refetch: () => fetchStats(true) };
 }
 
 export function useEnqueueScan() {
@@ -680,4 +685,3 @@ export function useSpyBrands() {
 }
 
 export const useAdFeed = useSpy;
-

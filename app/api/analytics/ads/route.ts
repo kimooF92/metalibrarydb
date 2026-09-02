@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { ads, adObservations, trackedPages } from "@/db/schema";
 import { sql, desc, count, and, eq, or, gte, isNull, inArray } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
+import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -352,7 +353,8 @@ export async function GET(req: NextRequest) {
       },
       {
         headers: {
-          "Cache-Control": "no-store, no-cache, must-revalidate",
+          "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
+          Vary: PRIVATE_AUTH_VARY,
         },
       }
     );

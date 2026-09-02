@@ -6,7 +6,7 @@ const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE
 const supabaseKey = process.env.SUPABASE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 const BUCKET_NAME = "ad-media";
-const MAX_BYTE_SIZE = 15 * 1024 * 1024; // 15MB limit
+const MAX_BYTE_SIZE = 1.5 * 1024 * 1024; // Keep Supabase fallback thumbnails small
 const FETCH_TIMEOUT_MS = 25000;
 
 let supabaseClient: ReturnType<typeof createClient> | null = null;
@@ -64,13 +64,22 @@ export async function cacheThumbnail(
       return { storagePath: null, publicUrl: null };
     }
 
+    const contentType = response.headers.get("content-type") || "image/jpeg";
+    if (contentType.toLowerCase().startsWith("video/")) {
+      return { storagePath: null, publicUrl: null };
+    }
+
+    const contentLength = Number(response.headers.get("content-length") || 0);
+    if (contentLength > MAX_BYTE_SIZE) {
+      return { storagePath: null, publicUrl: null };
+    }
+
     const arrayBuffer = await response.arrayBuffer();
     if (arrayBuffer.byteLength > MAX_BYTE_SIZE) {
       return { storagePath: null, publicUrl: null };
     }
 
     const buffer = Buffer.from(arrayBuffer);
-    const contentType = response.headers.get("content-type") || "image/jpeg";
 
     // 2. Upload to Supabase storage fallback
     const { error } = await client.storage

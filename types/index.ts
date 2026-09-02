@@ -123,6 +123,8 @@ export interface ScrapedProduct {
   subCategory?: string | null;
   targetAudience?: "unisex" | "men" | "women" | "kids" | null;
   supplierUrls?: string[] | null;
+  offerCount?: number;
+  supplierCount?: number;
   isFavorite?: boolean;
   scrapeStatus: "pending" | "scraping" | "success" | "failed";
   failureReason?: string | null;

@@ -12,6 +12,7 @@ export const maxDuration = 60;
 
 import { normalizeProductUrl } from "@/lib/firecrawl";
 import { getCleanDomain } from "@/lib/utils";
+import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 
 const isUuid = (str: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
@@ -97,10 +98,8 @@ export async function GET(
         linkUrl: ads.linkUrl,
         productId: ads.productId,
         mediaType: ads.mediaType,
-        mediaUrls: ads.mediaUrls,
         thumbnailUrl: ads.thumbnailUrl,
         thumbnailStoragePath: ads.thumbnailStoragePath,
-        storyboardUrls: ads.storyboardUrls,
         firstSeenAt: ads.firstSeenAt,
         lastSeenAt: ads.lastSeenAt,
         isArchived: ads.isArchived,
@@ -152,7 +151,34 @@ export async function GET(
     let linkedProducts: any[] = [];
     if (productQueryConditions.length > 0) {
       linkedProducts = await db
-        .select()
+        .select({
+          id: scrapedProducts.id,
+          url: scrapedProducts.url,
+          domain: scrapedProducts.domain,
+          pageId: scrapedProducts.pageId,
+          title: scrapedProducts.title,
+          currentPrice: scrapedProducts.currentPrice,
+          originalPrice: scrapedProducts.originalPrice,
+          currency: scrapedProducts.currency,
+          discountOrOffer: scrapedProducts.discountOrOffer,
+          mainImageUrl: scrapedProducts.mainImageUrl,
+          offerCount: sql<number>`COALESCE(json_array_length(${scrapedProducts.allOffers}), 0)`.mapWith(Number),
+          supplierCount: sql<number>`COALESCE(array_length(${scrapedProducts.supplierUrls}, 1), 0)`.mapWith(Number),
+          metaPixelIds: scrapedProducts.metaPixelIds,
+          phoneNumbers: scrapedProducts.phoneNumbers,
+          whatsappNumbers: scrapedProducts.whatsappNumbers,
+          storePlatform: scrapedProducts.storePlatform,
+          deliveryCost: scrapedProducts.deliveryCost,
+          category: scrapedProducts.category,
+          subCategory: scrapedProducts.subCategory,
+          targetAudience: scrapedProducts.targetAudience,
+          isFavorite: scrapedProducts.isFavorite,
+          scrapeStatus: scrapedProducts.scrapeStatus,
+          failureReason: scrapedProducts.failureReason,
+          lastScrapedAt: scrapedProducts.lastScrapedAt,
+          createdAt: scrapedProducts.createdAt,
+          updatedAt: scrapedProducts.updatedAt,
+        })
         .from(scrapedProducts)
         .where(or(...productQueryConditions));
     }
@@ -391,10 +417,7 @@ export async function GET(
 
       const linkedAdsCount = matchingAds.length;
       const activeAdsCount = matchingAds.filter((a) => a.isActive && !a.isArchived).length;
-      const topThumb =
-        matchingAds.find((a) => a.thumbnailUrl)?.thumbnailUrl ||
-        matchingAds.find((a) => a.mediaUrls?.[0])?.mediaUrls?.[0] ||
-        p.mainImageUrl;
+      const topThumb = matchingAds.find((a) => a.thumbnailUrl)?.thumbnailUrl || p.mainImageUrl;
       const maxScore = matchingAds.reduce((max, a) => Math.max(max, a.winnerScore || 0), 0);
 
       brandProductsList.push({
@@ -596,6 +619,8 @@ export async function GET(
         phoneNumbers: Array.from(detectedPhones),
         whatsappNumbers: Array.from(detectedWhatsapp),
       },
+    }, {
+      headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY },
     });
   } catch (err: any) {
     console.error("[Brand Analytics API Error]:", err);

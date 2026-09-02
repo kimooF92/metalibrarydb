@@ -177,6 +177,7 @@ export default function BrandDeepDivePage({
   const [productOfferOnly, setProductOfferOnly] = useState(false);
   const [selectedProductForModal, setSelectedProductForModal] = useState<ScrapedProduct | null>(null);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const detailRequestIdRef = useRef(0);
   const [filteredProductForCreatives, setFilteredProductForCreatives] = useState<{
     id: string;
     title: string;
@@ -204,11 +205,14 @@ export default function BrandDeepDivePage({
   }, []);
 
   // Load brand analytics payload
-  const fetchBrandData = async () => {
+  const fetchBrandData = async (forceRefresh = false) => {
     setIsLoadingAnalytics(true);
     setError(null);
     try {
-      const res = await fetch(`/api/spy/brand/${encodeURIComponent(id)}?_t=${Date.now()}`);
+      const cacheBust = forceRefresh ? `?_t=${Date.now()}` : "";
+      const res = await fetch(`/api/spy/brand/${encodeURIComponent(id)}${cacheBust}`, {
+        cache: forceRefresh ? "no-store" : "default",
+      });
       const json = await res.json();
       if (!res.ok) {
         throw new Error(json.error || "Failed to load brand analytics");
@@ -265,7 +269,7 @@ export default function BrandDeepDivePage({
         title: "Products Synchronized",
         message: `${resJson.uniqueProductUrlsCount || 0} unique product URLs found: ${resJson.alreadyScrapedCount || 0} linked, ${resJson.newlyScrapedCount || 0} scraped.`,
       });
-      await Promise.all([fetchBrandData(), refetchFeed()]);
+      await Promise.all([fetchBrandData(true), refetchFeed()]);
     } catch (err: any) {
       showToast({
         type: "error",
@@ -301,7 +305,7 @@ export default function BrandDeepDivePage({
           title: "Product Scraped",
           message: `${resJson.product?.title || "Product"} updated successfully.`,
         });
-        await fetchBrandData();
+        await fetchBrandData(true);
       } else {
         throw new Error(resJson.error || "Failed to scrape product");
       }
@@ -323,7 +327,7 @@ export default function BrandDeepDivePage({
         title: "Product Deleted",
         message: "Product removed from brand catalog.",
       });
-      await fetchBrandData();
+      await fetchBrandData(true);
     } catch (err: any) {
       showToast({
         type: "error",
@@ -385,7 +389,7 @@ export default function BrandDeepDivePage({
         title: nextState ? "Added to Starred Watchlist" : "Removed from Watchlist",
         message: `${data.brand.displayName} watchlist status updated.`,
       });
-      fetchBrandData();
+      fetchBrandData(true);
     } catch (err: any) {
       setIsWatchlisted(!nextState);
       showToast({
@@ -418,7 +422,7 @@ export default function BrandDeepDivePage({
           title: "Brand Media Refresh Enqueued",
           message: resData.message || "Scraping fresh creative media links...",
         });
-        await Promise.all([fetchBrandData(), refetchFeed()]);
+        await Promise.all([fetchBrandData(true), refetchFeed()]);
       } else {
         throw new Error(resData.message || "Could not refresh brand media");
       }
@@ -1018,7 +1022,7 @@ export default function BrandDeepDivePage({
                   <AdCard
                     key={ad.id}
                     ad={ad}
-                    onArchiveToggle={() => fetchBrandData()}
+                    onArchiveToggle={() => fetchBrandData(true)}
                     onMediaRefreshed={updateAdInFeed}
                   />
                 ))}
@@ -1232,9 +1236,20 @@ export default function BrandDeepDivePage({
                     key={product.id}
                     product={product}
                     onRefresh={handleRefreshProduct}
-                    onViewDetails={(p) => {
+                    onViewDetails={async (p) => {
+                      const requestId = ++detailRequestIdRef.current;
                       setSelectedProductForModal(p);
                       setIsProductModalOpen(true);
+                      try {
+                        const res = await fetch(`/api/products?id=${encodeURIComponent(p.id)}&details=true`);
+                        const json = await res.json();
+                        const detailedProduct = json.products?.[0];
+                        if (requestId === detailRequestIdRef.current && res.ok && detailedProduct) {
+                          setSelectedProductForModal(detailedProduct);
+                        }
+                      } catch {
+                        // Keep the lean product card available if detail loading fails.
+                      }
                     }}
                     onViewCreatives={handleViewCreativesForProduct}
                   />

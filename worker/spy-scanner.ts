@@ -677,7 +677,7 @@ export async function scanAdCreatives(
             archivedAt: null,
           },
         })
-        .returning();
+        .returning({ id: ads.id });
 
       // Insert ad observation snapshot for this scan
       if (upsertedAd) {

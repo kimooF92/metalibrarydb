@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { ads, adObservations, scrapedProducts } from "@/db/schema";
 import { eq, ilike, and, sql, desc, asc, or, count, inArray, isNull } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
+import { PRIVATE_AUTH_VARY, PRIVATE_DETAIL_CACHE_CONTROL, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -30,6 +31,8 @@ export async function GET(req: NextRequest) {
     const sortBy = searchParams.get("sortBy") || "latest";
     const sortOrder = searchParams.get("sortOrder") || "desc";
     const includeStats = searchParams.get("includeStats") === "true";
+    // Full product fields are only allowed for a single on-demand detail read.
+    const includeDetails = Boolean(id);
 
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "24", 10)));
@@ -190,37 +193,45 @@ export async function GET(req: NextRequest) {
     orderByClauses.push(desc(scrapedProducts.id));
 
     // Execute fast primary queries in parallel (lean, indexed product select + count)
+    const productSelection = {
+      id: scrapedProducts.id,
+      url: scrapedProducts.url,
+      domain: scrapedProducts.domain,
+      pageId: scrapedProducts.pageId,
+      title: scrapedProducts.title,
+      currentPrice: scrapedProducts.currentPrice,
+      originalPrice: scrapedProducts.originalPrice,
+      currency: scrapedProducts.currency,
+      discountOrOffer: scrapedProducts.discountOrOffer,
+      mainImageUrl: scrapedProducts.mainImageUrl,
+      storePlatform: scrapedProducts.storePlatform,
+      deliveryCost: scrapedProducts.deliveryCost,
+      category: scrapedProducts.category,
+      subCategory: scrapedProducts.subCategory,
+      targetAudience: scrapedProducts.targetAudience,
+      isFavorite: scrapedProducts.isFavorite,
+      scrapeStatus: scrapedProducts.scrapeStatus,
+      failureReason: scrapedProducts.failureReason,
+      lastScrapedAt: scrapedProducts.lastScrapedAt,
+      createdAt: scrapedProducts.createdAt,
+      updatedAt: scrapedProducts.updatedAt,
+      offerCount: sql<number>`COALESCE(json_array_length(${scrapedProducts.allOffers}), 0)`.mapWith(Number),
+      supplierCount: sql<number>`COALESCE(array_length(${scrapedProducts.supplierUrls}, 1), 0)`.mapWith(Number),
+      ...(includeDetails
+        ? {
+            galleryImages: scrapedProducts.galleryImages,
+            allOffers: scrapedProducts.allOffers,
+            phoneNumbers: scrapedProducts.phoneNumbers,
+            whatsappNumbers: scrapedProducts.whatsappNumbers,
+            metaPixelIds: scrapedProducts.metaPixelIds,
+            supplierUrls: scrapedProducts.supplierUrls,
+          }
+        : {}),
+    };
+
     const [rawProducts, totalCountResult] = await Promise.all([
       db
-        .select({
-          id: scrapedProducts.id,
-          url: scrapedProducts.url,
-          domain: scrapedProducts.domain,
-          pageId: scrapedProducts.pageId,
-          title: scrapedProducts.title,
-          currentPrice: scrapedProducts.currentPrice,
-          originalPrice: scrapedProducts.originalPrice,
-          currency: scrapedProducts.currency,
-          discountOrOffer: scrapedProducts.discountOrOffer,
-          mainImageUrl: scrapedProducts.mainImageUrl,
-          galleryImages: scrapedProducts.galleryImages,
-          allOffers: scrapedProducts.allOffers,
-          phoneNumbers: scrapedProducts.phoneNumbers,
-          whatsappNumbers: scrapedProducts.whatsappNumbers,
-          metaPixelIds: scrapedProducts.metaPixelIds,
-          storePlatform: scrapedProducts.storePlatform,
-          deliveryCost: scrapedProducts.deliveryCost,
-          category: scrapedProducts.category,
-          subCategory: scrapedProducts.subCategory,
-          targetAudience: scrapedProducts.targetAudience,
-          supplierUrls: scrapedProducts.supplierUrls,
-          isFavorite: scrapedProducts.isFavorite,
-          scrapeStatus: scrapedProducts.scrapeStatus,
-          failureReason: scrapedProducts.failureReason,
-          lastScrapedAt: scrapedProducts.lastScrapedAt,
-          createdAt: scrapedProducts.createdAt,
-          updatedAt: scrapedProducts.updatedAt,
-        })
+        .select(productSelection)
         .from(scrapedProducts)
         .where(whereClause)
         .orderBy(...orderByClauses)
@@ -312,6 +323,11 @@ export async function GET(req: NextRequest) {
         limit,
         total,
         totalPages,
+      },
+    }, {
+      headers: {
+        "Cache-Control": includeDetails ? PRIVATE_DETAIL_CACHE_CONTROL : PRIVATE_READ_CACHE_CONTROL,
+        Vary: PRIVATE_AUTH_VARY,
       },
     });
   } catch (err: any) {

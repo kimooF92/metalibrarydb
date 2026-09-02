@@ -112,10 +112,13 @@ export default function AnalyticsPage() {
   }, []);
 
   // 1. Fetch Products Analytics
-  const fetchProductsAnalytics = useCallback(async () => {
+  const fetchProductsAnalytics = useCallback(async (forceRefresh = false) => {
     try {
       setLoadingProducts(true);
-      const res = await fetch(`/api/analytics/products?range=${dateRange}`);
+      const cacheBust = forceRefresh ? `&_t=${Date.now()}` : "";
+      const res = await fetch(`/api/analytics/products?range=${dateRange}${cacheBust}`, {
+        cache: forceRefresh ? "no-store" : "default",
+      });
       if (res.ok) {
         const json = await res.json();
         setProductsData(json);
@@ -128,10 +131,13 @@ export default function AnalyticsPage() {
   }, [dateRange]);
 
   // 2. Fetch Ads Analytics
-  const fetchAdsAnalytics = useCallback(async () => {
+  const fetchAdsAnalytics = useCallback(async (forceRefresh = false) => {
     try {
       setLoadingAds(true);
-      const res = await fetch(`/api/analytics/ads?range=${dateRange}`);
+      const cacheBust = forceRefresh ? `&_t=${Date.now()}` : "";
+      const res = await fetch(`/api/analytics/ads?range=${dateRange}${cacheBust}`, {
+        cache: forceRefresh ? "no-store" : "default",
+      });
       if (res.ok) {
         const json = await res.json();
         setAdsData(json);
@@ -144,12 +150,17 @@ export default function AnalyticsPage() {
   }, [dateRange]);
 
   // 3. Fetch Pages Analytics
-  const fetchPagesData = useCallback(async () => {
+  const fetchPagesData = useCallback(async (forceRefresh = false) => {
     try {
       setLoadingPages(true);
+      const cacheBust = forceRefresh ? `&_t=${Date.now()}` : "";
       const [pagesRes, statsRes] = await Promise.all([
-        fetch(`/api/pages?limit=5000&range=${dateRange}&sortBy=currentResults&sortOrder=desc`),
-        fetch("/api/stats"),
+        fetch(`/api/pages?limit=5000&range=${dateRange}&sortBy=currentResults&sortOrder=desc${cacheBust}`, {
+          cache: forceRefresh ? "no-store" : "default",
+        }),
+        fetch(`/api/stats${forceRefresh ? `?_t=${Date.now()}` : ""}`, {
+          cache: forceRefresh ? "no-store" : "default",
+        }),
       ]);
 
       if (pagesRes.ok) {
@@ -168,11 +179,11 @@ export default function AnalyticsPage() {
   }, [dateRange]);
 
   // Fetch all in parallel
-  const fetchAll = useCallback(async () => {
+  const fetchAll = useCallback(async (forceRefresh = false) => {
     await Promise.all([
-      fetchProductsAnalytics(),
-      fetchAdsAnalytics(),
-      fetchPagesData(),
+      fetchProductsAnalytics(forceRefresh),
+      fetchAdsAnalytics(forceRefresh),
+      fetchPagesData(forceRefresh),
     ]);
     setLastRefreshed(new Date());
   }, [fetchProductsAnalytics, fetchAdsAnalytics, fetchPagesData]);
@@ -324,7 +335,7 @@ export default function AnalyticsPage() {
           )}
           <DateRangeFilter value={dateRange} onChange={handleDateRangeChange} />
           <button
-            onClick={fetchAll}
+            onClick={() => fetchAll(true)}
             disabled={isGlobalLoading}
             className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer disabled:opacity-50"
           >
