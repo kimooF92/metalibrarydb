@@ -14,6 +14,7 @@ import {
 } from "@/lib/network-extractor";
 import { createNotification } from "@/lib/notifications";
 import { buildProductExtractionNotification } from "@/lib/product-extraction";
+import { PRODUCT_EXTRACTION_LOOKUP_PROJECTION } from "@/lib/product-projections";
 
 export async function POST(req: NextRequest) {
   const authError = await validateApiSecret(req);
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
 
     // 1. Check for existing product in DB (Deduplication)
     const existing = await db
-      .select()
+      .select(PRODUCT_EXTRACTION_LOOKUP_PROJECTION)
       .from(scrapedProducts)
       .where(eq(scrapedProducts.url, normalizedUrl))
       .limit(1);

@@ -4,6 +4,7 @@ import { scrapedProducts, ads, adObservations } from "@/db/schema";
 import { eq, sql, inArray, or, and } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { formatTunisianPhone } from "@/lib/network-extractor";
+import { PRODUCT_NETWORK_PROJECTION } from "@/lib/product-projections";
 
 export async function GET(req: NextRequest) {
   const authError = await validateApiSecret(req);
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
 
     // 1. Fetch target product
     const [targetProduct] = await db
-      .select()
+      .select(PRODUCT_NETWORK_PROJECTION)
       .from(scrapedProducts)
       .where(eq(scrapedProducts.id, productId));
 

@@ -6,6 +6,10 @@ import { validateApiSecret } from "@/lib/api-guard";
 import { normalizeProductUrl, extractProductFromUrl } from "@/lib/firecrawl";
 import { getCleanDomain } from "@/lib/utils";
 import {
+  PRODUCT_RESPONSE_PROJECTION,
+  PRODUCT_SYNC_LOOKUP_PROJECTION,
+} from "@/lib/product-projections";
+import {
   extractTunisianPhoneNumbers,
   extractWhatsAppNumbers,
   extractMetaPixelIds,
@@ -171,11 +175,11 @@ export async function POST(
 
     // 4. Check existing products in DB
     const existingProducts = await db
-      .select()
+      .select(PRODUCT_SYNC_LOOKUP_PROJECTION)
       .from(scrapedProducts)
       .where(inArray(scrapedProducts.url, uniqueNormalizedUrls));
 
-    const existingUrlMap = new Map<string, typeof scrapedProducts.$inferSelect>();
+    const existingUrlMap = new Map<string, (typeof existingProducts)[number]>();
     existingProducts.forEach((p) => existingUrlMap.set(p.url, p));
 
     let alreadyScrapedCount = 0;
@@ -367,7 +371,7 @@ export async function POST(
 
     // 7. Fetch final updated product list for this brand
     const finalProducts = await db
-      .select()
+      .select(PRODUCT_RESPONSE_PROJECTION)
       .from(scrapedProducts)
       .where(inArray(scrapedProducts.url, uniqueNormalizedUrls));
 

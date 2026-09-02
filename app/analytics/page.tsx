@@ -155,7 +155,7 @@ export default function AnalyticsPage() {
       setLoadingPages(true);
       const cacheBust = forceRefresh ? `&_t=${Date.now()}` : "";
       const [pagesRes, statsRes] = await Promise.all([
-        fetch(`/api/pages?limit=5000&range=${dateRange}&sortBy=currentResults&sortOrder=desc${cacheBust}`, {
+        fetch(`/api/analytics/pages?range=${dateRange}${cacheBust}`, {
           cache: forceRefresh ? "no-store" : "default",
         }),
         fetch(`/api/stats${forceRefresh ? `?_t=${Date.now()}` : ""}`, {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { scrapedProducts, ads, adObservations } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { AD_STATUS_PRODUCT_COLUMNS } from "@/lib/product-projections";
 
 export async function POST(
   request: NextRequest,
@@ -12,6 +13,7 @@ export async function POST(
 
     const product = await db.query.scrapedProducts.findFirst({
       where: eq(scrapedProducts.id, id),
+      columns: AD_STATUS_PRODUCT_COLUMNS,
     });
 
     if (!product) {

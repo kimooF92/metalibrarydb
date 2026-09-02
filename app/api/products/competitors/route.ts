@@ -4,6 +4,7 @@ import { scrapedProducts, ads } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { findCompetitorMatches } from "@/lib/product-matcher";
+import { PRODUCT_MATCH_PROJECTION } from "@/lib/product-projections";
 import { ScrapedProduct } from "@/types";
 
 export async function GET(req: NextRequest) {
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
 
     // 1. Fetch target product
     const [targetProduct] = await db
-      .select()
+      .select(PRODUCT_MATCH_PROJECTION)
       .from(scrapedProducts)
       .where(eq(scrapedProducts.id, productId));
 
@@ -47,23 +48,7 @@ export async function GET(req: NextRequest) {
 
     const allProducts = await db
       .select({
-        id: scrapedProducts.id,
-        url: scrapedProducts.url,
-        domain: scrapedProducts.domain,
-        pageId: scrapedProducts.pageId,
-        title: scrapedProducts.title,
-        currentPrice: scrapedProducts.currentPrice,
-        originalPrice: scrapedProducts.originalPrice,
-        currency: scrapedProducts.currency,
-        discountOrOffer: scrapedProducts.discountOrOffer,
-        mainImageUrl: scrapedProducts.mainImageUrl,
-        galleryImages: scrapedProducts.galleryImages,
-        allOffers: scrapedProducts.allOffers,
-        scrapeStatus: scrapedProducts.scrapeStatus,
-        failureReason: scrapedProducts.failureReason,
-        lastScrapedAt: scrapedProducts.lastScrapedAt,
-        createdAt: scrapedProducts.createdAt,
-        updatedAt: scrapedProducts.updatedAt,
+        ...PRODUCT_MATCH_PROJECTION,
         linkedAdsCount: sql<number>`COALESCE(${adCountsSubquery.linkedAdsCount}, 0)`.mapWith(Number),
       })
       .from(scrapedProducts)

@@ -60,8 +60,10 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
     requestInFlightRef.current = true;
     if (showLoading) setIsRefreshing(true);
     try {
-      const typeParam = activeTab === "all" ? "" : `&type=${activeTab}`;
-      const res = await fetch(`/api/notifications?limit=40${typeParam}`, {
+      const query = isOpen
+        ? `limit=20${activeTab === "all" ? "" : `&type=${encodeURIComponent(activeTab)}`}`
+        : "summary=true";
+      const res = await fetch(`/api/notifications?${query}`, {
         signal: AbortSignal.timeout(10000),
       });
       if (res.ok) {
@@ -79,7 +81,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
         setTimeout(() => setIsRefreshing(false), 400);
       }
     }
-  }, [activeTab]);
+  }, [activeTab, isOpen]);
 
   // Adaptive polling: notifications are secondary UI state, so avoid frequent
   // database reads and pause entirely while the tab is hidden.

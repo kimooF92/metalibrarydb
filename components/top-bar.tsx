@@ -10,7 +10,6 @@ import {
   UploadCloud,
   Settings,
 } from "lucide-react";
-import { NotificationCenter } from "./notification-center";
 import { ThemeToggle } from "./theme-toggle";
 
 const ROUTE_INFO: Record<
@@ -50,7 +49,6 @@ export function TopBar() {
 
       {/* Right: Actions (Notification Center & Theme Button Only) */}
       <div className="flex items-center space-x-2">
-        <NotificationCenter layout="navbar" />
         <ThemeToggle size="sm" />
       </div>
     </header>

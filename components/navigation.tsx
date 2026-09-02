@@ -17,7 +17,6 @@ import {
   LogOut,
   Sparkles,
 } from "lucide-react";
-import { NotificationCenter } from "./notification-center";
 import { ThemeToggle } from "./theme-toggle";
 import { useSidebar } from "@/components/sidebar-context";
 
@@ -220,7 +219,6 @@ export function Navigation() {
         </div>
 
         <div className="flex items-center space-x-2">
-          <NotificationCenter layout="navbar" />
           <ThemeToggle size="sm" />
           <button
             onClick={() => setIsOpen(!isOpen)}

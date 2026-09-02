@@ -3,6 +3,7 @@ import { db } from "../db";
 import { ads, scrapedProducts, adObservations } from "../db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { randomDelay, DELAY_CONFIG } from "./throttle";
+import { AD_STATUS_AD_COLUMNS, AD_STATUS_PRODUCT_COLUMNS } from "../lib/product-projections";
 
 export interface SingleAdStatusResult {
   adArchiveId: string;
@@ -197,6 +198,7 @@ export async function verifyProductFavoriteAds(
 
   const product = await db.query.scrapedProducts.findFirst({
     where: eq(scrapedProducts.id, productId),
+    columns: AD_STATUS_PRODUCT_COLUMNS,
   });
 
   if (!product) {
@@ -206,6 +208,7 @@ export async function verifyProductFavoriteAds(
   // 1. Fetch all ads linked to this product
   const allLinkedAds = await db.query.ads.findMany({
     where: eq(ads.productId, productId),
+    columns: AD_STATUS_AD_COLUMNS,
   });
 
   const activeAds = allLinkedAds.filter((a) => !a.isArchived);

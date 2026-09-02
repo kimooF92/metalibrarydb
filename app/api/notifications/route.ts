@@ -9,6 +9,7 @@ export async function GET(req: NextRequest) {
     const type = searchParams.get("type");
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "50", 10)));
     const unreadOnly = searchParams.get("unreadOnly") === "true";
+    const summaryOnly = searchParams.get("summary") === "true";
 
     const conditions = [];
     if (type && type !== "all") {
@@ -23,11 +24,13 @@ export async function GET(req: NextRequest) {
       conditions.push(eq(activityNotifications.isRead, false));
     }
 
-    const notifications = await db.query.activityNotifications.findMany({
-      where: conditions.length > 0 ? and(...conditions) : undefined,
-      orderBy: [desc(activityNotifications.createdAt)],
-      limit,
-    });
+    const notifications = summaryOnly
+      ? []
+      : await db.query.activityNotifications.findMany({
+          where: conditions.length > 0 ? and(...conditions) : undefined,
+          orderBy: [desc(activityNotifications.createdAt)],
+          limit,
+        });
 
     // Count unread notifications
     const [unreadCountResult] = await db
