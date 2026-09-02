@@ -57,3 +57,6 @@ next-env.d.ts
 /_bmad/
 /.agents/
 _bmad-output/implementation-artifacts/sprint-status.yaml
+.mcp.json
+debug.log
+skills-lock.json
