@@ -10,9 +10,15 @@ export interface ReconciliationOptions {
 
 export function shouldArchiveZeroCount(
   status: "success" | "unclear",
-  results: number | null
+  results: number | null,
+  holdStatus?: string | null,
+  consecutiveZeroScans?: number | null
 ): boolean {
-  return status === "success" && results === 0;
+  if (status !== "success" || results !== 0) return false;
+  if (holdStatus === "on_hold" && (consecutiveZeroScans ?? 0) < 3) {
+    return false;
+  }
+  return true;
 }
 
 export function isActiveAdArchiveFlag(
@@ -34,9 +40,11 @@ export async function reconcileZeroResultCount(
   status: "success" | "unclear",
   results: number | null,
   now: Date,
-  reconcile: ZeroCountReconciler = reconcileArchivedAds
+  reconcile: ZeroCountReconciler = reconcileArchivedAds,
+  holdStatus?: string | null,
+  consecutiveZeroScans?: number | null
 ): Promise<number> {
-  if (!shouldArchiveZeroCount(status, results)) {
+  if (!shouldArchiveZeroCount(status, results, holdStatus, consecutiveZeroScans)) {
     return 0;
   }
 
@@ -72,7 +80,7 @@ export async function reconcileArchivedAds(
     // 0. Safeguard: Only run auto-archival for official Meta Page targets
     const trackedPage = await database.query.trackedPages.findFirst({
       where: eq(trackedPages.id, trackedPageId),
-      columns: { id: true, searchType: true, pageId: true, displayName: true, currentResults: true },
+      columns: { id: true, searchType: true, pageId: true, displayName: true, currentResults: true, holdStatus: true, consecutiveZeroScans: true },
     });
 
     const isPageTarget = Boolean(
@@ -87,6 +95,18 @@ export async function reconcileArchivedAds(
         `[Ad Reconciliation] ⚠️ Skipped archival: Tracked page ${trackedPageId} ("${trackedPage?.displayName || "unknown"}") is not an official Page target (searchType="${trackedPage?.searchType || "none"}", pageId="${trackedPage?.pageId || "none"}").`
       );
       return { archivedCount: 0 };
+    }
+
+    // Universal Zero-Drop Guard:
+    // If the scan reports 0 observed ads (wiping all active ads), NEVER archive unless the page has confirmed inactive status
+    // or has completed the 3-scan confirmation grace period.
+    if (currentlyObservedAdArchiveIds.size === 0) {
+      if (trackedPage?.holdStatus === "on_hold" && (trackedPage?.consecutiveZeroScans ?? 0) < 3) {
+        console.log(
+          `[Ad Reconciliation] ⏸️ Protected page ${trackedPageId} ("${trackedPage?.displayName || "unknown"}") from premature archival: Page is on hold (${trackedPage?.consecutiveZeroScans ?? 0}/3 scans).`
+        );
+        return { archivedCount: 0 };
+      }
     }
 
     // 1. Fetch distinct ad IDs observed for this tracked page

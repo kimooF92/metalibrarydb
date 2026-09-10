@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { trackedPages, scanHistory, queue, ads, scrapedProducts } from "@/db/schema";
 import { addSingleUrl } from "@/actions/add-url";
 import { singleUrlSchema } from "@/lib/validators";
-import { eq, ilike, or, and, sql, desc, asc, inArray, gte, lte, isNotNull } from "drizzle-orm";
+import { eq, ne, ilike, or, and, sql, desc, asc, inArray, gte, lte, isNotNull } from "drizzle-orm";
 import { extractProductClusterKey } from "@/lib/product-clustering";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
@@ -58,7 +58,9 @@ export async function GET(request: Request) {
     } else if (tab === "attention") {
       conditions.push(or(eq(trackedPages.currentResults, 0), inArray(trackedPages.status, ["unclear", "failed"])));
     } else if (tab === "zero_ads") {
-      conditions.push(eq(trackedPages.currentResults, 0));
+      conditions.push(and(eq(trackedPages.currentResults, 0), ne(trackedPages.holdStatus, "on_hold")));
+    } else if (tab === "on_hold") {
+      conditions.push(eq(trackedPages.holdStatus, "on_hold"));
     } else if (tab === "needs_review") {
       conditions.push(inArray(trackedPages.status, ["unclear", "failed"]));
     }
@@ -124,6 +126,7 @@ export async function GET(request: Request) {
     let prevResultsMap: Record<string, number | null> = {};
     let historyPointsMap: Record<string, number[]> = {};
     let windowDeltaMap: Record<string, number> = {};
+    let recentScans: Array<{ trackedPageId: string; results: number | null; rank: number }> = [];
 
     if (pageIds.length > 0) {
       const rankedScans = db
@@ -136,7 +139,7 @@ export async function GET(request: Request) {
         .where(and(inArray(scanHistory.trackedPageId, pageIds), isNotNull(scanHistory.results)))
         .as("ranked_scans");
 
-      const recentScans = await db
+      recentScans = await db
         .select({
           trackedPageId: rankedScans.trackedPageId,
           results: rankedScans.results,
@@ -160,6 +163,25 @@ export async function GET(request: Request) {
       // Reverse to chronological order (oldest -> newest) for sparklines
       for (const pId in historyPointsMap) {
         historyPointsMap[pId].reverse();
+      }
+
+      // Sanitize sparklines so temporary 0-glitches don't break visual trends:
+      for (const p of pages) {
+        if (historyPointsMap[p.id]) {
+          historyPointsMap[p.id] = historyPointsMap[p.id].map((v, i, arr) => {
+            if (v === 0) {
+              const prevNonZero = arr.slice(0, i).reverse().find((x) => x > 0);
+              const nextNonZero = arr.slice(i + 1).find((x) => x > 0);
+              // Case A: Glitch in the past — flanked by positive counts (e.g. [170, 0, 175])
+              if (prevNonZero && nextNonZero) return prevNonZero;
+              // Case B: Ongoing hold — trailing zeros while page is on hold
+              if (p.holdStatus === "on_hold" && prevNonZero && !nextNonZero) {
+                return p.lastKnownValidResults ?? prevNonZero;
+              }
+            }
+            return v;
+          });
+        }
       }
 
       const windowScans = await db
@@ -319,11 +341,22 @@ export async function GET(request: Request) {
     }
 
     const pagesWithPrev = pages.map((p) => {
-      const prev = prevResultsMap[p.id] ?? null;
+      let prev = prevResultsMap[p.id] ?? null;
+      if (p.currentResults && p.currentResults > 0 && prev === 0) {
+        const lastNonZero = recentScans
+          .filter((s) => s.trackedPageId === p.id && (s.results ?? 0) > 0)
+          .sort((a, b) => Number(a.rank) - Number(b.rank))[1]?.results;
+        if (lastNonZero !== undefined) {
+          prev = lastNonZero;
+        }
+      }
       const difference =
         p.currentResults !== null && prev !== null ? p.currentResults - prev : null;
       const queueEntry = queueMap[p.id];
       const historyPoints = historyPointsMap[p.id] || (p.currentResults !== null ? [p.currentResults] : []);
+      const effectiveResults = p.holdStatus === "on_hold"
+        ? (p.lastKnownValidResults ?? p.currentResults)
+        : p.currentResults;
 
       return {
         ...p,
@@ -338,9 +371,13 @@ export async function GET(request: Request) {
         isWatchlisted: p.isWatchlisted ?? false,
         isCreativeQueued: Boolean(activeCreativeJobMap[p.id]),
         historyPoints,
-        scalingPattern: classifyScalingPattern(historyPoints, p.currentResults),
+        scalingPattern: classifyScalingPattern(historyPoints, effectiveResults),
         extractedAdCount: extractedAdCountMap[p.id] ?? 0,
         approxProductCount: approxProductCountMap[p.id] ?? null,
+        holdStatus: p.holdStatus ?? "active",
+        lastKnownValidResults: p.lastKnownValidResults ?? null,
+        holdStartedAt: p.holdStartedAt ? p.holdStartedAt.toISOString() : null,
+        consecutiveZeroScans: p.consecutiveZeroScans ?? 0,
       };
     });
 

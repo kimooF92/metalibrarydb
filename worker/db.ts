@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { trackedPages, queue, scanHistory, workerState, creativeScans, discoveredPages, discoveryRuns, appSettings } from "../db/schema";
-import { eq, asc, desc, sql, inArray } from "drizzle-orm";
+import { eq, sql, inArray, and } from "drizzle-orm";
 import { shouldArchiveZeroCount } from "../lib/ad-reconciliation";
 
 export async function getAppSettings() {
@@ -483,62 +483,216 @@ export async function markJobCompleted(
   queueId: string,
   pageId: string,
   results: number | null,
-  status: "success" | "unclear"
+  status: "success" | "unclear",
+  options?: {
+    failureReason?: string | null;
+    scanQuality?: "complete" | "partial" | "unclear";
+  }
 ) {
   const now = new Date();
 
-  // 1. Fetch previous scan result for difference calculation
+  // 1. Fetch previous scan result and tracked page early
   const lastScan = await db.query.scanHistory.findFirst({
     where: eq(scanHistory.trackedPageId, pageId),
     orderBy: [sql`${scanHistory.checkedAt} desc`],
   });
+
+  const trackedPage = await db.query.trackedPages.findFirst({
+    where: eq(trackedPages.id, pageId),
+  });
+
+  let mostRecentSuccessfulPositiveScan = null;
+  if (!trackedPage?.lastKnownValidResults) {
+    mostRecentSuccessfulPositiveScan = await db.query.scanHistory.findFirst({
+      where: and(
+        eq(scanHistory.trackedPageId, pageId),
+        eq(scanHistory.status, "success"),
+        sql`${scanHistory.results} > 0`
+      ),
+      orderBy: [sql`${scanHistory.checkedAt} desc`],
+    });
+  }
 
   let difference: number | null = null;
   if (results !== null && lastScan?.results !== null && lastScan?.results !== undefined) {
     difference = results - lastScan.results;
   }
 
-  // 2. Insert scan_history record
+  const scanError = options?.failureReason || null;
+  const scanQuality = options?.scanQuality || (status === "success" && !scanError ? "complete" : "unclear");
+
+  // 2. Insert scan_history record (truthful audit log)
   await db.insert(scanHistory).values({
     trackedPageId: pageId,
     results,
     difference,
     checkedAt: now,
     status,
+    failureReason: scanError,
   });
 
-  // 3. Update tracked_pages
-  await db
-    .update(trackedPages)
-    .set({
+  // 3. Cliff-Drop Detection & Grace Period State Machine
+  const CONFIRM_SCANS = 3; // consecutive zero scans before archiving
+
+  const prevCount = trackedPage?.lastKnownValidResults
+    ?? mostRecentSuccessfulPositiveScan?.results
+    ?? (lastScan?.status === "success" && (lastScan.results ?? 0) > 0 ? lastScan.results : null)
+    ?? (trackedPage?.currentResults && trackedPage.currentResults > 0 ? trackedPage.currentResults : 0);
+  const hadActiveAds = prevCount > 0;
+  const isOnHold = trackedPage?.holdStatus === "on_hold";
+
+  const isValidatedZero = results === 0
+    && status === "success"
+    && scanQuality === "complete"
+    && !scanError;
+
+  const isDropToZero = isValidatedZero && !isOnHold && hadActiveAds;
+  const isZeroWhileOnHold = isOnHold && isValidatedZero;
+  const isAmbiguousZero = results === 0 && !isValidatedZero;
+  const isRecovering = isOnHold
+    && results !== null
+    && results > 0
+    && status === "success"
+    && scanQuality === "complete"
+    && !scanError;
+
+  let displayDifference = difference;
+  const brandName = trackedPage?.displayName || trackedPage?.url || "Tracked Brand";
+
+  if (isDropToZero) {
+    // First drop to 0: enter grace period, NEVER shut down ads directly
+    await db.update(trackedPages).set({
+      holdStatus: "on_hold",
+      lastKnownValidResults: prevCount,
+      holdStartedAt: now,
+      consecutiveZeroScans: 1,
+      currentResults: results,
+      lastChecked: now,
+      lastSuccessAt: now,
+      status: "success",
+      updatedAt: now,
+    }).where(eq(trackedPages.id, pageId));
+
+    // Immediately enqueue a priority recheck scan to verify whether it is really 0 or a glitch
+    try {
+      await enqueueOrEscalateJob(pageId, "count", 10);
+    } catch (e) {
+      console.error(`[Count Scan] Failed to enqueue priority recheck for ${pageId}:`, e);
+    }
+
+    // Fire amber hold notification instead of "Brand Went Dark"
+    try {
+      const { logHoldDetectedNotification } = await import("../lib/notifications");
+      await logHoldDetectedNotification({
+        trackedPageId: pageId,
+        brandName,
+        prevResults: prevCount,
+        pageId: trackedPage?.pageId,
+      });
+    } catch (e) {
+      console.error("[Count Scan] Failed to log hold detected notification:", e);
+    }
+  } else if (isZeroWhileOnHold) {
+    const nextZeroCount = (trackedPage?.consecutiveZeroScans ?? 0) + 1;
+    const isConfirmedShutdown = nextZeroCount >= CONFIRM_SCANS;
+
+    if (isConfirmedShutdown) {
+      // 3 consecutive zero scans confirmed — transition to inactive & allow archival
+      await db.update(trackedPages).set({
+        holdStatus: "inactive",
+        consecutiveZeroScans: nextZeroCount,
+        currentResults: results,
+        lastChecked: now,
+        lastSuccessAt: now,
+        status: "success",
+        updatedAt: now,
+      }).where(eq(trackedPages.id, pageId));
+
+      // Archive ads now that shutdown is confirmed
+      try {
+        const { reconcileZeroResultCount } = await import("../lib/ad-reconciliation");
+        const archivedCount = await reconcileZeroResultCount(
+          pageId,
+          status,
+          results,
+          now,
+          undefined,
+          "inactive",
+          nextZeroCount
+        );
+        if (archivedCount > 0) {
+          console.log(
+            `[Count Scan] Archived ${archivedCount} linked ad(s) after confirmed 3x zero-result scans for ${pageId}.`
+          );
+        }
+      } catch (archiveErr) {
+        console.error(
+          `[Count Scan] Failed to archive linked ads after confirmed zero shutdown for ${pageId}:`,
+          archiveErr
+        );
+      }
+    } else {
+      // Still in grace period (e.g. scan 2 of 3) — increment counter, NO archival
+      await db.update(trackedPages).set({
+        consecutiveZeroScans: nextZeroCount,
+        currentResults: results,
+        lastChecked: now,
+        lastSuccessAt: now,
+        status: "success",
+        updatedAt: now,
+      }).where(eq(trackedPages.id, pageId));
+
+      try {
+        await enqueueOrEscalateJob(pageId, "count", 10);
+      } catch {}
+    }
+  } else if (isRecovering) {
+    // Account hold lifted — compute display difference vs lastKnownValidResults BEFORE clearing
+    const baseline = trackedPage?.lastKnownValidResults ?? results;
+    displayDifference = results - baseline;
+
+    await db.update(trackedPages).set({
+      holdStatus: "active",
+      lastKnownValidResults: null,
+      holdStartedAt: null,
+      consecutiveZeroScans: 0,
+      currentResults: results,
+      lastChecked: now,
+      lastSuccessAt: now,
+      status: "success",
+      updatedAt: now,
+    }).where(eq(trackedPages.id, pageId));
+
+    console.log(
+      `[Count Scan] 🟢 Page ${pageId} recovered from hold: ${results} ads (baseline was ${baseline}, displayDiff: ${displayDifference}).`
+    );
+  } else if (results === 0 || status !== "success" || scanQuality !== "complete" || scanError) {
+    // Ambiguous/failed scan: preserve previous state and never archive.
+    await db.update(trackedPages).set({
+      currentResults: trackedPage?.currentResults ?? mostRecentSuccessfulPositiveScan?.results ?? null,
+      consecutiveZeroScans: isOnHold ? 0 : (trackedPage?.consecutiveZeroScans ?? 0),
+      lastChecked: now,
+      status,
+      updatedAt: now,
+    }).where(eq(trackedPages.id, pageId));
+  } else {
+    // Normal (non-hold) update
+    await db.update(trackedPages).set({
       currentResults: results,
       lastChecked: now,
       lastSuccessAt: status === "success" ? now : undefined,
       status,
       updatedAt: now,
-    })
-    .where(eq(trackedPages.id, pageId));
+    }).where(eq(trackedPages.id, pageId));
 
-  if (shouldArchiveZeroCount(status, results)) {
-    try {
-      const { reconcileZeroResultCount } = await import("../lib/ad-reconciliation");
-      const archivedCount = await reconcileZeroResultCount(
-        pageId,
-        status,
-        results,
-        now
-      );
-
-      if (archivedCount > 0) {
-        console.log(
-          `[Count Scan] Archived ${archivedCount} linked ad(s) after verified zero-result scan for ${pageId}.`
-        );
+    // Structural guard: NEVER archive a page that had active ads via this path.
+    if (!hadActiveAds && shouldArchiveZeroCount(status, results, trackedPage?.holdStatus, trackedPage?.consecutiveZeroScans)) {
+      try {
+        const { reconcileZeroResultCount } = await import("../lib/ad-reconciliation");
+        await reconcileZeroResultCount(pageId, status, results, now);
+      } catch (archiveErr) {
+        console.error(`[Count Scan] Error in zero result reconciliation:`, archiveErr);
       }
-    } catch (archiveErr) {
-      console.error(
-        `[Count Scan] Failed to archive linked ads after zero-result scan for ${pageId}:`,
-        archiveErr
-      );
     }
   }
 
@@ -561,34 +715,31 @@ export async function markJobCompleted(
     })
     .where(eq(queue.id, queueId));
 
-  let brandName = "Tracked Brand";
-  // 4b. Log in-app activity notification for count check (only logs if positive diff or error)
-  try {
-    const trackedPage = await db.query.trackedPages.findFirst({
-      where: eq(trackedPages.id, pageId),
-      columns: { displayName: true, url: true, pageId: true },
-    });
-    brandName = trackedPage?.displayName || trackedPage?.url || "Tracked Brand";
-    const { logCountScanNotification } = await import("../lib/notifications");
-    await logCountScanNotification({
-      trackedPageId: pageId,
-      brandName,
-      currentResults: results,
-      difference,
-      status,
-      pageId: trackedPage?.pageId || null,
-    });
-  } catch {}
+  // 4b. Log in-app activity notification
+  if (!isDropToZero && !isAmbiguousZero && !(isZeroWhileOnHold && ((trackedPage?.consecutiveZeroScans ?? 0) + 1) < CONFIRM_SCANS)) {
+    try {
+      const { logCountScanNotification } = await import("../lib/notifications");
+      await logCountScanNotification({
+        trackedPageId: pageId,
+        brandName,
+        currentResults: results,
+        difference: displayDifference,
+        status,
+        pageId: trackedPage?.pageId || null,
+        isOnHold: isDropToZero || isZeroWhileOnHold,
+        isAmbiguousZero,
+      });
+    } catch {}
+  }
 
-  // 5. Intelligent Creative Routing:
-  // - Minor ad changes (< 50 total active ads AND 1 <= difference < autoSpyThreshold): Enqueue for free local Playwright worker ($0 cost)
-  // - Large catalog pages (50+ total active ads) OR Scaling surges (difference >= autoSpyThreshold, default 5): Launch Apify Cloud scan
-  if (status === "success" && difference !== null && difference >= 1) {
+  // 5. Intelligent Creative Routing
+  // Guard with displayDifference and ensure holdStatus !== "on_hold"
+  if (status === "success" && !isOnHold && !isDropToZero && displayDifference !== null && displayDifference >= 1) {
     try {
       const settings = await getAppSettings();
       const autoSpyThreshold = Math.max(2, settings.autoSpyThreshold ?? 5);
       const isMegaBrand = (results || 0) >= 50;
-      const isSurge = difference >= autoSpyThreshold;
+      const isSurge = displayDifference >= autoSpyThreshold;
 
       if (!isMegaBrand && !isSurge) {
         // Enqueue for free local Playwright worker (< 50 ads total & < 5 diff)
@@ -610,10 +761,10 @@ export async function markJobCompleted(
               configSnapshot: JSON.stringify({
                 runner: "playwright",
                 autoTriggered: true,
-                delta: difference,
+                delta: displayDifference,
                 totalResults: results,
               }),
-              outcomeDetails: `Queued for local Playwright creative scan (+${difference} new ads, total ${results} < 50, delta < ${autoSpyThreshold})`,
+              outcomeDetails: `Queued for local Playwright creative scan (+${displayDifference} new ads, total ${results} < 50, delta < ${autoSpyThreshold})`,
             })
             .returning();
 
@@ -626,19 +777,19 @@ export async function markJobCompleted(
           });
 
           console.log(
-            `[Local Creative Queue] 🟢 Enqueued "${brandName}" for free local Playwright scan (+${difference} ads, total: ${results}, threshold: ${autoSpyThreshold}).`
+            `[Local Creative Queue] 🟢 Enqueued "${brandName}" for free local Playwright scan (+${displayDifference} ads, total: ${results}, threshold: ${autoSpyThreshold}).`
           );
         }
       } else {
-        // 50+ total ads OR 5+ scaling surge: Trigger Apify Cloud runner for fast, high-volume residential proxy extraction
+        // 50+ total ads OR 5+ scaling surge: Trigger Apify Cloud runner
         const reason = isMegaBrand
           ? `Mega-Brand catalog (${results} active ads >= 50)`
-          : `Scaling surge (+${difference} ads >= threshold ${autoSpyThreshold})`;
+          : `Scaling surge (+${displayDifference} ads >= threshold ${autoSpyThreshold})`;
 
         console.log(
           `[Apify Auto-Trigger] 🚀 ${reason} detected for "${brandName}". Triggering Apify Cloud scan...`
         );
-        tryAutoTriggerApifyDeltaScan(pageId, difference).catch((err) => {
+        tryAutoTriggerApifyDeltaScan(pageId, displayDifference).catch((err) => {
           console.error("[Apify Auto-Trigger] Error launching background delta scan:", err);
         });
       }
@@ -647,7 +798,7 @@ export async function markJobCompleted(
     }
   }
 
-  return { difference, results, brandName };
+  return { difference: displayDifference, results, brandName };
 }
 
 // In-memory sequential queue for Apify delta triggers to prevent slot starvation / 429 errors

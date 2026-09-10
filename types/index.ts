@@ -30,6 +30,10 @@ export interface TrackedPage {
   approxProductCount?: number | null;
   extractedAdCount?: number | null;
   discoveredPagesCount?: number | null;
+  holdStatus?: "active" | "on_hold" | "inactive" | null;
+  lastKnownValidResults?: number | null;
+  holdStartedAt?: string | null;
+  consecutiveZeroScans?: number | null;
 }
 
 export interface ScanHistoryEntry {

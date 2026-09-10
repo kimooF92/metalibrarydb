@@ -99,6 +99,13 @@
       "when": 1787245000000,
       "tag": "0013_move_extension_and_fix_storage_policies",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1789078900000,
+      "tag": "0014_add_page_hold_tracking",
+      "breakpoints": true
     }
   ]
 }

@@ -89,8 +89,10 @@ export async function logCountScanNotification(params: {
   difference: number | null;
   status: "success" | "failed" | "unclear";
   pageId?: string | null;
+  isOnHold?: boolean;
+  isAmbiguousZero?: boolean;
 }) {
-  const { trackedPageId, brandName, currentResults, difference, status, pageId } = params;
+  const { trackedPageId, brandName, currentResults, difference, status, pageId, isOnHold, isAmbiguousZero } = params;
   const brandPath = `/spy/brand/${encodeURIComponent(pageId || trackedPageId)}`;
 
   // 1. Log errors or unclear navigation warnings
@@ -111,6 +113,9 @@ export async function logCountScanNotification(params: {
 
   // 2. High-Urgency: Brand completely shut off all ads (Active Ads -> 0)
   if (currentResults === 0 && diffNum < 0) {
+    if (isOnHold || isAmbiguousZero) {
+      return null;
+    }
     return createNotification({
       type: "count_scan",
       title: `🚨 Brand Went Dark: ${brandName}`,
@@ -151,6 +156,23 @@ export async function logCountScanNotification(params: {
   // Minor changes (1 to 4 new ads, and pauses) are cleanly summarized in the Batch Summary digest
   // to avoid flooding the notification center with dozens of individual cards.
   return null;
+}
+
+export async function logHoldDetectedNotification(params: {
+  trackedPageId: string;
+  brandName: string;
+  prevResults: number | null;
+  pageId?: string | null;
+}) {
+  return createNotification({
+    type: "count_scan",
+    title: `⏸️ Account Hold Detected: ${params.brandName}`,
+    message: `"${params.brandName}" scanned 0 ads (was ${params.prevResults ?? "?"} ads). Entering 3-scan grace period before archiving. May be a billing pause or Meta glitch.`,
+    severity: "warning",
+    trackedPageId: params.trackedPageId,
+    actionUrl: `/spy/brand/${encodeURIComponent(params.pageId || params.trackedPageId)}`,
+    metadata: { prevResults: params.prevResults, isOnHold: true },
+  });
 }
 
 /**

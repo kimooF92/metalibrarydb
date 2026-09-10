@@ -8,7 +8,11 @@ import {
   shouldArchiveZeroCount,
 } from "./ad-reconciliation";
 
-function createFakeDb(options: { officialPage?: boolean } = {}) {
+function createFakeDb(options: {
+  officialPage?: boolean;
+  holdStatus?: string | null;
+  consecutiveZeroScans?: number | null;
+} = {}) {
   const activeRows = options.officialPage === false
     ? null
     : [
@@ -28,6 +32,8 @@ function createFakeDb(options: { officialPage?: boolean } = {}) {
           pageId: options.officialPage === false ? null : "page-1",
           displayName: "Test Page",
           currentResults: 2,
+          holdStatus: options.holdStatus ?? "active",
+          consecutiveZeroScans: options.consecutiveZeroScans ?? 0,
         }),
       },
       adObservations: {
@@ -198,3 +204,65 @@ test("does not archive ads for non-page targets", async () => {
   assert.equal(result.archivedCount, 0);
   assert.equal(updates.length, 0);
 });
+
+test("shouldArchiveZeroCount respects on_hold grace period", () => {
+  // Grace period scan 1 and 2 must NOT archive
+  assert.equal(shouldArchiveZeroCount("success", 0, "on_hold", 1), false);
+  assert.equal(shouldArchiveZeroCount("success", 0, "on_hold", 2), false);
+  // Scan 3 confirms shutdown and allows archival
+  assert.equal(shouldArchiveZeroCount("success", 0, "on_hold", 3), true);
+  assert.equal(shouldArchiveZeroCount("success", 0, "inactive", 3), true);
+  // Normal non-hold legacy scan without hold parameters archives as before
+  assert.equal(shouldArchiveZeroCount("success", 0), true);
+  // Unclear or non-zero never archives
+  assert.equal(shouldArchiveZeroCount("unclear", 0, "on_hold", 3), false);
+  assert.equal(shouldArchiveZeroCount("success", 5, "on_hold", 3), false);
+});
+
+test("reconcileZeroResultCount skips archival during on_hold grace period", async () => {
+  let called = false;
+  const reconcile = async () => {
+    called = true;
+    return { archivedCount: 5 };
+  };
+
+  const archived1 = await reconcileZeroResultCount(
+    "page-1",
+    "success",
+    0,
+    new Date(),
+    reconcile,
+    "on_hold",
+    1
+  );
+  assert.equal(archived1, 0);
+  assert.equal(called, false);
+
+  const archivedConfirmed = await reconcileZeroResultCount(
+    "page-1",
+    "success",
+    0,
+    new Date(),
+    reconcile,
+    "inactive",
+    3
+  );
+  assert.equal(archivedConfirmed, 5);
+  assert.equal(called, true);
+});
+
+test("reconcileArchivedAds protects on_hold page from premature ad wiping", async () => {
+  const { fakeDb, updates } = createFakeDb({ holdStatus: "on_hold", consecutiveZeroScans: 1 });
+  const result = await reconcileArchivedAds(
+    "tracked-page-1",
+    null,
+    new Set<string>(), // 0 observed ads
+    new Date("2026-08-31T00:00:00.000Z"),
+    { isVerifiedZeroState: true },
+    fakeDb
+  );
+
+  assert.equal(result.archivedCount, 0);
+  assert.equal(updates.length, 0); // No ads archived
+});
+

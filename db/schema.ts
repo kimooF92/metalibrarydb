@@ -38,11 +38,18 @@ export const trackedPages = pgTable(
     creativeHash: text("creative_hash"),
     isWatchlisted: boolean("is_watchlisted").default(false),
     discoveredPagesCount: integer("discovered_pages_count").default(0),
+
+    // Hold tracking fields (for temporary Meta glitches & ad account pauses)
+    holdStatus: text("hold_status").default("active"), // "active" | "on_hold" | "inactive"
+    lastKnownValidResults: integer("last_known_valid_results"),
+    holdStartedAt: timestamp("hold_started_at", { withTimezone: true }),
+    consecutiveZeroScans: integer("consecutive_zero_scans").default(0),
   },
   (table) => [
     index("idx_tracked_pages_status").on(table.status),
     index("idx_tracked_pages_page_id").on(table.pageId),
     index("idx_tracked_pages_watchlist").on(table.isWatchlisted),
+    index("idx_tracked_pages_hold_status").on(table.holdStatus),
   ]
 );
 

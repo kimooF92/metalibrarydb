@@ -458,7 +458,8 @@ async function runWorker() {
             queueJob.id,
             trackedPage.id,
             outcome.results,
-            outcome.status
+            outcome.status,
+            { failureReason: outcome.failureReason }
           );
           sessionScanned++;
           if (res && res.difference && res.difference > 0) {

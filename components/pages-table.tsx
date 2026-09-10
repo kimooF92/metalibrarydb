@@ -849,7 +849,8 @@ export function PagesTable({
                   const scaling = p.scalingPattern || classifyScalingPattern(p.historyPoints, p.currentResults);
 
                   const isHighVolume = p.currentResults !== null && p.currentResults >= 50;
-                  const isDimmed = p.currentResults === 0 || p.status === "unclear";
+                  const isOnHold = p.holdStatus === "on_hold";
+                  const isDimmed = !isOnHold && (p.currentResults === 0 || p.status === "unclear");
                   const isSelected = selectedIds.includes(p.id);
 
                   return (
@@ -858,6 +859,8 @@ export function PagesTable({
                       className={`transition-all group ${
                         isSelected
                           ? "bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-950/60"
+                          : isOnHold
+                            ? "bg-amber-500/[0.04] dark:bg-amber-500/[0.06] border-l-2 border-l-amber-500 hover:bg-amber-500/[0.08]"
                           : watchlisted[p.id]
                             ? "bg-amber-500/[0.03] border-l-2 border-l-yellow-500 dark:border-l-yellow-400/70 hover:bg-amber-500/[0.07]"
                             : isHighVolume
@@ -979,6 +982,16 @@ export function PagesTable({
 
                             {/* Subline: Scaling Archetype Badge + Faint ID */}
                             <div className="flex items-center gap-1.5 flex-wrap">
+                              {isOnHold && (
+                                <span
+                                  className="inline-flex items-center gap-1 text-[9.5px] font-extrabold px-1.5 py-0.2 rounded border bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20 shadow-2xs"
+                                  title={`Account hold detected — was ${p.lastKnownValidResults ?? "?"} ads. Grace period verification scan ${p.consecutiveZeroScans ?? 1}/3.`}
+                                >
+                                  <span>⏸️</span>
+                                  <span>On Hold ({p.consecutiveZeroScans ?? 1}/3)</span>
+                                </span>
+                              )}
+
                               {scaling.archetype !== "emerging" && scaling.archetype !== "inactive" && (
                                 <span
                                   className={`inline-flex items-center gap-1 text-[9.5px] font-extrabold px-1.5 py-0.2 rounded border shadow-2xs ${scaling.badgeClass}`}
@@ -1038,7 +1051,17 @@ export function PagesTable({
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-3">
                           <div className="flex items-baseline gap-1.5 shrink-0 min-w-[72px]">
-                            {p.currentResults !== null ? (
+                            {isOnHold && p.lastKnownValidResults ? (
+                              <span
+                                className="text-xs font-mono text-amber-500 font-bold"
+                                title={`Account hold — was ${p.lastKnownValidResults} ads. Under grace period (${p.consecutiveZeroScans ?? 1}/3 scans).`}
+                              >
+                                0
+                                <span className="text-[9px] font-normal text-amber-500/80 ml-0.5">
+                                  (was {p.lastKnownValidResults})
+                                </span>
+                              </span>
+                            ) : p.currentResults !== null ? (
                               <span className={`text-xs font-black font-mono ${
                                 p.currentResults >= 50
                                   ? "text-amber-500 dark:text-amber-400"

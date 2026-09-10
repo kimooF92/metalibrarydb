@@ -70,6 +70,8 @@ interface BrandAnalyticsData {
     status: string;
     currentResults: number;
     isTracked: boolean;
+    holdStatus?: string | null;
+    lastKnownValidResults?: number | null;
   };
   summary: {
     totalAdsCaptured: number;
@@ -527,7 +529,10 @@ export default function BrandDeepDivePage({
     .map((h) => h.results)
     .filter((r): r is number => r !== null)
     .reverse();
-  const scalingPattern = classifyScalingPattern(historyPoints, brand.currentResults);
+  const effectiveResults = brand.holdStatus === "on_hold"
+    ? (brand.lastKnownValidResults ?? brand.currentResults)
+    : brand.currentResults;
+  const scalingPattern = classifyScalingPattern(historyPoints, effectiveResults);
 
   return (
     <div className="space-y-5 pb-16 animate-in fade-in duration-150">

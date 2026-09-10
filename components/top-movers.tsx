@@ -15,12 +15,13 @@ interface TopMoversProps {
     difference?: number | null;
     historyPoints?: number[];
     scalingPattern?: any;
+    holdStatus?: string | null;
   }>;
 }
 
 export function TopMovers({ pages }: TopMoversProps) {
   const withDiff = pages.filter(
-    (p) => p.difference !== null && p.difference !== undefined && p.difference !== 0
+    (p) => p.difference !== null && p.difference !== undefined && p.difference !== 0 && p.holdStatus !== "on_hold"
   );
 
   const gainers = withDiff

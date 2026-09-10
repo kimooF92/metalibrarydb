@@ -34,6 +34,10 @@ export async function GET(request: Request) {
         isWatchlisted: trackedPages.isWatchlisted,
         lastCreativeScan: trackedPages.lastCreativeScan,
         discoveredPagesCount: trackedPages.discoveredPagesCount,
+        holdStatus: trackedPages.holdStatus,
+        lastKnownValidResults: trackedPages.lastKnownValidResults,
+        holdStartedAt: trackedPages.holdStartedAt,
+        consecutiveZeroScans: trackedPages.consecutiveZeroScans,
       })
       .from(trackedPages)
       .orderBy(desc(trackedPages.currentResults), desc(trackedPages.createdAt), desc(trackedPages.id));
@@ -42,6 +46,7 @@ export async function GET(request: Request) {
     const previousResultsMap: Record<string, number | null> = {};
     const historyPointsMap: Record<string, number[]> = {};
     const windowDeltaMap: Record<string, number> = {};
+    let recentScans: Array<{ trackedPageId: string; results: number | null; rank: number }> = [];
 
     if (pageIds.length > 0) {
       const rankedScans = db
@@ -54,7 +59,7 @@ export async function GET(request: Request) {
         .where(and(inArray(scanHistory.trackedPageId, pageIds), isNotNull(scanHistory.results)))
         .as("ranked_scans");
 
-      const recentScans = await db
+      recentScans = await db
         .select({
           trackedPageId: rankedScans.trackedPageId,
           results: rankedScans.results,
@@ -70,6 +75,25 @@ export async function GET(request: Request) {
         }
       }
       for (const pageId of Object.keys(historyPointsMap)) historyPointsMap[pageId].reverse();
+
+      // Sanitize sparklines so temporary 0-glitches don't break visual trends:
+      for (const p of pages) {
+        if (historyPointsMap[p.id]) {
+          historyPointsMap[p.id] = historyPointsMap[p.id].map((v, i, arr) => {
+            if (v === 0) {
+              const prevNonZero = arr.slice(0, i).reverse().find((x) => x > 0);
+              const nextNonZero = arr.slice(i + 1).find((x) => x > 0);
+              // Case A: Glitch in the past — flanked by positive counts
+              if (prevNonZero && nextNonZero) return prevNonZero;
+              // Case B: Ongoing hold — trailing zeros while page is on hold
+              if (p.holdStatus === "on_hold" && prevNonZero && !nextNonZero) {
+                return p.lastKnownValidResults ?? prevNonZero;
+              }
+            }
+            return v;
+          });
+        }
+      }
 
       const windowScans = await db
         .select({ trackedPageId: scanHistory.trackedPageId, results: scanHistory.results })
@@ -94,11 +118,23 @@ export async function GET(request: Request) {
     }
 
     const data = pages.map((page) => {
-      const previousResults = previousResultsMap[page.id] ?? null;
+      let previousResults = previousResultsMap[page.id] ?? null;
+      if (page.currentResults && page.currentResults > 0 && previousResults === 0) {
+        const lastNonZero = recentScans
+          .filter((s) => s.trackedPageId === page.id && (s.results ?? 0) > 0)
+          .sort((a, b) => Number(a.rank) - Number(b.rank))[1]?.results;
+        if (lastNonZero !== undefined) {
+          previousResults = lastNonZero;
+        }
+      }
       const historyPoints = historyPointsMap[page.id] || (page.currentResults !== null ? [page.currentResults] : []);
       const difference = page.currentResults !== null && previousResults !== null
         ? page.currentResults - previousResults
         : null;
+
+      const effectiveResults = page.holdStatus === "on_hold"
+        ? (page.lastKnownValidResults ?? page.currentResults)
+        : page.currentResults;
 
       return {
         ...page,
@@ -109,9 +145,13 @@ export async function GET(request: Request) {
         attempts: 0,
         isCreativeQueued: false,
         historyPoints,
-        scalingPattern: classifyScalingPattern(historyPoints, page.currentResults),
+        scalingPattern: classifyScalingPattern(historyPoints, effectiveResults),
         extractedAdCount: 0,
         approxProductCount: null,
+        holdStatus: page.holdStatus ?? "active",
+        lastKnownValidResults: page.lastKnownValidResults ?? null,
+        holdStartedAt: page.holdStartedAt ? page.holdStartedAt.toISOString() : null,
+        consecutiveZeroScans: page.consecutiveZeroScans ?? 0,
       };
     });
 
