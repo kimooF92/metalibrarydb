@@ -17,7 +17,9 @@ import {
   Star,
   CheckCircle2,
   Rocket,
+  Calendar,
 } from "lucide-react";
+import { formatDiscoveryDate, formatDiscoveryLabel } from "@/lib/format-date";
 
 interface ProductRowProps {
   product: ScrapedProduct;
@@ -317,6 +319,16 @@ export function ProductRow({
 
       {/* Right: Action Buttons */}
       <div className="flex items-center gap-1 shrink-0 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800/80">
+        {product.createdAt && (
+          <span
+            className="text-[10px] font-medium text-slate-400 dark:text-slate-500 inline-flex items-center gap-1 shrink-0 select-none mr-1.5"
+            title={formatDiscoveryLabel(product.createdAt)}
+          >
+            <Calendar className="w-3 h-3 text-slate-400" />
+            <span>{formatDiscoveryDate(product.createdAt)}</span>
+          </span>
+        )}
+
         {onViewCreatives && (product.linkedAdsCount || 0) > 0 && (
           <button
             onClick={(e) => {

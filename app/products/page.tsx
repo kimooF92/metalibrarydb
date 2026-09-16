@@ -37,6 +37,7 @@ import {
   ArrowUp,
   Loader2,
   Rocket,
+  Calendar,
 } from "lucide-react";
 
 type SmartPreset = "all" | "breakout" | "most_scaled" | "new_discovered" | "top_lasting" | "with_offers" | "favorites";
@@ -63,6 +64,9 @@ export default function ProductsPage() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [hideInactive, setHideInactive] = useState(false);
+  const [discoveryFilter, setDiscoveryFilter] = useState("all");
+  const [discoveryFrom, setDiscoveryFrom] = useState("");
+  const [discoveryTo, setDiscoveryTo] = useState("");
   const [sortBy, setSortBy] = useState<string>("latest");
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({
@@ -154,6 +158,18 @@ export default function ProductsPage() {
       const hideInactiveParam = params.get("hideInactive");
       if (hideInactiveParam === "true") {
         setHideInactive(true);
+      }
+      const discoveryParam = params.get("discovery");
+      if (discoveryParam) {
+        setDiscoveryFilter(discoveryParam);
+      }
+      const discoveryFromParam = params.get("discoveryFrom");
+      if (discoveryFromParam) {
+        setDiscoveryFrom(discoveryFromParam);
+      }
+      const discoveryToParam = params.get("discoveryTo");
+      if (discoveryToParam) {
+        setDiscoveryTo(discoveryToParam);
       }
 
       // Check for deep-linked product ID (?id=... or ?productId=...)
@@ -253,6 +269,11 @@ export default function ProductsPage() {
         if (categoryFilter !== "all") query.set("category", categoryFilter);
         if (statusFilter !== "all") query.set("status", statusFilter);
         if (hideInactive) query.set("hideInactive", "true");
+        if (discoveryFilter !== "all") query.set("discovery", discoveryFilter);
+        if (discoveryFilter === "custom") {
+          if (discoveryFrom) query.set("discoveryFrom", discoveryFrom);
+          if (discoveryTo) query.set("discoveryTo", discoveryTo);
+        }
 
         const res = await fetch(`/api/products?${query.toString()}`, {
           signal: currentController.signal,
@@ -292,7 +313,19 @@ export default function ProductsPage() {
         }
       }
     },
-    [sortBy, smartPreset, debouncedSearch, debouncedBrand, platform, categoryFilter, statusFilter, hideInactive]
+    [
+      sortBy,
+      smartPreset,
+      debouncedSearch,
+      debouncedBrand,
+      platform,
+      categoryFilter,
+      statusFilter,
+      hideInactive,
+      discoveryFilter,
+      discoveryFrom,
+      discoveryTo,
+    ]
   );
 
   // Trigger fetch on filter/sort change
@@ -610,6 +643,9 @@ export default function ProductsPage() {
     setCategoryFilter("all");
     setStatusFilter("all");
     setSmartPreset("all");
+    setDiscoveryFilter("all");
+    setDiscoveryFrom("");
+    setDiscoveryTo("");
     setSortBy("latest");
     setHideInactive(false);
     setPage(1);
@@ -986,6 +1022,59 @@ export default function ProductsPage() {
             <option value="failed">Failed Scrape Only</option>
           </select>
 
+          {/* Discovery Date Filter */}
+          <div className="flex items-center gap-1.5">
+            <select
+              value={discoveryFilter}
+              onChange={(e) => {
+                setDiscoveryFilter(e.target.value);
+                setPage(1);
+              }}
+              className={`text-xs font-semibold rounded-lg border px-2.5 py-1.5 focus:outline-none cursor-pointer transition-colors ${
+                discoveryFilter !== "all"
+                  ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800"
+                  : "bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800"
+              }`}
+              title="Filter by discovery date"
+            >
+              <option value="all">📅 All Discovery Dates</option>
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="last_3d">Last 3 Days</option>
+              <option value="last_7d">Last 7 Days</option>
+              <option value="last_14d">Last 14 Days</option>
+              <option value="last_30d">Last 30 Days</option>
+              <option value="this_month">This Month</option>
+              <option value="custom">Custom Range...</option>
+            </select>
+
+            {/* Custom Range Date Pickers */}
+            {discoveryFilter === "custom" && (
+              <div className="inline-flex items-center gap-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-1 text-xs">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">From</span>
+                <input
+                  type="date"
+                  value={discoveryFrom}
+                  onChange={(e) => {
+                    setDiscoveryFrom(e.target.value);
+                    setPage(1);
+                  }}
+                  className="bg-transparent text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer text-xs"
+                />
+                <span className="text-[10px] font-bold text-slate-400 uppercase ml-1">To</span>
+                <input
+                  type="date"
+                  value={discoveryTo}
+                  onChange={(e) => {
+                    setDiscoveryTo(e.target.value);
+                    setPage(1);
+                  }}
+                  className="bg-transparent text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer text-xs"
+                />
+              </div>
+            )}
+          </div>
+
           {/* Sort By */}
           <select
             value={sortBy}
@@ -996,6 +1085,7 @@ export default function ProductsPage() {
             className="bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-2.5 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
           >
             <option value="latest">⚡ Newest Discovered</option>
+            <option value="oldest">🕰️ Oldest Discovered</option>
             <option value="most_scaled">🔥 Most Scaled (Active Ads)</option>
             <option value="top_lasting">⏳ Longest Lasting (Evergreen)</option>
             <option value="price_desc">💰 Price (High to Low)</option>
@@ -1069,7 +1159,14 @@ export default function ProductsPage() {
           </div>
 
           {/* Reset Filters */}
-          {(searchInput !== "" || brandInput !== "" || platform !== "all" || statusFilter !== "all" || smartPreset !== "all" || sortBy !== "latest" || hideInactive) && (
+          {(searchInput !== "" ||
+            brandInput !== "" ||
+            platform !== "all" ||
+            statusFilter !== "all" ||
+            smartPreset !== "all" ||
+            discoveryFilter !== "all" ||
+            sortBy !== "latest" ||
+            hideInactive) && (
             <button
               onClick={handleResetFilters}
               className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"

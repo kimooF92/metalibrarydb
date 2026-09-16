@@ -1540,7 +1540,7 @@ ${imagesText}`;
                   </a>
                 </div>
                 <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                  <span className="font-medium">First Scraped:</span>
+                  <span className="font-medium">Discovery Date:</span>
                   <span>{new Date(product.createdAt).toLocaleString()}</span>
                 </div>
                 {product.lastScrapedAt && (

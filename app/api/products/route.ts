@@ -28,6 +28,9 @@ export async function GET(req: NextRequest) {
     const hideInactive = searchParams.get("hideInactive") === "true";
     const activeStatus = searchParams.get("activeStatus") || (hideInactive ? "active" : "all");
     const smartPreset = searchParams.get("smartPreset") || "all";
+    const discovery = searchParams.get("discovery") || "all";
+    const discoveryFrom = searchParams.get("discoveryFrom");
+    const discoveryTo = searchParams.get("discoveryTo");
     const sortBy = searchParams.get("sortBy") || "latest";
     const sortOrder = searchParams.get("sortOrder") || "desc";
     const includeStats = searchParams.get("includeStats") === "true";
@@ -140,6 +143,32 @@ export async function GET(req: NextRequest) {
       conditions.push(sql`${scrapedProducts.createdAt} >= NOW() - INTERVAL '7 days'`);
     }
 
+    // Discovery Date Filters (presets or custom range)
+    if (discovery === "today") {
+      conditions.push(sql`${scrapedProducts.createdAt} >= date_trunc('day', NOW() AT TIME ZONE 'UTC')`);
+    } else if (discovery === "yesterday") {
+      conditions.push(
+        sql`${scrapedProducts.createdAt} >= date_trunc('day', NOW() AT TIME ZONE 'UTC' - INTERVAL '1 day') AND ${scrapedProducts.createdAt} < date_trunc('day', NOW() AT TIME ZONE 'UTC')`
+      );
+    } else if (discovery === "last_3d") {
+      conditions.push(sql`${scrapedProducts.createdAt} >= NOW() - INTERVAL '3 days'`);
+    } else if (discovery === "last_7d") {
+      conditions.push(sql`${scrapedProducts.createdAt} >= NOW() - INTERVAL '7 days'`);
+    } else if (discovery === "last_14d") {
+      conditions.push(sql`${scrapedProducts.createdAt} >= NOW() - INTERVAL '14 days'`);
+    } else if (discovery === "last_30d") {
+      conditions.push(sql`${scrapedProducts.createdAt} >= NOW() - INTERVAL '30 days'`);
+    } else if (discovery === "this_month") {
+      conditions.push(sql`${scrapedProducts.createdAt} >= date_trunc('month', NOW() AT TIME ZONE 'UTC')`);
+    } else if (discovery === "custom" || (!discovery && (discoveryFrom || discoveryTo))) {
+      if (discoveryFrom && /^\d{4}-\d{2}-\d{2}$/.test(discoveryFrom.trim())) {
+        conditions.push(sql`${scrapedProducts.createdAt} >= ${discoveryFrom.trim() + " 00:00:00"}::timestamptz`);
+      }
+      if (discoveryTo && /^\d{4}-\d{2}-\d{2}$/.test(discoveryTo.trim())) {
+        conditions.push(sql`${scrapedProducts.createdAt} < (${discoveryTo.trim() + " 00:00:00"}::timestamptz + INTERVAL '1 day')`);
+      }
+    }
+
     // Smart Preset: Breakout Scalers (new ads <= 7 days with >= 3 duplications)
     if (smartPreset === "breakout") {
       conditions.push(
@@ -184,6 +213,8 @@ export async function GET(req: NextRequest) {
       orderByClauses.push(asc(safePriceSql));
     } else if (sortBy === "price_desc") {
       orderByClauses.push(desc(safePriceSql));
+    } else if (sortBy === "oldest") {
+      orderByClauses.push(asc(scrapedProducts.createdAt));
     } else {
       // Default: latest discovery
       orderByClauses.push(

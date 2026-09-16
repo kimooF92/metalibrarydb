@@ -19,7 +19,9 @@ import {
   Truck,
   Star,
   Rocket,
+  Calendar,
 } from "lucide-react";
+import { formatDiscoveryDate, formatDiscoveryLabel } from "@/lib/format-date";
 
 interface ProductCardProps {
   product: ScrapedProduct;
@@ -262,42 +264,54 @@ export function ProductCard({
 
       {/* Content Area */}
       <div className="p-4 flex flex-col flex-1">
-        {/* Brand Name Link */}
-        <div className="flex items-center justify-between gap-1 mb-1">
-          {product.brandPageId ? (
-            <Link
-              href={`/spy/brand/${encodeURIComponent(product.brandPageId)}?tab=products`}
-              onClick={(e) => e.stopPropagation()}
-              className={`text-[11px] font-bold uppercase tracking-wider truncate hover:underline ${
-                isInactive
-                  ? "text-slate-500 dark:text-slate-400"
-                  : "text-indigo-600 dark:text-indigo-400"
-              }`}
-              title={`View ${product.brandName || "Brand"} Catalog`}
+        {/* Brand Name Link & Discovery Date */}
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <div className="min-w-0 flex-1">
+            {product.brandPageId ? (
+              <Link
+                href={`/spy/brand/${encodeURIComponent(product.brandPageId)}?tab=products`}
+                onClick={(e) => e.stopPropagation()}
+                className={`text-[11px] font-bold uppercase tracking-wider truncate block hover:underline ${
+                  isInactive
+                    ? "text-slate-500 dark:text-slate-400"
+                    : "text-indigo-600 dark:text-indigo-400"
+                }`}
+                title={`View ${product.brandName || "Brand"} Catalog`}
+              >
+                {product.brandName || product.domain || "View Brand"} &rarr;
+              </Link>
+            ) : product.brandName ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFilterBrand?.(product.brandName!);
+                }}
+                className={`text-[11px] font-bold uppercase tracking-wider truncate block text-left cursor-pointer hover:underline ${
+                  isInactive
+                    ? "text-slate-500 dark:text-slate-400"
+                    : "text-indigo-600 dark:text-indigo-400"
+                }`}
+                title={`Filter by ${product.brandName}`}
+              >
+                {product.brandName}
+              </button>
+            ) : product.domain ? (
+              <span className="text-[11px] font-semibold text-slate-500 truncate block">
+                {product.domain}
+              </span>
+            ) : null}
+          </div>
+
+          {product.createdAt && (
+            <span
+              className="text-[10px] font-medium text-slate-400 dark:text-slate-500 inline-flex items-center gap-1 shrink-0 select-none"
+              title={formatDiscoveryLabel(product.createdAt)}
             >
-              {product.brandName || product.domain || "View Brand"} &rarr;
-            </Link>
-          ) : product.brandName ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onFilterBrand?.(product.brandName!);
-              }}
-              className={`text-[11px] font-bold uppercase tracking-wider truncate text-left cursor-pointer hover:underline ${
-                isInactive
-                  ? "text-slate-500 dark:text-slate-400"
-                  : "text-indigo-600 dark:text-indigo-400"
-              }`}
-              title={`Filter by ${product.brandName}`}
-            >
-              {product.brandName}
-            </button>
-          ) : product.domain ? (
-            <span className="text-[11px] font-semibold text-slate-500 truncate">
-              {product.domain}
+              <Calendar className="w-2.5 h-2.5" />
+              <span>{formatDiscoveryDate(product.createdAt)}</span>
             </span>
-          ) : null}
+          )}
         </div>
 
         {/* Product Title */}
