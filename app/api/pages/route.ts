@@ -51,7 +51,9 @@ export async function GET(request: Request) {
     }
 
     // Smart Tabs Filters
-    if (tab === "watchlist") {
+    if (tab === "active") {
+      conditions.push(gte(trackedPages.currentResults, 1));
+    } else if (tab === "watchlist") {
       conditions.push(eq(trackedPages.isWatchlisted, true));
     } else if (tab === "high_volume") {
       conditions.push(gte(trackedPages.currentResults, 50));

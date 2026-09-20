@@ -11,7 +11,7 @@ import { RefreshCw, X, Plus, UploadCloud } from "lucide-react";
 
 const VALID_STATUSES = ["all", "success", "pending", "scanning", "failed", "unclear"] as const;
 const VALID_SEARCH_TYPES = ["all", "page", "keyword_exact_phrase", "keyword_unordered"] as const;
-const VALID_TABS = ["all", "watchlist", "high_volume", "attention", "zero_ads", "needs_review"] as const;
+const VALID_TABS = ["active", "all", "watchlist", "high_volume", "attention", "zero_ads", "needs_review"] as const;
 const VALID_SORT_COLS = ["createdAt", "displayName", "currentResults", "lastChecked", "lastCreativeScan", "status", "difference"] as const;
 const VALID_PAGE_SIZES = [25, 50, 100] as const;
 
@@ -20,7 +20,7 @@ function getInitialDashboardState() {
     search: "",
     statusFilter: "all" as (typeof VALID_STATUSES)[number],
     searchTypeFilter: "all" as (typeof VALID_SEARCH_TYPES)[number],
-    activeTab: "all" as (typeof VALID_TABS)[number],
+    activeTab: "active" as (typeof VALID_TABS)[number],
     sortBy: "createdAt" as (typeof VALID_SORT_COLS)[number],
     sortOrder: "desc" as "asc" | "desc",
     page: 1,
@@ -33,8 +33,8 @@ function getInitialDashboardState() {
     // 1. Load saved state from localStorage or sessionStorage
     let saved: Partial<typeof defaults> = {};
     const rawSaved =
-      localStorage.getItem("dashboard_filters") ||
-      sessionStorage.getItem("dashboard_filters");
+      localStorage.getItem("dashboard_filters_v2") ||
+      sessionStorage.getItem("dashboard_filters_v2");
 
     if (rawSaved) {
       try {
@@ -50,7 +50,7 @@ function getInitialDashboardState() {
       saved.searchTypeFilter = "all";
     }
     if (saved.activeTab && !VALID_TABS.includes(saved.activeTab as any)) {
-      saved.activeTab = "all";
+      saved.activeTab = "active";
     }
     if (saved.sortBy && !VALID_SORT_COLS.includes(saved.sortBy as any)) {
       saved.sortBy = "createdAt";
@@ -80,7 +80,7 @@ function getInitialDashboardState() {
     }
     if (urlParams.has("tab")) {
       const t = urlParams.get("tab");
-      state.activeTab = t && VALID_TABS.includes(t as any) ? (t as any) : "all";
+      state.activeTab = t && VALID_TABS.includes(t as any) ? (t as any) : "active";
     }
     if (urlParams.has("sortBy")) {
       const sb = urlParams.get("sortBy");
@@ -124,7 +124,7 @@ function syncDashboardStateToUrl(state: {
     if (state.searchTypeFilter && state.searchTypeFilter !== "all" && VALID_SEARCH_TYPES.includes(state.searchTypeFilter as any)) {
       query.set("searchType", state.searchTypeFilter);
     }
-    if (state.activeTab && state.activeTab !== "all" && VALID_TABS.includes(state.activeTab as any)) {
+    if (state.activeTab && state.activeTab !== "active" && VALID_TABS.includes(state.activeTab as any)) {
       query.set("tab", state.activeTab);
     }
     if (state.sortBy && state.sortBy !== "createdAt" && VALID_SORT_COLS.includes(state.sortBy as any)) {
@@ -139,8 +139,8 @@ function syncDashboardStateToUrl(state: {
     window.history.replaceState(null, "", newUrl);
 
     const payload = JSON.stringify(state);
-    sessionStorage.setItem("dashboard_filters", payload);
-    localStorage.setItem("dashboard_filters", payload);
+    sessionStorage.setItem("dashboard_filters_v2", payload);
+    localStorage.setItem("dashboard_filters_v2", payload);
   } catch (e) {
     console.error("Error syncing dashboard state:", e);
   }
@@ -278,7 +278,7 @@ function DashboardContent() {
       if (search) params.set("search", search);
       if (statusFilter !== "all") params.set("status", statusFilter);
       if (searchTypeFilter !== "all") params.set("searchType", searchTypeFilter);
-      if (activeTab !== "all") params.set("tab", activeTab);
+      if (activeTab) params.set("tab", activeTab);
       params.set("sortBy", sortBy);
       params.set("sortOrder", sortOrder);
       if (forceRefresh) params.set("_t", String(Date.now()));
@@ -324,11 +324,13 @@ function DashboardContent() {
     setSearch("");
     setStatusFilter("all");
     setSearchTypeFilter("all");
-    setActiveTab("all");
+    setActiveTab("active");
     setSortBy("createdAt");
     setSortOrder("desc");
     setPage(1);
     try {
+      sessionStorage.removeItem("dashboard_filters_v2");
+      localStorage.removeItem("dashboard_filters_v2");
       sessionStorage.removeItem("dashboard_filters");
       localStorage.removeItem("dashboard_filters");
       window.history.replaceState(null, "", window.location.pathname);

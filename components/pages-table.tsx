@@ -459,7 +459,7 @@ export function PagesTable({
           <div className="flex items-center space-x-2">
             <Filter className="w-3.5 h-3.5 text-indigo-500" />
             <span>Filters & Smart Tabs</span>
-            {(statusFilter !== "all" || searchTypeFilter !== "all" || activeTab !== "all" || search !== "") && (
+            {(statusFilter !== "all" || searchTypeFilter !== "all" || activeTab !== "active" || search !== "") && (
               <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
             )}
           </div>
@@ -495,6 +495,12 @@ export function PagesTable({
         <div className="flex flex-wrap items-center gap-1.5">
           {/* Smart Tabs */}
           {[
+            {
+              id: "active",
+              label: "Active",
+              icon: CheckCircle2,
+              iconColor: "text-emerald-500 dark:text-emerald-400 fill-emerald-500/10 dark:fill-emerald-400/20",
+            },
             { id: "all", label: "All Pages", icon: null },
             { id: "watchlist", label: "Watchlist", icon: Star, iconColor: "text-yellow-500 dark:text-yellow-400 fill-yellow-500/10 dark:fill-yellow-400/20" },
             { id: "high_volume", label: "High Volume", icon: Flame, iconColor: "text-amber-500 dark:text-amber-400 fill-amber-500/10 dark:fill-amber-400/20" },
@@ -610,7 +616,7 @@ export function PagesTable({
           </div>
 
           {/* Reset Filters Toolbar Button */}
-          {(search !== "" || statusFilter !== "all" || searchTypeFilter !== "all" || activeTab !== "all" || page > 1) && onResetFilters && (
+          {(search !== "" || statusFilter !== "all" || searchTypeFilter !== "all" || activeTab !== "active" || page > 1) && onResetFilters && (
             <button
               onClick={onResetFilters}
               className="flex items-center space-x-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer whitespace-nowrap shrink-0"
@@ -793,18 +799,18 @@ export function PagesTable({
                           No matching tracked pages found
                         </h4>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {search || statusFilter !== "all" || searchTypeFilter !== "all" || activeTab !== "all" || page > 1
+                          {search || statusFilter !== "all" || searchTypeFilter !== "all" || activeTab !== "active" || page > 1
                             ? "Your active filters or smart tab narrowed down results to zero."
-                            : "No tracked Meta Ad Library pages have been added yet."}
+                            : "No active tracked Meta Ad Library pages found."}
                         </p>
                       </div>
 
                       {/* Active Filter Chips */}
-                      {(search || statusFilter !== "all" || searchTypeFilter !== "all" || activeTab !== "all" || page > 1) && (
+                      {(search || statusFilter !== "all" || searchTypeFilter !== "all" || activeTab !== "active" || page > 1) && (
                         <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
-                          {activeTab !== "all" && (
+                          {activeTab !== "active" && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
-                              Tab: {activeTab}
+                              Tab: {activeTab === "all" ? "All Pages" : activeTab}
                             </span>
                           )}
                           {statusFilter !== "all" && (
@@ -830,16 +836,26 @@ export function PagesTable({
                         </div>
                       )}
 
-                      {/* Reset Button */}
-                      {(search || statusFilter !== "all" || searchTypeFilter !== "all" || activeTab !== "all" || page > 1) && onResetFilters && (
-                        <button
-                          onClick={onResetFilters}
-                          className="mt-2 inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                          <span>Clear Filters & Show All Pages</span>
-                        </button>
-                      )}
+                      {/* Reset / Switch Actions */}
+                      <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+                        {activeTab === "active" && !search && statusFilter === "all" && searchTypeFilter === "all" && (
+                          <button
+                            onClick={() => onTabChange("all")}
+                            className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold border border-slate-200 dark:border-slate-700 shadow-sm transition-all cursor-pointer"
+                          >
+                            <span>Switch to All Pages (View 0-Ad Pages)</span>
+                          </button>
+                        )}
+                        {(search || statusFilter !== "all" || searchTypeFilter !== "all" || activeTab !== "active" || page > 1) && onResetFilters && (
+                          <button
+                            onClick={onResetFilters}
+                            className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Reset Filters</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </td>
                 </tr>

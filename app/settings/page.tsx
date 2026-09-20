@@ -130,7 +130,7 @@ export default function SettingsPage() {
   const handleExportCsv = async () => {
     try {
       showToast({ type: "info", title: "Preparing CSV export..." });
-      const res = await fetch("/api/pages?limit=1000");
+      const res = await fetch("/api/pages?limit=1000&tab=all");
       if (res.ok) {
         const data = await res.json();
         const pages = data.data || data.pages || [];
