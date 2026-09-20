@@ -31,6 +31,7 @@ interface ProductCardProps {
   onViewDetails?: (product: ScrapedProduct) => void;
   onViewCreatives?: (product: ScrapedProduct) => void;
   onFilterBrand?: (brandName: string) => void;
+  isRecentlyViewed?: boolean;
 }
 
 export const ProductCard = memo(function ProductCard({
@@ -41,6 +42,7 @@ export const ProductCard = memo(function ProductCard({
   onViewDetails,
   onViewCreatives,
   onFilterBrand,
+  isRecentlyViewed = false,
 }: ProductCardProps) {
   const [imgError, setImgError] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -247,7 +249,7 @@ export const ProductCard = memo(function ProductCard({
         {/* Offer Overlay Ribbon */}
         {product.discountOrOffer && (
           <div
-            className={`absolute bottom-2.5 left-2.5 z-10 flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-md backdrop-blur-sm max-w-[90%] truncate ${
+            className={`absolute bottom-2.5 left-2.5 z-10 flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-md backdrop-blur-sm max-w-[60%] truncate ${
               isInactive
                 ? "bg-slate-800/90 text-slate-300 border border-slate-700/80"
                 : "bg-emerald-600/90 text-white"
@@ -255,6 +257,36 @@ export const ProductCard = memo(function ProductCard({
           >
             <Tag className="w-3 h-3 shrink-0" />
             <span className="truncate">{product.discountOrOffer}</span>
+          </div>
+        )}
+
+        {/* Top Ad Creative Mini Preview */}
+        {product.topCreativeThumbnail && (
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewCreatives?.(product);
+            }}
+            className="absolute bottom-2.5 right-2.5 z-10 group/adpreview cursor-pointer"
+            title={`Top ad creative (${product.linkedAdsCount || 1} ads) — click to view all ads`}
+          >
+            <div className="relative w-11 h-11 rounded-lg overflow-hidden border-2 border-white dark:border-slate-800 shadow-md transition-all duration-200 group-hover/adpreview:scale-130 group-hover/adpreview:shadow-xl group-hover/adpreview:z-30 bg-slate-900">
+              <NextImage
+                src={product.topCreativeThumbnail}
+                alt="Ad Creative"
+                fill
+                unoptimized
+                referrerPolicy="no-referrer"
+                className="object-cover"
+              />
+              <div className="absolute inset-0 bg-black/25 group-hover/adpreview:bg-transparent transition-colors flex items-center justify-center">
+                <Eye className="w-3 h-3 text-white drop-shadow-md opacity-80 group-hover/adpreview:opacity-100" />
+              </div>
+            </div>
+            {/* Tooltip on hover */}
+            <div className="pointer-events-none absolute bottom-full right-0 mb-1.5 hidden group-hover/adpreview:flex items-center gap-1 px-2 py-0.5 rounded bg-slate-900 text-white text-[10px] font-bold shadow-lg whitespace-nowrap z-40 border border-slate-700">
+              <span>Top Creative</span>
+            </div>
           </div>
         )}
       </div>
@@ -391,6 +423,15 @@ export const ProductCard = memo(function ProductCard({
               title={`${supplierCount} Supplier links attached`}
             >
               📦 {supplierCount} {supplierCount === 1 ? "Supplier" : "Suppliers"}
+            </span>
+          )}
+
+          {isRecentlyViewed && (
+            <span
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+              title="You inspected this product during this session"
+            >
+              <Eye className="w-2.5 h-2.5 text-indigo-500" /> Inspected
             </span>
           )}
         </div>

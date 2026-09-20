@@ -108,6 +108,18 @@ export default function ProductsPage() {
   const detailRequestIdRef = useRef(0);
   const lastStatsFetchedRef = useRef(0);
 
+  // Recently inspected products tracking (session-based)
+  const [recentlyViewedIds, setRecentlyViewedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem("recently_viewed_products");
+      if (stored) {
+        setRecentlyViewedIds(JSON.parse(stored));
+      }
+    } catch {}
+  }, []);
+
   // Async stats fetcher (cached on backend, does not block product feed)
   const fetchStats = useCallback(async (forceRefresh = false) => {
     const now = Date.now();
@@ -687,6 +699,16 @@ export default function ProductsPage() {
     const requestId = ++detailRequestIdRef.current;
     setSelectedProduct(product);
     setIsModalOpen(true);
+
+    // Track recently inspected product
+    setRecentlyViewedIds((prev) => {
+      const updated = [product.id, ...prev.filter((id) => id !== product.id)].slice(0, 40);
+      try {
+        sessionStorage.setItem("recently_viewed_products", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
       url.searchParams.set("id", product.id);
@@ -1544,7 +1566,7 @@ export default function ProductsPage() {
           </button>
         </div>
       ) : products.length === 0 ? (
-        <div className="py-20 text-center bg-white dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-800/80 p-8 flex flex-col items-center justify-center space-y-4">
+        <div className="py-16 text-center bg-white dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-800/80 p-8 flex flex-col items-center justify-center space-y-4">
           <div className="w-16 h-16 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
             {smartPreset === "favorites" ? (
               <Star className="w-8 h-8 text-amber-500" />
@@ -1561,21 +1583,148 @@ export default function ProductsPage() {
             <p className="text-xs text-slate-600 dark:text-slate-400 max-w-sm mt-1">
               {smartPreset === "favorites"
                 ? "Click the star (⭐) button on any product card to add it to your starred favorites watchlist."
-                : searchInput || brandInput || platform !== "all" || smartPreset !== "all"
-                ? "Try resetting your active filters or smart preset to view more products."
+                : (debouncedSearch.trim() || debouncedBrand.trim() || platform !== "all" || categoryFilter !== "all" || statusFilter !== "all" || hideInactive || smartPreset !== "all" || discoveryFilter !== "all")
+                ? "Your active filters narrowed down results to 0. Use 1-click recovery below or reset all."
                 : "Run ad spy scans to automatically extract, deduplicate, and scrape product landing pages."}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+
+          {/* Contextual 1-Click Targeted Filter Recovery Chips */}
+          {(debouncedSearch.trim() || debouncedBrand.trim() || platform !== "all" || categoryFilter !== "all" || statusFilter !== "all" || hideInactive || (smartPreset !== "all" && smartPreset !== "favorites") || discoveryFilter !== "all") && (
+            <div className="flex flex-col items-center gap-2 max-w-md w-full pt-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                1-Click Recovery Options:
+              </span>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                {debouncedSearch.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchInput("");
+                      setDebouncedSearch("");
+                      setPage(1);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-semibold text-xs hover:bg-indigo-100 dark:hover:bg-indigo-900/60 cursor-pointer transition-colors"
+                  >
+                    <Search className="w-3 h-3 text-indigo-500" />
+                    <span>Clear Search &ldquo;{debouncedSearch}&rdquo;</span>
+                  </button>
+                )}
+
+                {debouncedBrand.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBrandInput("");
+                      setDebouncedBrand("");
+                      setPage(1);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-semibold text-xs hover:bg-indigo-100 dark:hover:bg-indigo-900/60 cursor-pointer transition-colors"
+                  >
+                    <Building2 className="w-3 h-3 text-indigo-500" />
+                    <span>Clear Brand &ldquo;{debouncedBrand}&rdquo;</span>
+                  </button>
+                )}
+
+                {hideInactive && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHideInactive(false);
+                      setPage(1);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-semibold text-xs hover:bg-emerald-100 dark:hover:bg-emerald-900/60 cursor-pointer transition-colors"
+                  >
+                    <EyeOff className="w-3 h-3 text-emerald-500" />
+                    <span>Include Inactive (Off-Air)</span>
+                  </button>
+                )}
+
+                {categoryFilter !== "all" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCategoryFilter("all");
+                      setPage(1);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 font-semibold text-xs hover:bg-amber-100 dark:hover:bg-amber-900/60 cursor-pointer transition-colors"
+                  >
+                    <Tag className="w-3 h-3 text-amber-500" />
+                    <span>Clear Category ({categoryFilter})</span>
+                  </button>
+                )}
+
+                {platform !== "all" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlatform("all");
+                      setPage(1);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-colors"
+                  >
+                    <Globe className="w-3 h-3 text-slate-500" />
+                    <span>Clear Platform ({platform})</span>
+                  </button>
+                )}
+
+                {statusFilter !== "all" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter("all");
+                      setPage(1);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-colors"
+                  >
+                    <SlidersHorizontal className="w-3 h-3 text-slate-500" />
+                    <span>Reset Scrape Status</span>
+                  </button>
+                )}
+
+                {discoveryFilter !== "all" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDiscoveryFilter("all");
+                      setDiscoveryFrom("");
+                      setDiscoveryTo("");
+                      setPage(1);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-colors"
+                  >
+                    <Calendar className="w-3 h-3 text-slate-500" />
+                    <span>Reset Discovery Date</span>
+                  </button>
+                )}
+
+                {smartPreset !== "all" && smartPreset !== "favorites" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSmartPreset("all");
+                      setPage(1);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 font-semibold text-xs hover:bg-purple-100 dark:hover:bg-purple-900/60 cursor-pointer transition-colors"
+                  >
+                    <Sparkles className="w-3 h-3 text-purple-500" />
+                    <span>Switch to All Products</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 pt-2">
             <button
               onClick={handleResetFilters}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer transition-colors"
             >
-              Reset Filters
+              Reset All Filters
             </button>
             <Link
               href="/spy"
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-sm cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-sm cursor-pointer transition-colors"
             >
               <Eye className="w-3.5 h-3.5" />
               <span>Explore Ad Spy Feed</span>
@@ -1596,6 +1745,7 @@ export default function ProductsPage() {
                   onViewDetails={handleViewDetails}
                   onViewCreatives={handleViewCreatives}
                   onFilterBrand={handleFilterBrand}
+                  isRecentlyViewed={recentlyViewedIds.includes(product.id)}
                 />
               ))}
             </div>
@@ -1611,6 +1761,7 @@ export default function ProductsPage() {
                   onViewDetails={handleViewDetails}
                   onViewCreatives={handleViewCreatives}
                   onFilterBrand={handleFilterBrand}
+                  isRecentlyViewed={recentlyViewedIds.includes(product.id)}
                 />
               ))}
             </div>

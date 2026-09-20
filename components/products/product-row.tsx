@@ -29,6 +29,7 @@ interface ProductRowProps {
   onViewDetails?: (product: ScrapedProduct) => void;
   onViewCreatives?: (product: ScrapedProduct) => void;
   onFilterBrand?: (brandName: string) => void;
+  isRecentlyViewed?: boolean;
 }
 
 export const ProductRow = memo(function ProductRow({
@@ -39,6 +40,7 @@ export const ProductRow = memo(function ProductRow({
   onViewDetails,
   onViewCreatives,
   onFilterBrand,
+  isRecentlyViewed = false,
 }: ProductRowProps) {
   const [imgError, setImgError] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -142,22 +144,46 @@ export const ProductRow = memo(function ProductRow({
           <Star className={`w-3.5 h-3.5 ${isFavorite ? "fill-current" : ""}`} />
         </button>
 
-        {/* Thumbnail */}
-        <div className="relative w-14 h-14 rounded-lg bg-slate-100 dark:bg-slate-950 overflow-hidden shrink-0 border border-slate-200 dark:border-slate-800 flex items-center justify-center">
-          {product.mainImageUrl && !imgError ? (
-            <NextImage
-              src={product.mainImageUrl}
-              alt={product.title || "Product"}
-              fill
-              unoptimized
-              referrerPolicy="no-referrer"
-              className={`object-contain p-1 transition-all duration-300 ${
-                isInactive ? "grayscale contrast-90 group-hover:grayscale-0 group-hover:contrast-100" : ""
-              }`}
-              onError={() => setImgError(true)}
-            />
-          ) : (
-            <ShoppingBag className="w-5 h-5 text-slate-400" />
+        {/* Thumbnail + Ad Creative Mini Overlay */}
+        <div className="relative shrink-0">
+          <div className="relative w-14 h-14 rounded-lg bg-slate-100 dark:bg-slate-950 overflow-hidden border border-slate-200 dark:border-slate-800 flex items-center justify-center">
+            {product.mainImageUrl && !imgError ? (
+              <NextImage
+                src={product.mainImageUrl}
+                alt={product.title || "Product"}
+                fill
+                unoptimized
+                referrerPolicy="no-referrer"
+                className={`object-contain p-1 transition-all duration-300 ${
+                  isInactive ? "grayscale contrast-90 group-hover:grayscale-0 group-hover:contrast-100" : ""
+                }`}
+                onError={() => setImgError(true)}
+              />
+            ) : (
+              <ShoppingBag className="w-5 h-5 text-slate-400" />
+            )}
+          </div>
+
+          {product.topCreativeThumbnail && (
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewCreatives?.(product);
+              }}
+              className="absolute -bottom-1 -right-1 z-10 group/adthumb cursor-pointer"
+              title={`Top ad creative (${product.linkedAdsCount || 1} ads) — click to view ads`}
+            >
+              <div className="relative w-6 h-6 rounded-md overflow-hidden border-2 border-white dark:border-slate-850 shadow-md bg-slate-900 transition-transform duration-150 group-hover/adthumb:scale-140">
+                <NextImage
+                  src={product.topCreativeThumbnail}
+                  alt="Ad Creative"
+                  fill
+                  unoptimized
+                  referrerPolicy="no-referrer"
+                  className="object-cover"
+                />
+              </div>
+            </div>
           )}
         </div>
 
@@ -244,6 +270,15 @@ export const ProductRow = memo(function ProductRow({
                 title={`${supplierCount} Supplier links attached`}
               >
                   📦 {supplierCount} {supplierCount === 1 ? "Supplier" : "Suppliers"}
+              </span>
+            )}
+
+            {isRecentlyViewed && (
+              <span
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                title="You inspected this product during this session"
+              >
+                <Eye className="w-2.5 h-2.5 text-indigo-500" /> Inspected
               </span>
             )}
           </div>
