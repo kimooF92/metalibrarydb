@@ -32,6 +32,7 @@ import {
   CheckCircle2,
   Globe,
   SlidersHorizontal,
+  ChevronDown,
   Star,
   Building2,
   ArrowUp,
@@ -53,6 +54,7 @@ export default function ProductsPage() {
   // Smart preset tab & view mode
   const [smartPreset, setSmartPreset] = useState<SmartPreset>("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 
   // Filters & Pagination
   const [searchInput, setSearchInput] = useState("");
@@ -739,6 +741,26 @@ export default function ProductsPage() {
   const remainingCount = Math.max(0, pagination.total - products.length);
   const hasMore = page < pagination.totalPages;
 
+  // Active secondary filters count
+  const activeFilterCount =
+    (debouncedBrand.trim() ? 1 : 0) +
+    (categoryFilter !== "all" ? 1 : 0) +
+    (platform !== "all" ? 1 : 0) +
+    (statusFilter !== "all" ? 1 : 0) +
+    (discoveryFilter !== "all" ? 1 : 0) +
+    (hideInactive ? 1 : 0);
+
+  const discoveryLabels: Record<string, string> = {
+    today: "Today",
+    yesterday: "Yesterday",
+    last_3d: "Last 3 Days",
+    last_7d: "Last 7 Days",
+    last_14d: "Last 14 Days",
+    last_30d: "Last 30 Days",
+    this_month: "This Month",
+    custom: discoveryFrom && discoveryTo ? `${discoveryFrom} to ${discoveryTo}` : "Custom Date",
+  };
+
   return (
     <div className="space-y-4 pb-12">
       {/* Header */}
@@ -1023,32 +1045,10 @@ export default function ProductsPage() {
         </button>
       </div>
 
-      {/* Brand Active Filter Banner (if brand filter is applied) */}
-      {(brandInput || debouncedBrand) && (
-        <div className="flex items-center justify-between p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-xs">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="flex h-2 w-2 rounded-full bg-indigo-600 animate-pulse shrink-0" />
-            <span className="text-slate-700 dark:text-slate-200 truncate">
-              Showing products advertised by brand: <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{brandInput || debouncedBrand}</strong>
-            </span>
-          </div>
-          <button
-            onClick={() => {
-              setBrandInput("");
-              setDebouncedBrand("");
-              setPage(1);
-            }}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 text-[11px] cursor-pointer shrink-0 transition-colors"
-          >
-            <X className="w-3 h-3" /> Clear Brand Filter
-          </button>
-        </div>
-      )}
-
-      {/* 3. Toolbar Controls (Search, Brand Filter, Platform, Status, Sort, View Switcher) */}
+      {/* 3. Primary Toolbar Row */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 bg-white dark:bg-slate-950/60 rounded-xl border border-slate-200 dark:border-slate-800/80 shadow-xs">
         {/* Search */}
-        <div className="relative w-full sm:w-80">
+        <div className="relative flex-1 max-w-md">
           <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
           <input
             type="text"
@@ -1075,140 +1075,33 @@ export default function ProductsPage() {
           )}
         </div>
 
-        {/* Filters & Sort Controls */}
+        {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2 justify-end">
-          {/* Brand Filter Input */}
-          <div className="relative">
-            <Building2 className="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-500" />
-            <input
-              type="text"
-              value={brandInput}
-              onChange={(e) => {
-                setBrandInput(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Filter by brand..."
-              className="w-36 bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 pl-8 pr-6 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none"
-            />
-            {brandInput && (
-              <button
-                type="button"
-                onClick={() => {
-                  setBrandInput("");
-                  setDebouncedBrand("");
-                  setPage(1);
-                }}
-                className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
-              >
-                <X className="w-3 h-3" />
-              </button>
+          {/* Filters Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setIsFiltersOpen((prev) => !prev)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border cursor-pointer select-none ${
+              isFiltersOpen || activeFilterCount > 0
+                ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800 shadow-xs"
+                : "bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-500" />
+            <span>Filters</span>
+            {activeFilterCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-indigo-600 text-white">
+                {activeFilterCount}
+              </span>
             )}
-          </div>
-
-          {/* Category Filter */}
-          <select
-            value={categoryFilter}
-            onChange={(e) => {
-              setCategoryFilter(e.target.value);
-              setPage(1);
-            }}
-            className="bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-2.5 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
-          >
-            <option value="all">All Categories</option>
-            <option value="Electronics & Tech">📱 Electronics & Tech</option>
-            <option value="Beauty, Health & Care">💄 Beauty & Health</option>
-            <option value="Home, Kitchen & Living">🏠 Home & Kitchen</option>
-            <option value="Fashion & Jewelry">👗 Fashion & Jewelry</option>
-            <option value="Sports, Fitness & Outdoor">⚡ Sports & Fitness</option>
-            <option value="Kids, Baby & Toys">🧸 Kids & Baby</option>
-            <option value="Automotive & Tools">🚗 Automotive & Tools</option>
-            <option value="General & Other">📦 General & Uncategorized</option>
-          </select>
-
-          {/* E-Commerce Platform Filter */}
-          <select
-            value={platform}
-            onChange={(e) => {
-              setPlatform(e.target.value);
-              setPage(1);
-            }}
-            className="bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-2.5 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
-          >
-            <option value="all">All Platforms</option>
-            <option value="shopify">Shopify ({stats.platforms.shopify})</option>
-            <option value="youcan">YouCan ({stats.platforms.youcan})</option>
-            <option value="woocommerce">WooCommerce ({stats.platforms.woocommerce})</option>
-          </select>
-
-          {/* Status Filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setPage(1);
-            }}
-            className="bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-2.5 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
-          >
-            <option value="all">All Scrape Status</option>
-            <option value="success">Scraped Only ({stats.successfulProducts})</option>
-            <option value="pending">Pending / Needs Scrape ({stats.pendingProducts})</option>
-            <option value="failed">Failed Scrape Only</option>
-          </select>
-
-          {/* Discovery Date Filter */}
-          <div className="flex items-center gap-1.5">
-            <select
-              value={discoveryFilter}
-              onChange={(e) => {
-                setDiscoveryFilter(e.target.value);
-                setPage(1);
-              }}
-              className={`text-xs font-semibold rounded-lg border px-2.5 py-1.5 focus:outline-none cursor-pointer transition-colors ${
-                discoveryFilter !== "all"
-                  ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800"
-                  : "bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800"
+            <ChevronDown
+              className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                isFiltersOpen ? "rotate-180" : ""
               }`}
-              title="Filter by discovery date"
-            >
-              <option value="all">📅 All Discovery Dates</option>
-              <option value="today">Today</option>
-              <option value="yesterday">Yesterday</option>
-              <option value="last_3d">Last 3 Days</option>
-              <option value="last_7d">Last 7 Days</option>
-              <option value="last_14d">Last 14 Days</option>
-              <option value="last_30d">Last 30 Days</option>
-              <option value="this_month">This Month</option>
-              <option value="custom">Custom Range...</option>
-            </select>
+            />
+          </button>
 
-            {/* Custom Range Date Pickers */}
-            {discoveryFilter === "custom" && (
-              <div className="inline-flex items-center gap-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-1 text-xs">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">From</span>
-                <input
-                  type="date"
-                  value={discoveryFrom}
-                  onChange={(e) => {
-                    setDiscoveryFrom(e.target.value);
-                    setPage(1);
-                  }}
-                  className="bg-transparent text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer text-xs"
-                />
-                <span className="text-[10px] font-bold text-slate-400 uppercase ml-1">To</span>
-                <input
-                  type="date"
-                  value={discoveryTo}
-                  onChange={(e) => {
-                    setDiscoveryTo(e.target.value);
-                    setPage(1);
-                  }}
-                  className="bg-transparent text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer text-xs"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Sort By */}
+          {/* Quick Sort Dropdown */}
           <select
             value={sortBy}
             onChange={(e) => {
@@ -1257,12 +1150,7 @@ export default function ProductsPage() {
             ) : (
               <>
                 <Eye className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span>Include Inactive</span>
-                {stats.inactiveCount > 0 && (
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold">
-                    {stats.inactiveCount} off-air
-                  </span>
-                )}
+                <span>All Products</span>
               </>
             )}
           </button>
@@ -1273,7 +1161,9 @@ export default function ProductsPage() {
               type="button"
               onClick={() => setViewMode("grid")}
               className={`p-1.5 rounded-md transition-all cursor-pointer ${
-                viewMode === "grid" ? "bg-white dark:bg-slate-800 text-indigo-600 shadow-xs" : "text-slate-500"
+                viewMode === "grid"
+                  ? "bg-white dark:bg-slate-800 text-indigo-600 shadow-xs"
+                  : "text-slate-500"
               }`}
               title="Grid View"
             >
@@ -1283,33 +1173,328 @@ export default function ProductsPage() {
               type="button"
               onClick={() => setViewMode("list")}
               className={`p-1.5 rounded-md transition-all cursor-pointer ${
-                viewMode === "list" ? "bg-white dark:bg-slate-800 text-indigo-600 shadow-xs" : "text-slate-500"
+                viewMode === "list"
+                  ? "bg-white dark:bg-slate-800 text-indigo-600 shadow-xs"
+                  : "text-slate-500"
               }`}
               title="Dense List View"
             >
               <LayoutList className="w-3.5 h-3.5" />
             </button>
           </div>
-
-          {/* Reset Filters */}
-          {(searchInput !== "" ||
-            brandInput !== "" ||
-            platform !== "all" ||
-            statusFilter !== "all" ||
-            smartPreset !== "all" ||
-            discoveryFilter !== "all" ||
-            sortBy !== "latest" ||
-            hideInactive) && (
-            <button
-              onClick={handleResetFilters}
-              className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
-            >
-              <X className="w-3 h-3" />
-              <span>Reset</span>
-            </button>
-          )}
         </div>
       </div>
+
+      {/* Collapsible Filter Drawer */}
+      {isFiltersOpen && (
+        <div className="p-4 bg-white dark:bg-slate-950/70 rounded-xl border border-slate-200 dark:border-slate-800/90 shadow-sm space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 dark:border-slate-800/80">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="w-4 h-4 text-indigo-500" />
+              <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                Refine Product Catalog
+              </span>
+              {activeFilterCount > 0 && (
+                <span className="text-[11px] text-slate-500 font-medium">
+                  ({activeFilterCount} active)
+                </span>
+              )}
+            </div>
+            {activeFilterCount > 0 && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+              >
+                Reset All Filters
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            {/* Brand Filter Input */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                Brand Name or Page ID
+              </label>
+              <div className="relative">
+                <Building2 className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
+                <input
+                  type="text"
+                  value={brandInput}
+                  onChange={(e) => {
+                    setBrandInput(e.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="e.g. Nike, Apple..."
+                  className="w-full bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 pl-8 pr-7 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500"
+                />
+                {brandInput && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBrandInput("");
+                      setDebouncedBrand("");
+                      setPage(1);
+                    }}
+                    className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Category Filter */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                Niche & Category
+              </label>
+              <select
+                value={categoryFilter}
+                onChange={(e) => {
+                  setCategoryFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-3 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 cursor-pointer"
+              >
+                <option value="all">All Categories</option>
+                <option value="Electronics & Tech">📱 Electronics & Tech</option>
+                <option value="Beauty, Health & Care">💄 Beauty & Health</option>
+                <option value="Home, Kitchen & Living">🏠 Home & Kitchen</option>
+                <option value="Fashion & Jewelry">👗 Fashion & Jewelry</option>
+                <option value="Sports, Fitness & Outdoor">⚡ Sports & Fitness</option>
+                <option value="Kids, Baby & Toys">🧸 Kids & Baby</option>
+                <option value="Automotive & Tools">🚗 Automotive & Tools</option>
+                <option value="General & Other">📦 General & Uncategorized</option>
+              </select>
+            </div>
+
+            {/* E-Commerce Platform Filter */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                E-Commerce Platform
+              </label>
+              <select
+                value={platform}
+                onChange={(e) => {
+                  setPlatform(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-3 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 cursor-pointer"
+              >
+                <option value="all">All Platforms</option>
+                <option value="shopify">Shopify ({stats.platforms.shopify})</option>
+                <option value="youcan">YouCan ({stats.platforms.youcan})</option>
+                <option value="woocommerce">WooCommerce ({stats.platforms.woocommerce})</option>
+              </select>
+            </div>
+
+            {/* Scrape Status Filter */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                Scraping Status
+              </label>
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-3 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 cursor-pointer"
+              >
+                <option value="all">All Scrape Status</option>
+                <option value="success">Scraped Only ({stats.successfulProducts})</option>
+                <option value="pending">Pending / Needs Scrape ({stats.pendingProducts})</option>
+                <option value="failed">Failed Scrape Only</option>
+              </select>
+            </div>
+
+            {/* Discovery Date Filter & Custom Range */}
+            <div className="space-y-1 sm:col-span-2 md:col-span-4 pt-1">
+              <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                Discovery Date
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={discoveryFilter}
+                  onChange={(e) => {
+                    setDiscoveryFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  className={`text-xs font-semibold rounded-lg border px-3 py-2 focus:outline-none cursor-pointer transition-colors ${
+                    discoveryFilter !== "all"
+                      ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800"
+                      : "bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800"
+                  }`}
+                >
+                  <option value="all">📅 All Discovery Dates</option>
+                  <option value="today">Today</option>
+                  <option value="yesterday">Yesterday</option>
+                  <option value="last_3d">Last 3 Days</option>
+                  <option value="last_7d">Last 7 Days</option>
+                  <option value="last_14d">Last 14 Days</option>
+                  <option value="last_30d">Last 30 Days</option>
+                  <option value="this_month">This Month</option>
+                  <option value="custom">Custom Date Range...</option>
+                </select>
+
+                {discoveryFilter === "custom" && (
+                  <div className="inline-flex items-center gap-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">From</span>
+                    <input
+                      type="date"
+                      value={discoveryFrom}
+                      onChange={(e) => {
+                        setDiscoveryFrom(e.target.value);
+                        setPage(1);
+                      }}
+                      className="bg-transparent text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer text-xs"
+                    />
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">To</span>
+                    <input
+                      type="date"
+                      value={discoveryTo}
+                      onChange={(e) => {
+                        setDiscoveryTo(e.target.value);
+                        setPage(1);
+                      }}
+                      className="bg-transparent text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer text-xs"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Active Filter Chips Bar */}
+      {activeFilterCount > 0 && (
+        <div className="flex items-center gap-2 flex-wrap text-xs pt-1 pb-1">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mr-1">
+            Active Filters ({activeFilterCount}):
+          </span>
+
+          {debouncedBrand.trim() && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-semibold text-[11px]">
+              <Building2 className="w-3 h-3 text-indigo-500 shrink-0" />
+              <span>Brand: <strong>{debouncedBrand}</strong></span>
+              <button
+                type="button"
+                onClick={() => {
+                  setBrandInput("");
+                  setDebouncedBrand("");
+                  setPage(1);
+                }}
+                className="hover:text-indigo-950 dark:hover:text-white ml-0.5 p-0.5 cursor-pointer rounded-full transition-colors"
+                title="Remove brand filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+
+          {categoryFilter !== "all" && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-semibold text-[11px]">
+              <Tag className="w-3 h-3 text-indigo-500 shrink-0" />
+              <span>Category: <strong>{categoryFilter}</strong></span>
+              <button
+                type="button"
+                onClick={() => {
+                  setCategoryFilter("all");
+                  setPage(1);
+                }}
+                className="hover:text-indigo-950 dark:hover:text-white ml-0.5 p-0.5 cursor-pointer rounded-full transition-colors"
+                title="Remove category filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+
+          {platform !== "all" && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-semibold text-[11px]">
+              <Globe className="w-3 h-3 text-indigo-500 shrink-0" />
+              <span>Platform: <strong className="capitalize">{platform}</strong></span>
+              <button
+                type="button"
+                onClick={() => {
+                  setPlatform("all");
+                  setPage(1);
+                }}
+                className="hover:text-indigo-950 dark:hover:text-white ml-0.5 p-0.5 cursor-pointer rounded-full transition-colors"
+                title="Remove platform filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+
+          {statusFilter !== "all" && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-semibold text-[11px]">
+              <span>Status: <strong className="capitalize">{statusFilter}</strong></span>
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusFilter("all");
+                  setPage(1);
+                }}
+                className="hover:text-indigo-950 dark:hover:text-white ml-0.5 p-0.5 cursor-pointer rounded-full transition-colors"
+                title="Remove status filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+
+          {discoveryFilter !== "all" && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-semibold text-[11px]">
+              <Calendar className="w-3 h-3 text-indigo-500 shrink-0" />
+              <span>Discovery: <strong>{discoveryLabels[discoveryFilter] || discoveryFilter}</strong></span>
+              <button
+                type="button"
+                onClick={() => {
+                  setDiscoveryFilter("all");
+                  setDiscoveryFrom("");
+                  setDiscoveryTo("");
+                  setPage(1);
+                }}
+                className="hover:text-indigo-950 dark:hover:text-white ml-0.5 p-0.5 cursor-pointer rounded-full transition-colors"
+                title="Remove discovery date filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+
+          {hideInactive && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-semibold text-[11px]">
+              <EyeOff className="w-3 h-3 text-emerald-500 shrink-0" />
+              <span>Active Ads Only</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setHideInactive(false);
+                  setPage(1);
+                }}
+                className="hover:text-emerald-950 dark:hover:text-white ml-0.5 p-0.5 cursor-pointer rounded-full transition-colors"
+                title="Show all products including inactive"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={handleResetFilters}
+            className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-red-600 dark:hover:text-red-400 px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+          >
+            <X className="w-3 h-3" /> Clear all
+          </button>
+        </div>
+      )}
 
       {/* 4. Products Display Area */}
       {loading && products.length === 0 ? (
