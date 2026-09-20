@@ -726,6 +726,23 @@ export default function ProductsPage() {
     }
   }, []);
 
+  // Modal sequential navigation
+  const currentProductIndex = selectedProduct
+    ? products.findIndex((p) => p.id === selectedProduct.id)
+    : -1;
+
+  const handleNavigatePrev = useCallback(() => {
+    if (currentProductIndex > 0) {
+      handleViewDetails(products[currentProductIndex - 1]);
+    }
+  }, [currentProductIndex, products, handleViewDetails]);
+
+  const handleNavigateNext = useCallback(() => {
+    if (currentProductIndex >= 0 && currentProductIndex < products.length - 1) {
+      handleViewDetails(products[currentProductIndex + 1]);
+    }
+  }, [currentProductIndex, products, handleViewDetails]);
+
   const handleViewCreatives = useCallback((product: ScrapedProduct) => {
     if (product.brandPageId) {
       router.push(`/spy/brand/${encodeURIComponent(product.brandPageId)}?tab=creatives`);
@@ -1878,6 +1895,12 @@ export default function ProductsPage() {
         onRefresh={handleRefresh}
         onDelete={handleDelete}
         onProductUpdate={handleProductUpdate}
+        currentIndex={currentProductIndex}
+        totalCount={products.length}
+        hasPrev={currentProductIndex > 0}
+        hasNext={currentProductIndex >= 0 && currentProductIndex < products.length - 1}
+        onNavigatePrev={handleNavigatePrev}
+        onNavigateNext={handleNavigateNext}
       />
     </div>
   );

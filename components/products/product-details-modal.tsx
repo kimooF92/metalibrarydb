@@ -28,6 +28,8 @@ import {
   Bot,
   FileText,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Phone,
   MessageCircle,
   Building2,
@@ -90,6 +92,12 @@ interface ProductDetailsModalProps {
   onRefresh?: (productId: string, product?: ScrapedProduct) => Promise<void>;
   onDelete?: (productId: string) => Promise<void>;
   onProductUpdate?: (updatedProduct: ScrapedProduct) => void;
+  currentIndex?: number;
+  totalCount?: number;
+  hasPrev?: boolean;
+  hasNext?: boolean;
+  onNavigatePrev?: () => void;
+  onNavigateNext?: () => void;
 }
 
 export function ProductDetailsModal({
@@ -99,11 +107,20 @@ export function ProductDetailsModal({
   onRefresh,
   onDelete,
   onProductUpdate,
+  currentIndex = -1,
+  totalCount = 0,
+  hasPrev = false,
+  hasNext = false,
+  onNavigatePrev,
+  onNavigateNext,
 }: ProductDetailsModalProps) {
   const { showToast } = useToast();
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [linkedAds, setLinkedAds] = useState<Ad[]>([]);
   const [loadingAds, setLoadingAds] = useState(false);
+  const [adFilter, setAdFilter] = useState<"all" | "active" | "stopped" | "video" | "image">("all");
+  const [lightboxAd, setLightboxAd] = useState<Ad | null>(null);
+  const adGalleryRef = useRef<HTMLDivElement>(null);
   const [network, setNetwork] = useState<any>(null);
   const [loadingNetwork, setLoadingNetwork] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -328,6 +345,67 @@ export function ProductDetailsModal({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Keyboard navigation for ← and →
+  useEffect(() => {
+    if (!isOpen) return;
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (isEditMode) return;
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.key === "ArrowLeft") {
+        if (hasPrev && onNavigatePrev) {
+          e.preventDefault();
+          onNavigatePrev();
+        }
+      } else if (e.key === "ArrowRight") {
+        if (hasNext && onNavigateNext) {
+          e.preventDefault();
+          onNavigateNext();
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, isEditMode, hasPrev, hasNext, onNavigatePrev, onNavigateNext]);
+
+  const handleCopyAdCopy = async (ad: Ad, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const text = ad.caption || ad.title;
+    if (!text) {
+      showToast({
+        type: "info",
+        title: "No Ad Copy",
+        message: "This ad creative has no extractable text caption.",
+      });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast({
+        type: "success",
+        title: "Ad Copy Copied!",
+        message: "Headline & caption copied to clipboard.",
+      });
+    } catch {
+      showToast({
+        type: "error",
+        title: "Copy Failed",
+        message: "Could not access clipboard.",
+      });
+    }
+  };
+
   useEffect(() => {
     if (product) {
       setSelectedImage(product.mainImageUrl || null);
@@ -335,6 +413,8 @@ export function ProductDetailsModal({
       setNewSupplierInput("");
       setCopiedSupplierIndex(null);
       setIsEditMode(false);
+      setAdFilter("all");
+      setLightboxAd(null);
       setEditForm({
         title: product.title || "",
         url: product.url || "",
@@ -659,6 +739,28 @@ ${imagesText}`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
+      {/* Floating Desktop Side Navigation Chevrons */}
+      {hasPrev && (
+        <button
+          type="button"
+          onClick={onNavigatePrev}
+          className="hidden xl:flex fixed left-4 top-1/2 -translate-y-1/2 z-50 w-11 h-11 rounded-full bg-slate-900/90 text-white hover:bg-indigo-600 border border-white/20 shadow-2xl items-center justify-center transition-all cursor-pointer hover:scale-110"
+          title="Previous Product (Arrow Left ←)"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+      )}
+      {hasNext && (
+        <button
+          type="button"
+          onClick={onNavigateNext}
+          className="hidden xl:flex fixed right-4 top-1/2 -translate-y-1/2 z-50 w-11 h-11 rounded-full bg-slate-900/90 text-white hover:bg-indigo-600 border border-white/20 shadow-2xl items-center justify-center transition-all cursor-pointer hover:scale-110"
+          title="Next Product (Arrow Right →)"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
+      )}
+
       <div
         className="relative w-full max-w-4xl max-h-[90vh] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
@@ -718,6 +820,19 @@ ${imagesText}`;
                         ⚫ Inactive / Off-Air
                       </span>
                     )}
+
+                    {linkedAds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => adGalleryRef.current?.scrollIntoView({ behavior: "smooth" })}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/80 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 cursor-pointer transition-colors"
+                        title="Jump directly to Linked Ad Creatives"
+                      >
+                        <Sparkles className="w-2.5 h-2.5" />
+                        <span>{linkedAds.length} Ad {linkedAds.length === 1 ? "Creative" : "Creatives"}</span>
+                        <ChevronDown className="w-2.5 h-2.5" />
+                      </button>
+                    )}
                   </div>
                 </>
               )}
@@ -752,6 +867,36 @@ ${imagesText}`;
               </>
             ) : (
               <>
+                {/* Sequential Product Navigation Indicator & Controls */}
+                {totalCount > 1 && currentIndex >= 0 && (
+                  <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800/90 rounded-lg p-0.5 border border-slate-200 dark:border-slate-700/80 shrink-0 mr-1">
+                    <button
+                      type="button"
+                      onClick={onNavigatePrev}
+                      disabled={!hasPrev}
+                      className="p-1 rounded-md text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer transition-colors"
+                      title="Previous Product (Arrow Left ←)"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <span
+                      className="text-[10px] font-bold text-slate-600 dark:text-slate-300 px-1.5 select-none whitespace-nowrap"
+                      title="Use ← and → arrow keys to browse products"
+                    >
+                      {currentIndex + 1} / {totalCount}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={onNavigateNext}
+                      disabled={!hasNext}
+                      className="p-1 rounded-md text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer transition-colors"
+                      title="Next Product (Arrow Right →)"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
                 {/* Edit Icon-only Button */}
                 <button
                   type="button"
@@ -1806,31 +1951,44 @@ ${imagesText}`;
           </div>
 
           {/* Linked Creatives Section */}
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+          <div ref={adGalleryRef} className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
             {(() => {
               const activeLinkedAds = linkedAds.filter((a: any) => !a.isArchived && a.isActive !== false);
               const inactiveLinkedAds = linkedAds.filter((a: any) => a.isArchived || a.isActive === false);
+              const videoLinkedAds = linkedAds.filter((a: any) => a.mediaType === "video");
+              const imageLinkedAds = linkedAds.filter((a: any) => a.mediaType === "image" || a.mediaType === "carousel");
               const isAllInactive = linkedAds.length > 0 && activeLinkedAds.length === 0;
+
+              const displayAds = linkedAds.filter((a: any) => {
+                const isAdArchived = Boolean(a.isArchived || a.isActive === false);
+                if (adFilter === "active") return !isAdArchived;
+                if (adFilter === "stopped") return isAdArchived;
+                if (adFilter === "video") return a.mediaType === "video";
+                if (adFilter === "image") return a.mediaType === "image" || a.mediaType === "carousel";
+                return true;
+              });
+
+              const getAdDuration = (ad: any) => {
+                const dateStr = ad.startedRunningOn || ad.firstSeenAt;
+                if (!dateStr) return null;
+                const d = new Date(dateStr);
+                if (isNaN(d.getTime())) return null;
+                const days = Math.max(1, Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24)));
+                return `${days}d`;
+              };
 
               return (
                 <>
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-indigo-500" />
                       <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                        Linked Ad Creatives ({linkedAds.length})
+                        Linked Ad Creatives Gallery ({linkedAds.length})
                       </h4>
-                      {linkedAds.length > 0 && (
-                        <div className="flex items-center gap-1.5 text-xs">
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20">
-                            {activeLinkedAds.length} Active
-                          </span>
-                          {inactiveLinkedAds.length > 0 && (
-                            <span className="px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 font-semibold border border-rose-500/20">
-                              {inactiveLinkedAds.length} Stopped
-                            </span>
-                          )}
-                        </div>
+                      {activeLinkedAds.length >= 3 && (
+                        <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[11px] font-bold border border-amber-500/20">
+                          🔥 Scaled Winner
+                        </span>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
@@ -1842,15 +2000,77 @@ ${imagesText}`;
                         title="Marks all linked ads as Pending so the next worker or GitHub Action scans them"
                       >
                         <RotateCw className={`w-3.5 h-3.5 ${isQueueingVerify ? "animate-spin" : ""}`} />
-                        <span>{isQueueingVerify ? "Queueing..." : "Scan All Linked Ads"}</span>
+                        <span>{isQueueingVerify ? "Queueing..." : "Scan All Ads"}</span>
                       </button>
-                      {activeLinkedAds.length >= 3 && (
-                        <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-bold border border-amber-500/20">
-                          High Scaling Winner
-                        </span>
-                      )}
                     </div>
                   </div>
+
+                  {/* Filter Pills */}
+                  {linkedAds.length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap pb-1">
+                      <button
+                        type="button"
+                        onClick={() => setAdFilter("all")}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          adFilter === "all"
+                            ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs"
+                            : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+                        }`}
+                      >
+                        All ({linkedAds.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAdFilter("active")}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          adFilter === "active"
+                            ? "bg-emerald-600 text-white shadow-xs"
+                            : "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60"
+                        }`}
+                      >
+                        Active ({activeLinkedAds.length})
+                      </button>
+                      {inactiveLinkedAds.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setAdFilter("stopped")}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            adFilter === "stopped"
+                              ? "bg-rose-600 text-white shadow-xs"
+                              : "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60"
+                          }`}
+                        >
+                          Stopped ({inactiveLinkedAds.length})
+                        </button>
+                      )}
+                      {videoLinkedAds.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setAdFilter("video")}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            adFilter === "video"
+                              ? "bg-indigo-600 text-white shadow-xs"
+                              : "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/60"
+                          }`}
+                        >
+                          🎬 Videos ({videoLinkedAds.length})
+                        </button>
+                      )}
+                      {imageLinkedAds.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setAdFilter("image")}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            adFilter === "image"
+                              ? "bg-purple-600 text-white shadow-xs"
+                              : "bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/60"
+                          }`}
+                        >
+                          🖼️ Images ({imageLinkedAds.length})
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   {isAllInactive && (
                     <div className="mb-3 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs font-medium flex items-center gap-2">
@@ -1890,16 +2110,19 @@ ${imagesText}`;
                     <div className="py-8 text-center text-xs text-slate-400">
                       Loading linked creatives...
                     </div>
-                  ) : linkedAds.length === 0 ? (
+                  ) : displayAds.length === 0 ? (
                     <div className="py-6 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">
-                      No active ad creatives linked yet. Paste a Meta Ad Library URL with <code>id=...</code> above to link one.
+                      {linkedAds.length === 0
+                        ? "No active ad creatives linked yet. Paste a Meta Ad Library URL with id=... above to link one."
+                        : `No ad creatives match the "${adFilter}" filter.`}
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                      {linkedAds.map((ad: any) => {
+                      {displayAds.map((ad: any) => {
                         const isAdArchived = Boolean(ad.isArchived || ad.isActive === false);
                         const thumb = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.[0];
                         const isThisUnlinking = unlinkingAdId === ad.id;
+                        const duration = getAdDuration(ad);
 
                         return (
                           <div
@@ -1910,12 +2133,10 @@ ${imagesText}`;
                                 : "border-slate-200 dark:border-slate-800 hover:border-indigo-500"
                             }`}
                           >
-                            <a
-                              href={`https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&id=${ad.adArchiveId}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="relative aspect-square w-full bg-slate-200 dark:bg-slate-900 flex items-center justify-center"
-                              title={`${ad.title || ad.caption || "Ad Creative"} (${isAdArchived ? "Inactive" : "Active"})`}
+                            <div
+                              onClick={() => setLightboxAd(ad)}
+                              className="relative aspect-square w-full bg-slate-200 dark:bg-slate-900 flex items-center justify-center cursor-pointer overflow-hidden"
+                              title={`${ad.title || ad.caption || "Ad Creative"} (Click to enlarge & view ad copy)`}
                             >
                               {thumb ? (
                                 <NextImage
@@ -1924,13 +2145,27 @@ ${imagesText}`;
                                   fill
                                   unoptimized
                                   referrerPolicy="no-referrer"
-                                  className={`object-cover transition-transform group-hover:scale-105 ${
+                                  className={`object-cover transition-transform group-hover:scale-108 ${
                                     isAdArchived ? "grayscale-[40%]" : ""
                                   }`}
                                 />
                               ) : (
                                 <ImageIcon className="w-6 h-6 text-slate-400" />
                               )}
+
+                              {/* Top-Left: Duration & Duplication Badges */}
+                              <div className="absolute top-1.5 left-1.5 z-10 flex flex-col items-start gap-1">
+                                {duration && (
+                                  <span className="px-1.5 py-0.5 rounded bg-slate-900/85 backdrop-blur-xs text-slate-200 text-[9px] font-bold border border-slate-700/80 shadow-xs">
+                                    ⏳ {duration}
+                                  </span>
+                                )}
+                                {ad.duplicationCount && ad.duplicationCount > 1 && (
+                                  <span className="px-1.5 py-0.5 rounded bg-gradient-to-r from-amber-500 to-rose-500 text-white text-[9px] font-black shadow-xs">
+                                    🔥 {ad.duplicationCount}x
+                                  </span>
+                                )}
+                              </div>
 
                               {/* Status Badge */}
                               <div className="absolute top-1.5 right-1.5 z-10">
@@ -1950,16 +2185,32 @@ ${imagesText}`;
                                   <Play className="w-2.5 h-2.5 fill-current ml-0.5" />
                                 </div>
                               )}
-                            </a>
+
+                              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <span className="px-2 py-0.5 rounded-full bg-slate-900/90 text-white text-[9px] font-bold backdrop-blur-xs shadow-md">
+                                  Quick View
+                                </span>
+                              </div>
+                            </div>
 
                             <div className="p-2 truncate text-[10px] font-medium text-slate-600 dark:text-slate-400 flex items-center justify-between">
                               <span className="truncate">{ad.pageName || `Page ${ad.pageId}`}</span>
                               <div className="flex items-center gap-1">
+                                {(ad.caption || ad.title) && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleCopyAdCopy(ad, e)}
+                                    className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-0.5 rounded transition-colors cursor-pointer"
+                                    title="Copy Ad Copywriting / Text"
+                                  >
+                                    <Copy className="w-3 h-3" />
+                                  </button>
+                                )}
                                 <a
                                   href={`https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&id=${ad.adArchiveId}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-slate-400 hover:text-indigo-600"
+                                  className="text-slate-400 hover:text-indigo-600 p-0.5 rounded transition-colors"
                                   title="Open in Meta Ad Library"
                                 >
                                   <ExternalLink className="w-3 h-3" />
@@ -1992,6 +2243,108 @@ ${imagesText}`;
           )}
         </div>
       </div>
+
+      {/* In-Modal Creative Lightbox Preview */}
+      {lightboxAd && (
+        <div
+          className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150"
+          onClick={() => setLightboxAd(null)}
+        >
+          <div
+            className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Lightbox Header */}
+            <div className="px-5 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/60">
+              <div className="flex items-center gap-2 truncate">
+                <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                  {lightboxAd.pageName || "Ad Creative Preview"}
+                </h3>
+                {Boolean(lightboxAd.isArchived || lightboxAd.isActive === false) ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20 shrink-0">
+                    Stopped / Archived
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shrink-0">
+                    Currently Active
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setLightboxAd(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Lightbox Media */}
+            <div className="p-4 overflow-y-auto space-y-4">
+              <div className="relative aspect-video w-full rounded-xl bg-slate-950 overflow-hidden border border-slate-800 flex items-center justify-center">
+                {lightboxAd.signedThumbnailUrl || lightboxAd.thumbnailUrl || lightboxAd.mediaUrls?.[0] ? (
+                  <NextImage
+                    src={lightboxAd.signedThumbnailUrl || lightboxAd.thumbnailUrl || lightboxAd.mediaUrls?.[0]!}
+                    alt="Enlarged ad creative"
+                    fill
+                    unoptimized
+                    referrerPolicy="no-referrer"
+                    className="object-contain"
+                  />
+                ) : (
+                  <ImageIcon className="w-12 h-12 text-slate-600" />
+                )}
+              </div>
+
+              {/* Ad Copy Body */}
+              {(lightboxAd.caption || lightboxAd.title) && (
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      Advertiser Ad Copy & Hooks
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => handleCopyAdCopy(lightboxAd, e)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors cursor-pointer"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>Copy Text</span>
+                    </button>
+                  </div>
+                  {lightboxAd.title && (
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                      {lightboxAd.title}
+                    </h4>
+                  )}
+                  {lightboxAd.caption && (
+                    <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
+                      {lightboxAd.caption}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Actions in Lightbox */}
+              <div className="flex items-center justify-between pt-2">
+                <div className="text-[11px] text-slate-400 font-mono">
+                  Ad ID: {lightboxAd.adArchiveId}
+                </div>
+                <a
+                  href={`https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&id=${lightboxAd.adArchiveId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors shadow-sm"
+                >
+                  <span>View in Meta Ad Library</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
