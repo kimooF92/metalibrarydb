@@ -7,41 +7,20 @@ import { ScrapedProduct } from "@/types";
 import { ProductCard } from "@/components/products/product-card";
 import { ProductRow } from "@/components/products/product-row";
 import { ProductDetailsModal } from "@/components/products/product-details-modal";
+import { ProductsKpiBar } from "@/components/products/products-kpi-bar";
+import type { SmartPreset } from "@/components/products/products-kpi-bar";
+import { ProductsFilterToolbar } from "@/components/products/products-filter-toolbar";
+import { ProductsEmptyState } from "@/components/products/products-empty-state";
 import { resolveProductForRefresh } from "@/lib/product-extraction";
 import { useToast } from "@/components/toast-context";
 import {
   ShoppingBag,
-  Sparkles,
-  Search,
-  Tag,
   RotateCw,
-  Layers,
-  ArrowUpDown,
-  ExternalLink,
-  ChevronLeft,
-  ChevronRight,
-  TrendingUp,
   Eye,
-  EyeOff,
-  X,
-  Flame,
-  Clock,
-  Zap,
-  LayoutGrid,
-  LayoutList,
-  CheckCircle2,
-  Globe,
-  SlidersHorizontal,
-  ChevronDown,
-  Star,
-  Building2,
   ArrowUp,
   Loader2,
-  Rocket,
-  Calendar,
+  CheckCircle2,
 } from "lucide-react";
-
-type SmartPreset = "all" | "breakout" | "most_scaled" | "new_discovered" | "top_lasting" | "with_offers" | "favorites";
 
 export default function ProductsPage() {
   const router = useRouter();
@@ -182,37 +161,21 @@ export default function ProductsPage() {
         setSmartPreset(presetParam as SmartPreset);
       }
       const platformParam = params.get("platform");
-      if (platformParam) {
-        setPlatform(platformParam);
-      }
+      if (platformParam) setPlatform(platformParam);
       const categoryParam = params.get("category");
-      if (categoryParam) {
-        setCategoryFilter(categoryParam);
-      }
+      if (categoryParam) setCategoryFilter(categoryParam);
       const statusParam = params.get("status");
-      if (statusParam) {
-        setStatusFilter(statusParam);
-      }
+      if (statusParam) setStatusFilter(statusParam);
       const sortByParam = params.get("sortBy");
-      if (sortByParam) {
-        setSortBy(sortByParam);
-      }
+      if (sortByParam) setSortBy(sortByParam);
       const hideInactiveParam = params.get("hideInactive");
-      if (hideInactiveParam === "true") {
-        setHideInactive(true);
-      }
+      if (hideInactiveParam === "true") setHideInactive(true);
       const discoveryParam = params.get("discovery");
-      if (discoveryParam) {
-        setDiscoveryFilter(discoveryParam);
-      }
+      if (discoveryParam) setDiscoveryFilter(discoveryParam);
       const discoveryFromParam = params.get("discoveryFrom");
-      if (discoveryFromParam) {
-        setDiscoveryFrom(discoveryFromParam);
-      }
+      if (discoveryFromParam) setDiscoveryFrom(discoveryFromParam);
       const discoveryToParam = params.get("discoveryTo");
-      if (discoveryToParam) {
-        setDiscoveryTo(discoveryToParam);
-      }
+      if (discoveryToParam) setDiscoveryTo(discoveryToParam);
 
       // Check for deep-linked product ID (?id=... or ?productId=...)
       const idParam = params.get("id") || params.get("productId");
@@ -629,22 +592,18 @@ export default function ProductsPage() {
   }, []);
 
   const handleDelete = useCallback(async (productId: string) => {
-    // 1. Find product and original index before removing
     const targetProduct = products.find((p) => p.id === productId);
     const targetIndex = products.findIndex((p) => p.id === productId);
     if (!targetProduct) return;
 
-    // 2. Fast Optimistic removal from UI state (instant response <1ms)
     setProducts((prev) => prev.filter((p) => p.id !== productId));
     setSelectedProduct((prev) => (prev?.id === productId ? null : prev));
     setIsModalOpen((prev) => (selectedProduct?.id === productId ? false : prev));
 
-    // 3. Fire backend delete request in background
-    fetch(`/api/products?id=${productId}`, {
-      method: "DELETE",
-    }).catch((err) => console.error("[Delete API Error]:", err));
+    fetch(`/api/products?id=${productId}`, { method: "DELETE" }).catch((err) =>
+      console.error("[Delete API Error]:", err)
+    );
 
-    // 4. Show sleek Toast with Undo button
     showToast({
       type: "info",
       title: "Product Deleted",
@@ -653,7 +612,6 @@ export default function ProductsPage() {
       action: {
         label: "↩ Undo",
         onClick: async () => {
-          // Instantly restore to state at original index
           setProducts((prev) => {
             if (prev.some((p) => p.id === productId)) return prev;
             const next = [...prev];
@@ -665,7 +623,6 @@ export default function ProductsPage() {
             return next;
           });
 
-          // Call restore API in background with rollback on failure
           try {
             const res = await fetch("/api/products/restore", {
               method: "POST",
@@ -700,7 +657,6 @@ export default function ProductsPage() {
     setSelectedProduct(product);
     setIsModalOpen(true);
 
-    // Track recently inspected product
     setRecentlyViewedIds((prev) => {
       const updated = [product.id, ...prev.filter((id) => id !== product.id)].slice(0, 40);
       try {
@@ -775,6 +731,13 @@ export default function ProductsPage() {
     setAutoLoadCount(0);
   }, []);
 
+  // KPI bar preset handler — also updates sortBy when a default is provided
+  const handleSelectPreset = useCallback((preset: SmartPreset, defaultSort?: string) => {
+    setSmartPreset(preset);
+    if (defaultSort) setSortBy(defaultSort);
+    setPage(1);
+  }, []);
+
   const progressPercent =
     pagination.total > 0 ? Math.min(100, Math.round((products.length / pagination.total) * 100)) : 0;
   const remainingCount = Math.max(0, pagination.total - products.length);
@@ -810,7 +773,7 @@ export default function ProductsPage() {
               <ShoppingBag className="w-4 h-4" />
             </div>
             <h1 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
-              Product Intelligence & Catalog Hub
+              Product Intelligence &amp; Catalog Hub
             </h1>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -842,700 +805,52 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      {/* 1. Executive Analytics KPI Cards (5 Metrics) */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        {/* Total Products */}
-        <div
-          onClick={() => {
-            setSmartPreset("all");
-            setPage(1);
-          }}
-          title="View All Products"
-          className={`p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md select-none ${
-            smartPreset === "all"
-              ? "border-indigo-500/60 ring-2 ring-indigo-500/20 bg-indigo-50/20 dark:bg-indigo-950/20"
-              : "border-slate-200 dark:border-slate-800/80 hover:border-indigo-500/40"
-          }`}
-        >
-          <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
-            <span>Total Products</span>
-            <ShoppingBag className="w-4 h-4 text-indigo-500" />
-          </div>
-          <p className={`text-2xl font-black text-slate-900 dark:text-white mt-1 ${statsLoading ? "animate-pulse opacity-60" : ""}`}>
-            {stats.totalProducts}
-          </p>
-          <span className="text-[11px] text-slate-500 font-medium">
-            {stats.successfulProducts} fully scraped • {stats.pendingProducts} pending
-          </span>
-        </div>
+      {/* 1. KPI Bar */}
+      <ProductsKpiBar
+        stats={stats}
+        statsLoading={statsLoading}
+        smartPreset={smartPreset}
+        onSelectPreset={handleSelectPreset}
+      />
 
-        {/* Starred Favorites */}
-        <div
-          onClick={() => {
-            setSmartPreset("favorites");
-            setPage(1);
-          }}
-          title="Filter by Starred Favorites"
-          className={`p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md select-none ${
-            smartPreset === "favorites"
-              ? "border-amber-500/60 ring-2 ring-amber-500/20 bg-amber-50/20 dark:bg-amber-950/20"
-              : "border-slate-200 dark:border-slate-800/80 hover:border-amber-500/40"
-          }`}
-        >
-          <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
-            <span>⭐ Starred Favorites</span>
-            <Star className="w-4 h-4 text-amber-500 fill-amber-500/20" />
-          </div>
-          <p className={`text-2xl font-black text-amber-600 dark:text-amber-400 mt-1 ${statsLoading ? "animate-pulse opacity-60" : ""}`}>
-            {stats.favoritesCount}
-          </p>
-          <span className="text-[11px] text-slate-500 font-medium">
-            Saved to product watchlist
-          </span>
-        </div>
+      {/* 2. Filter Toolbar (preset pills + primary toolbar + drawer + chips) */}
+      <ProductsFilterToolbar
+        smartPreset={smartPreset}
+        onSelectPreset={handleSelectPreset}
+        searchInput={searchInput}
+        onChangeSearch={(v) => { setSearchInput(v); setPage(1); }}
+        onClearSearch={() => { setSearchInput(""); setDebouncedSearch(""); setPage(1); }}
+        sortBy={sortBy}
+        onChangeSortBy={(v) => { setSortBy(v); setPage(1); }}
+        hideInactive={hideInactive}
+        onToggleHideInactive={() => { setHideInactive((prev) => !prev); setPage(1); }}
+        viewMode={viewMode}
+        onChangeViewMode={setViewMode}
+        isFiltersOpen={isFiltersOpen}
+        onToggleFilters={() => setIsFiltersOpen((prev) => !prev)}
+        brandInput={brandInput}
+        onChangeBrand={(v) => { setBrandInput(v); setPage(1); }}
+        onClearBrand={() => { setBrandInput(""); setDebouncedBrand(""); setPage(1); }}
+        debouncedBrand={debouncedBrand}
+        categoryFilter={categoryFilter}
+        onChangeCategoryFilter={(v) => { setCategoryFilter(v); setPage(1); }}
+        platform={platform}
+        onChangePlatform={(v) => { setPlatform(v); setPage(1); }}
+        statusFilter={statusFilter}
+        onChangeStatusFilter={(v) => { setStatusFilter(v); setPage(1); }}
+        discoveryFilter={discoveryFilter}
+        onChangeDiscoveryFilter={(v) => { setDiscoveryFilter(v); setPage(1); }}
+        discoveryFrom={discoveryFrom}
+        onChangeDiscoveryFrom={(v) => { setDiscoveryFrom(v); setPage(1); }}
+        discoveryTo={discoveryTo}
+        onChangeDiscoveryTo={(v) => { setDiscoveryTo(v); setPage(1); }}
+        onResetFilters={handleResetFilters}
+        activeFilterCount={activeFilterCount}
+        discoveryLabels={discoveryLabels}
+        stats={stats}
+      />
 
-        {/* Fresh Drops (Last 7 Days) */}
-        <div
-          onClick={() => {
-            setSmartPreset("new_discovered");
-            setSortBy("latest");
-            setPage(1);
-          }}
-          title="Filter by Fresh Drops discovered in the last 7 days"
-          className={`p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md select-none ${
-            smartPreset === "new_discovered"
-              ? "border-emerald-500/60 ring-2 ring-emerald-500/20 bg-emerald-50/20 dark:bg-emerald-950/20"
-              : "border-slate-200 dark:border-slate-800/80 hover:border-emerald-500/40"
-          }`}
-        >
-          <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
-            <span>Fresh Drops (7d)</span>
-            <Zap className="w-4 h-4 text-emerald-500" />
-          </div>
-          <p className={`text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1 ${statsLoading ? "animate-pulse opacity-60" : ""}`}>
-            {stats.newThisWeekCount}
-          </p>
-          <span className="text-[11px] text-slate-500 font-medium">
-            Newly discovered this week
-          </span>
-        </div>
-
-        {/* Top Lasting (Evergreen 30d+) */}
-        <div
-          onClick={() => {
-            setSmartPreset("top_lasting");
-            setSortBy("top_lasting");
-            setPage(1);
-          }}
-          title="Filter by Longest Running Evergreen products (30d+)"
-          className={`p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md select-none ${
-            smartPreset === "top_lasting"
-              ? "border-purple-500/60 ring-2 ring-purple-500/20 bg-purple-50/20 dark:bg-purple-950/20"
-              : "border-slate-200 dark:border-slate-800/80 hover:border-purple-500/40"
-          }`}
-        >
-          <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
-            <span>Evergreen (30d+)</span>
-            <Clock className="w-4 h-4 text-purple-500" />
-          </div>
-          <p className={`text-2xl font-black text-purple-600 dark:text-purple-400 mt-1 ${statsLoading ? "animate-pulse opacity-60" : ""}`}>
-            {stats.evergreenCount}
-          </p>
-          <span className="text-[11px] text-slate-500 font-medium">
-            Longest running proven winners
-          </span>
-        </div>
-
-        {/* With Discounts / Bundle Offers */}
-        <div
-          onClick={() => {
-            setSmartPreset("with_offers");
-            setPage(1);
-          }}
-          title="Filter by Products with bundle offers and discounts"
-          className={`p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md select-none col-span-2 sm:col-span-1 ${
-            smartPreset === "with_offers"
-              ? "border-blue-500/60 ring-2 ring-blue-500/20 bg-blue-50/20 dark:bg-blue-950/20"
-              : "border-slate-200 dark:border-slate-800/80 hover:border-blue-500/40"
-          }`}
-        >
-          <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
-            <span>Offers & Bundles</span>
-            <Tag className="w-4 h-4 text-blue-500" />
-          </div>
-          <p className={`text-2xl font-black text-blue-600 dark:text-blue-400 mt-1 ${statsLoading ? "animate-pulse opacity-60" : ""}`}>
-            {stats.withOffersCount}
-          </p>
-          <span className="text-[11px] text-slate-500 font-medium">
-            {stats.totalProducts > 0 ? Math.round((stats.withOffersCount / stats.totalProducts) * 100) : 0}% promotional rate
-          </span>
-        </div>
-      </div>
-
-      {/* 2. Smart Preset Filter Tabs */}
-      <div className="flex items-center gap-2 pt-1 pb-1 flex-wrap">
-        <button
-          onClick={() => {
-            setSmartPreset("all");
-            setPage(1);
-          }}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            smartPreset === "all"
-              ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/25"
-              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800"
-          }`}
-        >
-          <Globe className="w-3.5 h-3.5" />
-          <span>All Products ({stats.totalProducts})</span>
-        </button>
-
-        <button
-          onClick={() => {
-            setSmartPreset("favorites");
-            setPage(1);
-          }}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            smartPreset === "favorites"
-              ? "bg-amber-500 text-slate-950 font-black shadow-sm shadow-amber-500/25"
-              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800"
-          }`}
-        >
-          <Star className={`w-3.5 h-3.5 ${smartPreset === "favorites" ? "fill-current" : "text-amber-500"}`} />
-          <span>⭐ Starred Favorites ({stats.favoritesCount})</span>
-        </button>
-
-        <button
-          onClick={() => {
-            setSmartPreset("breakout");
-            setSortBy("breakout");
-            setPage(1);
-          }}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            smartPreset === "breakout"
-              ? "bg-gradient-to-r from-pink-600 to-rose-600 text-white font-bold shadow-sm shadow-rose-600/25"
-              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800"
-          }`}
-        >
-          <Rocket className="w-3.5 h-3.5 text-pink-400" />
-          <span>🚀 Breakout Winners</span>
-        </button>
-
-        <button
-          onClick={() => {
-            setSmartPreset("most_scaled");
-            setSortBy("most_scaled");
-            setPage(1);
-          }}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            smartPreset === "most_scaled"
-              ? "bg-rose-600 text-white shadow-sm shadow-rose-600/25"
-              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800"
-          }`}
-        >
-          <Flame className="w-3.5 h-3.5 text-rose-400" />
-          <span>🔥 Most Scaled</span>
-        </button>
-
-        <button
-          onClick={() => {
-            setSmartPreset("new_discovered");
-            setSortBy("latest");
-            setPage(1);
-          }}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            smartPreset === "new_discovered"
-              ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/25"
-              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800"
-          }`}
-        >
-          <Zap className="w-3.5 h-3.5 text-emerald-400" />
-          <span>⚡ Newly Discovered ({stats.newThisWeekCount})</span>
-        </button>
-
-        <button
-          onClick={() => {
-            setSmartPreset("top_lasting");
-            setSortBy("top_lasting");
-            setPage(1);
-          }}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            smartPreset === "top_lasting"
-              ? "bg-purple-600 text-white shadow-sm shadow-purple-600/25"
-              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800"
-          }`}
-        >
-          <Clock className="w-3.5 h-3.5 text-purple-400" />
-          <span>⏳ Top Lasting (Evergreen 30d+)</span>
-        </button>
-
-        <button
-          onClick={() => {
-            setSmartPreset("with_offers");
-            setPage(1);
-          }}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            smartPreset === "with_offers"
-              ? "bg-blue-600 text-white shadow-sm shadow-blue-600/25"
-              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800"
-          }`}
-        >
-          <Tag className="w-3.5 h-3.5 text-blue-400" />
-          <span>🏷️ With Offers ({stats.withOffersCount})</span>
-        </button>
-      </div>
-
-      {/* 3. Primary Toolbar Row */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 bg-white dark:bg-slate-950/60 rounded-xl border border-slate-200 dark:border-slate-800/80 shadow-xs">
-        {/* Search */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
-          <input
-            type="text"
-            value={searchInput}
-            onChange={(e) => {
-              setSearchInput(e.target.value);
-              setPage(1);
-            }}
-            placeholder="Search product title, brand, URL, offer..."
-            className="w-full bg-slate-50 dark:bg-slate-900 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 rounded-lg pl-9 pr-8 py-1.5 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 font-medium"
-          />
-          {searchInput && (
-            <button
-              type="button"
-              onClick={() => {
-                setSearchInput("");
-                setDebouncedSearch("");
-                setPage(1);
-              }}
-              className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded-full cursor-pointer transition-colors"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-
-        {/* Action Controls */}
-        <div className="flex flex-wrap items-center gap-2 justify-end">
-          {/* Filters Toggle Button */}
-          <button
-            type="button"
-            onClick={() => setIsFiltersOpen((prev) => !prev)}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border cursor-pointer select-none ${
-              isFiltersOpen || activeFilterCount > 0
-                ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800 shadow-xs"
-                : "bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
-            }`}
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-500" />
-            <span>Filters</span>
-            {activeFilterCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-indigo-600 text-white">
-                {activeFilterCount}
-              </span>
-            )}
-            <ChevronDown
-              className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                isFiltersOpen ? "rotate-180" : ""
-              }`}
-            />
-          </button>
-
-          {/* Quick Sort Dropdown */}
-          <select
-            value={sortBy}
-            onChange={(e) => {
-              setSortBy(e.target.value);
-              setPage(1);
-            }}
-            className="bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-2.5 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
-          >
-            <option value="latest">⚡ Newest Discovered</option>
-            <option value="oldest">🕰️ Oldest Discovered</option>
-            <option value="most_scaled">🔥 Most Scaled (Active Ads)</option>
-            <option value="top_lasting">⏳ Longest Lasting (Evergreen)</option>
-            <option value="price_desc">💰 Price (High to Low)</option>
-            <option value="price_asc">🏷️ Price (Low to High)</option>
-            <option value="title">🔤 Title (A-Z)</option>
-          </select>
-
-          {/* Active / Inactive (Off-Air) Toggle Button */}
-          <button
-            type="button"
-            onClick={() => {
-              setHideInactive((prev) => !prev);
-              setPage(1);
-            }}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border cursor-pointer select-none ${
-              hideInactive
-                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 shadow-xs"
-                : "bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-slate-900 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
-            }`}
-            title={
-              hideInactive
-                ? "Currently hiding inactive (off-air) products. Click to include all products."
-                : "Currently showing all products including off-air. Click to hide inactive products."
-            }
-          >
-            {hideInactive ? (
-              <>
-                <EyeOff className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                <span>Active Only</span>
-                {stats.inactiveCount > 0 && (
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold">
-                    -{stats.inactiveCount}
-                  </span>
-                )}
-              </>
-            ) : (
-              <>
-                <Eye className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span>All Products</span>
-              </>
-            )}
-          </button>
-
-          {/* Grid / List View Toggle */}
-          <div className="flex items-center bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={() => setViewMode("grid")}
-              className={`p-1.5 rounded-md transition-all cursor-pointer ${
-                viewMode === "grid"
-                  ? "bg-white dark:bg-slate-800 text-indigo-600 shadow-xs"
-                  : "text-slate-500"
-              }`}
-              title="Grid View"
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("list")}
-              className={`p-1.5 rounded-md transition-all cursor-pointer ${
-                viewMode === "list"
-                  ? "bg-white dark:bg-slate-800 text-indigo-600 shadow-xs"
-                  : "text-slate-500"
-              }`}
-              title="Dense List View"
-            >
-              <LayoutList className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Collapsible Filter Drawer */}
-      {isFiltersOpen && (
-        <div className="p-4 bg-white dark:bg-slate-950/70 rounded-xl border border-slate-200 dark:border-slate-800/90 shadow-sm space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 dark:border-slate-800/80">
-            <div className="flex items-center gap-2">
-              <SlidersHorizontal className="w-4 h-4 text-indigo-500" />
-              <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                Refine Product Catalog
-              </span>
-              {activeFilterCount > 0 && (
-                <span className="text-[11px] text-slate-500 font-medium">
-                  ({activeFilterCount} active)
-                </span>
-              )}
-            </div>
-            {activeFilterCount > 0 && (
-              <button
-                type="button"
-                onClick={handleResetFilters}
-                className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-              >
-                Reset All Filters
-              </button>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-            {/* Brand Filter Input */}
-            <div className="space-y-1">
-              <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                Brand Name or Page ID
-              </label>
-              <div className="relative">
-                <Building2 className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
-                <input
-                  type="text"
-                  value={brandInput}
-                  onChange={(e) => {
-                    setBrandInput(e.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="e.g. Nike, Apple..."
-                  className="w-full bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 pl-8 pr-7 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500"
-                />
-                {brandInput && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBrandInput("");
-                      setDebouncedBrand("");
-                      setPage(1);
-                    }}
-                    className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Category Filter */}
-            <div className="space-y-1">
-              <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                Niche & Category
-              </label>
-              <select
-                value={categoryFilter}
-                onChange={(e) => {
-                  setCategoryFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-3 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 cursor-pointer"
-              >
-                <option value="all">All Categories</option>
-                <option value="Electronics & Tech">📱 Electronics & Tech</option>
-                <option value="Beauty, Health & Care">💄 Beauty & Health</option>
-                <option value="Home, Kitchen & Living">🏠 Home & Kitchen</option>
-                <option value="Fashion & Jewelry">👗 Fashion & Jewelry</option>
-                <option value="Sports, Fitness & Outdoor">⚡ Sports & Fitness</option>
-                <option value="Kids, Baby & Toys">🧸 Kids & Baby</option>
-                <option value="Automotive & Tools">🚗 Automotive & Tools</option>
-                <option value="General & Other">📦 General & Uncategorized</option>
-              </select>
-            </div>
-
-            {/* E-Commerce Platform Filter */}
-            <div className="space-y-1">
-              <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                E-Commerce Platform
-              </label>
-              <select
-                value={platform}
-                onChange={(e) => {
-                  setPlatform(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-3 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 cursor-pointer"
-              >
-                <option value="all">All Platforms</option>
-                <option value="shopify">Shopify ({stats.platforms.shopify})</option>
-                <option value="youcan">YouCan ({stats.platforms.youcan})</option>
-                <option value="woocommerce">WooCommerce ({stats.platforms.woocommerce})</option>
-              </select>
-            </div>
-
-            {/* Scrape Status Filter */}
-            <div className="space-y-1">
-              <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                Scraping Status
-              </label>
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-3 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 cursor-pointer"
-              >
-                <option value="all">All Scrape Status</option>
-                <option value="success">Scraped Only ({stats.successfulProducts})</option>
-                <option value="pending">Pending / Needs Scrape ({stats.pendingProducts})</option>
-                <option value="failed">Failed Scrape Only</option>
-              </select>
-            </div>
-
-            {/* Discovery Date Filter & Custom Range */}
-            <div className="space-y-1 sm:col-span-2 md:col-span-4 pt-1">
-              <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                Discovery Date
-              </label>
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={discoveryFilter}
-                  onChange={(e) => {
-                    setDiscoveryFilter(e.target.value);
-                    setPage(1);
-                  }}
-                  className={`text-xs font-semibold rounded-lg border px-3 py-2 focus:outline-none cursor-pointer transition-colors ${
-                    discoveryFilter !== "all"
-                      ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800"
-                      : "bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800"
-                  }`}
-                >
-                  <option value="all">📅 All Discovery Dates</option>
-                  <option value="today">Today</option>
-                  <option value="yesterday">Yesterday</option>
-                  <option value="last_3d">Last 3 Days</option>
-                  <option value="last_7d">Last 7 Days</option>
-                  <option value="last_14d">Last 14 Days</option>
-                  <option value="last_30d">Last 30 Days</option>
-                  <option value="this_month">This Month</option>
-                  <option value="custom">Custom Date Range...</option>
-                </select>
-
-                {discoveryFilter === "custom" && (
-                  <div className="inline-flex items-center gap-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">From</span>
-                    <input
-                      type="date"
-                      value={discoveryFrom}
-                      onChange={(e) => {
-                        setDiscoveryFrom(e.target.value);
-                        setPage(1);
-                      }}
-                      className="bg-transparent text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer text-xs"
-                    />
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">To</span>
-                    <input
-                      type="date"
-                      value={discoveryTo}
-                      onChange={(e) => {
-                        setDiscoveryTo(e.target.value);
-                        setPage(1);
-                      }}
-                      className="bg-transparent text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer text-xs"
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Active Filter Chips Bar */}
-      {activeFilterCount > 0 && (
-        <div className="flex items-center gap-2 flex-wrap text-xs pt-1 pb-1">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mr-1">
-            Active Filters ({activeFilterCount}):
-          </span>
-
-          {debouncedBrand.trim() && (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-semibold text-[11px]">
-              <Building2 className="w-3 h-3 text-indigo-500 shrink-0" />
-              <span>Brand: <strong>{debouncedBrand}</strong></span>
-              <button
-                type="button"
-                onClick={() => {
-                  setBrandInput("");
-                  setDebouncedBrand("");
-                  setPage(1);
-                }}
-                className="hover:text-indigo-950 dark:hover:text-white ml-0.5 p-0.5 cursor-pointer rounded-full transition-colors"
-                title="Remove brand filter"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          )}
-
-          {categoryFilter !== "all" && (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-semibold text-[11px]">
-              <Tag className="w-3 h-3 text-indigo-500 shrink-0" />
-              <span>Category: <strong>{categoryFilter}</strong></span>
-              <button
-                type="button"
-                onClick={() => {
-                  setCategoryFilter("all");
-                  setPage(1);
-                }}
-                className="hover:text-indigo-950 dark:hover:text-white ml-0.5 p-0.5 cursor-pointer rounded-full transition-colors"
-                title="Remove category filter"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          )}
-
-          {platform !== "all" && (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-semibold text-[11px]">
-              <Globe className="w-3 h-3 text-indigo-500 shrink-0" />
-              <span>Platform: <strong className="capitalize">{platform}</strong></span>
-              <button
-                type="button"
-                onClick={() => {
-                  setPlatform("all");
-                  setPage(1);
-                }}
-                className="hover:text-indigo-950 dark:hover:text-white ml-0.5 p-0.5 cursor-pointer rounded-full transition-colors"
-                title="Remove platform filter"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          )}
-
-          {statusFilter !== "all" && (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-semibold text-[11px]">
-              <span>Status: <strong className="capitalize">{statusFilter}</strong></span>
-              <button
-                type="button"
-                onClick={() => {
-                  setStatusFilter("all");
-                  setPage(1);
-                }}
-                className="hover:text-indigo-950 dark:hover:text-white ml-0.5 p-0.5 cursor-pointer rounded-full transition-colors"
-                title="Remove status filter"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          )}
-
-          {discoveryFilter !== "all" && (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-semibold text-[11px]">
-              <Calendar className="w-3 h-3 text-indigo-500 shrink-0" />
-              <span>Discovery: <strong>{discoveryLabels[discoveryFilter] || discoveryFilter}</strong></span>
-              <button
-                type="button"
-                onClick={() => {
-                  setDiscoveryFilter("all");
-                  setDiscoveryFrom("");
-                  setDiscoveryTo("");
-                  setPage(1);
-                }}
-                className="hover:text-indigo-950 dark:hover:text-white ml-0.5 p-0.5 cursor-pointer rounded-full transition-colors"
-                title="Remove discovery date filter"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          )}
-
-          {hideInactive && (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-semibold text-[11px]">
-              <EyeOff className="w-3 h-3 text-emerald-500 shrink-0" />
-              <span>Active Ads Only</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setHideInactive(false);
-                  setPage(1);
-                }}
-                className="hover:text-emerald-950 dark:hover:text-white ml-0.5 p-0.5 cursor-pointer rounded-full transition-colors"
-                title="Show all products including inactive"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          )}
-
-          <button
-            type="button"
-            onClick={handleResetFilters}
-            className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-red-600 dark:hover:text-red-400 px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
-          >
-            <X className="w-3 h-3" /> Clear all
-          </button>
-        </div>
-      )}
-
-      {/* 4. Products Display Area */}
+      {/* 3. Products Display Area */}
       {loading && products.length === 0 ? (
         viewMode === "grid" ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -1583,171 +898,25 @@ export default function ProductsPage() {
           </button>
         </div>
       ) : products.length === 0 ? (
-        <div className="py-16 text-center bg-white dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-800/80 p-8 flex flex-col items-center justify-center space-y-4">
-          <div className="w-16 h-16 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-            {smartPreset === "favorites" ? (
-              <Star className="w-8 h-8 text-amber-500" />
-            ) : (
-              <ShoppingBag className="w-8 h-8" />
-            )}
-          </div>
-          <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-              {smartPreset === "favorites"
-                ? "No Starred Favorite Products Yet"
-                : "No Matching Products Found"}
-            </h3>
-            <p className="text-xs text-slate-600 dark:text-slate-400 max-w-sm mt-1">
-              {smartPreset === "favorites"
-                ? "Click the star (⭐) button on any product card to add it to your starred favorites watchlist."
-                : (debouncedSearch.trim() || debouncedBrand.trim() || platform !== "all" || categoryFilter !== "all" || statusFilter !== "all" || hideInactive || smartPreset !== "all" || discoveryFilter !== "all")
-                ? "Your active filters narrowed down results to 0. Use 1-click recovery below or reset all."
-                : "Run ad spy scans to automatically extract, deduplicate, and scrape product landing pages."}
-            </p>
-          </div>
-
-          {/* Contextual 1-Click Targeted Filter Recovery Chips */}
-          {(debouncedSearch.trim() || debouncedBrand.trim() || platform !== "all" || categoryFilter !== "all" || statusFilter !== "all" || hideInactive || (smartPreset !== "all" && smartPreset !== "favorites") || discoveryFilter !== "all") && (
-            <div className="flex flex-col items-center gap-2 max-w-md w-full pt-1">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                1-Click Recovery Options:
-              </span>
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                {debouncedSearch.trim() && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearchInput("");
-                      setDebouncedSearch("");
-                      setPage(1);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-semibold text-xs hover:bg-indigo-100 dark:hover:bg-indigo-900/60 cursor-pointer transition-colors"
-                  >
-                    <Search className="w-3 h-3 text-indigo-500" />
-                    <span>Clear Search &ldquo;{debouncedSearch}&rdquo;</span>
-                  </button>
-                )}
-
-                {debouncedBrand.trim() && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBrandInput("");
-                      setDebouncedBrand("");
-                      setPage(1);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-semibold text-xs hover:bg-indigo-100 dark:hover:bg-indigo-900/60 cursor-pointer transition-colors"
-                  >
-                    <Building2 className="w-3 h-3 text-indigo-500" />
-                    <span>Clear Brand &ldquo;{debouncedBrand}&rdquo;</span>
-                  </button>
-                )}
-
-                {hideInactive && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setHideInactive(false);
-                      setPage(1);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-semibold text-xs hover:bg-emerald-100 dark:hover:bg-emerald-900/60 cursor-pointer transition-colors"
-                  >
-                    <EyeOff className="w-3 h-3 text-emerald-500" />
-                    <span>Include Inactive (Off-Air)</span>
-                  </button>
-                )}
-
-                {categoryFilter !== "all" && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCategoryFilter("all");
-                      setPage(1);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 font-semibold text-xs hover:bg-amber-100 dark:hover:bg-amber-900/60 cursor-pointer transition-colors"
-                  >
-                    <Tag className="w-3 h-3 text-amber-500" />
-                    <span>Clear Category ({categoryFilter})</span>
-                  </button>
-                )}
-
-                {platform !== "all" && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPlatform("all");
-                      setPage(1);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-colors"
-                  >
-                    <Globe className="w-3 h-3 text-slate-500" />
-                    <span>Clear Platform ({platform})</span>
-                  </button>
-                )}
-
-                {statusFilter !== "all" && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStatusFilter("all");
-                      setPage(1);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-colors"
-                  >
-                    <SlidersHorizontal className="w-3 h-3 text-slate-500" />
-                    <span>Reset Scrape Status</span>
-                  </button>
-                )}
-
-                {discoveryFilter !== "all" && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDiscoveryFilter("all");
-                      setDiscoveryFrom("");
-                      setDiscoveryTo("");
-                      setPage(1);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-colors"
-                  >
-                    <Calendar className="w-3 h-3 text-slate-500" />
-                    <span>Reset Discovery Date</span>
-                  </button>
-                )}
-
-                {smartPreset !== "all" && smartPreset !== "favorites" && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSmartPreset("all");
-                      setPage(1);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 font-semibold text-xs hover:bg-purple-100 dark:hover:bg-purple-900/60 cursor-pointer transition-colors"
-                  >
-                    <Sparkles className="w-3 h-3 text-purple-500" />
-                    <span>Switch to All Products</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="flex items-center gap-2 pt-2">
-            <button
-              onClick={handleResetFilters}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer transition-colors"
-            >
-              Reset All Filters
-            </button>
-            <Link
-              href="/spy"
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-sm cursor-pointer transition-colors"
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <span>Explore Ad Spy Feed</span>
-            </Link>
-          </div>
-        </div>
+        <ProductsEmptyState
+          smartPreset={smartPreset}
+          debouncedSearch={debouncedSearch}
+          debouncedBrand={debouncedBrand}
+          platform={platform}
+          categoryFilter={categoryFilter}
+          statusFilter={statusFilter}
+          hideInactive={hideInactive}
+          discoveryFilter={discoveryFilter}
+          onClearSearch={() => { setSearchInput(""); setDebouncedSearch(""); setPage(1); }}
+          onClearBrand={() => { setBrandInput(""); setDebouncedBrand(""); setPage(1); }}
+          onClearPlatform={() => { setPlatform("all"); setPage(1); }}
+          onClearCategory={() => { setCategoryFilter("all"); setPage(1); }}
+          onClearStatus={() => { setStatusFilter("all"); setPage(1); }}
+          onClearDiscovery={() => { setDiscoveryFilter("all"); setDiscoveryFrom(""); setDiscoveryTo(""); setPage(1); }}
+          onClearHideInactive={() => { setHideInactive(false); setPage(1); }}
+          onClearPreset={() => { setSmartPreset("all"); setPage(1); }}
+          onResetAll={handleResetFilters}
+        />
       ) : (
         <>
           {viewMode === "grid" ? (
@@ -1828,16 +997,17 @@ export default function ProductsPage() {
 
           {/* Bottom Discovery Bar with Visual Progress & Hybrid Load More */}
           <div className="flex flex-col items-center justify-center pt-8 pb-8 space-y-3">
-            {/* Visual Progress Counter */}
             <div className="w-full max-w-xs flex flex-col items-center space-y-1.5">
               <div className="flex items-center justify-between w-full text-xs font-semibold text-slate-500 dark:text-slate-400">
                 <span>
-                  Showing <strong className="text-slate-900 dark:text-white font-bold">{products.length}</strong> of{" "}
-                  <strong className="text-slate-900 dark:text-white font-bold">{pagination.total}</strong> products
+                  Showing{" "}
+                  <strong className="text-slate-900 dark:text-white font-bold">{products.length}</strong>{" "}
+                  of{" "}
+                  <strong className="text-slate-900 dark:text-white font-bold">{pagination.total}</strong>{" "}
+                  products
                 </span>
                 <span className="font-bold text-indigo-600 dark:text-indigo-400">{progressPercent}%</span>
               </div>
-              {/* Progress Track */}
               <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full transition-all duration-300"
@@ -1846,7 +1016,6 @@ export default function ProductsPage() {
               </div>
             </div>
 
-            {/* Hybrid "Load More" Action Button if paused or if user prefers clicking */}
             {hasMore ? (
               <button
                 onClick={handleManualLoadMore}
