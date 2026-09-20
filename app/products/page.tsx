@@ -90,6 +90,7 @@ export default function ProductsPage() {
     withOffersCount: 0,
     favoritesCount: 0,
     newThisWeekCount: 0,
+    evergreenCount: 0,
     activeCount: 0,
     inactiveCount: 0,
     platforms: {
@@ -103,9 +104,15 @@ export default function ProductsPage() {
   const [selectedProduct, setSelectedProduct] = useState<ScrapedProduct | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const detailRequestIdRef = useRef(0);
+  const lastStatsFetchedRef = useRef(0);
 
   // Async stats fetcher (cached on backend, does not block product feed)
   const fetchStats = useCallback(async (forceRefresh = false) => {
+    const now = Date.now();
+    if (!forceRefresh && now - lastStatsFetchedRef.current < 45000 && lastStatsFetchedRef.current > 0) {
+      return;
+    }
+    lastStatsFetchedRef.current = now;
     try {
       const res = await fetch(`/api/products/stats${forceRefresh ? "?refresh=true" : ""}`);
       if (res.ok) {
@@ -142,18 +149,39 @@ export default function ProductsPage() {
     return () => clearTimeout(timer);
   }, [brandInput]);
 
-  // Read URL query params on mount (e.g. ?brand=... or ?preset=favorites or ?hideInactive=true or ?id=...)
+  // Read URL query params on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
+      const searchParam = params.get("search");
+      if (searchParam) {
+        setSearchInput(searchParam);
+        setDebouncedSearch(searchParam);
+      }
       const brandParam = params.get("brand");
       if (brandParam) {
         setBrandInput(brandParam);
         setDebouncedBrand(brandParam);
       }
       const presetParam = params.get("preset");
-      if (presetParam === "favorites") {
-        setSmartPreset("favorites");
+      if (presetParam && ["all", "breakout", "most_scaled", "new_discovered", "top_lasting", "with_offers", "favorites"].includes(presetParam)) {
+        setSmartPreset(presetParam as SmartPreset);
+      }
+      const platformParam = params.get("platform");
+      if (platformParam) {
+        setPlatform(platformParam);
+      }
+      const categoryParam = params.get("category");
+      if (categoryParam) {
+        setCategoryFilter(categoryParam);
+      }
+      const statusParam = params.get("status");
+      if (statusParam) {
+        setStatusFilter(statusParam);
+      }
+      const sortByParam = params.get("sortBy");
+      if (sortByParam) {
+        setSortBy(sortByParam);
       }
       const hideInactiveParam = params.get("hideInactive");
       if (hideInactiveParam === "true") {
@@ -237,6 +265,51 @@ export default function ProductsPage() {
       }
     }
   }, [isModalOpen, selectedProduct]);
+
+  // Continuous sync between active filters and URL search params
+  const isFilterHydratedRef = useRef(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!isFilterHydratedRef.current) {
+      isFilterHydratedRef.current = true;
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    const currentId = url.searchParams.get("id") || url.searchParams.get("productId");
+    const newParams = new URLSearchParams();
+
+    if (currentId) newParams.set("id", currentId);
+    if (debouncedSearch.trim()) newParams.set("search", debouncedSearch.trim());
+    if (debouncedBrand.trim()) newParams.set("brand", debouncedBrand.trim());
+    if (smartPreset !== "all") newParams.set("preset", smartPreset);
+    if (platform !== "all") newParams.set("platform", platform);
+    if (categoryFilter !== "all") newParams.set("category", categoryFilter);
+    if (statusFilter !== "all") newParams.set("status", statusFilter);
+    if (sortBy !== "latest") newParams.set("sortBy", sortBy);
+    if (hideInactive) newParams.set("hideInactive", "true");
+    if (discoveryFilter !== "all") newParams.set("discovery", discoveryFilter);
+    if (discoveryFilter === "custom") {
+      if (discoveryFrom) newParams.set("discoveryFrom", discoveryFrom);
+      if (discoveryTo) newParams.set("discoveryTo", discoveryTo);
+    }
+
+    const nextSearch = newParams.toString();
+    const nextUrl = nextSearch ? `${url.pathname}?${nextSearch}` : url.pathname;
+    window.history.replaceState(null, "", nextUrl);
+  }, [
+    debouncedSearch,
+    debouncedBrand,
+    smartPreset,
+    platform,
+    categoryFilter,
+    statusFilter,
+    sortBy,
+    hideInactive,
+    discoveryFilter,
+    discoveryFrom,
+    discoveryTo,
+  ]);
 
   const fetchProducts = useCallback(
     async (targetPage = 1, append = false) => {
@@ -435,7 +508,7 @@ export default function ProductsPage() {
     }
   };
 
-  const handleToggleFavorite = async (productId: string, nextFavorite: boolean) => {
+  const handleToggleFavorite = useCallback(async (productId: string, nextFavorite: boolean) => {
     setProducts((prev) =>
       prev.map((p) => (p.id === productId ? { ...p, isFavorite: nextFavorite } : p))
     );
@@ -464,15 +537,19 @@ export default function ProductsPage() {
       setProducts((prev) =>
         prev.map((p) => (p.id === productId ? { ...p, isFavorite: !nextFavorite } : p))
       );
+      setStats((prev) => ({
+        ...prev,
+        favoritesCount: Math.max(0, prev.favoritesCount + (nextFavorite ? -1 : 1)),
+      }));
       showToast({
         type: "error",
         title: "Favorite Error",
         message: err.message || "Could not update favorite status.",
       });
     }
-  };
+  }, [showToast]);
 
-  const handleRefresh = async (productId: string, productOverride?: ScrapedProduct) => {
+  const handleRefresh = useCallback(async (productId: string, productOverride?: ScrapedProduct) => {
     const prod = resolveProductForRefresh(productId, products, productOverride || selectedProduct);
     if (!prod || !prod.url) {
       showToast({
@@ -495,9 +572,7 @@ export default function ProductsPage() {
         setProducts((prev) =>
           prev.map((p) => (p.id === productId ? { ...p, ...data.product } : p))
         );
-        if (selectedProduct?.id === productId) {
-          setSelectedProduct((prev) => (prev ? { ...prev, ...data.product } : null));
-        }
+        setSelectedProduct((prev) => (prev?.id === productId ? { ...prev, ...data.product } : prev));
         showToast({
           type: "success",
           title: "Product Re-extracted",
@@ -511,22 +586,22 @@ export default function ProductsPage() {
         });
       }
     } catch (err: any) {
-        showToast({
-          type: "error",
-          title: "Network Error",
-          message: err.message || "Failed to refresh product.",
-        });
-      }
-    };
+      showToast({
+        type: "error",
+        title: "Network Error",
+        message: err.message || "Failed to refresh product.",
+      });
+    }
+  }, [products, selectedProduct, showToast]);
 
-    const handleProductUpdate = (updatedProduct: ScrapedProduct) => {
-      setSelectedProduct(updatedProduct);
-      setProducts((prev) =>
-        prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p))
-      );
-    };
+  const handleProductUpdate = useCallback((updatedProduct: ScrapedProduct) => {
+    setSelectedProduct(updatedProduct);
+    setProducts((prev) =>
+      prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p))
+    );
+  }, []);
 
-  const handleCloseDetailsModal = () => {
+  const handleCloseDetailsModal = useCallback(() => {
     setIsModalOpen(false);
     setSelectedProduct(null);
     if (typeof window !== "undefined") {
@@ -537,9 +612,9 @@ export default function ProductsPage() {
         window.history.pushState({}, "", url.toString());
       }
     }
-  };
+  }, []);
 
-  const handleDelete = async (productId: string) => {
+  const handleDelete = useCallback(async (productId: string) => {
     // 1. Find product and original index before removing
     const targetProduct = products.find((p) => p.id === productId);
     const targetIndex = products.findIndex((p) => p.id === productId);
@@ -547,9 +622,8 @@ export default function ProductsPage() {
 
     // 2. Fast Optimistic removal from UI state (instant response <1ms)
     setProducts((prev) => prev.filter((p) => p.id !== productId));
-    if (selectedProduct?.id === productId) {
-      handleCloseDetailsModal();
-    }
+    setSelectedProduct((prev) => (prev?.id === productId ? null : prev));
+    setIsModalOpen((prev) => (selectedProduct?.id === productId ? false : prev));
 
     // 3. Fire backend delete request in background
     fetch(`/api/products?id=${productId}`, {
@@ -577,7 +651,7 @@ export default function ProductsPage() {
             return next;
           });
 
-          // Call restore API in background
+          // Call restore API in background with rollback on failure
           try {
             const res = await fetch("/api/products/restore", {
               method: "POST",
@@ -590,16 +664,24 @@ export default function ProductsPage() {
                 title: "Product Restored",
                 message: `"${targetProduct.title || "Product"}" restored to catalog.`,
               });
+            } else {
+              throw new Error("Failed to restore on server");
             }
           } catch (err) {
             console.error("[Restore Error]:", err);
+            setProducts((prev) => prev.filter((p) => p.id !== productId));
+            showToast({
+              type: "error",
+              title: "Restore Failed",
+              message: "Could not restore product to server.",
+            });
           }
         },
       },
     });
-  };
+  }, [products, selectedProduct?.id, showToast]);
 
-  const handleViewDetails = async (product: ScrapedProduct) => {
+  const handleViewDetails = useCallback(async (product: ScrapedProduct) => {
     const requestId = ++detailRequestIdRef.current;
     setSelectedProduct(product);
     setIsModalOpen(true);
@@ -618,23 +700,23 @@ export default function ProductsPage() {
     } catch {
       // Keep the lean product card available if detail loading fails.
     }
-  };
+  }, []);
 
-  const handleViewCreatives = (product: ScrapedProduct) => {
+  const handleViewCreatives = useCallback((product: ScrapedProduct) => {
     if (product.brandPageId) {
       router.push(`/spy/brand/${encodeURIComponent(product.brandPageId)}?tab=creatives`);
     } else {
       router.push(`/spy?productId=${encodeURIComponent(product.id)}`);
     }
-  };
+  }, [router]);
 
-  const handleFilterBrand = (brandName: string) => {
+  const handleFilterBrand = useCallback((brandName: string) => {
     setBrandInput(brandName);
     setDebouncedBrand(brandName);
     setPage(1);
-  };
+  }, []);
 
-  const handleResetFilters = () => {
+  const handleResetFilters = useCallback(() => {
     setSearchInput("");
     setDebouncedSearch("");
     setBrandInput("");
@@ -650,7 +732,7 @@ export default function ProductsPage() {
     setHideInactive(false);
     setPage(1);
     setAutoLoadCount(0);
-  };
+  }, []);
 
   const progressPercent =
     pagination.total > 0 ? Math.min(100, Math.round((products.length / pagination.total) * 100)) : 0;
@@ -702,7 +784,18 @@ export default function ProductsPage() {
       {/* 1. Executive Analytics KPI Cards (5 Metrics) */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {/* Total Products */}
-        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80 shadow-xs">
+        <div
+          onClick={() => {
+            setSmartPreset("all");
+            setPage(1);
+          }}
+          title="View All Products"
+          className={`p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md select-none ${
+            smartPreset === "all"
+              ? "border-indigo-500/60 ring-2 ring-indigo-500/20 bg-indigo-50/20 dark:bg-indigo-950/20"
+              : "border-slate-200 dark:border-slate-800/80 hover:border-indigo-500/40"
+          }`}
+        >
           <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
             <span>Total Products</span>
             <ShoppingBag className="w-4 h-4 text-indigo-500" />
@@ -721,7 +814,12 @@ export default function ProductsPage() {
             setSmartPreset("favorites");
             setPage(1);
           }}
-          className="p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80 shadow-xs cursor-pointer hover:border-amber-500/40 transition-colors"
+          title="Filter by Starred Favorites"
+          className={`p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md select-none ${
+            smartPreset === "favorites"
+              ? "border-amber-500/60 ring-2 ring-amber-500/20 bg-amber-50/20 dark:bg-amber-950/20"
+              : "border-slate-200 dark:border-slate-800/80 hover:border-amber-500/40"
+          }`}
         >
           <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
             <span>⭐ Starred Favorites</span>
@@ -736,7 +834,19 @@ export default function ProductsPage() {
         </div>
 
         {/* Fresh Drops (Last 7 Days) */}
-        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80 shadow-xs">
+        <div
+          onClick={() => {
+            setSmartPreset("new_discovered");
+            setSortBy("latest");
+            setPage(1);
+          }}
+          title="Filter by Fresh Drops discovered in the last 7 days"
+          className={`p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md select-none ${
+            smartPreset === "new_discovered"
+              ? "border-emerald-500/60 ring-2 ring-emerald-500/20 bg-emerald-50/20 dark:bg-emerald-950/20"
+              : "border-slate-200 dark:border-slate-800/80 hover:border-emerald-500/40"
+          }`}
+        >
           <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
             <span>Fresh Drops (7d)</span>
             <Zap className="w-4 h-4 text-emerald-500" />
@@ -750,13 +860,25 @@ export default function ProductsPage() {
         </div>
 
         {/* Top Lasting (Evergreen 30d+) */}
-        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80 shadow-xs">
+        <div
+          onClick={() => {
+            setSmartPreset("top_lasting");
+            setSortBy("top_lasting");
+            setPage(1);
+          }}
+          title="Filter by Longest Running Evergreen products (30d+)"
+          className={`p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md select-none ${
+            smartPreset === "top_lasting"
+              ? "border-purple-500/60 ring-2 ring-purple-500/20 bg-purple-50/20 dark:bg-purple-950/20"
+              : "border-slate-200 dark:border-slate-800/80 hover:border-purple-500/40"
+          }`}
+        >
           <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
             <span>Evergreen (30d+)</span>
             <Clock className="w-4 h-4 text-purple-500" />
           </div>
-          <p className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">
-            {products.filter((p) => (p.daysRunning || 0) >= 30).length}
+          <p className={`text-2xl font-black text-purple-600 dark:text-purple-400 mt-1 ${statsLoading ? "animate-pulse opacity-60" : ""}`}>
+            {stats.evergreenCount}
           </p>
           <span className="text-[11px] text-slate-500 font-medium">
             Longest running proven winners
@@ -764,7 +886,18 @@ export default function ProductsPage() {
         </div>
 
         {/* With Discounts / Bundle Offers */}
-        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80 shadow-xs col-span-2 sm:col-span-1">
+        <div
+          onClick={() => {
+            setSmartPreset("with_offers");
+            setPage(1);
+          }}
+          title="Filter by Products with bundle offers and discounts"
+          className={`p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md select-none col-span-2 sm:col-span-1 ${
+            smartPreset === "with_offers"
+              ? "border-blue-500/60 ring-2 ring-blue-500/20 bg-blue-50/20 dark:bg-blue-950/20"
+              : "border-slate-200 dark:border-slate-800/80 hover:border-blue-500/40"
+          }`}
+        >
           <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
             <span>Offers & Bundles</span>
             <Tag className="w-4 h-4 text-blue-500" />
@@ -1180,20 +1313,41 @@ export default function ProductsPage() {
 
       {/* 4. Products Display Area */}
       {loading && products.length === 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {[...Array(8)].map((_, i) => (
-            <div
-              key={i}
-              className="aspect-[3/4] bg-white dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-800 animate-pulse p-4 flex flex-col justify-between"
-            >
-              <div className="aspect-square bg-slate-200 dark:bg-slate-800 rounded-lg" />
-              <div className="space-y-2 mt-4">
-                <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-3/4" />
-                <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-1/2" />
+        viewMode === "grid" ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {[...Array(8)].map((_, i) => (
+              <div
+                key={i}
+                className="aspect-[3/4] bg-white dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-800 animate-pulse p-4 flex flex-col justify-between"
+              >
+                <div className="aspect-square bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                <div className="space-y-2 mt-4">
+                  <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-3/4" />
+                  <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-1/2" />
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            {[...Array(6)].map((_, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-4 p-3.5 bg-white dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-800 animate-pulse"
+              >
+                <div className="w-16 h-16 bg-slate-200 dark:bg-slate-800 rounded-lg shrink-0" />
+                <div className="flex-1 space-y-2 min-w-0">
+                  <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-2/3" />
+                  <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-1/3" />
+                </div>
+                <div className="hidden sm:flex items-center gap-3 shrink-0">
+                  <div className="h-5 w-16 bg-slate-200 dark:bg-slate-800 rounded" />
+                  <div className="h-8 w-24 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )
       ) : error ? (
         <div className="py-16 text-center bg-white dark:bg-slate-900/40 rounded-xl border border-red-500/20 p-6">
           <p className="text-sm font-semibold text-red-500 mb-3">{error}</p>
@@ -1282,20 +1436,41 @@ export default function ProductsPage() {
 
           {/* Skeletons while fetching more items */}
           {isFetchingMore && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 pt-2">
-              {[...Array(4)].map((_, i) => (
-                <div
-                  key={`skeleton-${i}`}
-                  className="aspect-[3/4] bg-white dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-800 animate-pulse p-4 flex flex-col justify-between"
-                >
-                  <div className="aspect-square bg-slate-200 dark:bg-slate-800 rounded-lg" />
-                  <div className="space-y-2 mt-4">
-                    <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-3/4" />
-                    <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-1/2" />
+            viewMode === "grid" ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 pt-2">
+                {[...Array(4)].map((_, i) => (
+                  <div
+                    key={`skeleton-${i}`}
+                    className="aspect-[3/4] bg-white dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-800 animate-pulse p-4 flex flex-col justify-between"
+                  >
+                    <div className="aspect-square bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                    <div className="space-y-2 mt-4">
+                      <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-3/4" />
+                      <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-1/2" />
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2.5 pt-2">
+                {[...Array(3)].map((_, i) => (
+                  <div
+                    key={`skeleton-${i}`}
+                    className="flex items-center gap-4 p-3.5 bg-white dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-800 animate-pulse"
+                  >
+                    <div className="w-16 h-16 bg-slate-200 dark:bg-slate-800 rounded-lg shrink-0" />
+                    <div className="flex-1 space-y-2 min-w-0">
+                      <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-2/3" />
+                      <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-1/3" />
+                    </div>
+                    <div className="hidden sm:flex items-center gap-3 shrink-0">
+                      <div className="h-5 w-16 bg-slate-200 dark:bg-slate-800 rounded" />
+                      <div className="h-8 w-24 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
           )}
 
           {/* Bottom Discovery Bar with Visual Progress & Hybrid Load More */}
@@ -1351,7 +1526,8 @@ export default function ProductsPage() {
       {showBackToTop && (
         <button
           onClick={scrollToTop}
-          className="fixed bottom-6 right-6 z-40 p-3 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg hover:shadow-indigo-500/30 transition-all duration-200 animate-in fade-in zoom-in cursor-pointer"
+          aria-label="Scroll Back to Top"
+          className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom,0px))] right-6 z-40 p-3 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg hover:shadow-indigo-500/30 transition-all duration-200 animate-in fade-in zoom-in cursor-pointer"
           title="Scroll Back to Top"
         >
           <ArrowUp className="w-4 h-4" />

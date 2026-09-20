@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, memo } from "react";
 import NextImage from "next/image";
 import Link from "next/link";
 import { ScrapedProduct } from "@/types";
@@ -33,7 +33,7 @@ interface ProductCardProps {
   onFilterBrand?: (brandName: string) => void;
 }
 
-export function ProductCard({
+export const ProductCard = memo(function ProductCard({
   product,
   onRefresh,
   onDelete,
@@ -45,7 +45,7 @@ export function ProductCard({
   const [imgError, setImgError] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isFavorite, setIsFavorite] = useState(Boolean(product.isFavorite));
+  const isFavorite = Boolean(product.isFavorite);
   const [isTogglingFav, setIsTogglingFav] = useState(false);
   const [isQueueingVerify, setIsQueueingVerify] = useState(false);
 
@@ -69,7 +69,6 @@ export function ProductCard({
     e.stopPropagation();
     if (isTogglingFav) return;
     const nextState = !isFavorite;
-    setIsFavorite(nextState);
     setIsTogglingFav(true);
     try {
       if (onToggleFavorite) {
@@ -81,8 +80,6 @@ export function ProductCard({
           body: JSON.stringify({ id: product.id, isFavorite: nextState }),
         });
       }
-    } catch {
-      setIsFavorite(!nextState); // Rollback on error
     } finally {
       setIsTogglingFav(false);
     }
@@ -551,4 +548,4 @@ export function ProductCard({
       </div>
     </div>
   );
-}
+});

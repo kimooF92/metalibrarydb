@@ -17,6 +17,7 @@ interface CachedStats {
     withOffersCount: number;
     favoritesCount: number;
     newThisWeekCount: number;
+    evergreenCount: number;
     activeCount: number;
     inactiveCount: number;
     platforms: {
@@ -58,6 +59,11 @@ export async function GET(req: NextRequest) {
           successful: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} = 'success' THEN 1 END)`.mapWith(Number),
           pending: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} NOT IN ('success', 'deleted', 'ignored') OR ${scrapedProducts.currentPrice} IS NULL THEN 1 END)`.mapWith(Number),
           newThisWeek: sql<number>`COUNT(CASE WHEN ${scrapedProducts.createdAt} >= NOW() - INTERVAL '7 days' THEN 1 END)`.mapWith(Number),
+          evergreenCount: sql<number>`COUNT(CASE WHEN ${scrapedProducts.createdAt} <= NOW() - INTERVAL '30 days' OR EXISTS (
+            SELECT 1 FROM ${ads}
+            WHERE ${ads.productId} = ${scrapedProducts.id}
+            AND COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) <= NOW() - INTERVAL '30 days'
+          ) THEN 1 END)`.mapWith(Number),
           shopifyCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%shopify%' THEN 1 END)`.mapWith(Number),
           youcanCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%youcan%' THEN 1 END)`.mapWith(Number),
           woocommerceCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%woocommerce%' THEN 1 END)`.mapWith(Number),
@@ -87,6 +93,7 @@ export async function GET(req: NextRequest) {
       withOffersCount: Number(baseStats.withOffers) || 0,
       favoritesCount: Number(baseStats.favoritesCount) || 0,
       newThisWeekCount: Number(baseStats.newThisWeek) || 0,
+      evergreenCount: Number(baseStats.evergreenCount) || 0,
       activeCount,
       inactiveCount,
       platforms: {
