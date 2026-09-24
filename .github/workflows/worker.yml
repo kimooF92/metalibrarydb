@@ -62,6 +62,11 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
           APIFY_API_TOKENS: ${{ secrets.APIFY_API_TOKENS }}
+          APIFY_API_TOKEN_1: ${{ secrets.APIFY_API_TOKEN_1 }}
+          APIFY_API_TOKEN_2: ${{ secrets.APIFY_API_TOKEN_2 }}
+          APIFY_API_TOKEN_3: ${{ secrets.APIFY_API_TOKEN_3 }}
+          APIFY_API_TOKEN_4: ${{ secrets.APIFY_API_TOKEN_4 }}
+          APIFY_API_TOKEN_5: ${{ secrets.APIFY_API_TOKEN_5 }}
           B2_APPLICATION_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
           B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
           B2_BUCKET_NAME: ${{ secrets.B2_BUCKET_NAME }}

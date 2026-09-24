@@ -28,19 +28,35 @@ export interface ApifyActorRunResponse {
 }
 
 /**
+ * In-memory set of exhausted token strings for the current process lifetime.
+ * Prevents redundant failing network requests against already-exhausted tokens.
+ */
+export const exhaustedTokens = new Set<string>();
+
+/**
  * Retrieves all configured Apify API tokens from environment variables.
- * Supports APIFY_API_TOKENS (comma separated) or APIFY_API_TOKEN, APIFY_API_TOKEN_1, APIFY_API_TOKEN_2.
+ * Supports APIFY_API_TOKENS (comma separated), APIFY_API_TOKEN,
+ * APIFY_API_TOKEN_1 ... APIFY_API_TOKEN_20, and any dynamic APIFY_API_TOKEN_* keys.
  */
 export function getApifyTokens(): string[] {
   const tokens: string[] = [];
 
-  const rawValues = [
+  const rawValues: (string | undefined)[] = [
     process.env.APIFY_API_TOKENS,
     process.env.APIFY_API_TOKEN,
-    process.env.APIFY_API_TOKEN_1,
-    process.env.APIFY_API_TOKEN_2,
-    process.env.APIFY_API_TOKEN_3,
   ];
+
+  // Support numbered tokens up to 20
+  for (let i = 1; i <= 20; i++) {
+    rawValues.push(process.env[`APIFY_API_TOKEN_${i}`]);
+  }
+
+  // Also include any process.env keys starting with APIFY_API_TOKEN
+  for (const [key, val] of Object.entries(process.env)) {
+    if (key.startsWith("APIFY_API_TOKEN") && val && !rawValues.includes(val)) {
+      rawValues.push(val);
+    }
+  }
 
   for (const raw of rawValues) {
     if (!raw) continue;
@@ -200,9 +216,14 @@ export async function startApifyDeltaScan(params: {
 
   let lastError: string | null = null;
 
+  // Filter out tokens already marked exhausted in this process run, falling back to all tokens if all were flagged
+  const nonExhausted = tokens.filter((t) => !exhaustedTokens.has(t));
+  const candidateTokens = nonExhausted.length > 0 ? nonExhausted : tokens;
+
   // Iterate over available tokens to launch actor run with automatic failover
-  for (let idx = 0; idx < tokens.length; idx++) {
-    const token = tokens[idx];
+  for (let idx = 0; idx < candidateTokens.length; idx++) {
+    const token = candidateTokens[idx];
+    const tokenNum = tokens.indexOf(token) + 1;
     // Each scan submits one URL. The actor requires 512MB per input URL;
     // allocating 1GB for a single URL causes it to return a dataset error.
     const memory = 512;
@@ -210,7 +231,7 @@ export async function startApifyDeltaScan(params: {
     const runUrl = `${APIFY_BASE_URL}/acts/${actorIdPath}/runs?token=${token}&memory=${memory}&timeout=${timeout}`;
 
     try {
-      console.log(`[Apify] Attempting actor launch using Token #${idx + 1} of ${tokens.length}...`);
+      console.log(`[Apify] Attempting actor launch using Token #${tokenNum} of ${tokens.length}...`);
 
       const res = await fetch(runUrl, {
         method: "POST",
@@ -223,23 +244,43 @@ export async function startApifyDeltaScan(params: {
 
       if (!res.ok) {
         const errorText = await res.text();
-        console.warn(`[Apify] Token #${idx + 1} failed (HTTP ${res.status}): ${errorText}`);
+        console.warn(`[Apify] Token #${tokenNum} failed (HTTP ${res.status}): ${errorText}`);
 
-        // If credit limit / payment required (HTTP 402, 403, 429) or invalid token, try next token
-        if (res.status === 402 || res.status === 403 || res.status === 429 || errorText.toLowerCase().includes("limit") || errorText.toLowerCase().includes("credit")) {
-          console.warn(`⚠️ [Apify Failover] Token #${idx + 1} exhausted / limited. Failing over to Token #${idx + 2}...`);
-          lastError = `Token #${idx + 1} HTTP ${res.status}: ${errorText}`;
+        // If credit limit / payment required (HTTP 402, 403, 429) or invalid token, record exhausted & try next token
+        if (
+          res.status === 402 ||
+          res.status === 403 ||
+          res.status === 429 ||
+          errorText.toLowerCase().includes("limit") ||
+          errorText.toLowerCase().includes("credit")
+        ) {
+          exhaustedTokens.add(token);
+          lastError = `Token #${tokenNum} HTTP ${res.status}: ${errorText}`;
+          if (idx + 1 < candidateTokens.length) {
+            const nextTokenNum = tokens.indexOf(candidateTokens[idx + 1]) + 1;
+            console.warn(
+              `⚠️ [Apify Failover] Token #${tokenNum} exhausted / limited. Failing over to Token #${nextTokenNum} of ${tokens.length}...`
+            );
+          } else {
+            console.warn(
+              `⚠️ [Apify Failover] Token #${tokenNum} exhausted / limited. No more failover tokens available (Total configured: ${tokens.length}).`
+            );
+          }
           continue;
         }
 
         lastError = `Apify launch failed (HTTP ${res.status}): ${errorText}`;
+        if (idx + 1 < candidateTokens.length) {
+          const nextTokenNum = tokens.indexOf(candidateTokens[idx + 1]) + 1;
+          console.warn(`⚠️ [Apify Failover] Failing over to Token #${nextTokenNum}...`);
+        }
         continue;
       }
 
       const json = await res.json();
       const runData = json.data;
 
-      console.log(`✅ [Apify Success] Actor run initiated using Token #${idx + 1}! Run ID: ${runData.id}`);
+      console.log(`✅ [Apify Success] Actor run initiated using Token #${tokenNum}! Run ID: ${runData.id}`);
 
       return {
         id: runData.id,
@@ -250,8 +291,12 @@ export async function startApifyDeltaScan(params: {
         usedToken: token.substring(0, 10) + "...",
       };
     } catch (error: any) {
-      console.error(`[Apify] Exception with Token #${idx + 1}:`, error.message || error);
+      console.error(`[Apify] Exception with Token #${tokenNum}:`, error.message || error);
       lastError = error.message || String(error);
+      if (idx + 1 < candidateTokens.length) {
+        const nextTokenNum = tokens.indexOf(candidateTokens[idx + 1]) + 1;
+        console.warn(`⚠️ [Apify Failover] Failing over to Token #${nextTokenNum}...`);
+      }
     }
   }
 
@@ -307,12 +352,16 @@ export async function scrapeSingleAdViaApify(adArchiveId: string): Promise<any |
     "scrapePageAds.sortBy": "most_recent",
   };
 
-  for (let idx = 0; idx < tokens.length; idx++) {
-    const token = tokens[idx];
+  const nonExhausted = tokens.filter((t) => !exhaustedTokens.has(t));
+  const candidateTokens = nonExhausted.length > 0 ? nonExhausted : tokens;
+
+  for (let idx = 0; idx < candidateTokens.length; idx++) {
+    const token = candidateTokens[idx];
+    const tokenNum = tokens.indexOf(token) + 1;
     const runUrl = `${APIFY_BASE_URL}/acts/${actorIdPath}/runs?token=${token}&waitForFinish=30&memory=256&timeout=30`;
 
     try {
-      console.log(`[Apify Single Ad] Refreshing ad ${adArchiveId} using Token #${idx + 1}...`);
+      console.log(`[Apify Single Ad] Refreshing ad ${adArchiveId} using Token #${tokenNum} of ${tokens.length}...`);
       const res = await fetch(runUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -321,7 +370,16 @@ export async function scrapeSingleAdViaApify(adArchiveId: string): Promise<any |
 
       if (!res.ok) {
         const errorText = await res.text();
-        console.warn(`[Apify Single Ad] Token #${idx + 1} failed: ${errorText}`);
+        console.warn(`[Apify Single Ad] Token #${tokenNum} failed: ${errorText}`);
+        if (
+          res.status === 402 ||
+          res.status === 403 ||
+          res.status === 429 ||
+          errorText.toLowerCase().includes("limit") ||
+          errorText.toLowerCase().includes("credit")
+        ) {
+          exhaustedTokens.add(token);
+        }
         continue;
       }
 
@@ -334,7 +392,7 @@ export async function scrapeSingleAdViaApify(adArchiveId: string): Promise<any |
         }
       }
     } catch (err: any) {
-      console.error(`[Apify Single Ad] Error with token #${idx + 1}:`, err.message || err);
+      console.error(`[Apify Single Ad] Error with token #${tokenNum}:`, err.message || err);
     }
   }
 
