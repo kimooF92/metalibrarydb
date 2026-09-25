@@ -286,6 +286,25 @@ export async function extractProductFromUrl(url: string): Promise<{
     };
   }
 
+  // 4. Local Residential Browser Fallback:
+  // If running on desktop/local worker (not Vercel/serverless), attempt to bypass Cloudflare
+  // using the local Playwright browser with residential IP
+  if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    try {
+      const { scrapeUrlWithLocalPlaywright } = await import("./local-browser-scraper");
+      const localResult = await scrapeUrlWithLocalPlaywright(normalized);
+      if (localResult.success && localResult.data) {
+        return {
+          success: true,
+          data: localResult.data,
+          raw: { html: localResult.rawHtml, engine: "local_playwright_browser" },
+        };
+      }
+    } catch (localErr: any) {
+      console.warn(`[Product Scraper] Local browser fallback error for ${normalized}:`, localErr?.message);
+    }
+  }
+
   return {
     success: false,
     error: "Failed to extract product details from landing page using both direct and fallback extractors.",

@@ -20,6 +20,7 @@ import {
   Star,
   Rocket,
   Calendar,
+  Pause,
 } from "lucide-react";
 import { formatDiscoveryDate, formatDiscoveryLabel } from "@/lib/format-date";
 
@@ -146,7 +147,7 @@ export const ProductCard = memo(function ProductCard({
       onClick={() => onViewDetails?.(product)}
       className={`group relative flex flex-col bg-white dark:bg-slate-900/60 rounded-xl border transition-all duration-200 overflow-hidden cursor-pointer ${
         isPageOnHold
-          ? "border-amber-300 dark:border-amber-700/60 bg-amber-500/[0.02] shadow-xs"
+          ? "border-2 border-dashed border-amber-400 dark:border-amber-500/70 bg-amber-50/20 dark:bg-amber-950/15 opacity-90 hover:opacity-100 shadow-xs hover:shadow-md"
           : isInactive
           ? "border-slate-200/80 dark:border-slate-800/80 opacity-80 hover:opacity-100 hover:border-slate-400 dark:hover:border-slate-600 shadow-xs"
           : isBreakout
@@ -164,7 +165,11 @@ export const ProductCard = memo(function ProductCard({
             unoptimized
             referrerPolicy="no-referrer"
             className={`object-contain p-2 transition-all duration-300 group-hover:scale-105 ${
-              isInactive ? "grayscale contrast-90 group-hover:grayscale-0 group-hover:contrast-100" : ""
+              isPageOnHold
+                ? "grayscale-[70%] contrast-90 opacity-85 group-hover:grayscale-0 group-hover:opacity-100 group-hover:contrast-100"
+                : isInactive
+                ? "grayscale contrast-90 group-hover:grayscale-0 group-hover:contrast-100"
+                : ""
             }`}
             onError={() => setImgError(true)}
           />
@@ -177,11 +182,28 @@ export const ProductCard = memo(function ProductCard({
           </div>
         )}
 
-        {/* On Hold / Paused Badge */}
+        {/* On Hold Top Ribbon Banner */}
         {isPageOnHold && (
-          <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500 text-slate-950 text-[10px] font-extrabold shadow-md border border-amber-400 backdrop-blur-xs">
-            <span className="w-1.5 h-1.5 rounded-full bg-slate-950 animate-pulse"></span>
-            <span>⏸️ On Hold (Paused)</span>
+          <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-3 py-1 bg-amber-500 text-slate-950 font-black text-[10px] tracking-wide shadow-md border-b border-amber-400/80">
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-950 animate-pulse" />
+              <span>⏸️ PAUSED (ON HOLD)</span>
+            </div>
+            <span className="text-[9px] font-bold uppercase tracking-wider bg-black/15 px-1.5 py-0.5 rounded">
+              Grace Period
+            </span>
+          </div>
+        )}
+
+        {/* On Hold Center Watermark Icon Overlay */}
+        {isPageOnHold && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/20 backdrop-blur-[0.5px] transition-all duration-200 group-hover:opacity-20">
+            <div className="flex items-center justify-center w-11 h-11 rounded-full bg-amber-500 text-slate-950 shadow-lg border-2 border-amber-300">
+              <Pause className="w-5 h-5 fill-current" />
+            </div>
+            <span className="mt-1.5 text-[10px] font-black uppercase tracking-wider text-amber-300 drop-shadow-md bg-slate-950/85 px-2 py-0.5 rounded-md border border-amber-500/30">
+              Ads Paused
+            </span>
           </div>
         )}
 
@@ -233,7 +255,7 @@ export const ProductCard = memo(function ProductCard({
         )}
 
         {/* Top Right: Favorite Star & Delete Button */}
-        <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1.5">
+        <div className={`absolute right-2.5 z-10 flex items-center gap-1.5 ${isPageOnHold ? "top-7" : "top-2.5"}`}>
           <button
             type="button"
             onClick={handleToggleFavorite}
@@ -360,7 +382,7 @@ export const ProductCard = memo(function ProductCard({
         {/* Product Title */}
         <h3
           className={`text-sm font-bold line-clamp-2 mb-2 leading-snug transition-colors ${
-            isInactive
+            isPageOnHold || isInactive
               ? "text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200"
               : "text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
           }`}
@@ -409,10 +431,10 @@ export const ProductCard = memo(function ProductCard({
 
           {isPageOnHold ? (
             <span
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/80"
               title="Brand account is on pause / hold (under grace period recheck)"
             >
-              ⏸️ Page on Pause
+              ⏸️ Ads Paused (Grace Period)
             </span>
           ) : isPageInactive ? (
             <span
@@ -470,7 +492,7 @@ export const ProductCard = memo(function ProductCard({
             {product.currentPrice ? (
               <span
                 className={`text-base font-extrabold ${
-                  isInactive
+                  isPageOnHold || isInactive
                     ? "text-slate-600 dark:text-slate-400"
                     : "text-indigo-600 dark:text-indigo-400"
                 }`}

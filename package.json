@@ -12,6 +12,7 @@
     "spy:apify": "npx tsx scripts/run-apify-spy-cron.ts",
     "apify:check": "npx tsx scripts/check-apify-tokens.ts",
     "scrape:products": "npx tsx scripts/run-product-scraper.ts",
+    "scrape:browser": "npx tsx scripts/scrape-with-local-browser.ts",
     "categorize:products": "npx tsx scripts/backfill-product-categories.ts",
     "reset-limits": "npx tsx scripts/reset-limits.ts",
     "clean-scans": "npx tsx scripts/clean-orphaned-scans.ts",

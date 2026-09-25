@@ -319,6 +319,15 @@ async function runWorker() {
       if (!nextJob) {
         console.log(`[Queue Empty] All pending jobs completed. Worker idling (${ranJobs} processed).`);
         await emitSessionSummary();
+
+        // Automatic Fallback: rescue any failed/incomplete product scrapings locally via residential IP & browser
+        try {
+          const { rescueFailedProductsBatch } = await import("./product-rescue");
+          await rescueFailedProductsBatch(3);
+        } catch (rescueErr: any) {
+          console.warn("[Local Rescue] Background rescue cycle warning:", rescueErr?.message);
+        }
+
         if (isSingleRun) {
           console.log("[Single Run] Queue is empty. Exiting worker cleanly.");
           process.exit(0);

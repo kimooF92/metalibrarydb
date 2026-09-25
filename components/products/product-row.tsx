@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   Rocket,
   Calendar,
+  Pause,
 } from "lucide-react";
 import { formatDiscoveryDate, formatDiscoveryLabel } from "@/lib/format-date";
 
@@ -126,7 +127,7 @@ export const ProductRow = memo(function ProductRow({
       onClick={() => onViewDetails?.(product)}
       className={`group flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 bg-white dark:bg-slate-900/60 rounded-xl border transition-all duration-150 cursor-pointer ${
         isPageOnHold
-          ? "border-amber-300 dark:border-amber-700/60 bg-amber-500/[0.02] shadow-xs"
+          ? "border-amber-400 dark:border-amber-600/80 bg-amber-50/25 dark:bg-amber-950/20 border-l-4 border-l-amber-500 opacity-90 hover:opacity-100 shadow-xs hover:shadow-md"
           : isInactive
           ? "border-slate-200/60 dark:border-slate-800/60 opacity-80 hover:opacity-100 shadow-xs"
           : isBreakout
@@ -161,12 +162,25 @@ export const ProductRow = memo(function ProductRow({
                 unoptimized
                 referrerPolicy="no-referrer"
                 className={`object-contain p-1 transition-all duration-300 ${
-                  isInactive ? "grayscale contrast-90 group-hover:grayscale-0 group-hover:contrast-100" : ""
+                  isPageOnHold
+                    ? "grayscale-[70%] contrast-90 opacity-85 group-hover:grayscale-0 group-hover:opacity-100"
+                    : isInactive
+                    ? "grayscale contrast-90 group-hover:grayscale-0 group-hover:contrast-100"
+                    : ""
                 }`}
                 onError={() => setImgError(true)}
               />
             ) : (
               <ShoppingBag className="w-5 h-5 text-slate-400" />
+            )}
+
+            {/* On Hold Thumbnail Overlay */}
+            {isPageOnHold && (
+              <div className="absolute inset-0 bg-slate-950/25 backdrop-blur-[0.5px] flex items-center justify-center rounded-lg pointer-events-none group-hover:opacity-20 transition-opacity">
+                <div className="w-6 h-6 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center shadow-md border border-amber-300">
+                  <Pause className="w-3 h-3 fill-current" />
+                </div>
+              </div>
             )}
           </div>
 
@@ -249,8 +263,9 @@ export const ProductRow = memo(function ProductRow({
             )}
 
             {isPageOnHold && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
-                ⏸️ Page on Hold
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-500 text-slate-950 shadow-xs border border-amber-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-950 animate-pulse" />
+                <span>⏸️ On Hold (Paused)</span>
               </span>
             )}
 
@@ -297,7 +312,7 @@ export const ProductRow = memo(function ProductRow({
 
           <h4
             className={`text-xs font-bold truncate transition-colors mt-0.5 ${
-              isInactive
+              isPageOnHold || isInactive
                 ? "text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200"
                 : "text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
             }`}
@@ -327,7 +342,7 @@ export const ProductRow = memo(function ProductRow({
         <div className="text-left sm:text-right">
           <div
             className={`text-sm font-extrabold ${
-              isInactive
+              isPageOnHold || isInactive
                 ? "text-slate-600 dark:text-slate-400"
                 : "text-indigo-600 dark:text-indigo-400"
             }`}
@@ -345,10 +360,10 @@ export const ProductRow = memo(function ProductRow({
         <div className="min-w-[70px] text-center">
           {isPageOnHold ? (
             <span
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/80"
               title="Brand account is on pause / hold (under grace period recheck)"
             >
-              ⏸️ On Pause
+              ⏸️ On Hold
             </span>
           ) : isPageInactive ? (
             <span

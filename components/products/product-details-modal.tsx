@@ -284,6 +284,21 @@ export function ProductDetailsModal({
           onNavigateNext={onNavigateNext}
         />
 
+        {/* On Hold Notification Banner */}
+        {currentProduct?.brandHoldStatus === "on_hold" && (
+          <div className="mx-6 mt-3 px-3.5 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 text-xs text-amber-800 dark:text-amber-300">
+            <div className="flex items-center gap-2">
+              <span className="flex h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+              <span>
+                <strong>Brand on Hold:</strong> Meta Ad Library detected 0 active ads during recent scans. This product is preserved under the grace period before being marked off-air.
+              </span>
+            </div>
+            <span className="shrink-0 text-[10px] font-black uppercase bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30">
+              ⏸️ Paused
+            </span>
+          </div>
+        )}
+
         {/* Segmented Navigation Tab Bar */}
         {!isEditMode && (
           <div className="px-6 pt-3 pb-1 border-b border-slate-200 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-950/20 flex items-center gap-1.5 overflow-x-auto shrink-0">
