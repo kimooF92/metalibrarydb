@@ -213,18 +213,24 @@ export async function extractProductFromUrl(url: string): Promise<{
   }
 
   // 1. Primary: High-speed Direct E-Commerce HTML & JSON-LD Scraper ($0 cost, ~250ms latency)
+  let directResult: any = null;
   try {
-    const directResult = await scrapeProductDirectHtml(normalized);
+    directResult = await scrapeProductDirectHtml(normalized);
     const priceStr = directResult.data?.current_price?.trim() || "";
     const isZeroPrice = /^0(\.0+)?\s*(dt|tnd|usd|eur|dinar)?$/i.test(priceStr) || priceStr === "0";
     const hasValidPrice = Boolean(priceStr && !isZeroPrice);
     const hasValidImage = Boolean(directResult.data?.main_image_url);
 
+    const apiKey = process.env.FIRECRAWL_API_KEY;
+    const canUseFirecrawlRescue = Boolean(apiKey && apiKey.trim() !== "");
+
+    // If direct HTML successfully found a title AND a valid price, return immediately.
+    // If title and image exist but price is missing/zero, only bypass Firecrawl if Firecrawl is not configured.
     if (
       directResult.success &&
       directResult.data &&
       directResult.data.title &&
-      (hasValidPrice || hasValidImage)
+      (hasValidPrice || (!canUseFirecrawlRescue && hasValidImage))
     ) {
       return {
         success: true,
@@ -232,7 +238,7 @@ export async function extractProductFromUrl(url: string): Promise<{
         raw: { html: directResult.rawHtml, engine: "direct_html" },
       };
     }
-    console.log(`[Product Scraper] Direct HTML incomplete or empty SPA shell for ${normalized}. Checking Firecrawl rescue fallback...`);
+    console.log(`[Product Scraper] Direct HTML incomplete or missing price for ${normalized}. Checking Firecrawl rescue fallback...`);
   } catch (directErr: any) {
     console.warn(`[Product Scraper] Direct scraper error for ${normalized}:`, directErr?.message);
   }
@@ -269,6 +275,15 @@ export async function extractProductFromUrl(url: string): Promise<{
     } catch (err: any) {
       console.warn(`[Product Scraper] Firecrawl rescue fallback also failed for ${normalized}:`, err?.message);
     }
+  }
+
+  // 3. Fallback: If Firecrawl could not rescue or failed, return direct HTML best-effort result if available
+  if (directResult?.success && directResult.data && directResult.data.title) {
+    return {
+      success: true,
+      data: directResult.data,
+      raw: { html: directResult.rawHtml, engine: "direct_html_best_effort" },
+    };
   }
 
   return {

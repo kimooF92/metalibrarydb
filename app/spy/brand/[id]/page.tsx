@@ -299,7 +299,12 @@ export default function BrandDeepDivePage({
       const res = await fetch("/api/products/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: prod.url, pageId: data?.brand?.pageId, forceRefresh: true }),
+        body: JSON.stringify({
+          productId: prod.id,
+          url: prod.url,
+          pageId: data?.brand?.pageId || prod.pageId,
+          forceRefresh: true,
+        }),
       });
       const resJson = await res.json();
       if (resJson.success) {

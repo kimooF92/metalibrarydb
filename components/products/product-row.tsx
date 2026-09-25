@@ -420,8 +420,8 @@ export const ProductRow = memo(function ProductRow({
             type="button"
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors cursor-pointer"
-            title="Re-extract Landing Page"
+            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            title={isRefreshing ? "Re-extracting landing page..." : "Re-extract Landing Page"}
           >
             <RotateCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-indigo-500" : ""}`} />
           </button>

@@ -14,6 +14,7 @@ import {
 } from "../lib/network-extractor";
 import { getCleanDomain } from "../lib/utils";
 import { normalizeProductUrl } from "../lib/firecrawl";
+import { isPriceString } from "../lib/html-scraper";
 import { trackedPages, adObservations } from "../db/schema";
 
 interface RunOptions {
@@ -310,7 +311,9 @@ async function runProductScraperBatch() {
           p.scrapeStatus === "pending" ||
           p.scrapeStatus === "failed" ||
           !p.currentPrice ||
-          p.currentPrice === "0 DT")
+          p.currentPrice === "0 DT" ||
+          p.currentPrice === "0" ||
+          (p.title ? isPriceString(p.title) : false))
     );
 
     console.log(`Scraping ${targetProducts.length} product(s) for brand ${resolvedPageId}...\n`);
@@ -368,7 +371,7 @@ async function runProductScraperBatch() {
         .orderBy(desc(scrapedProducts.createdAt))
         .limit(options.limit);
     } else {
-      // Default or "pending": query any item that is pending, failed, or missing price
+      // Default or "pending": query any item that is pending, failed, missing price, or zero price
       targetProducts = await query
         .where(
           and(
@@ -376,7 +379,9 @@ async function runProductScraperBatch() {
             or(
               eq(scrapedProducts.scrapeStatus, "pending"),
               eq(scrapedProducts.scrapeStatus, "failed"),
-              isNull(scrapedProducts.currentPrice)
+              isNull(scrapedProducts.currentPrice),
+              eq(scrapedProducts.currentPrice, "0 DT"),
+              eq(scrapedProducts.currentPrice, "0")
             )
           )
         )

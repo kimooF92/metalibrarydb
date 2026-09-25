@@ -58,6 +58,78 @@ function decodeHtmlEntities(str: string): string {
 }
 
 /**
+ * Detects if a candidate title string is actually just a price badge, currency, or numerical offer
+ * (e.g. "49.000 دت \r\n 68.600 دت", "39 DT", "120.00 TND", "€29.99", etc.)
+ */
+export function isPriceString(str: string): boolean {
+  if (!str) return false;
+  const s = str.trim();
+  // Strip currency tokens, digits, and common pricing punctuation/symbols
+  const withoutPrices = s
+    .replace(/(?:TND|DT|dt|د\.ت|دت|دinar|Dinar|USD|EUR|MAD|DZD|dinars?|دنانير|دينار|\$|€|£)/gi, "")
+    .replace(/[\d.,\s\r\n\t\-–—+/:%()]/g, "");
+  // If after removing numbers, currency tokens, and symbols, there are almost no letters left (less than 3 chars), it's a price string!
+  return withoutPrices.length < 3;
+}
+
+/**
+ * Checks whether an image URL or tag corresponds to an ad tracker, conversion pixel, or invisible beacon.
+ */
+export function isTrackingBeacon(src: string, tag?: string): boolean {
+  if (!src) return true;
+  const s = src.toLowerCase();
+  if (
+    s.includes("facebook.com/tr") ||
+    s.includes("connect.facebook.net") ||
+    s.includes("analytics.tiktok") ||
+    s.includes("google-analytics") ||
+    s.includes("googletagmanager") ||
+    s.includes("doubleclick.net") ||
+    s.includes("bat.bing.com") ||
+    s.includes("snapchat.com") ||
+    s.includes("pixel") ||
+    s.includes("favicon") ||
+    s.includes("sprite") ||
+    s.includes("blank.gif") ||
+    s.includes("spacer.gif") ||
+    s.includes("1x1") ||
+    s.endsWith(".ico") ||
+    s.endsWith(".svg")
+  ) {
+    return true;
+  }
+  if (tag) {
+    const t = tag.toLowerCase();
+    if (
+      (t.includes('width="1"') || t.includes("width='1'")) &&
+      (t.includes('height="1"') || t.includes("height='1'"))
+    ) {
+      return true;
+    }
+    if (t.includes("display:none") || t.includes("display: none")) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function extractImageUrl(img: any): string | null {
+  if (!img) return null;
+  if (typeof img === "string") {
+    const s = img.trim();
+    if (s.includes("[[") || s.includes("{{") || s.length < 5) return null;
+    if (isTrackingBeacon(s)) return null;
+    return s;
+  }
+  if (typeof img === "object") {
+    if (typeof img.url === "string") return extractImageUrl(img.url);
+    if (typeof img.contentUrl === "string") return extractImageUrl(img.contentUrl);
+    if (typeof img.src === "string") return extractImageUrl(img.src);
+  }
+  return null;
+}
+
+/**
  * Parses product data from raw or rendered HTML (and optional markdown).
  */
 export function parseProductHtmlContent(
@@ -111,37 +183,77 @@ export function parseProductHtmlContent(
     // 2. Extract Title
     let title: string | null = null;
 
-    if (jsonLdProduct?.name) {
+    if (jsonLdProduct?.name && !isPriceString(String(jsonLdProduct.name))) {
       title = String(jsonLdProduct.name).trim();
-    } else if (convertyProduct?.name) {
+    } else if (convertyProduct?.name && !isPriceString(String(convertyProduct.name))) {
       title = String(convertyProduct.name).trim();
-    } else if (nextDataProduct?.title || nextDataProduct?.name) {
+    } else if ((nextDataProduct?.title || nextDataProduct?.name) && !isPriceString(String(nextDataProduct.title || nextDataProduct.name))) {
       title = String(nextDataProduct.title || nextDataProduct.name).trim();
     }
 
-    if (!title) {
-      title = extractMeta(html, "og:title") || extractMeta(html, "twitter:title");
+    // 2b. Check COD platform form inputs (Stocki, YouCan, Funnelish, custom COD landing pages)
+    if (!title && html) {
+      const formNameMatch =
+        html.match(/<input[^>]+name=["'](?:name|product_name|nom_produit|item_name|titre)["'][^>]+value=["']([^"']+)["']/i) ||
+        html.match(/<input[^>]+value=["']([^"']+)["'][^>]+name=["'](?:name|product_name|nom_produit|item_name|titre)["']/i);
+      if (formNameMatch && formNameMatch[1] && !isPriceString(formNameMatch[1])) {
+        title = formNameMatch[1].trim();
+      }
     }
+
+    if (!title) {
+      const ogTitle = extractMeta(html, "og:title") || extractMeta(html, "twitter:title");
+      if (ogTitle && !isPriceString(ogTitle)) {
+        title = ogTitle;
+      }
+    }
+
     if (!title) {
       const h1Match = /<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(html);
       if (h1Match) {
-        title = h1Match[1].replace(/<[^>]*>/g, "").trim();
+        const candidate = h1Match[1].replace(/<[^>]*>/g, "").trim();
+        if (!isPriceString(candidate)) {
+          title = candidate;
+        }
       }
     }
+
+    // Fallback to h2 / h3 headings if h1 was absent or was just a price badge
+    if (!title && html) {
+      const headingMatches = [...html.matchAll(/<(?:h2|h3)[^>]*>([\s\S]*?)<\/(?:h2|h3)>/gi)];
+      for (const hm of headingMatches) {
+        const candidate = hm[1].replace(/<[^>]*>/g, "").trim();
+        if (
+          candidate.length >= 3 &&
+          !isPriceString(candidate) &&
+          !/^(?:avis|review|livraison|shipping|connexion|login|panier|cart|contact|menu)/i.test(candidate)
+        ) {
+          title = candidate;
+          break;
+        }
+      }
+    }
+
     if (!title) {
       const titleTagMatch = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);
       if (titleTagMatch) {
-        title = titleTagMatch[1].replace(/<[^>]*>/g, "").trim();
+        const candidate = titleTagMatch[1].replace(/<[^>]*>/g, "").trim();
+        if (!isPriceString(candidate)) {
+          title = candidate;
+        }
       }
     }
 
     // Markdown heading fallback for SPAs where HTML <title> is just the store name
     if (markdown) {
-      const headingMatch = markdown.match(/^#\s+(.+)$/m);
-      if (headingMatch && headingMatch[1].trim()) {
-        const hTitle = headingMatch[1].trim();
-        if (!title || title.length < 3 || title.toLowerCase().includes("store") || title.toLowerCase().includes("boutique")) {
-          title = hTitle;
+      const headingMatches = [...markdown.matchAll(/^#{1,3}\s+(.+)$/gm)];
+      for (const hm of headingMatches) {
+        const hTitle = hm[1].trim();
+        if (hTitle.length >= 3 && !isPriceString(hTitle) && !hTitle.toLowerCase().includes("store") && !hTitle.toLowerCase().includes("boutique")) {
+          if (!title || title.length < 3 || title.toLowerCase().includes("store") || title.toLowerCase().includes("boutique")) {
+            title = hTitle;
+            break;
+          }
         }
       }
     }
@@ -171,21 +283,6 @@ export function parseProductHtmlContent(
       }
       title = title.trim();
     }
-
-function extractImageUrl(img: any): string | null {
-  if (!img) return null;
-  if (typeof img === "string") {
-    const s = img.trim();
-    if (s.includes("[[") || s.includes("{{") || s.length < 5) return null;
-    return s;
-  }
-  if (typeof img === "object") {
-    if (typeof img.url === "string") return extractImageUrl(img.url);
-    if (typeof img.contentUrl === "string") return extractImageUrl(img.contentUrl);
-    if (typeof img.src === "string") return extractImageUrl(img.src);
-  }
-  return null;
-}
 
     // 3. Extract Main Image & Gallery
     let mainImageUrl: string | null = null;
@@ -235,20 +332,43 @@ function extractImageUrl(img: any): string | null {
       const imgRegex = /<img\s+[^>]*src=["']([^"']+)["'][^>]*>/gi;
       let imgMatch;
       while ((imgMatch = imgRegex.exec(html)) !== null) {
+        const fullTag = imgMatch[0];
         const src = extractImageUrl(imgMatch[1]);
+        if (!src) continue;
+
+        const isLogoOrTiny =
+          /alt=["'][^"']*logo[^"']*["']/i.test(fullTag) ||
+          /class=["'][^"']*logo[^"']*["']/i.test(fullTag) ||
+          /id=["'][^"']*logo[^"']*["']/i.test(fullTag) ||
+          src.includes("logo") ||
+          src.includes("icon") ||
+          src.includes("favicon") ||
+          /width=["'](?:[1-9]|[1-9][0-9]|1[0-2][0-9])["']/i.test(fullTag);
+
         if (
-          src &&
-          !src.includes("pixel") &&
-          !src.includes("icon") &&
+          !isTrackingBeacon(src, fullTag) &&
+          !isLogoOrTiny &&
           !src.includes("svg") &&
-          !src.includes("logo") &&
-          src.length > 30
+          src.length > 25
         ) {
           if (!mainImageUrl) {
             mainImageUrl = src;
           } else if (!galleryImages.includes(src)) {
             galleryImages.push(src);
           }
+        }
+      }
+    }
+
+    // Stocki / Carousel / Product asset image scan fallback
+    if (!mainImageUrl && html) {
+      const productImgRegex = /https?:\/\/[^"'\s]+\/(?:produit|products|items|uploads|cdn\.shopify\.com)[^"'\s]+\.(?:webp|jpg|jpeg|png|avif)/gi;
+      let pMatch;
+      while ((pMatch = productImgRegex.exec(html)) !== null) {
+        const candidate = pMatch[0];
+        if (!isTrackingBeacon(candidate) && !candidate.includes("logo")) {
+          mainImageUrl = candidate;
+          break;
         }
       }
     }
@@ -320,7 +440,25 @@ function extractImageUrl(img: any): string | null {
       }
     }
 
-    // 4c. Check Meta Tags (og:price:amount, product:price:amount)
+    // 4c. Check COD Form hidden price inputs (Stocki, YouCan, Funnelish, custom COD forms)
+    if (!currentPrice && html) {
+      const formPriceMatch =
+        html.match(/<input[^>]+name=["'](?:price|prix|unit_price|amount)["'][^>]+value=["']([^"']+)["']/i) ||
+        html.match(/<input[^>]+value=["']([^"']+)["'][^>]+name=["'](?:price|prix|unit_price|amount)["']/i);
+      if (formPriceMatch && formPriceMatch[1]) {
+        const cleaned = formPriceMatch[1].replace(/[^0-9.,]/g, "").trim();
+        if (cleaned && Number(cleaned.replace(",", ".")) > 0) {
+          let num = parseFloat(cleaned.replace(",", "."));
+          if (num >= 1000 && (cleaned.includes(",000") || cleaned.includes(".000"))) {
+            num = Math.round(num / 1000);
+          }
+          currentPrice = `${num} DT`;
+          currency = "TND";
+        }
+      }
+    }
+
+    // 4d. Check Meta Tags (og:price:amount, product:price:amount)
     if (!currentPrice) {
       const metaPrice =
         extractMeta(html, "product:price:amount") ||
@@ -339,10 +477,10 @@ function extractImageUrl(img: any): string | null {
       }
     }
 
-    // 4d. Check OpenGraph Title or Description for price
+    // 4e. Check OpenGraph Title or Description for price
     if (!currentPrice) {
       const ogDesc = extractMeta(html, "og:description") || extractMeta(html, "description") || "";
-      const descPriceMatch = /(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت)/i.exec(ogDesc);
+      const descPriceMatch = /(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت|دت)/i.exec(ogDesc);
       if (descPriceMatch && descPriceMatch[1] && Number(descPriceMatch[1].replace(",", ".")) > 0) {
         let numStr = descPriceMatch[1].replace(",", ".");
         let num = parseFloat(numStr);
@@ -354,10 +492,10 @@ function extractImageUrl(img: any): string | null {
       }
     }
 
-    // 4e. Try Markdown prices (e.g. from Firecrawl rendered SPA body)
+    // 4f. Try Markdown prices (e.g. from Firecrawl rendered SPA body)
     if (!currentPrice && markdown) {
       // 1. Check discount pair in markdown: e.g. -38% 89,000 د.ت 55,000 د.ت
-      const discountPairMatch = markdown.match(/-\d{1,2}%\s*(?:‎|\s)*(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:د\.ت|DT|TND|د)\s*(?:‎|\s)*(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:د\.ت|DT|TND|د)/i);
+      const discountPairMatch = markdown.match(/-\d{1,2}%\s*(?:‎|\s)*(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:د\.ت|دت|DT|TND|د)\s*(?:‎|\s)*(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:د\.ت|دت|DT|TND|د)/i);
       if (discountPairMatch) {
         let origNum = parseFloat(discountPairMatch[1].replace(",", "."));
         let currNum = parseFloat(discountPairMatch[2].replace(",", "."));
@@ -369,7 +507,7 @@ function extractImageUrl(img: any): string | null {
 
       // 2. Check checkout total or final price line
       if (!currentPrice) {
-        const finalTotalMatch = markdown.match(/(?:المجموع\s*النهائي|Total|Prix\s*Total|السعر\s*:?)\s*(?:‎|\s)*(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:د\.ت|DT|TND|د)/i);
+        const finalTotalMatch = markdown.match(/(?:المجموع\s*النهائي|Total|Prix\s*Total|السعر\s*:?)\s*(?:‎|\s)*(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:د\.ت|دت|DT|TND|د)/i);
         if (finalTotalMatch) {
           let numStr = finalTotalMatch[1].replace(",", ".");
           let num = parseFloat(numStr);
@@ -381,9 +519,9 @@ function extractImageUrl(img: any): string | null {
       }
     }
 
-    // 4f. Try HTML DOM regex patterns (WooCommerce, YouCan, Shopify, COD funnels)
+    // 4g. Try HTML DOM regex patterns (WooCommerce, YouCan, Shopify, Stocki, COD funnels)
     if (!currentPrice) {
-      const tunisianPriceRegex = /(?:class|id|data-[^=]*)?["'][^"']*(?:price|current|sale|amount)[^"']*["'][^>]*>[\s\S]*?(?:^|\s|>)(?:‎|\s)*(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت|دinar|Dinar)/i;
+      const tunisianPriceRegex = /(?:class|id|data-[^=]*)?["'][^"']*(?:price|current|sale|amount|total)[^"']*["'][^>]*>[\s\S]*?(?:^|\s|>)(?:‎|\s)*(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت|دت|دinar|Dinar)/i;
       const tndMatch = tunisianPriceRegex.exec(html);
       if (tndMatch && tndMatch[1] && Number(tndMatch[1].replace(",", ".")) > 0) {
         let numStr = tndMatch[1].replace(",", ".");
@@ -398,7 +536,7 @@ function extractImageUrl(img: any): string | null {
 
     if (!currentPrice) {
       // General price regex in page body
-      const generalPriceMatch = /(\d{1,4}(?:[.,]\d{2,3})?)\s*(?:TND|DT|dt|د\.ت)/i.exec(html);
+      const generalPriceMatch = /(\d{1,4}(?:[.,]\d{2,3})?)\s*(?:TND|DT|dt|د\.ت|دت)/i.exec(html);
       if (generalPriceMatch && generalPriceMatch[1] && Number(generalPriceMatch[1].replace(",", ".")) > 0) {
         let numStr = generalPriceMatch[1].replace(",", ".");
         let num = parseFloat(numStr);
@@ -412,7 +550,7 @@ function extractImageUrl(img: any): string | null {
 
     // Extract Crossed-out / Regular Price if not already extracted
     if (!originalPrice) {
-      const delPriceRegex = /<(?:del|s|span)[^>]*(?:class|id)=["'][^"']*(?:old|regular|compare|original|was)[^"']*["'][^>]*>[\s\S]*?(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت)?/gi;
+      const delPriceRegex = /<(?:del|s|span)[^>]*(?:class|id)=["'][^"']*(?:old|regular|compare|original|was)[^"']*["'][^>]*>[\s\S]*?(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت|دت)?/gi;
       let delMatch;
       const currNum = currentPrice ? parseFloat(currentPrice.replace(/[^0-9.]/g, "")) : 0;
       while ((delMatch = delPriceRegex.exec(html)) !== null) {
@@ -428,9 +566,31 @@ function extractImageUrl(img: any): string | null {
       }
     }
 
+    // 4h. Check inline CSS line-through for crossed-out original prices (Shopify, WooCommerce, Stocki, page builders)
+    if (!originalPrice && html) {
+      const lineThroughRegex = /<(?:span|p|div|del|s)[^>]*style=["'][^"']*line-through[^"']*["'][^>]*>([\s\S]*?)<\/(?:span|p|div|del|s)>/gi;
+      let ltMatch;
+      const currNum = currentPrice ? parseFloat(currentPrice.replace(/[^0-9.]/g, "")) : 0;
+      while ((ltMatch = lineThroughRegex.exec(html)) !== null) {
+        const textContent = ltMatch[1].replace(/<[^>]*>/g, "").trim();
+        const numMatch = /(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت|دت)?/i.exec(textContent);
+        if (numMatch && numMatch[1]) {
+          let numStr = numMatch[1].replace(",", ".");
+          let num = parseFloat(numStr);
+          if (num >= 1000 && (numMatch[1].includes(",000") || numMatch[1].includes(".000"))) {
+            num = Math.round(num / 1000);
+          }
+          if (num > 0 && num > currNum) {
+            originalPrice = `${num} ${currency === "TND" ? "DT" : currency}`;
+            break;
+          }
+        }
+      }
+    }
+
     // 5. Extract Bundle Offers
     const allOffers: Array<{ tier_name: string; price: string; savings?: string }> = [];
-    const packRegex = /(?:Pack|pack|باقة|عرض|Offre)\s*(?:de\s*)?(\d+|duo|trio|familial)[\s\S]*?(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:DT|TND|dt)/gi;
+    const packRegex = /(?:Pack|pack|باقة|عرض|Offre)\s*(?:de\s*)?(\d+|duo|trio|familial)[\s\S]*?(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:DT|TND|dt|د\.ت|دت)/gi;
     let packMatch;
     let tierCount = 0;
 

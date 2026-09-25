@@ -541,7 +541,12 @@ export default function ProductsPage() {
       const res = await fetch("/api/products/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: prod.url, forceRefresh: true }),
+        body: JSON.stringify({
+          productId: prod.id,
+          url: prod.url,
+          pageId: prod.pageId,
+          forceRefresh: true,
+        }),
       });
 
       const data = await res.json();

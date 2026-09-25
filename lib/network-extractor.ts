@@ -100,7 +100,7 @@ export function extractMetaPixelIds(content?: string | null): string[] {
 export function detectStorePlatform(
   html?: string | null,
   url?: string | null
-): "youcan" | "woocommerce" | "shopify" | "custom_cod" | "other" {
+): "youcan" | "woocommerce" | "shopify" | "custom_cod" | "stocki" | "other" {
   const content = (html || "").toLowerCase();
   const rawUrl = (url || "").toLowerCase();
 
@@ -134,6 +134,16 @@ export function detectStorePlatform(
     rawUrl.includes("myshopify.com")
   ) {
     return "shopify";
+  }
+
+  // 3b. Stocki Platform (Tunisian COD Platform)
+  if (
+    content.includes("stocki.tn") ||
+    content.includes("stocki.co") ||
+    rawUrl.includes("stocki.tn") ||
+    rawUrl.includes("stocki.co")
+  ) {
+    return "stocki";
   }
 
   // 4. Custom COD Landing Page (Funnelish / Leadpages / Custom PHP with COD form)
@@ -193,11 +203,30 @@ export function extractDeliveryInfo(
   extractedDelivery?: string | null,
   allOffers?: Array<{ tier_name?: string; tierName?: string; price?: string }> | null
 ): { isFree: boolean; label: string; rawCost?: string; isConditional?: boolean } {
+  // Check form hidden inputs first (e.g. name="frais" value="7.000")
+  if (htmlOrText) {
+    const formDeliveryMatch =
+      htmlOrText.match(/<input[^>]+name=["'](?:frais|frais_livraison|shipping_cost|frais_de_port)["'][^>]+value=["']([^"']+)["']/i) ||
+      htmlOrText.match(/<input[^>]+value=["']([^"']+)["'][^>]+name=["'](?:frais|frais_livraison|shipping_cost|frais_de_port)["']/i);
+    if (formDeliveryMatch && formDeliveryMatch[1]) {
+      const cleaned = formDeliveryMatch[1].replace(/[^0-9.,]/g, "").trim();
+      const val = parseFloat(cleaned.replace(",", "."));
+      if (!isNaN(val) && val > 0) {
+        const cost = val >= 1000 ? Math.round(val / 1000) : val;
+        return {
+          isFree: false,
+          label: `Livraison: ${cost} DT`,
+          rawCost: `${cost} DT`,
+        };
+      }
+    }
+  }
+
   const content = (htmlOrText || "").toLowerCase();
 
   // 1. Check for explicit checkout paid shipping amounts first (e.g. "Shipping: 7.00 DT", "Frais de livraison: 7 DT")
   const paidMatch =
-    content.match(/(?:shipping|frais de livraison|frais livraison|livraison|توصيل|مصاريف الشحن)\s*[:=\s]\s*([1-9][0-9]*(?:\.[0-9]+)?\s*(?:dt|tnd|dinar|dinars|د\.ت|د))/i) ||
+    content.match(/(?:shipping|frais de livraison|frais livraison|livraison|توصيل|مصاريف الشحن)\s*[:=\s]\s*([1-9][0-9]*(?:\.[0-9]+)?\s*(?:dt|tnd|dinar|dinars|د\.ت|دت|د))/i) ||
     content.match(/([1-9][0-9]*(?:\.[0-9]{2})?)\s*(?:dt|tnd)\s*(?:de livraison|pour la livraison|frais)/i);
 
   // 2. Check for Conditional Free Delivery (e.g. "Livraison gratuite à partir de 2", "اشتري زوز توصيل مجاني")

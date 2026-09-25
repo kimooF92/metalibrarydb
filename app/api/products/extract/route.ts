@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ads, scrapedProducts } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { normalizeProductUrl, extractProductFromUrl } from "@/lib/firecrawl";
+import { isPriceString } from "@/lib/html-scraper";
 import { getCleanDomain } from "@/lib/utils";
 import {
   extractTunisianPhoneNumbers,
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { url, adId, pageId, forceRefresh } = body;
+    const { productId, url, adId, pageId, forceRefresh } = body;
 
     if (!url || typeof url !== "string") {
       return NextResponse.json(
@@ -48,21 +49,49 @@ export async function POST(req: NextRequest) {
     notificationContext = {
       url: normalizedUrl,
       domain: getCleanDomain(normalizedUrl),
+      productId: typeof productId === "string" ? productId : null,
     };
 
     // 1. Check for existing product in DB (Deduplication)
-    const existing = await db
-      .select(PRODUCT_EXTRACTION_LOOKUP_PROJECTION)
-      .from(scrapedProducts)
-      .where(eq(scrapedProducts.url, normalizedUrl))
-      .limit(1);
+    // Priority: 1) explicit productId if provided by product card / row, 2) normalized URL, 3) raw trimmed URL
+    let existingProduct = null;
+    if (productId && typeof productId === "string") {
+      const existingById = await db
+        .select(PRODUCT_EXTRACTION_LOOKUP_PROJECTION)
+        .from(scrapedProducts)
+        .where(eq(scrapedProducts.id, productId))
+        .limit(1);
+      existingProduct = existingById[0] || null;
+    }
 
-    const existingProduct = existing[0];
+    if (!existingProduct) {
+      const trimmedUrl = url.trim();
+      const existing = await db
+        .select(PRODUCT_EXTRACTION_LOOKUP_PROJECTION)
+        .from(scrapedProducts)
+        .where(
+          or(
+            eq(scrapedProducts.url, normalizedUrl),
+            eq(scrapedProducts.url, trimmedUrl)
+          )
+        )
+        .limit(1);
+      existingProduct = existing[0] || null;
+    }
+
     const wasExistingProduct = Boolean(existingProduct);
-    notificationContext.productId = existingProduct?.id;
+    if (existingProduct?.id) {
+      notificationContext.productId = existingProduct.id;
+    }
 
-    // If already extracted successfully and not forcing a refresh, return cached data immediately (0 credits used)
-    if (existingProduct && existingProduct.scrapeStatus === "success" && !forceRefresh) {
+    // If already extracted successfully, valid, and not forcing a refresh, return cached data immediately (0 credits used)
+    const isCorruptedCachedProduct =
+      !existingProduct?.currentPrice ||
+      /^0(\.0+)?\s*(dt|tnd|usd|eur|dinar)?$/i.test(existingProduct.currentPrice.trim()) ||
+      existingProduct.currentPrice === "0" ||
+      (existingProduct.title ? isPriceString(existingProduct.title) : false);
+
+    if (existingProduct && existingProduct.scrapeStatus === "success" && !forceRefresh && !isCorruptedCachedProduct) {
       // Link the ad to this product if adId provided and not linked yet
       if (adId) {
         await db
@@ -74,10 +103,11 @@ export async function POST(req: NextRequest) {
       // Also link any other ads with similar linkUrl in background
       linkMatchingAds(existingProduct.id, normalizedUrl).catch(console.error);
 
+      const { rawExtract: _raw, ...cleanExisting } = existingProduct as any;
       return NextResponse.json({
         success: true,
         cached: true,
-        product: existingProduct,
+        product: cleanExisting,
       });
     }
 
@@ -156,6 +186,7 @@ export async function POST(req: NextRequest) {
       const [updated] = await db
         .update(scrapedProducts)
         .set({
+          url: normalizedUrl,
           domain: resolvedDomain || existingProduct.domain,
           pageId: pageId || existingProduct.pageId,
           title: extracted.title || existingProduct.title,
@@ -234,10 +265,11 @@ export async function POST(req: NextRequest) {
       }));
     }
 
+    const { rawExtract: _raw, ...cleanProduct } = savedProduct as any;
     return NextResponse.json({
       success: true,
       cached: false,
-      product: savedProduct,
+      product: cleanProduct,
     });
   } catch (err: unknown) {
     console.error("[Product Extract API] Error:", err);
