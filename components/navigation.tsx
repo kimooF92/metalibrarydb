@@ -20,6 +20,7 @@ import {
 import { ThemeToggle } from "./theme-toggle";
 import { useSidebar } from "@/components/sidebar-context";
 import { SmallPagesScanBadge } from "./small-pages-scan-banner";
+import { NotificationCenter } from "./notification-center";
 
 export function Navigation() {
   const pathname = usePathname();
@@ -221,6 +222,7 @@ export function Navigation() {
 
         <div className="flex items-center space-x-2">
           <SmallPagesScanBadge />
+          <NotificationCenter layout="navbar" />
           <ThemeToggle size="sm" />
           <button
             onClick={() => setIsOpen(!isOpen)}

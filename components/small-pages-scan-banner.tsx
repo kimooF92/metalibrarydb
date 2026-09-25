@@ -187,7 +187,7 @@ export function SmallPagesScanBadge() {
           ? `${count} small page(s) need creative scan. Click to show banner.`
           : `${count} small page(s) ready for local scan. Click to view.`
       }
-      className={`relative flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer border ${
+      className={`relative flex items-center h-8 space-x-1.5 px-2.5 rounded-full text-xs font-bold transition-all cursor-pointer border ${
         isDismissed
           ? "bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-amber-400 hover:text-amber-600 dark:hover:text-amber-400"
           : "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/35 hover:bg-amber-500/25 shadow-xs"

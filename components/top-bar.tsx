@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
 import { SmallPagesScanBadge } from "./small-pages-scan-banner";
+import { NotificationCenter } from "./notification-center";
 
 const ROUTE_INFO: Record<
   string,
@@ -51,6 +52,7 @@ export function TopBar() {
       {/* Right: Actions (Small Pages Badge, Notification Center & Theme Button) */}
       <div className="flex items-center space-x-2">
         <SmallPagesScanBadge />
+        <NotificationCenter layout="navbar" />
         <ThemeToggle size="sm" />
       </div>
     </header>

@@ -249,14 +249,14 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
   };
 
   return (
-    <div className="relative inline-block" ref={dropdownRef}>
+    <div className="relative inline-flex items-center" ref={dropdownRef}>
       {/* Trigger Button */}
       {layout === "navbar" ? (
         <button
           onClick={() => setIsOpen(!isOpen)}
           title={`Notifications (${unreadCount} unread)`}
           aria-label={`Notifications (${unreadCount} unread)`}
-          className={`relative flex items-center justify-center w-8.5 h-8.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-sm transition-all cursor-pointer ${
+          className={`relative flex items-center justify-center w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-sm transition-all cursor-pointer ${
             isOpen ? "border-indigo-500/40 text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/30" : ""
           }`}
         >
@@ -312,11 +312,11 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
         <div
           className={`fixed sm:absolute z-50 ${
             layout === "navbar"
-              ? "right-0 top-full mt-2"
+              ? "inset-x-3 top-16 w-auto sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[460px]"
               : layout === "collapsed"
-              ? "left-16 bottom-0"
-              : "left-0 sm:left-full sm:bottom-0 sm:ml-2 bottom-4 sm:bottom-auto"
-          } w-[calc(100vw-2rem)] sm:w-[460px] max-h-[82vh] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150`}
+              ? "left-16 bottom-0 w-[calc(100vw-2rem)] sm:w-[460px]"
+              : "left-0 sm:left-full sm:bottom-0 sm:ml-2 bottom-4 sm:bottom-auto w-[calc(100vw-2rem)] sm:w-[460px]"
+          } max-h-[82vh] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150`}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
