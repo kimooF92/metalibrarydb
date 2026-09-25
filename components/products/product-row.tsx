@@ -107,15 +107,17 @@ export const ProductRow = memo(function ProductRow({
     }
   };
 
-  const isBreakout = Boolean(
-    product.isBreakout ||
-    ((product.activeAdsCount || 0) > 0 &&
-      (product.daysRunning || 1) <= 7 &&
-      (product.maxDuplications || 1) >= 3)
-  );
-  const isPendingScrape = product.scrapeStatus === "pending";
   const isPageOnHold = product.brandHoldStatus === "on_hold";
   const isPageInactive = product.brandHoldStatus === "inactive";
+  const isBreakout = Boolean(
+    !isPageOnHold &&
+    !isPageInactive &&
+    (product.isBreakout ||
+      ((product.activeAdsCount || 0) > 0 &&
+        (product.daysRunning || 1) <= 7 &&
+        (product.maxDuplications || 1) >= 3))
+  );
+  const isPendingScrape = product.scrapeStatus === "pending";
   const isInactive = isPageInactive || (typeof product.activeAdsCount === "number" && product.activeAdsCount === 0 && (product.linkedAdsCount || 0) > 0);
   const supplierCount = product.supplierCount ?? product.supplierUrls?.length ?? 0;
 
@@ -246,7 +248,13 @@ export const ProductRow = memo(function ProductRow({
               </span>
             )}
 
-            {isInactive && (
+            {isPageOnHold && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                ⏸️ Page on Hold
+              </span>
+            )}
+
+            {isInactive && !isPageOnHold && (
               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
                 ⚫ Inactive (Off-Air)
               </span>

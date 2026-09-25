@@ -72,6 +72,7 @@ interface BrandAnalyticsData {
     isTracked: boolean;
     holdStatus?: string | null;
     lastKnownValidResults?: number | null;
+    consecutiveZeroScans?: number | null;
   };
   summary: {
     totalAdsCaptured: number;
@@ -555,6 +556,25 @@ export default function BrandDeepDivePage({
                   {brand.displayName}
                 </h1>
 
+                {brand.holdStatus === "on_hold" && (
+                  <span
+                    className="inline-flex items-center gap-1 text-[11px] font-extrabold px-2.5 py-0.5 rounded-md border bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700 shadow-2xs"
+                    title="Brand account is on pause / hold (under grace period recheck)"
+                  >
+                    <span>⏸️</span>
+                    <span>On Hold / Paused</span>
+                  </span>
+                )}
+                {brand.holdStatus === "inactive" && (
+                  <span
+                    className="inline-flex items-center gap-1 text-[11px] font-extrabold px-2.5 py-0.5 rounded-md border bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700 shadow-2xs"
+                    title="Brand account is confirmed inactive (0 active ads)"
+                  >
+                    <span>⚫</span>
+                    <span>Off-Air / Inactive</span>
+                  </span>
+                )}
+
                 {/* Primary Archetype Badge */}
                 {scalingPattern.archetype !== "inactive" && (
                   <span
@@ -633,6 +653,16 @@ export default function BrandDeepDivePage({
             </button>
           </div>
         </div>
+
+        {/* On Hold Notification Banner */}
+        {brand.holdStatus === "on_hold" && (
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-xs">
+            <span className="text-base shrink-0">⏸️</span>
+            <div>
+              <strong>Brand on Hold:</strong> Meta Ad Library returned 0 active ads during the last scan, but existing ads and products are temporarily preserved under grace period ({brand.consecutiveZeroScans || 1}/3 scans).
+            </div>
+          </div>
+        )}
 
         {/* Sleek Segmented Tab Switcher */}
         <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 w-fit max-w-full overflow-x-auto gap-1">

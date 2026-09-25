@@ -278,9 +278,17 @@ export async function GET(req: NextRequest) {
     const productIds = rawProducts.map((p) => p.id);
     const metricsMap = new Map<string, any>();
 
+    // Also collect page IDs directly associated with products to ensure brandHoldStatus is always accurate
+    const pageIdsFromProducts = Array.from(
+      new Set(rawProducts.map((p) => p.pageId).filter((pid): pid is string => Boolean(pid && pid.trim())))
+    );
+    const pageMap = new Map<string, any>();
+
+    const asyncLookups: Promise<any>[] = [];
+
     if (productIds.length > 0) {
-      try {
-        const metricsRows = await db
+      asyncLookups.push(
+        db
           .select({
             productId: ads.productId,
             linkedAdsCount: sql<number>`COUNT(${ads.id})`.mapWith(Number),
@@ -296,27 +304,65 @@ export async function GET(req: NextRequest) {
           .from(ads)
           .leftJoin(trackedPages, eq(trackedPages.pageId, ads.pageId))
           .where(inArray(ads.productId, productIds))
-          .groupBy(ads.productId);
+          .groupBy(ads.productId)
+          .then((rows) => {
+            rows.forEach((m) => {
+              if (m.productId) metricsMap.set(m.productId, m);
+            });
+          })
+          .catch((metricsErr) => {
+            console.warn("[Products API] Ad metrics batch lookup warning:", metricsErr);
+          })
+      );
+    }
 
-        metricsRows.forEach((m) => {
-          if (m.productId) {
-            metricsMap.set(m.productId, m);
-          }
-        });
-      } catch (metricsErr) {
-        console.warn("[Products API] Ad metrics batch lookup warning:", metricsErr);
-      }
+    if (pageIdsFromProducts.length > 0) {
+      asyncLookups.push(
+        db
+          .select({
+            pageId: trackedPages.pageId,
+            displayName: trackedPages.displayName,
+            holdStatus: trackedPages.holdStatus,
+            currentResults: trackedPages.currentResults,
+          })
+          .from(trackedPages)
+          .where(inArray(trackedPages.pageId, pageIdsFromProducts))
+          .then((rows) => {
+            rows.forEach((row) => {
+              if (row.pageId) pageMap.set(row.pageId, row);
+            });
+          })
+          .catch((pageErr) => {
+            console.warn("[Products API] Tracked pages batch lookup warning:", pageErr);
+          })
+      );
+    }
+
+    if (asyncLookups.length > 0) {
+      await Promise.all(asyncLookups);
     }
 
     // Merge ad metrics into product objects
     const products = rawProducts.map((p) => {
       const m = metricsMap.get(p.id);
+      const pageInfo = p.pageId ? pageMap.get(p.pageId) : null;
       const earliest = m?.earliestAdDate || p.createdAt;
       const daysRunning = earliest
         ? Math.max(1, Math.round((Date.now() - new Date(earliest).getTime()) / 86400000))
         : 1;
 
+      const brandPageId = m?.brandPageId || p.pageId || null;
+      const brandHoldStatus = (m?.brandHoldStatus || pageInfo?.holdStatus || "active") as any;
+      const brandName = m?.brandName || pageInfo?.displayName || null;
+      const brandCurrentResults = typeof m?.brandCurrentResults === "number"
+        ? m.brandCurrentResults
+        : typeof pageInfo?.currentResults === "number"
+        ? pageInfo.currentResults
+        : null;
+
       const isBreakout = Boolean(
+        brandHoldStatus !== "on_hold" &&
+        brandHoldStatus !== "inactive" &&
         (m?.activeAdsCount || 0) > 0 &&
         daysRunning <= 7 &&
         (m?.maxDuplications || 1) >= 3
@@ -329,10 +375,10 @@ export async function GET(req: NextRequest) {
         maxDuplications: m?.maxDuplications || 1,
         earliestAdDate: m?.earliestAdDate || null,
         latestAdDate: m?.latestAdDate || null,
-        brandName: m?.brandName || null,
-        brandPageId: m?.brandPageId || p.pageId || null,
-        brandHoldStatus: (m?.brandHoldStatus as any) || "active",
-        brandCurrentResults: typeof m?.brandCurrentResults === "number" ? m.brandCurrentResults : null,
+        brandName,
+        brandPageId,
+        brandHoldStatus,
+        brandCurrentResults,
         topCreativeThumbnail: m?.topCreativeThumbnail || null,
         daysRunning,
         isBreakout,

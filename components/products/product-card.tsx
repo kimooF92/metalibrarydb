@@ -124,14 +124,16 @@ export const ProductCard = memo(function ProductCard({
     }
   };
 
-  const isBreakout = Boolean(
-    product.isBreakout ||
-    ((product.activeAdsCount || 0) > 0 &&
-      (product.daysRunning || 1) <= 7 &&
-      (product.maxDuplications || 1) >= 3)
-  );
   const isPageOnHold = product.brandHoldStatus === "on_hold";
   const isPageInactive = product.brandHoldStatus === "inactive";
+  const isBreakout = Boolean(
+    !isPageOnHold &&
+    !isPageInactive &&
+    (product.isBreakout ||
+      ((product.activeAdsCount || 0) > 0 &&
+        (product.daysRunning || 1) <= 7 &&
+        (product.maxDuplications || 1) >= 3))
+  );
   const isWinning = !isBreakout && !isPageOnHold && !isPageInactive && (product.linkedAdsCount || 0) >= 3 && (product.activeAdsCount || 0) > 0;
   const isInactive = isPageInactive || (typeof product.activeAdsCount === "number" && product.activeAdsCount === 0 && (product.linkedAdsCount || 0) > 0);
   const supplierCount = product.supplierCount ?? product.supplierUrls?.length ?? 0;
@@ -175,6 +177,14 @@ export const ProductCard = memo(function ProductCard({
           </div>
         )}
 
+        {/* On Hold / Paused Badge */}
+        {isPageOnHold && (
+          <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500 text-slate-950 text-[10px] font-extrabold shadow-md border border-amber-400 backdrop-blur-xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-950 animate-pulse"></span>
+            <span>⏸️ On Hold (Paused)</span>
+          </div>
+        )}
+
         {/* Breakout Winner Badge */}
         {isBreakout && (
           <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-pink-600 via-rose-500 to-amber-500 text-white text-[10px] font-extrabold shadow-md shadow-pink-500/25">
@@ -192,7 +202,7 @@ export const ProductCard = memo(function ProductCard({
         )}
 
         {/* Inactive / Off-Air Badge */}
-        {isInactive && (
+        {isInactive && !isPageOnHold && (
           <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900/85 text-slate-300 text-[10px] font-bold shadow-md border border-slate-700/80 backdrop-blur-xs">
             <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
             <span>Inactive (Off-Air)</span>

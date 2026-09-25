@@ -879,7 +879,7 @@ export async function markJobCompleted(
         console.log(
           `[Apify Auto-Trigger] 🚀 Cloud-eligible catalog (${results} active ads >= 20) detected for "${brandName}". Triggering Apify Cloud scan...`
         );
-        tryAutoTriggerApifyDeltaScan(pageId, displayDifference).catch((err) => {
+        tryAutoTriggerApifyDeltaScan(pageId, effectiveDifference).catch((err) => {
           console.error("[Apify Auto-Trigger] Error launching background delta scan:", err);
         });
       }
