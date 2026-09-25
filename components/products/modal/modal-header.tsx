@@ -185,11 +185,18 @@ export function ModalHeader({
                   </a>
                 )}
 
-                {typeof product.activeAdsCount === "number" && product.activeAdsCount === 0 && (
+                {product.brandHoldStatus === "on_hold" ? (
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                    title="Brand account is on pause / hold (under grace period recheck)"
+                  >
+                    ⏸️ Page on Pause
+                  </span>
+                ) : product.brandHoldStatus === "inactive" || (typeof product.activeAdsCount === "number" && product.activeAdsCount === 0) ? (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
                     ⚫ Inactive / Off-Air
                   </span>
-                )}
+                ) : null}
 
                 {linkedAds.length > 0 && (
                   <button

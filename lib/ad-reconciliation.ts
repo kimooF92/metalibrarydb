@@ -123,7 +123,6 @@ export async function reconcileArchivedAds(
 
     const pageIdMatch = [
       targetPageId ? eq(ads.pageId, targetPageId) : undefined,
-      eq(ads.pageId, trackedPageId),
       obsAdIds.length > 0 ? inArray(ads.id, obsAdIds) : undefined,
     ].filter(
       (condition): condition is NonNullable<typeof condition> =>

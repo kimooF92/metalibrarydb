@@ -6,6 +6,8 @@ import { SidebarProvider } from "@/components/sidebar-context";
 import { Navigation } from "@/components/navigation";
 import { TopBar } from "@/components/top-bar";
 import { NotificationCenter } from "@/components/notification-center";
+import { SmallPagesScanProvider } from "@/components/small-pages-scan-context";
+import { SmallPagesScanBanner } from "@/components/small-pages-scan-banner";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -17,16 +19,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider>
-      <Navigation />
-      <div className="fixed right-24 top-3 md:right-20 md:top-1.5 z-50">
-        <NotificationCenter layout="navbar" />
-      </div>
-      <div className="flex-1 min-w-0 h-full flex flex-col overflow-hidden bg-background">
-        <TopBar />
-        <main className="flex-1 min-w-0 overflow-y-auto flex flex-col p-4 md:px-6 md:py-5 bg-background">
-          {children}
-        </main>
-      </div>
+      <SmallPagesScanProvider>
+        <Navigation />
+        <div className="fixed right-24 top-3 md:right-20 md:top-1.5 z-50">
+          <NotificationCenter layout="navbar" />
+        </div>
+        <div className="flex-1 min-w-0 h-full flex flex-col overflow-hidden bg-background">
+          <TopBar />
+          <SmallPagesScanBanner />
+          <main className="flex-1 min-w-0 overflow-y-auto flex flex-col p-4 md:px-6 md:py-5 bg-background">
+            {children}
+          </main>
+        </div>
+      </SmallPagesScanProvider>
     </SidebarProvider>
   );
 }
+

@@ -553,7 +553,12 @@ export async function ingestApifyDatasetItems(
 
   // Initialize tracked page updates object
   const pageUpdates: any = {
-    status: "success",
+    status: (pageRecord?.holdStatus === "on_hold" || pageRecord?.holdStatus === "inactive") && extractedCount === 0
+      ? (pageRecord?.status || "success")
+      : "success",
+    ...(extractedCount > 0 && (pageRecord?.holdStatus === "on_hold" || pageRecord?.holdStatus === "inactive")
+      ? { holdStatus: "active", consecutiveZeroScans: 0, lastKnownValidResults: null }
+      : {}),
     lastCreativeScan: now,
     updatedAt: now,
   };
@@ -632,7 +637,14 @@ export async function ingestApifyDatasetItems(
         adCount: activeAdCount > 0 || isFullScan ? activeAdCount : pageRecord?.adCount ?? 0,
         lastChecked: now,
         lastSuccessAt: now,
-        status: "success",
+        // Apify only handles cloud-eligible pages (>= 20 ads), so we never set "pending" here.
+        // "pending" is only used as a local-worker trigger, managed by worker/db.ts.
+        status: (pageRecord?.holdStatus === "on_hold" || pageRecord?.holdStatus === "inactive") && activeAdCount === 0
+          ? (pageRecord?.status || "success")
+          : "success",
+        ...(activeAdCount > 0 && (pageRecord?.holdStatus === "on_hold" || pageRecord?.holdStatus === "inactive")
+          ? { holdStatus: "active", consecutiveZeroScans: 0, lastKnownValidResults: null }
+          : {}),
         updatedAt: now,
       })
       .where(eq(trackedPages.id, finalTrackedPageId));

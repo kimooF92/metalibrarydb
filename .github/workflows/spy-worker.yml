@@ -55,6 +55,7 @@ jobs:
           APIFY_API_TOKEN_4: ${{ secrets.APIFY_API_TOKEN_4 }}
           APIFY_API_TOKEN_5: ${{ secrets.APIFY_API_TOKEN_5 }}
           APIFY_ACTOR_ID: ${{ secrets.APIFY_ACTOR_ID }}
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
           # Backblaze B2 Media Storage (optional)
           B2_APPLICATION_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
           B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
@@ -71,3 +72,17 @@ jobs:
             echo "Running batch Apify scan for eligible pages..."
             npm run spy:apify
           fi
+
+      - name: Scrape New Product Landing Pages (Follow-up)
+        if: always()
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+          SCRAPE_LIMIT: 100
+          SCRAPE_STATUS: 'pending'
+        run: |
+          echo "Processing any pending extracted product pages..."
+          npx tsx scripts/run-product-scraper.ts --limit 100 --status pending || true
+

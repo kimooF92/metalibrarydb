@@ -13,8 +13,6 @@ import {
   extractDeliveryInfo,
 } from "../lib/network-extractor";
 import { getCleanDomain } from "../lib/utils";
-import { classifyProductWithAI } from "../lib/product-classifier";
-
 import { normalizeProductUrl } from "../lib/firecrawl";
 import { trackedPages, adObservations } from "../db/schema";
 
@@ -101,9 +99,10 @@ async function runProductScraperBatch() {
       const pixels = extractMetaPixelIds(rawHtml);
       const delivery = extractDeliveryInfo(rawHtml, res.data.delivery_cost);
 
-      const classification = await classifyProductWithAI(res.data.title || "", {
-        domain: resolvedDomain,
-      });
+      // AI classification bypassed per user instructions to avoid external failures/delays
+      const category = null;
+      const subCategory = null;
+      const targetAudience = null;
 
       const formattedOffers = (res.data.all_offers || []).map((o) => ({
         tierName: o.tier_name,
@@ -129,9 +128,9 @@ async function runProductScraperBatch() {
           whatsappNumbers: wa,
           metaPixelIds: pixels,
           deliveryCost: delivery.label,
-          category: classification.category,
-          subCategory: classification.subCategory,
-          targetAudience: classification.targetAudience,
+          category,
+          subCategory,
+          targetAudience,
           scrapeStatus: "success",
           lastScrapedAt: new Date(),
         })
@@ -151,9 +150,9 @@ async function runProductScraperBatch() {
             whatsappNumbers: wa,
             metaPixelIds: pixels,
             deliveryCost: delivery.label,
-            category: classification.category,
-            subCategory: classification.subCategory,
-            targetAudience: classification.targetAudience,
+            category,
+            subCategory,
+            targetAudience,
             scrapeStatus: "success",
             failureReason: null,
             lastScrapedAt: new Date(),
@@ -173,7 +172,7 @@ async function runProductScraperBatch() {
       console.log(`Price:    ${res.data.current_price || "N/A"} (${res.data.currency || "TND"})`);
       console.log(`Offer:    ${res.data.discount_or_offer || "None"}`);
       console.log(`Platform: ${platform || "Unknown"}`);
-      console.log(`Category: ${classification.category || "Unclassified"}`);
+      console.log(`Category: ${category || "Unclassified"}`);
       console.log(`Image:    ${res.data.main_image_url || "No image"}`);
     } else {
       console.error(`\n❌ [${elapsed}ms] Extraction failed: ${res.error || "Unknown"}`);
@@ -423,9 +422,10 @@ async function runProductScraperBatch() {
         const pixels = extractMetaPixelIds(rawHtml);
         const delivery = extractDeliveryInfo(rawHtml, res.data.delivery_cost);
 
-        const classification = await classifyProductWithAI(res.data.title || item.title || "", {
-          domain: resolvedDomain,
-        });
+        // AI classification bypassed per user instructions to avoid external failures/delays
+        const category = item.category || null;
+        const subCategory = item.subCategory || null;
+        const targetAudience = item.targetAudience || null;
 
         const formattedOffers = (res.data.all_offers || []).map((o) => ({
           tierName: o.tier_name,
@@ -452,9 +452,9 @@ async function runProductScraperBatch() {
             whatsappNumbers: wa.length > 0 ? wa : item.whatsappNumbers,
             metaPixelIds: pixels.length > 0 ? pixels : item.metaPixelIds,
             deliveryCost: delivery.label || item.deliveryCost,
-            category: classification.category || item.category,
-            subCategory: classification.subCategory || item.subCategory,
-            targetAudience: classification.targetAudience || item.targetAudience,
+            category,
+            subCategory,
+            targetAudience,
             scrapeStatus: "success",
             lastScrapedAt: new Date(),
           })
@@ -476,9 +476,9 @@ async function runProductScraperBatch() {
               whatsappNumbers: wa.length > 0 ? wa : item.whatsappNumbers,
               metaPixelIds: pixels.length > 0 ? pixels : item.metaPixelIds,
               deliveryCost: delivery.label || item.deliveryCost,
-              category: classification.category || item.category,
-              subCategory: classification.subCategory || item.subCategory,
-              targetAudience: classification.targetAudience || item.targetAudience,
+              category,
+              subCategory,
+              targetAudience,
               scrapeStatus: "success",
               failureReason: null,
               lastScrapedAt: new Date(),
@@ -508,7 +508,11 @@ async function runProductScraperBatch() {
             lastScrapedAt: new Date(),
             updatedAt: new Date(),
           })
-          .where(eq(scrapedProducts.id, item.id));
+          .where(
+            item.id.startsWith("temp_")
+              ? eq(scrapedProducts.url, item.url)
+              : eq(scrapedProducts.id, item.id)
+          );
       }
     } catch (err: any) {
       failedCount++;

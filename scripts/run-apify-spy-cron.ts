@@ -13,6 +13,7 @@ import {
 } from "../lib/apify";
 import { getApifyRunStatus } from "../lib/apify-sync";
 import { ingestApifyDatasetItems } from "../lib/apify-ingest";
+import { waitForScrapeQueueDrain } from "../lib/product-ingest";
 
 // Sleep helper
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -215,6 +216,11 @@ async function main() {
     }
 
     // Standard Smart Delta Rule:
+    // Strict guard: Apify never scans micro-pages (< 20 active ads)
+    if (!options.forceAll && !options.pageId && (page.currentResults || 0) < 20) {
+      continue;
+    }
+
     const isFirstTime = !page.lastCreativeScan;
 
     // Rule 1: Brand new page (never scanned before) with active ads
@@ -231,16 +237,16 @@ async function main() {
       continue;
     }
 
-    // Rule 2: Check latest count scan history for difference >= autoSpyThreshold OR total results >= 50 (Mega-Brand)
+    // Rule 2: Check latest count scan history for difference >= autoSpyThreshold OR cloud eligible (>= 20 ads)
     const latestHistory = await db.query.scanHistory.findFirst({
       where: eq(scanHistory.trackedPageId, page.id),
       orderBy: [desc(scanHistory.checkedAt)],
     });
 
     const diff = latestHistory?.difference || 0;
-    const isMegaBrand = (page.currentResults || 0) >= 50 && diff >= 1;
+    const isCloudEligible = (page.currentResults || 0) >= 20 && diff >= 1;
 
-    if (!latestHistory || (!isMegaBrand && diff < autoSpyThreshold)) {
+    if (!latestHistory || (!isCloudEligible && diff < autoSpyThreshold)) {
       skippedNoDiffCount++;
       continue;
     }
@@ -460,6 +466,17 @@ async function main() {
   console.log(`Total Ad Creatives Ingested    : ${totalAdsIngested}`);
   console.log(`Total Product Pages Ingested   : ${totalProductsIngested}`);
   console.log("=================================================\n");
+
+  // Drain any pending in-flight background product extraction tasks before process exits
+  if (totalProductsIngested > 0) {
+    console.log("⏳ Waiting for in-flight background product extractions to complete...");
+    try {
+      const drainRes = await waitForScrapeQueueDrain(45000);
+      console.log(`✅ Background product extractions finished (drained: ${drainRes.drained}, remaining: ${drainRes.remaining}).`);
+    } catch (drainErr) {
+      console.warn("⚠️ Warning waiting for product scrape drain:", drainErr);
+    }
+  }
 
   process.exit(failedCount > 0 && successCount === 0 ? 1 : 0);
 }

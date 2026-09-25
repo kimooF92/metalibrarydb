@@ -114,14 +114,18 @@ export const ProductRow = memo(function ProductRow({
       (product.maxDuplications || 1) >= 3)
   );
   const isPendingScrape = product.scrapeStatus === "pending";
-  const isInactive = typeof product.activeAdsCount === "number" && product.activeAdsCount === 0 && (product.linkedAdsCount || 0) > 0;
+  const isPageOnHold = product.brandHoldStatus === "on_hold";
+  const isPageInactive = product.brandHoldStatus === "inactive";
+  const isInactive = isPageInactive || (typeof product.activeAdsCount === "number" && product.activeAdsCount === 0 && (product.linkedAdsCount || 0) > 0);
   const supplierCount = product.supplierCount ?? product.supplierUrls?.length ?? 0;
 
   return (
     <div
       onClick={() => onViewDetails?.(product)}
       className={`group flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 bg-white dark:bg-slate-900/60 rounded-xl border transition-all duration-150 cursor-pointer ${
-        isInactive
+        isPageOnHold
+          ? "border-amber-300 dark:border-amber-700/60 bg-amber-500/[0.02] shadow-xs"
+          : isInactive
           ? "border-slate-200/60 dark:border-slate-800/60 opacity-80 hover:opacity-100 shadow-xs"
           : isBreakout
             ? "border-pink-500/40 dark:border-pink-500/40 hover:border-pink-500 shadow-xs hover:shadow-md"
@@ -331,7 +335,21 @@ export const ProductRow = memo(function ProductRow({
 
         {/* Active Ads Counter */}
         <div className="min-w-[70px] text-center">
-          {typeof product.activeAdsCount === "number" && product.activeAdsCount > 0 ? (
+          {isPageOnHold ? (
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+              title="Brand account is on pause / hold (under grace period recheck)"
+            >
+              ⏸️ On Pause
+            </span>
+          ) : isPageInactive ? (
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+              title="Brand has shut down advertising (confirmed inactive)"
+            >
+              ⚫ Off-Air
+            </span>
+          ) : typeof product.activeAdsCount === "number" && product.activeAdsCount > 0 ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
               🔥 {product.activeAdsCount} active
             </span>

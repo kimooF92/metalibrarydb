@@ -85,13 +85,16 @@ async function runWorker() {
     await enqueueAllPagesForRefresh(cooldownHours);
   }
 
-  const shouldEnqueueSpy = args.includes("--enqueue-spy") || process.env.ENQUEUE_SPY === "true";
+  const shouldEnqueueSpy =
+    args.includes("--enqueue-spy") ||
+    process.env.ENQUEUE_SPY === "true" ||
+    process.env.AUTO_ENQUEUE_SPY !== "false";
   if (shouldEnqueueSpy && isCoordinator) {
     const spyCooldownDays = parseInt(process.env.SPY_COOLDOWN_DAYS || "3", 10);
     const spyMaxPages = parseInt(process.env.SPY_MAX_PAGES_PER_RUN || "25", 10);
     const spyThreshold = settings.autoSpyThreshold || 1;
     console.log(
-      `[Spy Mode] Enqueuing eligible pages for Ad Spy creative scan (cooldown: ${spyCooldownDays}d, max: ${spyMaxPages} pages/round, threshold: +${spyThreshold})...`
+      `[Spy Mode] Checking eligible pages with ads count updates for Ad Spy scan (cooldown: ${spyCooldownDays}d, max: ${spyMaxPages}, min diff: +${spyThreshold})...`
     );
     await enqueuePagesForCreativeScan(spyCooldownDays, spyMaxPages, spyThreshold);
   }

@@ -266,3 +266,19 @@ test("reconcileArchivedAds protects on_hold page from premature ad wiping", asyn
   assert.equal(updates.length, 0); // No ads archived
 });
 
+test("reconcileArchivedAds correctly archives missing ads for official page target without UUID query", async () => {
+  const { fakeDb, updates } = createFakeDb({ officialPage: true, holdStatus: "active" });
+  const result = await reconcileArchivedAds(
+    "tracked-page-uuid",
+    "scan-1",
+    new Set<string>(["archive-1"]), // archive-2 is missing
+    new Date("2026-08-31T00:00:00.000Z"),
+    { isFullScan: true },
+    fakeDb
+  );
+
+  assert.equal(result.archivedCount, 1);
+  assert.equal(updates.some((u) => u.isArchived === true), true);
+  assert.equal(updates.some((u) => u.isActive === false), true);
+});
+

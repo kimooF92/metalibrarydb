@@ -45,22 +45,35 @@ export async function enqueueAllPagesForRefresh(cooldownHours: number = 12) {
   // Apply a 30-minute grace buffer so that 12-hour scheduled workflow runs (e.g. 8:00 & 20:00 UTC)
   // match pages scanned in the previous workflow window without failing strict boundary checks
   const effectiveCooldown = Math.max(0.5, cooldownHours > 1 ? cooldownHours - 0.5 : cooldownHours);
-  const cutoff = new Date(Date.now() - effectiveCooldown * 60 * 60 * 1000);
+  const activeCutoff = new Date(Date.now() - effectiveCooldown * 60 * 60 * 1000);
+  // Inactive pages (confirmed shutdown) are scanned once every 3 days (72h) to detect ad relaunches
+  const inactiveCutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
 
-  // Find pages that either have never been checked, or were last checked before the cutoff time
+  // Find pages that either have never been checked, or were last checked before their respective cutoff
   const pagesToRefresh = cooldownHours > 0
     ? await db.query.trackedPages.findMany({
-      where: (pages, { or, isNull, lt }) =>
-        or(isNull(pages.lastChecked), lt(pages.lastChecked, cutoff)),
-      columns: { id: true },
+      where: (pages, { or, and, isNull, lt, ne, eq }) =>
+        or(
+          // Active or on_hold pages: standard cooldown (default 12h)
+          and(
+            or(isNull(pages.holdStatus), ne(pages.holdStatus, "inactive")),
+            or(isNull(pages.lastChecked), lt(pages.lastChecked, activeCutoff))
+          ),
+          // Inactive pages: 3-day (72h) cooldown to detect ad relaunches without wasting budget
+          and(
+            eq(pages.holdStatus, "inactive"),
+            or(isNull(pages.lastChecked), lt(pages.lastChecked, inactiveCutoff))
+          )
+        ),
+      columns: { id: true, holdStatus: true },
     })
     : await db.query.trackedPages.findMany({
-      columns: { id: true },
+      columns: { id: true, holdStatus: true },
     });
 
   if (pagesToRefresh.length === 0) {
     console.log(
-      `[Enqueue Refresh] No tracked pages due for refresh (all scanned within last ${cooldownHours}h).`
+      `[Enqueue Refresh] No tracked pages due for refresh (active < ${cooldownHours}h, inactive < 72h).`
     );
     return 0;
   }
@@ -108,6 +121,7 @@ export async function enqueuePagesForCreativeScan(
     columns: {
       id: true,
       status: true,
+      holdStatus: true,
       searchType: true,
       pageId: true,
       lastCreativeScan: true,
@@ -121,6 +135,11 @@ export async function enqueuePagesForCreativeScan(
   for (const page of allPages) {
     // 1. MUST be a verified successful count scan (not 'pending', 'scanning', or 'failed')
     if (page.status !== "success") {
+      continue;
+    }
+
+    // 1b. Skip pages that are currently on hold or inactive (paused)
+    if (page.holdStatus === "on_hold" || page.holdStatus === "inactive") {
       continue;
     }
 
@@ -142,13 +161,14 @@ export async function enqueuePagesForCreativeScan(
         eligiblePages.push({ id: page.id, currentResults: page.currentResults || 0 });
       }
     } else {
-      // Subsequent scan: requires latest scanHistory difference >= minDifferenceThreshold (new ads added)
+      // Subsequent scan: strictly requires latest scanHistory difference >= minDifferenceThreshold (new ads added)
+      const threshold = Math.max(1, minDifferenceThreshold);
       const latestHistory = await db.query.scanHistory.findFirst({
         where: eq(scanHistory.trackedPageId, page.id),
         orderBy: [sql`${scanHistory.checkedAt} desc`],
       });
 
-      if (latestHistory && (latestHistory.difference || 0) >= minDifferenceThreshold) {
+      if (latestHistory && (latestHistory.difference || 0) >= threshold) {
         eligiblePages.push({ id: page.id, currentResults: page.currentResults || 0 });
       }
     }
@@ -415,6 +435,13 @@ export async function claimNextPendingJob() {
       .set({ status: "running", startedAt: new Date() })
       .where(eq(creativeScans.id, job.creativeScanId));
 
+    if (job.trackedPageId) {
+      await db
+        .update(trackedPages)
+        .set({ status: "scanning", updatedAt: new Date() })
+        .where(eq(trackedPages.id, job.trackedPageId));
+    }
+
     creativeScanRecord = await db.query.creativeScans.findFirst({
       where: eq(creativeScans.id, job.creativeScanId),
     });
@@ -516,6 +543,10 @@ export async function markJobCompleted(
   let difference: number | null = null;
   if (results !== null && lastScan?.results !== null && lastScan?.results !== undefined) {
     difference = results - lastScan.results;
+  } else if (results !== null && trackedPage?.currentResults !== null && trackedPage?.currentResults !== undefined) {
+    difference = results - trackedPage.currentResults;
+  } else if (results !== null) {
+    difference = results;
   }
 
   const scanError = options?.failureReason || null;
@@ -539,7 +570,8 @@ export async function markJobCompleted(
     ?? (lastScan?.status === "success" && (lastScan.results ?? 0) > 0 ? lastScan.results : null)
     ?? (trackedPage?.currentResults && trackedPage.currentResults > 0 ? trackedPage.currentResults : 0);
   const hadActiveAds = prevCount > 0;
-  const isOnHold = trackedPage?.holdStatus === "on_hold";
+  let isOnHold = trackedPage?.holdStatus === "on_hold";
+  const isInactive = trackedPage?.holdStatus === "inactive";
 
   const isValidatedZero = results === 0
     && status === "success"
@@ -550,6 +582,12 @@ export async function markJobCompleted(
   const isZeroWhileOnHold = isOnHold && isValidatedZero;
   const isAmbiguousZero = results === 0 && !isValidatedZero;
   const isRecovering = isOnHold
+    && results !== null
+    && results > 0
+    && status === "success"
+    && scanQuality === "complete"
+    && !scanError;
+  const isRelaunching = isInactive
     && results !== null
     && results > 0
     && status === "success"
@@ -646,10 +684,17 @@ export async function markJobCompleted(
         await enqueueOrEscalateJob(pageId, "count", 10);
       } catch {}
     }
-  } else if (isRecovering) {
-    // Account hold lifted — compute display difference vs lastKnownValidResults BEFORE clearing
-    const baseline = trackedPage?.lastKnownValidResults ?? results;
+  } else if (isRecovering || isRelaunching) {
+    // Account hold lifted OR inactive brand relaunched ads — compute display difference vs baseline BEFORE clearing
+    const baseline = isRecovering ? (trackedPage?.lastKnownValidResults ?? results) : 0;
     displayDifference = results - baseline;
+
+    const isSmallPage = (results || 0) < 20;
+    const hasPreviousScan = Boolean(trackedPage?.lastCreativeScan);
+    const isMeaningfulDelta = !hasPreviousScan
+      ? ((displayDifference !== null && displayDifference >= 1) || (results !== null && results >= 1))
+      : (displayDifference !== null && displayDifference >= 2);
+    const finalStatus = (status === "success" && isMeaningfulDelta && isSmallPage) ? "pending" : "success";
 
     await db.update(trackedPages).set({
       holdStatus: "active",
@@ -659,13 +704,35 @@ export async function markJobCompleted(
       currentResults: results,
       lastChecked: now,
       lastSuccessAt: now,
-      status: "success",
+      status: finalStatus,
       updatedAt: now,
     }).where(eq(trackedPages.id, pageId));
 
-    console.log(
-      `[Count Scan] 🟢 Page ${pageId} recovered from hold: ${results} ads (baseline was ${baseline}, displayDiff: ${displayDifference}).`
-    );
+    // Reset stale hold flag so the creative routing block below can fire for these pages.
+    // isOnHold was captured from the original holdStatus before this branch ran the DB update.
+    // Without this, recovering on_hold pages would silently skip creative scan enqueuing.
+    if (isRecovering) isOnHold = false;
+
+    if (isRelaunching) {
+      console.log(
+        `[Count Scan] 🚀 Inactive brand "${brandName}" (${pageId}) relaunched ads! Detected ${results} active ad(s). Transitioned to active status.`
+      );
+      try {
+        const { logHoldLiftedNotification } = await import("../lib/notifications");
+        await logHoldLiftedNotification({
+          trackedPageId: pageId,
+          brandName,
+          recoveredResults: results,
+          pageId: trackedPage?.pageId,
+        });
+      } catch (notifErr) {
+        console.error("[Count Scan] Failed to log relaunch notification:", notifErr);
+      }
+    } else {
+      console.log(
+        `[Count Scan] 🟢 Page ${pageId} recovered from hold: ${results} ads (baseline was ${baseline}, displayDiff: ${displayDifference}).`
+      );
+    }
   } else if (results === 0 || status !== "success" || scanQuality !== "complete" || scanError) {
     // Ambiguous/failed scan: preserve previous state and never archive.
     await db.update(trackedPages).set({
@@ -677,11 +744,21 @@ export async function markJobCompleted(
     }).where(eq(trackedPages.id, pageId));
   } else {
     // Normal (non-hold) update
+    // If ad count changed on a micro-page (< 20 ads), set page to 'pending' if it's a meaningful delta (first-time >= 1, or delta >= 2)
+    const isSmallPage = (results || 0) < 20;
+    const hasPreviousScan = Boolean(trackedPage?.lastCreativeScan);
+    const isMeaningfulDelta = !hasPreviousScan
+      ? ((displayDifference !== null && displayDifference >= 1) || (results !== null && results >= 1))
+      : (displayDifference !== null && displayDifference >= 2);
+
+    const isAdCountIncrease = status === "success" && isMeaningfulDelta;
+    const finalPageStatus = (isAdCountIncrease && isSmallPage) ? "pending" : status;
+
     await db.update(trackedPages).set({
       currentResults: results,
       lastChecked: now,
       lastSuccessAt: status === "success" ? now : undefined,
-      status,
+      status: finalPageStatus,
       updatedAt: now,
     }).where(eq(trackedPages.id, pageId));
 
@@ -733,61 +810,74 @@ export async function markJobCompleted(
   }
 
   // 5. Intelligent Creative Routing
-  // Guard with displayDifference and ensure holdStatus !== "on_hold"
-  if (status === "success" && !isOnHold && !isDropToZero && displayDifference !== null && displayDifference >= 1) {
+  const hasPreviousScan = Boolean(trackedPage?.lastCreativeScan);
+  // For a brand-new page with no previous creative scan, all positive results count as new ads to extract
+  const effectiveDifference = (!hasPreviousScan && (displayDifference === null || displayDifference < 1) && (results || 0) >= 1)
+    ? (results || 0)
+    : (displayDifference ?? 0);
+
+  // Guard with effectiveDifference and ensure holdStatus !== "on_hold"
+  if (status === "success" && !isOnHold && !isDropToZero && effectiveDifference >= 1) {
     try {
-      const settings = await getAppSettings();
-      const autoSpyThreshold = Math.max(2, settings.autoSpyThreshold ?? 5);
-      const isMegaBrand = (results || 0) >= 50;
-      const isSurge = displayDifference >= autoSpyThreshold;
+      const isCloudEligible = (results || 0) >= 20;
 
-      if (!isMegaBrand && !isSurge) {
-        // Enqueue for free local Playwright worker (< 50 ads total & < 5 diff)
-        const existingJob = await db.query.queue.findFirst({
-          where: (q, { and, eq, inArray }) =>
-            and(
-              eq(q.trackedPageId, pageId),
-              eq(q.jobType, "creative"),
-              inArray(q.status, ["pending", "running"])
-            ),
-        });
+      if (!isCloudEligible) {
+        // MICRO-PAGE (< 20 active ads): Always enqueue for local free Playwright worker.
+        // Require meaningful delta: first-time scan (>= 1) or subsequent jump (>= 2)
+        const isMeaningfulDelta = !hasPreviousScan || effectiveDifference >= 2;
 
-        if (!existingJob) {
-          const [scanRecord] = await db
-            .insert(creativeScans)
-            .values({
-              trackedPageId: pageId,
-              status: "pending",
-              configSnapshot: JSON.stringify({
-                runner: "playwright",
-                autoTriggered: true,
-                delta: displayDifference,
-                totalResults: results,
-              }),
-              outcomeDetails: `Queued for local Playwright creative scan (+${displayDifference} new ads, total ${results} < 50, delta < ${autoSpyThreshold})`,
-            })
-            .returning();
-
-          await db.insert(queue).values({
-            trackedPageId: pageId,
-            jobType: "creative",
-            creativeScanId: scanRecord.id,
-            status: "pending",
-            priority: 5,
+        if (isMeaningfulDelta) {
+          const existingJob = await db.query.queue.findFirst({
+            where: (q, { and, eq, inArray }) =>
+              and(
+                eq(q.trackedPageId, pageId),
+                eq(q.jobType, "creative"),
+                inArray(q.status, ["pending", "running"])
+              ),
           });
 
+          if (!existingJob) {
+            const [scanRecord] = await db
+              .insert(creativeScans)
+              .values({
+                trackedPageId: pageId,
+                status: "pending",
+                configSnapshot: JSON.stringify({
+                  runner: "playwright",
+                  autoTriggered: true,
+                  delta: displayDifference,
+                  totalResults: results,
+                }),
+                outcomeDetails: `Queued for local Playwright creative scan (+${displayDifference} new ads, total ${results} < 20)`,
+              })
+              .returning();
+
+            await db.insert(queue).values({
+              trackedPageId: pageId,
+              jobType: "creative",
+              creativeScanId: scanRecord.id,
+              status: "pending",
+              priority: 5,
+            });
+
+            await db
+              .update(trackedPages)
+              .set({ status: "pending", updatedAt: now })
+              .where(eq(trackedPages.id, pageId));
+
+            console.log(
+              `[Local Creative Queue] 🟢 Enqueued "${brandName}" for free local Playwright scan (+${displayDifference} ads, total: ${results} < 20).`
+            );
+          }
+        } else {
           console.log(
-            `[Local Creative Queue] 🟢 Enqueued "${brandName}" for free local Playwright scan (+${displayDifference} ads, total: ${results}, threshold: ${autoSpyThreshold}).`
+            `[Local Creative Queue] ℹ️ Skipping auto-queue for "${brandName}": delta (+${displayDifference} < 2 on a ${results}-ad page) is below threshold.`
           );
         }
       } else {
-        // 50+ total ads OR 5+ scaling surge: Trigger Apify Cloud runner
-        const reason = isMegaBrand
-          ? `Mega-Brand catalog (${results} active ads >= 50)`
-          : `Scaling surge (+${displayDifference} ads >= threshold ${autoSpyThreshold})`;
-
+        // GROWING & MEGA-BRAND (>= 20 ads): Trigger Apify Cloud runner for cloud-eligible catalogs
         console.log(
-          `[Apify Auto-Trigger] 🚀 ${reason} detected for "${brandName}". Triggering Apify Cloud scan...`
+          `[Apify Auto-Trigger] 🚀 Cloud-eligible catalog (${results} active ads >= 20) detected for "${brandName}". Triggering Apify Cloud scan...`
         );
         tryAutoTriggerApifyDeltaScan(pageId, displayDifference).catch((err) => {
           console.error("[Apify Auto-Trigger] Error launching background delta scan:", err);
@@ -857,6 +947,14 @@ async function executeApifyDeltaScan(pageId: string, difference: number) {
   });
 
   if (!page || !page.url) return;
+
+  // Strict guard: Apify must NEVER scan micro-pages (< 20 ads)
+  if ((page.currentResults || 0) < 20) {
+    console.log(
+      `[Apify Auto-Trigger] 🛑 Skipping "${page.displayName || pageId}": micro-page (${page.currentResults ?? 0} ads < 20). Micro-pages are scanned locally.`
+    );
+    return;
+  }
 
   // Enforce 24-hour cooldown window to prevent redundant credit usage
   const cooldownCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);

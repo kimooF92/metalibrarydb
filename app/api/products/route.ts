@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { ads, adObservations, scrapedProducts } from "@/db/schema";
+import { ads, adObservations, scrapedProducts, trackedPages } from "@/db/schema";
 import { eq, ilike, and, sql, desc, asc, or, count, inArray, isNull } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { PRIVATE_AUTH_VARY, PRIVATE_DETAIL_CACHE_CONTROL, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
@@ -287,11 +287,14 @@ export async function GET(req: NextRequest) {
             activeAdsCount: sql<number>`COUNT(CASE WHEN ${ads.isArchived} = false OR ${ads.isArchived} IS NULL THEN ${ads.id} END)`.mapWith(Number),
             earliestAdDate: sql<string>`MIN(COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}))`,
             latestAdDate: sql<string>`MAX(${ads.lastSeenAt})`,
-            brandName: sql<string>`MAX(${ads.pageName})`,
+            brandName: sql<string>`MAX(COALESCE(${trackedPages.displayName}, ${ads.pageName}))`,
             brandPageId: sql<string>`MAX(${ads.pageId})`,
+            brandHoldStatus: sql<string>`MAX(${trackedPages.holdStatus})`,
+            brandCurrentResults: sql<number>`MAX(${trackedPages.currentResults})`.mapWith(Number),
             topCreativeThumbnail: sql<string>`MAX(COALESCE(${ads.thumbnailStoragePath}, ${ads.thumbnailUrl}))`,
           })
           .from(ads)
+          .leftJoin(trackedPages, eq(trackedPages.pageId, ads.pageId))
           .where(inArray(ads.productId, productIds))
           .groupBy(ads.productId);
 
@@ -328,6 +331,8 @@ export async function GET(req: NextRequest) {
         latestAdDate: m?.latestAdDate || null,
         brandName: m?.brandName || null,
         brandPageId: m?.brandPageId || p.pageId || null,
+        brandHoldStatus: (m?.brandHoldStatus as any) || "active",
+        brandCurrentResults: typeof m?.brandCurrentResults === "number" ? m.brandCurrentResults : null,
         topCreativeThumbnail: m?.topCreativeThumbnail || null,
         daysRunning,
         isBreakout,

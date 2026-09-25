@@ -175,6 +175,23 @@ export async function logHoldDetectedNotification(params: {
   });
 }
 
+export async function logHoldLiftedNotification(params: {
+  trackedPageId: string;
+  brandName: string;
+  recoveredResults: number;
+  pageId?: string | null;
+}) {
+  return createNotification({
+    type: "count_scan",
+    title: `🟢 Ads Relaunched: ${params.brandName}`,
+    message: `"${params.brandName}" is advertising again with ${params.recoveredResults} active ad(s). Account hold lifted.`,
+    severity: "success",
+    trackedPageId: params.trackedPageId,
+    actionUrl: `/spy/brand/${encodeURIComponent(params.pageId || params.trackedPageId)}`,
+    metadata: { recoveredResults: params.recoveredResults, isOnHold: false },
+  });
+}
+
 /**
  * Convenience helper to log Ad Spy creative scans.
  * Only logs when actual new creatives are ingested or ads archived.

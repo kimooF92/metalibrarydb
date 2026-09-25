@@ -10,7 +10,6 @@ import {
   detectStorePlatform,
   extractDeliveryInfo,
 } from "@/lib/network-extractor";
-import { classifyProductWithAI } from "@/lib/product-classifier";
 
 // In-flight URL scrape deduplication map to prevent redundant concurrent Firecrawl requests
 const inFlightScrapes = new Map<string, Promise<any>>();
@@ -18,10 +17,22 @@ const inFlightScrapes = new Map<string, Promise<any>>();
 // Concurrency limiter for background auto-scraping (max 3 concurrent scrapes)
 const MAX_CONCURRENT_AUTO_SCRAPES = 3;
 let activeScrapesCount = 0;
+let totalDrainedCount = 0;
 const scrapeQueue: Array<() => Promise<void>> = [];
+const drainListeners: Array<() => void> = [];
+
+function checkDrainNotification() {
+  if (activeScrapesCount === 0 && scrapeQueue.length === 0) {
+    while (drainListeners.length > 0) {
+      const listener = drainListeners.shift();
+      listener?.();
+    }
+  }
+}
 
 function processNextScrape() {
   if (activeScrapesCount >= MAX_CONCURRENT_AUTO_SCRAPES || scrapeQueue.length === 0) {
+    checkDrainNotification();
     return;
   }
   const nextTask = scrapeQueue.shift();
@@ -29,7 +40,9 @@ function processNextScrape() {
     activeScrapesCount++;
     nextTask().finally(() => {
       activeScrapesCount--;
+      totalDrainedCount++;
       processNextScrape();
+      checkDrainNotification();
     });
   }
 }
@@ -37,6 +50,33 @@ function processNextScrape() {
 function queueBackgroundScrape(task: () => Promise<void>) {
   scrapeQueue.push(task);
   processNextScrape();
+}
+
+/**
+ * Awaits until all queued background product scrapes complete or until the timeout is reached.
+ */
+export async function waitForScrapeQueueDrain(timeoutMs: number = 45000): Promise<{ drained: number; remaining: number }> {
+  if (activeScrapesCount === 0 && scrapeQueue.length === 0) {
+    return { drained: totalDrainedCount, remaining: 0 };
+  }
+
+  return new Promise((resolve) => {
+    let resolved = false;
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        resolve({ drained: totalDrainedCount, remaining: activeScrapesCount + scrapeQueue.length });
+      }
+    }, timeoutMs);
+
+    drainListeners.push(() => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        resolve({ drained: totalDrainedCount, remaining: 0 });
+      }
+    });
+  });
 }
 
 /**
@@ -194,10 +234,10 @@ export async function linkAndAutoScrapeProduct({
           const deliveryInfo = extractDeliveryInfo(rawHtml, extracted.delivery_cost);
           const deliveryCost = deliveryInfo?.label || null;
 
-          const classification = await classifyProductWithAI(extracted.title || "", {
-            domain: resolvedDomain,
-            adText: adCopy,
-          });
+          // AI classification bypassed per user instructions to avoid external failures/delays
+          const category = null;
+          const subCategory = null;
+          const targetAudience = null;
 
           const formattedOffers = (extracted.all_offers || []).map((offer) => ({
             tierName: offer.tier_name,
@@ -223,9 +263,9 @@ export async function linkAndAutoScrapeProduct({
               metaPixelIds: metaPixelIds.length > 0 ? metaPixelIds : null,
               storePlatform: storePlatform || "other",
               deliveryCost: deliveryCost || null,
-              category: classification.category || null,
-              subCategory: classification.subCategory || null,
-              targetAudience: classification.targetAudience || null,
+              category,
+              subCategory,
+              targetAudience,
               rawExtract: extractionResult.raw || null,
               scrapeStatus: "success",
               failureReason: null,

@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
 import { useSidebar } from "@/components/sidebar-context";
+import { SmallPagesScanBadge } from "./small-pages-scan-banner";
 
 export function Navigation() {
   const pathname = usePathname();
@@ -219,6 +220,7 @@ export function Navigation() {
         </div>
 
         <div className="flex items-center space-x-2">
+          <SmallPagesScanBadge />
           <ThemeToggle size="sm" />
           <button
             onClick={() => setIsOpen(!isOpen)}
