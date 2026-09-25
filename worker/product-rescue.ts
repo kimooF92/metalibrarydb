@@ -19,12 +19,12 @@ let lastRescueAttemptTime = 0;
  * Rescues failed or pending product extractions using the local residential IP and browser.
  * Runs during worker idle periods to repair Cloudflare-blocked products automatically.
  */
-export async function rescueFailedProductsBatch(limit = 3): Promise<number> {
+export async function rescueFailedProductsBatch(limit = 3, force = false): Promise<number> {
   if (isRescueRunning) return 0;
   
-  // Throttle rescue checks to run at most once every 60 seconds when queue is idle
+  // Throttle rescue checks to run at most once every 60 seconds unless forced (e.g. startup)
   const now = Date.now();
-  if (now - lastRescueAttemptTime < 60000) return 0;
+  if (!force && now - lastRescueAttemptTime < 60000) return 0;
   lastRescueAttemptTime = now;
 
   isRescueRunning = true;

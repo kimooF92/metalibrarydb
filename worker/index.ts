@@ -57,6 +57,18 @@ async function runWorker() {
   // Only the primary coordinator (Shard 0 or standalone runner) clears orphaned jobs
   if (isCoordinator) {
     await resetStuckJobs();
+
+    // Check and immediately rescue any stuck or failed product scrapings on worker startup
+    try {
+      const { rescueFailedProductsBatch } = await import("./product-rescue");
+      console.log("[Worker Startup] Checking for stuck or failed product scrapings to rescue...");
+      const rescuedCount = await rescueFailedProductsBatch(5, true);
+      if (rescuedCount > 0) {
+        console.log(`[Worker Startup] 🟢 Rescued ${rescuedCount} stuck product(s) via local residential browser.`);
+      }
+    } catch (rescueErr: any) {
+      console.warn("[Worker Startup] Product rescue notice:", rescueErr?.message);
+    }
   }
 
   // Load live application settings from database (with fallback defaults)
