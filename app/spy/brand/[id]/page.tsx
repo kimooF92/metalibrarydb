@@ -178,6 +178,7 @@ export default function BrandDeepDivePage({
   const [productSearch, setProductSearch] = useState("");
   const [productStatusFilter, setProductStatusFilter] = useState<"all" | "scraped" | "pending">("all");
   const [productOfferOnly, setProductOfferOnly] = useState(false);
+  const [productActiveOnly, setProductActiveOnly] = useState(false);
   const [selectedProductForModal, setSelectedProductForModal] = useState<ScrapedProduct | null>(null);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const detailRequestIdRef = useRef(0);
@@ -203,6 +204,9 @@ export default function BrandDeepDivePage({
       const tab = urlParams.get("tab");
       if (tab === "products" || tab === "creatives" || tab === "analytics") {
         setActiveTab(tab as any);
+      }
+      if (urlParams.get("active") === "true" || urlParams.get("activeOnly") === "true") {
+        setProductActiveOnly(true);
       }
     }
   }, []);
@@ -1117,6 +1121,7 @@ export default function BrandDeepDivePage({
             const allProds = data?.products || [];
             const scrapedCount = allProds.filter((p) => p.scrapeStatus === "success").length;
             const pendingCount = allProds.filter((p) => p.scrapeStatus === "pending").length;
+            const activeProdsCount = allProds.filter((p) => p.brandHoldStatus !== "inactive" && (p.activeAdsCount || 0) > 0).length;
             const heroProd = allProds[0];
 
             return (
@@ -1124,7 +1129,9 @@ export default function BrandDeepDivePage({
                 <div className="p-3 rounded-xl bg-white dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 shadow-sm">
                   <span className="text-[11px] font-bold uppercase text-slate-500 tracking-wider">Unique Products</span>
                   <p className="text-xl font-black text-slate-900 dark:text-white mt-0.5">{allProds.length}</p>
-                  <span className="text-[10px] text-slate-500 font-medium">Extracted from {summary.totalAdsCaptured} ads</span>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    {activeProdsCount} active on air • {allProds.length - activeProdsCount} off-air
+                  </span>
                 </div>
 
                 <div className="p-3 rounded-xl bg-white dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -1179,6 +1186,28 @@ export default function BrandDeepDivePage({
             </div>
 
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+              {/* Active Only Filter Toggle */}
+              <button
+                type="button"
+                onClick={() => setProductActiveOnly(!productActiveOnly)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer select-none ${
+                  productActiveOnly
+                    ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 font-bold shadow-2xs"
+                    : "bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+                }`}
+                title={productActiveOnly ? "Currently showing active products only. Click to show all." : "Filter products that currently have active running ads"}
+              >
+                <span className={`w-2 h-2 rounded-full ${productActiveOnly ? "bg-emerald-500 animate-pulse" : "bg-emerald-500/60"}`} />
+                <span>Active Only</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  productActiveOnly
+                    ? "bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200"
+                    : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                }`}>
+                  {(data?.products || []).filter((p: any) => p.brandHoldStatus !== "inactive" && (p.activeAdsCount || 0) > 0).length}
+                </span>
+              </button>
+
               <select
                 value={productStatusFilter}
                 onChange={(e) => setProductStatusFilter(e.target.value as any)}
@@ -1208,6 +1237,12 @@ export default function BrandDeepDivePage({
           {(() => {
             const allProds: ScrapedProduct[] = (data?.products as any[]) || [];
             const filtered = allProds.filter((p) => {
+              if (productActiveOnly) {
+                const isInactive =
+                  p.brandHoldStatus === "inactive" ||
+                  (typeof p.activeAdsCount === "number" && p.activeAdsCount === 0);
+                if (isInactive || (p.activeAdsCount || 0) <= 0) return false;
+              }
               if (productStatusFilter === "scraped" && p.scrapeStatus !== "success") return false;
               if (productStatusFilter === "pending" && p.scrapeStatus === "success") return false;
               if (productOfferOnly && (!p.discountOrOffer || p.discountOrOffer.trim() === "")) return false;
@@ -1260,6 +1295,7 @@ export default function BrandDeepDivePage({
                       setProductSearch("");
                       setProductStatusFilter("all");
                       setProductOfferOnly(false);
+                      setProductActiveOnly(false);
                     }}
                     className="text-xs text-indigo-600 font-semibold mt-2 hover:underline cursor-pointer"
                   >
