@@ -3,7 +3,11 @@ import { db } from "@/db";
 import { scrapedProducts, ads, adObservations } from "@/db/schema";
 import { eq, sql, inArray, or, and } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
-import { formatTunisianPhone } from "@/lib/network-extractor";
+import {
+  formatTunisianPhone,
+  PHANTOM_PHONE_BLACKLIST,
+  isPlaceholderOrDummyPhone,
+} from "@/lib/network-extractor";
 import { PRODUCT_NETWORK_PROJECTION } from "@/lib/product-projections";
 
 export async function GET(req: NextRequest) {
@@ -34,35 +38,71 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const phoneNumbers = targetProduct.phoneNumbers || [];
-    const whatsappNumbers = targetProduct.whatsappNumbers || [];
-    const metaPixelIds = targetProduct.metaPixelIds || [];
-    const domain = targetProduct.domain?.toLowerCase() || "";
+    // 2. Sanitize and validate target fingerprints
+    const rawPhones = targetProduct.phoneNumbers || [];
+    const rawWhatsApps = targetProduct.whatsappNumbers || [];
+    const rawPixels = targetProduct.metaPixelIds || [];
 
-    // 2. Cross-reference other products and ads sharing any of these fingerprints
+    const validPhones = rawPhones.filter(
+      (p) => !PHANTOM_PHONE_BLACKLIST.has(p) && !isPlaceholderOrDummyPhone(p)
+    );
+    const validWhatsApps = rawWhatsApps.filter(
+      (w) => !PHANTOM_PHONE_BLACKLIST.has(w) && !isPlaceholderOrDummyPhone(w)
+    );
+    const validPixels = rawPixels.filter(
+      (px) => px && /^\d{12,18}$/.test(px.trim())
+    );
+
+    // 3. Hub / Stop-Word Protection:
+    // If a phone number is associated with more than 4 distinct domains, it is a shared courier/service hotline,
+    // not a private merchant network. Only use it if accompanied by WhatsApp or Pixel.
+    let clusterablePhones = validPhones;
+    if (validPhones.length > 0) {
+      const hubCheckQuery = await db
+        .select({
+          phone: sql<string>`elem`,
+          domainCount: sql<number>`count(distinct ${scrapedProducts.domain})`,
+        })
+        .from(scrapedProducts)
+        .crossJoin(sql`unnest(${scrapedProducts.phoneNumbers}) as elem`)
+        .where(
+          sql`elem = ANY(ARRAY[${sql.raw(validPhones.map((p) => `'${p}'`).join(","))}]::text[])`
+        )
+        .groupBy(sql`elem`);
+
+      const hubNumbers = new Set(
+        hubCheckQuery
+          .filter((r) => Number(r.domainCount) > 4)
+          .map((r) => r.phone)
+      );
+
+      clusterablePhones = validPhones.filter((p) => !hubNumbers.has(p));
+    }
+
+    // 4. Cross-reference other products sharing any verified high-confidence fingerprints
     const matchingProductConditions = [];
 
-    if (phoneNumbers.length > 0) {
+    if (validPixels.length > 0) {
       matchingProductConditions.push(
-        sql`${scrapedProducts.phoneNumbers} && ${sql.raw(`ARRAY[${phoneNumbers.map((p) => `'${p}'`).join(",")}]::text[]`)}`
+        sql`${scrapedProducts.metaPixelIds} && ${sql.raw(`ARRAY[${validPixels.map((p) => `'${p}'`).join(",")}]::text[]`)}`
       );
     }
 
-    if (whatsappNumbers.length > 0) {
+    if (validWhatsApps.length > 0) {
       matchingProductConditions.push(
-        sql`${scrapedProducts.whatsappNumbers} && ${sql.raw(`ARRAY[${whatsappNumbers.map((p) => `'${p}'`).join(",")}]::text[]`)}`
+        sql`${scrapedProducts.whatsappNumbers} && ${sql.raw(`ARRAY[${validWhatsApps.map((p) => `'${p}'`).join(",")}]::text[]`)}`
       );
     }
 
-    if (metaPixelIds.length > 0) {
+    if (clusterablePhones.length > 0) {
       matchingProductConditions.push(
-        sql`${scrapedProducts.metaPixelIds} && ${sql.raw(`ARRAY[${metaPixelIds.map((p) => `'${p}'`).join(",")}]::text[]`)}`
+        sql`${scrapedProducts.phoneNumbers} && ${sql.raw(`ARRAY[${clusterablePhones.map((p) => `'${p}'`).join(",")}]::text[]`)}`
       );
     }
 
-    let connectedProducts: any[] = [];
+    let rawConnectedProducts: any[] = [];
     if (matchingProductConditions.length > 0) {
-      connectedProducts = await db
+      rawConnectedProducts = await db
         .select({
           id: scrapedProducts.id,
           url: scrapedProducts.url,
@@ -77,12 +117,52 @@ export async function GET(req: NextRequest) {
         .where(or(...matchingProductConditions));
     }
 
-    // Collect all matched product IDs (including target)
-    const allNetworkProductIds = Array.from(
-      new Set([targetProduct.id, ...connectedProducts.map((p) => p.id)])
-    );
+    // Map each product to its matching signals relative to targetProduct
+    interface ProductMatchMeta {
+      id: string;
+      domain: string | null;
+      pageId: string | null;
+      matchedPixels: string[];
+      matchedWhatsApps: string[];
+      matchedPhones: string[];
+      isTarget: boolean;
+    }
 
-    // 3. Fetch all ads linked to any of these network products
+    const productMatchMap = new Map<string, ProductMatchMeta>();
+
+    // Add target product
+    productMatchMap.set(targetProduct.id, {
+      id: targetProduct.id,
+      domain: targetProduct.domain,
+      pageId: targetProduct.pageId,
+      matchedPixels: validPixels,
+      matchedWhatsApps: validWhatsApps,
+      matchedPhones: validPhones,
+      isTarget: true,
+    });
+
+    for (const cp of rawConnectedProducts) {
+      const pPixels = (cp.metaPixelIds || []).filter((px: string) => validPixels.includes(px));
+      const pWhatsApps = (cp.whatsappNumbers || []).filter((w: string) => validWhatsApps.includes(w));
+      const pPhones = (cp.phoneNumbers || []).filter((p: string) => clusterablePhones.includes(p));
+
+      // Must share at least one valid signal with target
+      if (pPixels.length > 0 || pWhatsApps.length > 0 || pPhones.length > 0) {
+        productMatchMap.set(cp.id, {
+          id: cp.id,
+          domain: cp.domain,
+          pageId: cp.pageId,
+          matchedPixels: pPixels,
+          matchedWhatsApps: pWhatsApps,
+          matchedPhones: pPhones,
+          isTarget: cp.id === targetProduct.id,
+        });
+      }
+    }
+
+    const allNetworkProductIds = Array.from(productMatchMap.keys());
+
+    // 5. Fetch all ads linked to any of these network products
     const networkAds = await db
       .select({
         id: ads.id,
@@ -110,63 +190,193 @@ export async function GET(req: NextRequest) {
 
     const uniqueAds = Array.from(adMap.values());
 
-    // 4. Group by Facebook Page
-    const pageGroups = new Map<
-      string,
-      {
-        pageId: string;
-        pageName: string;
-        activeAdsCount: number;
-        sampleThumbnails: string[];
-      }
-    >();
+    // 6. Group by Facebook Page and build connection attribution
+    interface PageNetworkGroup {
+      pageId: string;
+      pageName: string;
+      isCurrentPage: boolean;
+      activeAdsCount: number;
+      sampleThumbnails: string[];
+      domains: Set<string>;
+      matchedPixels: Set<string>;
+      matchedWhatsApps: Set<string>;
+      matchedPhones: Set<string>;
+      confidence: "high" | "medium" | "low" | "current";
+      connectionReasons: string[];
+    }
+
+    const pageGroups = new Map<string, PageNetworkGroup>();
+    const targetPageId = targetProduct.pageId;
 
     uniqueAds.forEach((ad) => {
       if (!ad.pageId) return;
-      const existing = pageGroups.get(ad.pageId) || {
-        pageId: ad.pageId,
-        pageName: ad.pageName || `Page ${ad.pageId}`,
-        activeAdsCount: 0,
-        sampleThumbnails: [],
-      };
+      const isCurrent = Boolean(
+        (targetPageId && ad.pageId === targetPageId) ||
+        (ad.productId === targetProduct.id)
+      );
 
-      existing.activeAdsCount++;
-      const thumb = ad.thumbnailUrl || ad.mediaUrls?.[0];
-      if (thumb && existing.sampleThumbnails.length < 4 && !existing.sampleThumbnails.includes(thumb)) {
-        existing.sampleThumbnails.push(thumb);
+      let group = pageGroups.get(ad.pageId);
+      if (!group) {
+        group = {
+          pageId: ad.pageId,
+          pageName: ad.pageName || `Page ${ad.pageId}`,
+          isCurrentPage: isCurrent,
+          activeAdsCount: 0,
+          sampleThumbnails: [],
+          domains: new Set<string>(),
+          matchedPixels: new Set<string>(),
+          matchedWhatsApps: new Set<string>(),
+          matchedPhones: new Set<string>(),
+          confidence: isCurrent ? "current" : "medium",
+          connectionReasons: [],
+        };
+        pageGroups.set(ad.pageId, group);
       }
 
-      pageGroups.set(ad.pageId, existing);
+      group.activeAdsCount++;
+      const thumb = ad.thumbnailUrl || ad.mediaUrls?.[0];
+      if (thumb && group.sampleThumbnails.length < 4 && !group.sampleThumbnails.includes(thumb)) {
+        group.sampleThumbnails.push(thumb);
+      }
+
+      if (ad.productId) {
+        const pMeta = productMatchMap.get(ad.productId);
+        if (pMeta) {
+          if (pMeta.domain) group.domains.add(pMeta.domain);
+          pMeta.matchedPixels.forEach((px) => group!.matchedPixels.add(px));
+          pMeta.matchedWhatsApps.forEach((w) => group!.matchedWhatsApps.add(w));
+          pMeta.matchedPhones.forEach((p) => group!.matchedPhones.add(p));
+        }
+      }
     });
 
-    const connectedPages = Array.from(pageGroups.values()).sort(
-      (a, b) => b.activeAdsCount - a.activeAdsCount
-    );
+    // Ensure target product's own page is represented even if it has no ads yet
+    if (targetPageId && !pageGroups.has(targetPageId)) {
+      pageGroups.set(targetPageId, {
+        pageId: targetPageId,
+        pageName: `Page ${targetPageId}`,
+        isCurrentPage: true,
+        activeAdsCount: 0,
+        sampleThumbnails: [],
+        domains: targetProduct.domain ? new Set([targetProduct.domain]) : new Set(),
+        matchedPixels: new Set(validPixels),
+        matchedWhatsApps: new Set(validWhatsApps),
+        matchedPhones: new Set(validPhones),
+        confidence: "current",
+        connectionReasons: ["Current Brand Page"],
+      });
+    }
 
-    // Collect all unique phone and whatsapp numbers across the network
-    const allPhones = new Set<string>(phoneNumbers);
-    const allWhatsApps = new Set<string>(whatsappNumbers);
-    const allPixels = new Set<string>(metaPixelIds);
+    // Determine connection reasons & confidence for each page
+    pageGroups.forEach((group) => {
+      if (group.isCurrentPage) {
+        group.confidence = "current";
+        group.connectionReasons = ["Current Brand Page"];
+        return;
+      }
 
-    connectedProducts.forEach((p) => {
-      (p.phoneNumbers || []).forEach((num: string) => allPhones.add(num));
-      (p.whatsappNumbers || []).forEach((num: string) => allWhatsApps.add(num));
-      (p.metaPixelIds || []).forEach((id: string) => allPixels.add(id));
+      const reasons: string[] = [];
+      let hasPixelMatch = false;
+      let hasWaMatch = false;
+
+      if (group.matchedPixels.size > 0) {
+        hasPixelMatch = true;
+        group.matchedPixels.forEach((px) => {
+          reasons.push(`Shared Meta Pixel (${px})`);
+        });
+      }
+
+      if (group.matchedWhatsApps.size > 0) {
+        hasWaMatch = true;
+        group.matchedWhatsApps.forEach((w) => {
+          reasons.push(`Shared WhatsApp (${formatTunisianPhone(w).formatted})`);
+        });
+      }
+
+      if (group.matchedPhones.size > 0) {
+        group.matchedPhones.forEach((p) => {
+          reasons.push(`Shared Phone (${formatTunisianPhone(p).formatted})`);
+        });
+      }
+
+      group.connectionReasons = reasons;
+
+      if (hasPixelMatch || hasWaMatch || group.matchedPhones.size >= 2) {
+        group.confidence = "high";
+      } else if (group.matchedPhones.size === 1) {
+        group.confidence = "medium";
+      } else {
+        group.confidence = "low";
+      }
+    });
+
+    // Format output connected pages
+    const connectedPages = Array.from(pageGroups.values())
+      .map((g) => ({
+        pageId: g.pageId,
+        pageName: g.pageName,
+        isCurrentPage: g.isCurrentPage,
+        activeAdsCount: g.activeAdsCount,
+        sampleThumbnails: g.sampleThumbnails,
+        domains: Array.from(g.domains),
+        confidence: g.confidence,
+        connectionReasons: g.connectionReasons,
+      }))
+      .sort((a, b) => {
+        if (a.isCurrentPage && !b.isCurrentPage) return -1;
+        if (!a.isCurrentPage && b.isCurrentPage) return 1;
+        return b.activeAdsCount - a.activeAdsCount;
+      });
+
+    // Collect all valid unique contact info across the network
+    const allPhones = new Set<string>(validPhones);
+    const allWhatsApps = new Set<string>(validWhatsApps);
+    const allPixels = new Set<string>(validPixels);
+
+    rawConnectedProducts.forEach((p) => {
+      (p.phoneNumbers || []).forEach((num: string) => {
+        if (!PHANTOM_PHONE_BLACKLIST.has(num) && !isPlaceholderOrDummyPhone(num)) {
+          allPhones.add(num);
+        }
+      });
+      (p.whatsappNumbers || []).forEach((num: string) => {
+        if (!PHANTOM_PHONE_BLACKLIST.has(num) && !isPlaceholderOrDummyPhone(num)) {
+          allWhatsApps.add(num);
+        }
+      });
+      (p.metaPixelIds || []).forEach((id: string) => {
+        if (id && /^\d{12,18}$/.test(id.trim())) {
+          allPixels.add(id);
+        }
+      });
     });
 
     const formattedPhones = Array.from(allPhones).map((p) => formatTunisianPhone(p));
     const formattedWhatsApps = Array.from(allWhatsApps).map((p) => formatTunisianPhone(p));
 
+    const sisterPages = connectedPages.filter((p) => !p.isCurrentPage);
     const totalConnectedPages = connectedPages.length;
-    const totalNetworkAds = uniqueAds.length;
-    const hasShadowNetwork = totalConnectedPages > 1;
+    const sisterPagesCount = sisterPages.length;
+    const hasShadowNetwork = sisterPagesCount > 0;
+
+    let networkSummary = "Verified Independent Brand — no shared advertiser fingerprints detected.";
+    if (hasShadowNetwork) {
+      const topReasons = Array.from(
+        new Set(sisterPages.flatMap((p) => p.connectionReasons))
+      ).slice(0, 2);
+      networkSummary = `Shadow Network: Connected to ${sisterPagesCount} sister Facebook Page${
+        sisterPagesCount === 1 ? "" : "s"
+      } via ${topReasons.join(" & ")}.`;
+    }
 
     return NextResponse.json({
       success: true,
       network: {
         hasShadowNetwork,
         totalConnectedPages,
-        totalNetworkAds,
+        sisterPagesCount,
+        totalNetworkAds: uniqueAds.length,
+        networkSummary,
         storePlatform: targetProduct.storePlatform || "other",
         phoneNumbers: Array.from(allPhones),
         whatsappNumbers: Array.from(allWhatsApps),
@@ -184,3 +394,4 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
