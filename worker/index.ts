@@ -81,6 +81,27 @@ async function runWorker() {
   const testDiscoveryIdx = args.indexOf("--discovery-url");
   const isSingleRun = args.includes("--once") || process.env.SINGLE_RUN === "true";
 
+  if (args.includes("--count-only")) {
+    process.env.COUNT_ONLY = "true";
+  }
+  if (args.includes("--creative-only")) {
+    process.env.CREATIVE_ONLY = "true";
+  }
+  const isCountOnly =
+    process.env.COUNT_ONLY === "true" ||
+    process.env.CI === "true" ||
+    process.env.GITHUB_ACTIONS === "true";
+
+  if (isCountOnly) {
+    console.log(
+      "[Worker Mode] ⚡ Count-Only Mode Active: Creative spy scans will be skipped and reserved for local residential runner."
+    );
+  } else if (process.env.CREATIVE_ONLY === "true") {
+    console.log(
+      "[Worker Mode] 🎨 Creative-Only Mode Active: Only Ad Spy creative scans will be processed."
+    );
+  }
+
   const isForceRefresh = args.includes("--refresh-all") || process.env.REFRESH_ALL === "true";
   const shouldRefreshAll =
     isForceRefresh ||
@@ -98,9 +119,10 @@ async function runWorker() {
   }
 
   const shouldEnqueueSpy =
-    args.includes("--enqueue-spy") ||
-    process.env.ENQUEUE_SPY === "true" ||
-    process.env.AUTO_ENQUEUE_SPY !== "false";
+    !isCountOnly &&
+    (args.includes("--enqueue-spy") ||
+      process.env.ENQUEUE_SPY === "true" ||
+      process.env.AUTO_ENQUEUE_SPY !== "false");
   if (shouldEnqueueSpy && isCoordinator) {
     const spyCooldownDays = parseInt(process.env.SPY_COOLDOWN_DAYS || "3", 10);
     const spyMaxPages = parseInt(process.env.SPY_MAX_PAGES_PER_RUN || "25", 10);

@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { trackedPages, scanHistory, queue, ads, scrapedProducts } from "@/db/schema";
 import { addSingleUrl } from "@/actions/add-url";
 import { singleUrlSchema } from "@/lib/validators";
-import { eq, ne, ilike, or, and, sql, desc, asc, inArray, gte, lte, isNotNull } from "drizzle-orm";
+import { eq, ne, ilike, or, and, sql, desc, asc, inArray, gte, lte, isNotNull, isNull, count } from "drizzle-orm";
 import { extractProductClusterKey } from "@/lib/product-clustering";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
@@ -272,15 +272,12 @@ export async function GET(request: Request) {
         .filter(Boolean) as string[];
 
       if (pageIdValues.length > 0) {
-        const [brandAds, brandDirectProducts] = await Promise.all([
+        const [adCountsRows, brandDirectProducts, linkedAdProducts, unlinkedAds] = await Promise.all([
+          // 1. Group active ads count per brand directly in SQL (25 rows max, minimal egress)
           db
             .select({
-              id: ads.id,
               pageId: ads.pageId,
-              productId: ads.productId,
-              linkUrl: ads.linkUrl,
-              caption: ads.caption,
-              title: ads.title,
+              activeCount: count(ads.id),
             })
             .from(ads)
             .where(
@@ -288,7 +285,10 @@ export async function GET(request: Request) {
                 inArray(ads.pageId, pageIdValues),
                 eq(ads.isArchived, false)
               )
-            ),
+            )
+            .groupBy(ads.pageId),
+
+          // 2. Direct scraped products associated with each brand (lean id, pageId)
           db
             .select({
               id: scrapedProducts.id,
@@ -296,11 +296,50 @@ export async function GET(request: Request) {
             })
             .from(scrapedProducts)
             .where(inArray(scrapedProducts.pageId, pageIdValues)),
+
+          // 3. Distinct linked product IDs per brand (deduplicated in SQL, zero captions/URLs)
+          db
+            .select({
+              pageId: ads.pageId,
+              productId: ads.productId,
+            })
+            .from(ads)
+            .where(
+              and(
+                inArray(ads.pageId, pageIdValues),
+                eq(ads.isArchived, false),
+                isNotNull(ads.productId)
+              )
+            )
+            .groupBy(ads.pageId, ads.productId),
+
+          // 4. For unlinked ads only, fetch lean linkUrl & title for clustering (zero captions!)
+          db
+            .select({
+              pageId: ads.pageId,
+              linkUrl: ads.linkUrl,
+              title: ads.title,
+            })
+            .from(ads)
+            .where(
+              and(
+                inArray(ads.pageId, pageIdValues),
+                eq(ads.isArchived, false),
+                isNull(ads.productId)
+              )
+            ),
         ]);
 
         // Group ads and count unique exact products per brand
         const brandProducts = new Map<string, Set<string>>();
         const brandAdCounts = new Map<string, number>();
+
+        // Set ad counts directly from SQL aggregation
+        for (const row of adCountsRows) {
+          if (row.pageId) {
+            brandAdCounts.set(row.pageId, Number(row.activeCount) || 0);
+          }
+        }
 
         // 1. Add direct scraped products associated with each brand
         for (const prod of brandDirectProducts) {
@@ -312,20 +351,23 @@ export async function GET(request: Request) {
           }
         }
 
-        // 2. Add product IDs or normalized URLs from active ads
-        for (const ad of brandAds) {
-          brandAdCounts.set(ad.pageId, (brandAdCounts.get(ad.pageId) || 0) + 1);
+        // 2. Add distinct linked product IDs from ads
+        for (const linked of linkedAdProducts) {
+          if (linked.pageId && linked.productId) {
+            if (!brandProducts.has(linked.pageId)) {
+              brandProducts.set(linked.pageId, new Set());
+            }
+            brandProducts.get(linked.pageId)!.add(linked.productId);
+          }
+        }
 
+        // 3. Add fallback cluster keys for unlinked ads only
+        for (const ad of unlinkedAds) {
           if (!brandProducts.has(ad.pageId)) {
             brandProducts.set(ad.pageId, new Set());
           }
-
-          if (ad.productId) {
-            brandProducts.get(ad.pageId)!.add(ad.productId);
-          } else {
-            const keyInfo = extractProductClusterKey(ad);
-            brandProducts.get(ad.pageId)!.add(keyInfo.productKey);
-          }
+          const keyInfo = extractProductClusterKey(ad);
+          brandProducts.get(ad.pageId)!.add(keyInfo.productKey);
         }
 
         // Map counts by tracked page ID

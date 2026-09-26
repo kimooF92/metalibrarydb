@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { ads, scrapedProducts } from "@/db/schema";
 import { count, sql } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
+import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -42,11 +43,19 @@ export async function GET(req: NextRequest) {
 
     const now = Date.now();
     if (!forceRefresh && cachedStats && now - cachedStats.timestamp < CACHE_TTL_MS) {
-      return NextResponse.json({
-        success: true,
-        stats: cachedStats.data,
-        cached: true,
-      });
+      return NextResponse.json(
+        {
+          success: true,
+          stats: cachedStats.data,
+          cached: true,
+        },
+        {
+          headers: {
+            "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
+            Vary: PRIVATE_AUTH_VARY,
+          },
+        }
+      );
     }
 
     // Execute the two summary queries in parallel
@@ -108,11 +117,19 @@ export async function GET(req: NextRequest) {
       timestamp: now,
     };
 
-    return NextResponse.json({
-      success: true,
-      stats: statsData,
-      cached: false,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        stats: statsData,
+        cached: false,
+      },
+      {
+        headers: {
+          "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
+          Vary: PRIVATE_AUTH_VARY,
+        },
+      }
+    );
   } catch (err: any) {
     console.error("[Products Stats API Error]:", err);
     return NextResponse.json(

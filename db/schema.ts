@@ -262,6 +262,7 @@ export const queue = pgTable(
       table.createdAt.desc()
     ),
     index("idx_queue_discovered_page_id").on(table.discoveredPageId),
+    index("idx_queue_creative_scan_id").on(table.creativeScanId),
   ]
 );
 
@@ -329,6 +330,7 @@ export const discoveredPages = pgTable(
     index("idx_discovered_pages_run_id").on(table.runId),
     index("idx_discovered_pages_page_id").on(table.pageId),
     index("idx_discovered_pages_status").on(table.status),
+    index("idx_discovered_pages_tracked_page_id").on(table.trackedPageId),
     index("idx_discovered_pages_run_page").on(table.runId, table.pageId),
   ]
 );

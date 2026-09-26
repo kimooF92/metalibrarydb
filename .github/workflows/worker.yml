@@ -67,10 +67,13 @@ jobs:
           APIFY_API_TOKEN_3: ${{ secrets.APIFY_API_TOKEN_3 }}
           APIFY_API_TOKEN_4: ${{ secrets.APIFY_API_TOKEN_4 }}
           APIFY_API_TOKEN_5: ${{ secrets.APIFY_API_TOKEN_5 }}
-          B2_APPLICATION_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
+          B2_KEY_ID: ${{ secrets.B2_KEY_ID || secrets.B2_APPLICATION_KEY_ID }}
+          B2_APPLICATION_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID || secrets.B2_KEY_ID }}
           B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
           B2_BUCKET_NAME: ${{ secrets.B2_BUCKET_NAME }}
           B2_ENDPOINT: ${{ secrets.B2_ENDPOINT }}
+          B2_REGION: ${{ secrets.B2_REGION }}
+          B2_DOWNLOAD_URL: ${{ secrets.B2_DOWNLOAD_URL }}
           SINGLE_RUN: "true"
           PLAYWRIGHT_HEADLESS: "true"
           MAX_SCANS_PER_HOUR: "0"
@@ -78,4 +81,6 @@ jobs:
           AUTO_REFRESH_COOLDOWN_HOURS: "11"
           SHARD_INDEX: ${{ matrix.shard }}
           TOTAL_SHARDS: 4
+          COUNT_ONLY: "true"
+          AUTO_ENQUEUE_SPY: "false"
         run: npm run worker

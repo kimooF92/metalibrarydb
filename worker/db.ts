@@ -377,6 +377,18 @@ export async function enqueueOrEscalateJob(
  * Atomically claim the next pending queue job using PostgreSQL FOR UPDATE SKIP LOCKED
  */
 export async function claimNextPendingJob() {
+  const isCountOnly =
+    process.env.COUNT_ONLY === "true" ||
+    process.env.CI === "true" ||
+    process.env.GITHUB_ACTIONS === "true";
+  const isCreativeOnly = process.env.CREATIVE_ONLY === "true";
+
+  const jobTypeFilter = isCountOnly
+    ? sql`AND job_type != 'creative'`
+    : isCreativeOnly
+    ? sql`AND job_type = 'creative'`
+    : sql``;
+
   const result = await db.execute(sql`
     UPDATE queue
     SET 
@@ -386,6 +398,7 @@ export async function claimNextPendingJob() {
     WHERE id = (
       SELECT id FROM queue
       WHERE status = 'pending'
+      ${jobTypeFilter}
       ORDER BY priority DESC, created_at ASC
       FOR UPDATE SKIP LOCKED
       LIMIT 1

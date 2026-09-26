@@ -208,27 +208,19 @@ export async function uploadMediaWithHashing(
       };
     }
 
-    // Tier 3: Supabase is only an emergency thumbnail fallback. Never place
-    // full-size images or videos there because every later read counts toward
-    // the project's Supabase egress quota.
-    if (!canUseSupabaseStorageFallback(keyPrefix, buffer.length, isVideo)) {
-      return {
-        url: sourceUrl,
-        mediaHash,
-        perceptualHash,
-        wasReused: false,
-      };
-    }
-
-    const supabaseUrl = await uploadBufferToSupabase(buffer, contentKey, contentType);
-    if (supabaseUrl) {
-      console.log(`[Storage Engine] Stored to Supabase Storage fallback: ${supabaseUrl}`);
-      return {
-        url: supabaseUrl,
-        mediaHash,
-        perceptualHash,
-        wasReused: false,
-      };
+    // Tier 3: Supabase Storage fallback is DISABLED by default to protect project egress limits
+    // and avoid RLS errors with anon keys. Directly preserve the Meta CDN source URL instead.
+    if (process.env.ENABLE_SUPABASE_STORAGE_FALLBACK === "true" && canUseSupabaseStorageFallback(keyPrefix, buffer.length, isVideo)) {
+      const supabaseUrl = await uploadBufferToSupabase(buffer, contentKey, contentType);
+      if (supabaseUrl) {
+        console.log(`[Storage Engine] Stored to Supabase Storage fallback: ${supabaseUrl}`);
+        return {
+          url: supabaseUrl,
+          mediaHash,
+          perceptualHash,
+          wasReused: false,
+        };
+      }
     }
 
     // Tier 4: Fallback to source URL

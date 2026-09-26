@@ -299,7 +299,7 @@ export async function GET(req: NextRequest) {
             brandPageId: sql<string>`MAX(${ads.pageId})`,
             brandHoldStatus: sql<string>`MAX(${trackedPages.holdStatus})`,
             brandCurrentResults: sql<number>`MAX(${trackedPages.currentResults})`.mapWith(Number),
-            topCreativeThumbnail: sql<string>`MAX(COALESCE(${ads.thumbnailStoragePath}, ${ads.thumbnailUrl}))`,
+            topCreativeThumbnail: sql<string>`MAX(COALESCE(NULLIF(${ads.thumbnailUrl}, ''), NULLIF(${ads.thumbnailStoragePath}, '')))`,
           })
           .from(ads)
           .leftJoin(trackedPages, eq(trackedPages.pageId, ads.pageId))

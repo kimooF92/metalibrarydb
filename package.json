@@ -9,6 +9,8 @@
     "lint": "eslint",
     "test": "tsx --test lib/ad-reconciliation.test.ts lib/product-extraction.test.ts lib/b2-storage.test.ts lib/html-scraper.test.ts",
     "worker": "npx tsx worker/index.ts",
+    "worker:count": "npx tsx worker/index.ts --count-only",
+    "worker:creative": "npx tsx worker/index.ts --creative-only",
     "spy:apify": "npx tsx scripts/run-apify-spy-cron.ts",
     "apify:check": "npx tsx scripts/check-apify-tokens.ts",
     "scrape:products": "npx tsx scripts/run-product-scraper.ts",

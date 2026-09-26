@@ -34,7 +34,26 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
     // If a product image already exists, it is NOT considered a failure (even with 0 DT).
     // Never recheck 404s, dead links, or impossible-to-scrape items.
     const failedItems = await db
-      .select()
+      .select({
+        id: scrapedProducts.id,
+        url: scrapedProducts.url,
+        domain: scrapedProducts.domain,
+        title: scrapedProducts.title,
+        currentPrice: scrapedProducts.currentPrice,
+        originalPrice: scrapedProducts.originalPrice,
+        currency: scrapedProducts.currency,
+        discountOrOffer: scrapedProducts.discountOrOffer,
+        mainImageUrl: scrapedProducts.mainImageUrl,
+        galleryImages: scrapedProducts.galleryImages,
+        allOffers: scrapedProducts.allOffers,
+        storePlatform: scrapedProducts.storePlatform,
+        phoneNumbers: scrapedProducts.phoneNumbers,
+        whatsappNumbers: scrapedProducts.whatsappNumbers,
+        metaPixelIds: scrapedProducts.metaPixelIds,
+        deliveryCost: scrapedProducts.deliveryCost,
+        failureReason: scrapedProducts.failureReason,
+        lastScrapedAt: scrapedProducts.lastScrapedAt,
+      })
       .from(scrapedProducts)
       .where(
         and(

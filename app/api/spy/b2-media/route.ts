@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { isB2Configured } from "@/lib/b2-storage";
 
-const keyId = process.env.B2_KEY_ID?.trim();
+const keyId = process.env.B2_KEY_ID?.trim() || process.env.B2_APPLICATION_KEY_ID?.trim();
 const appKey = process.env.B2_APPLICATION_KEY?.trim();
 const bucketName = process.env.B2_BUCKET_NAME?.trim() || "meta-ad-media-feed";
 const endpoint = process.env.B2_ENDPOINT?.trim() || "s3.eu-central-003.backblazeb2.com";
