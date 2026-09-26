@@ -2,7 +2,7 @@ import { db } from "@/db";
 import { ads, scrapedProducts } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { normalizeProductUrl, extractProductFromUrl } from "@/lib/firecrawl";
-import { getCleanDomain } from "@/lib/utils";
+import { getCleanDomain, isValidPageId } from "@/lib/utils";
 import {
   extractTunisianPhoneNumbers,
   extractWhatsAppNumbers,
@@ -156,7 +156,7 @@ export async function linkAndAutoScrapeProduct({
       .values({
         url: normalizedUrl,
         domain: domain || null,
-        pageId: pageId || null,
+        pageId: isValidPageId(pageId) ? pageId : null,
         title: domain || "Product",
         scrapeStatus: "pending",
         createdAt: now,

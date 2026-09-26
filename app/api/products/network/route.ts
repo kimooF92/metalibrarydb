@@ -8,6 +8,7 @@ import {
   PHANTOM_PHONE_BLACKLIST,
   isPlaceholderOrDummyPhone,
 } from "@/lib/network-extractor";
+import { isValidPageId } from "@/lib/utils";
 import { PRODUCT_NETWORK_PROJECTION } from "@/lib/product-projections";
 
 export async function GET(req: NextRequest) {
@@ -206,14 +207,27 @@ export async function GET(req: NextRequest) {
     }
 
     const pageGroups = new Map<string, PageNetworkGroup>();
-    const targetPageId = targetProduct.pageId;
+    let targetPageId = isValidPageId(targetProduct.pageId) ? targetProduct.pageId : null;
+
+    // Fallback: If target product doesn't have a valid numeric pageId directly, check its linked ads
+    if (!targetPageId) {
+      const targetAd = uniqueAds.find((a) => a.productId === targetProduct.id && isValidPageId(a.pageId));
+      if (targetAd && targetAd.pageId) {
+        targetPageId = targetAd.pageId;
+      }
+    }
 
     uniqueAds.forEach((ad) => {
-      if (!ad.pageId) return;
+      if (!ad.pageId || !isValidPageId(ad.pageId)) return;
       const isCurrent = Boolean(
         (targetPageId && ad.pageId === targetPageId) ||
         (ad.productId === targetProduct.id)
       );
+
+      // If this ad belongs to the target product, make sure targetPageId is set
+      if (isCurrent && !targetPageId) {
+        targetPageId = ad.pageId;
+      }
 
       let group = pageGroups.get(ad.pageId);
       if (!group) {
@@ -231,6 +245,8 @@ export async function GET(req: NextRequest) {
           connectionReasons: [],
         };
         pageGroups.set(ad.pageId, group);
+      } else if (isCurrent) {
+        group.isCurrentPage = true;
       }
 
       group.activeAdsCount++;
@@ -251,20 +267,25 @@ export async function GET(req: NextRequest) {
     });
 
     // Ensure target product's own page is represented even if it has no ads yet
-    if (targetPageId && !pageGroups.has(targetPageId)) {
-      pageGroups.set(targetPageId, {
-        pageId: targetPageId,
-        pageName: `Page ${targetPageId}`,
-        isCurrentPage: true,
-        activeAdsCount: 0,
-        sampleThumbnails: [],
-        domains: targetProduct.domain ? new Set([targetProduct.domain]) : new Set(),
-        matchedPixels: new Set(validPixels),
-        matchedWhatsApps: new Set(validWhatsApps),
-        matchedPhones: new Set(validPhones),
-        confidence: "current",
-        connectionReasons: ["Current Brand Page"],
-      });
+    if (targetPageId && isValidPageId(targetPageId)) {
+      if (!pageGroups.has(targetPageId)) {
+        pageGroups.set(targetPageId, {
+          pageId: targetPageId,
+          pageName: `Page ${targetPageId}`,
+          isCurrentPage: true,
+          activeAdsCount: 0,
+          sampleThumbnails: [],
+          domains: targetProduct.domain ? new Set([targetProduct.domain]) : new Set(),
+          matchedPixels: new Set(validPixels),
+          matchedWhatsApps: new Set(validWhatsApps),
+          matchedPhones: new Set(validPhones),
+          confidence: "current",
+          connectionReasons: ["Current Brand Page"],
+        });
+      } else {
+        const currentGroup = pageGroups.get(targetPageId)!;
+        currentGroup.isCurrentPage = true;
+      }
     }
 
     // Determine connection reasons & confidence for each page

@@ -697,7 +697,7 @@ export async function scanAdCreatives(
             const prodRes = await linkAndAutoScrapeProduct({
               adId: upsertedAd.id,
               linkUrl: adData.linkUrl,
-              pageId: trackedPageId,
+              pageId: (adData.pageId && !adData.pageId.includes("-")) ? adData.pageId : (extractedPageIds[0] && !extractedPageIds[0].includes("-") ? extractedPageIds[0] : null),
               adCopy: adData.caption,
             });
             if (prodRes?.isNew) {

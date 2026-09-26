@@ -485,7 +485,7 @@ export async function ingestApifyDatasetItems(
           const prodRes = await linkAndAutoScrapeProduct({
             adId: upsertedAd.id,
             linkUrl,
-            pageId: pageId || trackedPageId,
+            pageId: (pageId && !pageId.includes("-")) ? pageId : (detectedPageId && !detectedPageId.includes("-") ? detectedPageId : null),
             adCopy: caption,
           });
           if (prodRes?.isNew) {
