@@ -8,7 +8,6 @@ import {
   ExternalLink,
   ShoppingBag,
   Sparkles,
-  Layers,
   RotateCw,
   Trash2,
   Tag,
@@ -16,7 +15,6 @@ import {
   AlertCircle,
   Clock,
   Eye,
-  Truck,
   Star,
   Rocket,
   Calendar,
@@ -137,8 +135,6 @@ export const ProductCard = memo(function ProductCard({
   );
   const isWinning = !isBreakout && !isPageOnHold && !isPageInactive && (product.linkedAdsCount || 0) >= 3 && (product.activeAdsCount || 0) > 0;
   const isInactive = isPageInactive || (typeof product.activeAdsCount === "number" && product.activeAdsCount === 0 && (product.linkedAdsCount || 0) > 0);
-  const supplierCount = product.supplierCount ?? product.supplierUrls?.length ?? 0;
-  const offerCount = product.offerCount ?? product.allOffers?.length ?? 0;
   const isPendingScrape = product.scrapeStatus === "pending";
   const isFailedScrape = product.scrapeStatus === "failed";
 
@@ -330,13 +326,13 @@ export const ProductCard = memo(function ProductCard({
       {/* Content Area */}
       <div className="p-4 flex flex-col flex-1">
         {/* Brand Name Link & Discovery Date */}
-        <div className="flex items-center justify-between gap-2 mb-1">
+        <div className="flex items-center justify-between gap-2 mb-1.5">
           <div className="min-w-0 flex-1">
             {product.brandPageId ? (
               <Link
                 href={`/spy/brand/${encodeURIComponent(product.brandPageId)}?tab=products`}
                 onClick={(e) => e.stopPropagation()}
-                className={`text-[11px] font-bold uppercase tracking-wider truncate block hover:underline ${
+                className={`text-xs font-bold uppercase tracking-wider truncate block hover:underline ${
                   isInactive
                     ? "text-slate-500 dark:text-slate-400"
                     : "text-indigo-600 dark:text-indigo-400"
@@ -352,7 +348,7 @@ export const ProductCard = memo(function ProductCard({
                   e.stopPropagation();
                   onFilterBrand?.(product.brandName!);
                 }}
-                className={`text-[11px] font-bold uppercase tracking-wider truncate block text-left cursor-pointer hover:underline ${
+                className={`text-xs font-bold uppercase tracking-wider truncate block text-left cursor-pointer hover:underline ${
                   isInactive
                     ? "text-slate-500 dark:text-slate-400"
                     : "text-indigo-600 dark:text-indigo-400"
@@ -362,7 +358,7 @@ export const ProductCard = memo(function ProductCard({
                 {product.brandName}
               </button>
             ) : product.domain ? (
-              <span className="text-[11px] font-semibold text-slate-500 truncate block">
+              <span className="text-xs font-semibold text-slate-500 truncate block">
                 {product.domain}
               </span>
             ) : null}
@@ -370,10 +366,10 @@ export const ProductCard = memo(function ProductCard({
 
           {product.createdAt && (
             <span
-              className="text-[10px] font-medium text-slate-400 dark:text-slate-500 inline-flex items-center gap-1 shrink-0 select-none"
+              className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/80 px-2 py-0.5 rounded-md inline-flex items-center gap-1 shrink-0 select-none border border-slate-200/60 dark:border-slate-700/60"
               title={formatDiscoveryLabel(product.createdAt)}
             >
-              <Calendar className="w-2.5 h-2.5" />
+              <Calendar className="w-3 h-3 text-slate-400" />
               <span>{formatDiscoveryDate(product.createdAt)}</span>
             </span>
           )}
@@ -381,7 +377,7 @@ export const ProductCard = memo(function ProductCard({
 
         {/* Product Title */}
         <h3
-          className={`text-sm font-bold line-clamp-2 mb-2 leading-snug transition-colors ${
+          className={`text-sm font-bold line-clamp-2 mb-2.5 leading-snug transition-colors ${
             isPageOnHold || isInactive
               ? "text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200"
               : "text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
@@ -391,107 +387,68 @@ export const ProductCard = memo(function ProductCard({
           {product.title || "Untitled Product Landing Page"}
         </h3>
 
-        {/* Badges: Category + Platform + WhatsApp + Ad Count + Longevity */}
-        <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
-          {product.category && (
+        {/* Primary Signals: First Ad Duration + Ad Scaling Activity */}
+        <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+          {/* Duration of the first ads discovered */}
+          {Boolean(product.daysRunning && product.daysRunning > 0) && (
             <span
-              className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
-                isInactive
-                  ? "bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
-                  : "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
-              }`}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20"
+              title={
+                product.earliestAdDate
+                  ? `First ad launched: ${formatDate(product.earliestAdDate)} (${product.daysRunning} days running)`
+                  : `First ad running for ${product.daysRunning} days`
+              }
             >
-              🏷️ {product.category}
+              <Clock className="w-3 h-3 text-amber-500 shrink-0" />
+              <span>{product.daysRunning}d running</span>
             </span>
           )}
 
-          {product.storePlatform && product.storePlatform !== "other" && (
-            <span
-              className={`px-1.5 py-0.5 rounded text-[10px] font-bold border uppercase ${
-                isInactive
-                  ? "bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
-                  : "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800"
-              }`}
-            >
-              {product.storePlatform}
-            </span>
-          )}
-
-          {product.whatsappNumbers && product.whatsappNumbers.length > 0 && (
-            <span
-              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
-                isInactive
-                  ? "bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
-                  : "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
-              }`}
-            >
-              💬 WhatsApp
-            </span>
-          )}
-
+          {/* Ad Status / Scale */}
           {isPageOnHold ? (
             <span
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/80"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-extrabold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/80"
               title="Brand account is on pause / hold (under grace period recheck)"
             >
-              ⏸️ Ads Paused (Grace Period)
+              ⏸️ Ads Paused
             </span>
           ) : isPageInactive ? (
             <span
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
               title="Brand has shut down advertising (confirmed inactive)"
             >
-              ⚫ Page Off-Air (Inactive)
+              ⚫ Inactive (Off-Air)
             </span>
           ) : typeof product.activeAdsCount === "number" && product.activeAdsCount > 0 ? (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
               🔥 {product.activeAdsCount} active {product.activeAdsCount === 1 ? "ad" : "ads"}
             </span>
           ) : isInactive ? (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-              ⚫ 0 active ads (Off-air)
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+              ⚫ 0 active ads
             </span>
           ) : typeof product.linkedAdsCount === "number" && product.linkedAdsCount > 0 ? (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
               🎬 {product.linkedAdsCount} {product.linkedAdsCount === 1 ? "ad" : "ads"}
             </span>
           ) : null}
 
-          {product.daysRunning && product.daysRunning > 1 && (
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-              ⏳ {product.daysRunning}d
-            </span>
-          )}
-
-          {supplierCount > 0 && (
-            <span
-              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
-                isInactive
-                  ? "bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
-                  : "bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800"
-              }`}
-              title={`${supplierCount} Supplier links attached`}
-            >
-              📦 {supplierCount} {supplierCount === 1 ? "Supplier" : "Suppliers"}
-            </span>
-          )}
-
           {isRecentlyViewed && (
             <span
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800/60"
               title="You inspected this product during this session"
             >
-              <Eye className="w-2.5 h-2.5 text-indigo-500" /> Inspected
+              <Eye className="w-2.5 h-2.5" /> Inspected
             </span>
           )}
         </div>
 
-        {/* Price & Offers */}
-        <div className="flex items-center justify-between gap-2 mb-3 mt-auto flex-wrap">
-          <div className="flex items-baseline gap-2">
-            {product.currentPrice ? (
+        {/* Primary Indicator: Hero Main Price */}
+        <div className="mt-auto pt-2 pb-2">
+          {product.currentPrice ? (
+            <div className="flex items-baseline">
               <span
-                className={`text-base font-extrabold ${
+                className={`text-lg font-black tracking-tight ${
                   isPageOnHold || isInactive
                     ? "text-slate-600 dark:text-slate-400"
                     : "text-indigo-600 dark:text-indigo-400"
@@ -499,73 +456,15 @@ export const ProductCard = memo(function ProductCard({
               >
                 {product.currentPrice}
               </span>
-            ) : isPendingScrape ? (
-              <span className="text-xs text-amber-500 font-medium">Scrape to get price</span>
-            ) : (
-              <span className="text-xs text-slate-400 italic">Price not detected</span>
-            )}
-
-            {product.originalPrice && (
-              <span className="text-xs text-slate-500 dark:text-slate-500 line-through">
-                {product.originalPrice}
-              </span>
-            )}
-          </div>
-
-          {/* Delivery pill */}
-          {(() => {
-            const delivery = product.deliveryCost;
-            const isFree =
-              delivery?.toLowerCase().includes("gratuit") ||
-              delivery?.toLowerCase().includes("free") ||
-              delivery?.toLowerCase().includes("مجاني") ||
-              delivery?.toLowerCase().includes("0 dt") ||
-              delivery?.toLowerCase().includes("0dt") ||
-              product.discountOrOffer?.toLowerCase().includes("livraison gratuite") ||
-              product.discountOrOffer?.toLowerCase().includes("توصيل مجاني");
-
-            const isSpecifiedPaid =
-              delivery &&
-              delivery !== "Livraison Non Spécifiée" &&
-              !isFree;
-
-            const label = isFree
-              ? "Livraison Gratuite"
-              : isSpecifiedPaid
-              ? delivery
-              : "Livraison: ~7 DT";
-
-            return (
-              <span
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${
-                  isInactive
-                    ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
-                    : isFree
-                    ? "bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-                    : isSpecifiedPaid
-                    ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700"
-                }`}
-                title={label}
-              >
-                <Truck className="w-2.5 h-2.5" />
-                <span className="truncate max-w-[110px]">{label}</span>
-              </span>
-            );
-          })()}
+            </div>
+          ) : isPendingScrape ? (
+            <span className="text-xs text-amber-500 font-medium">Scrape to get price</span>
+          ) : (
+            <span className="text-xs text-slate-400 italic">Price not detected</span>
+          )}
         </div>
 
-        {/* Multi-tier offers counter if available */}
-        {offerCount > 0 && (
-          <div className="mb-3 flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/50 px-2.5 py-1 rounded-md">
-            <Layers className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-            <span className="truncate font-medium">
-              {offerCount} bundle {offerCount === 1 ? "tier" : "tiers"} available
-            </span>
-          </div>
-        )}
-
-        {/* Footer info & action buttons */}
+        {/* Footer info & action buttons (clean action bar, no duplicate delete) */}
         <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2 text-xs">
           {onViewCreatives && (product.linkedAdsCount || 0) > 0 ? (
             <button
@@ -573,13 +472,13 @@ export const ProductCard = memo(function ProductCard({
                 e.stopPropagation();
                 onViewCreatives(product);
               }}
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold transition-colors cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
                 isInactive
                   ? "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
-                  : "bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-600 dark:text-indigo-400"
+                  : "bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-800/50"
               }`}
             >
-              <Eye className="w-3 h-3" />
+              <Eye className="w-3.5 h-3.5" />
               <span>View Ads ({product.linkedAdsCount})</span>
             </button>
           ) : (
@@ -623,17 +522,6 @@ export const ProductCard = memo(function ProductCard({
             >
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
-
-            {onDelete && (
-              <button
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md transition-colors cursor-pointer"
-                title="Delete Tracked Product"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            )}
           </div>
         </div>
       </div>
