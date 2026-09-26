@@ -548,6 +548,23 @@ export function parseProductHtmlContent(
       }
     }
 
+    // 4h. WooCommerce / Arabic prefix currency e.g. <bdi><span class="woocommerce-Price-currencySymbol">&#x62f;.&#x62a;</span>99.00</bdi>
+    // or (?:&#x62f;\.&#x62a;|د\.ت|دت|DT|TND)\s*(\d{1,4}(?:[.,]\d{1,3})?)
+    if (!currentPrice) {
+      const bdiMatch =
+        /<bdi>[^<]*(?:<span[^>]*>[^<]*<\/span>[^<]*)?(\d{1,4}(?:[.,]\d{1,3})?)\s*<\/bdi>/i.exec(html) ||
+        /(?:&#x62f;\.&#x62a;|د\.ت|دت)\s*(\d{1,4}(?:[.,]\d{1,3})?)/i.exec(html);
+      if (bdiMatch && bdiMatch[1] && Number(bdiMatch[1].replace(",", ".")) > 0) {
+        let numStr = bdiMatch[1].replace(",", ".");
+        let num = parseFloat(numStr);
+        if (num >= 1000 && (bdiMatch[1].includes(",000") || bdiMatch[1].includes(".000"))) {
+          num = Math.round(num / 1000);
+        }
+        currentPrice = `${num} DT`;
+        currency = "TND";
+      }
+    }
+
     // Extract Crossed-out / Regular Price if not already extracted
     if (!originalPrice) {
       const delPriceRegex = /<(?:del|s|span)[^>]*(?:class|id)=["'][^"']*(?:old|regular|compare|original|was)[^"']*["'][^>]*>[\s\S]*?(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت|دت)?/gi;
@@ -690,9 +707,12 @@ export async function scrapeProductDirectHtml(
     clearTimeout(timeoutId);
 
     if (!res.ok) {
+      const isDead = res.status === 404 || res.status === 410;
       return {
         success: false,
-        error: `Landing page returned HTTP ${res.status}: ${res.statusText}`,
+        error: isDead
+          ? `[Dead link] HTTP ${res.status}: ${res.statusText}`
+          : `Landing page returned HTTP ${res.status}: ${res.statusText}`,
       };
     }
 
@@ -707,7 +727,7 @@ export async function scrapeProductDirectHtml(
     ) {
       return {
         success: false,
-        error: "Short link expired or deleted by creator (404).",
+        error: "[Dead link] Short link expired or deleted by creator (404).",
         rawHtml: html,
       };
     }
@@ -744,9 +764,16 @@ export async function scrapeProductDirectHtml(
       rawHtml: html,
     };
   } catch (err: any) {
+    const isDead =
+      err.code === "ENOTFOUND" ||
+      err.message?.includes("ENOTFOUND") ||
+      err.message?.includes("ECONNREFUSED") ||
+      err.message?.includes("ERR_NAME_NOT_RESOLVED");
     return {
       success: false,
-      error: err.message || "Failed to fetch and scrape landing page HTML.",
+      error: isDead
+        ? `[Dead link] Domain unreachable (${err.message})`
+        : (err.message || "Failed to fetch and scrape landing page HTML."),
     };
   }
 }

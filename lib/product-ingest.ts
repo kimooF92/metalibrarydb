@@ -206,11 +206,13 @@ export async function linkAndAutoScrapeProduct({
           const extractionResult = await extractProductFromUrl(normalizedUrl);
 
           if (!extractionResult.success || !extractionResult.data) {
+            const isDead = extractionResult.error?.includes("[Dead link]") || extractionResult.error?.includes("404");
             await db
               .update(scrapedProducts)
               .set({
-                scrapeStatus: "failed",
+                scrapeStatus: isDead ? "ignored" : "failed",
                 failureReason: extractionResult.error || "Extraction failed",
+                lastScrapedAt: new Date(),
                 updatedAt: new Date(),
               })
               .where(eq(scrapedProducts.id, targetProductId));

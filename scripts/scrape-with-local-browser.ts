@@ -225,9 +225,12 @@ async function main() {
       if (options.status) {
         conditions.push(eq(scrapedProducts.scrapeStatus, options.status));
       } else {
-        // Default: failed or pending
+        // Default: failed or pending without an image (if image exists, it's not a fail)
         conditions.push(
-          sql`${scrapedProducts.scrapeStatus} IN ('failed', 'pending') OR ${scrapedProducts.currentPrice} IS NULL OR ${scrapedProducts.currentPrice} = '0 DT'`
+          sql`${scrapedProducts.scrapeStatus} IN ('failed', 'pending') AND ${scrapedProducts.mainImageUrl} IS NULL`
+        );
+        conditions.push(
+          sql`COALESCE(${scrapedProducts.failureReason}, '') NOT LIKE '%[Dead link%' AND COALESCE(${scrapedProducts.failureReason}, '') NOT LIKE '%[Impossible%' AND COALESCE(${scrapedProducts.failureReason}, '') NOT LIKE '%404%'`
         );
       }
 

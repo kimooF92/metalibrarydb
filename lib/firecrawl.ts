@@ -221,16 +221,20 @@ export async function extractProductFromUrl(url: string): Promise<{
     const hasValidPrice = Boolean(priceStr && !isZeroPrice);
     const hasValidImage = Boolean(directResult.data?.main_image_url);
 
-    const apiKey = process.env.FIRECRAWL_API_KEY;
-    const canUseFirecrawlRescue = Boolean(apiKey && apiKey.trim() !== "");
+    // Early exit if direct HTML already confirmed dead link / 404
+    if (directResult && !directResult.success && directResult.error?.includes("[Dead link]")) {
+      return {
+        success: false,
+        error: directResult.error,
+      };
+    }
 
-    // If direct HTML successfully found a title AND a valid price, return immediately.
-    // If title and image exist but price is missing/zero, only bypass Firecrawl if Firecrawl is not configured.
+    // If direct HTML successfully found a title AND (valid price OR valid image), return immediately (image is enough).
     if (
-      directResult.success &&
+      directResult?.success &&
       directResult.data &&
       directResult.data.title &&
-      (hasValidPrice || (!canUseFirecrawlRescue && hasValidImage))
+      (hasValidPrice || hasValidImage)
     ) {
       return {
         success: true,
@@ -238,7 +242,7 @@ export async function extractProductFromUrl(url: string): Promise<{
         raw: { html: directResult.rawHtml, engine: "direct_html" },
       };
     }
-    console.log(`[Product Scraper] Direct HTML incomplete or missing price for ${normalized}. Checking Firecrawl rescue fallback...`);
+    console.log(`[Product Scraper] Direct HTML incomplete or missing price/image for ${normalized}. Checking Firecrawl rescue fallback...`);
   } catch (directErr: any) {
     console.warn(`[Product Scraper] Direct scraper error for ${normalized}:`, directErr?.message);
   }
@@ -307,6 +311,6 @@ export async function extractProductFromUrl(url: string): Promise<{
 
   return {
     success: false,
-    error: "Failed to extract product details from landing page using both direct and fallback extractors.",
+    error: directResult?.error || "Failed to extract product details from landing page using both direct and fallback extractors.",
   };
 }

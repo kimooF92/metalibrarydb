@@ -56,9 +56,21 @@ export async function scrapeUrlWithLocalPlaywright(
     page = await context.newPage();
 
     console.log(`[Local Browser Fallback] Navigating to: ${url}`);
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs }).catch((e: any) => {
+    const navResponse = await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs }).catch((e: any) => {
       console.warn(`[Local Browser Fallback] Initial navigation notice: ${e.message}`);
+      return null;
     });
+
+    if (navResponse) {
+      const status = navResponse.status();
+      if (status === 404 || status === 410) {
+        return {
+          success: false,
+          error: `[Dead link] HTTP ${status} Not Found`,
+          engine: "local_playwright_browser",
+        };
+      }
+    }
 
     // Check for Cloudflare Waiting Room / Challenge
     const initialContent = await page.content();
@@ -79,10 +91,19 @@ export async function scrapeUrlWithLocalPlaywright(
     const finalUrl = page.url();
 
     const parsed = parseProductHtmlContent(html, finalUrl);
-    if (!parsed.success || !parsed.data || (!parsed.data.title && !parsed.data.current_price)) {
+    const hasImage = Boolean(parsed.data?.main_image_url);
+    const hasTitle = Boolean(parsed.data?.title);
+    const hasPrice = Boolean(
+      parsed.data?.current_price &&
+      parsed.data.current_price !== "0 DT" &&
+      parsed.data.current_price !== "0"
+    );
+
+    // If product image exists or valid price exists, accept as successful extraction (not a fail if image exists)
+    if (!parsed.success || !parsed.data || (!hasPrice && !hasImage) || !hasTitle) {
       return {
         success: false,
-        error: parsed.error || "Could not parse product details from page DOM via local browser.",
+        error: parsed.error || "Could not parse product details or image from page DOM via local browser.",
         rawHtml: html,
         engine: "local_playwright_browser",
       };
@@ -96,9 +117,14 @@ export async function scrapeUrlWithLocalPlaywright(
     };
   } catch (err: any) {
     console.warn(`[Local Browser Fallback] Error for ${url}:`, err.message);
+    const isDead =
+      err.message?.includes("ERR_NAME_NOT_RESOLVED") ||
+      err.message?.includes("ERR_CONNECTION_REFUSED") ||
+      err.message?.includes("ENOTFOUND") ||
+      err.message?.includes("404");
     return {
       success: false,
-      error: `Local browser error: ${err.message}`,
+      error: isDead ? `[Dead link] ${err.message}` : `Local browser error: ${err.message}`,
     };
   } finally {
     if (page) {

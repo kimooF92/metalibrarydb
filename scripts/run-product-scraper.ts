@@ -371,18 +371,19 @@ async function runProductScraperBatch() {
         .orderBy(desc(scrapedProducts.createdAt))
         .limit(options.limit);
     } else {
-      // Default or "pending": query any item that is pending, failed, missing price, or zero price
+      // Default or "pending": query any item that is pending or failed and lacks an image (if image exists, it's not a fail)
       targetProducts = await query
         .where(
           and(
-            sql`${scrapedProducts.scrapeStatus} NOT IN ('deleted', 'ignored')`,
+            sql`${scrapedProducts.scrapeStatus} NOT IN ('deleted', 'ignored', 'success')`,
             or(
               eq(scrapedProducts.scrapeStatus, "pending"),
-              eq(scrapedProducts.scrapeStatus, "failed"),
-              isNull(scrapedProducts.currentPrice),
-              eq(scrapedProducts.currentPrice, "0 DT"),
-              eq(scrapedProducts.currentPrice, "0")
-            )
+              eq(scrapedProducts.scrapeStatus, "failed")
+            ),
+            isNull(scrapedProducts.mainImageUrl),
+            sql`COALESCE(${scrapedProducts.failureReason}, '') NOT LIKE '%[Dead link%'`,
+            sql`COALESCE(${scrapedProducts.failureReason}, '') NOT LIKE '%[Impossible%'`,
+            sql`COALESCE(${scrapedProducts.failureReason}, '') NOT LIKE '%404%'`
           )
         )
         .orderBy(desc(scrapedProducts.createdAt))
