@@ -134,91 +134,91 @@ export function ProductsFilterToolbar({
   return (
     <div className="space-y-2.5">
       {/* Smart Preset Pills */}
-      <div className="flex items-center gap-2 pt-1 pb-1 flex-wrap">
+      <div className="flex items-center gap-1.5 pt-0.5 pb-0.5 flex-wrap">
         <button
           onClick={() => onSelectPreset("all")}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
             smartPreset === "all"
-              ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/25"
+              ? "bg-indigo-600 text-white shadow-xs shadow-indigo-600/25"
               : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800"
           }`}
         >
           <Globe className="w-3.5 h-3.5" />
-          <span>All Products ({stats.totalProducts})</span>
+          <span>All ({stats.totalProducts})</span>
         </button>
 
         <button
           onClick={() => onSelectPreset("favorites")}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
             smartPreset === "favorites"
-              ? "bg-amber-500 text-slate-950 font-black shadow-sm shadow-amber-500/25"
+              ? "bg-amber-500 text-slate-950 font-bold shadow-xs shadow-amber-500/25"
               : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800"
           }`}
         >
           <Star
             className={`w-3.5 h-3.5 ${smartPreset === "favorites" ? "fill-current" : "text-amber-500"}`}
           />
-          <span>⭐ Starred Favorites ({stats.favoritesCount})</span>
+          <span>Favorites ({stats.favoritesCount})</span>
         </button>
 
         <button
           onClick={() => onSelectPreset("breakout", "breakout")}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
             smartPreset === "breakout"
-              ? "bg-gradient-to-r from-pink-600 to-rose-600 text-white font-bold shadow-sm shadow-rose-600/25"
+              ? "bg-gradient-to-r from-pink-600 to-rose-600 text-white font-bold shadow-xs shadow-rose-600/25"
               : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800"
           }`}
         >
           <Rocket className="w-3.5 h-3.5 text-pink-400" />
-          <span>🚀 Breakout Winners</span>
+          <span>Breakout</span>
         </button>
 
         <button
           onClick={() => onSelectPreset("most_scaled", "most_scaled")}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
             smartPreset === "most_scaled"
-              ? "bg-rose-600 text-white shadow-sm shadow-rose-600/25"
+              ? "bg-rose-600 text-white shadow-xs shadow-rose-600/25"
               : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800"
           }`}
         >
           <Flame className="w-3.5 h-3.5 text-rose-400" />
-          <span>🔥 Most Scaled</span>
+          <span>Scaled</span>
         </button>
 
         <button
           onClick={() => onSelectPreset("new_discovered", "latest")}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
             smartPreset === "new_discovered"
-              ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/25"
+              ? "bg-emerald-600 text-white shadow-xs shadow-emerald-600/25"
               : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800"
           }`}
         >
           <Zap className="w-3.5 h-3.5 text-emerald-400" />
-          <span>⚡ Newly Discovered ({stats.newThisWeekCount})</span>
+          <span>New ({stats.newThisWeekCount})</span>
         </button>
 
         <button
           onClick={() => onSelectPreset("top_lasting", "top_lasting")}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
             smartPreset === "top_lasting"
-              ? "bg-purple-600 text-white shadow-sm shadow-purple-600/25"
+              ? "bg-purple-600 text-white shadow-xs shadow-purple-600/25"
               : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800"
           }`}
         >
           <Clock className="w-3.5 h-3.5 text-purple-400" />
-          <span>⏳ Top Lasting (Evergreen 30d+)</span>
+          <span>Evergreen ({stats.evergreenCount})</span>
         </button>
 
         <button
           onClick={() => onSelectPreset("with_offers")}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
             smartPreset === "with_offers"
-              ? "bg-blue-600 text-white shadow-sm shadow-blue-600/25"
+              ? "bg-blue-600 text-white shadow-xs shadow-blue-600/25"
               : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800"
           }`}
         >
           <Tag className="w-3.5 h-3.5 text-blue-400" />
-          <span>🏷️ With Offers ({stats.withOffersCount})</span>
+          <span>Offers ({stats.withOffersCount})</span>
         </button>
       </div>
 
@@ -277,13 +277,13 @@ export function ProductsFilterToolbar({
             onChange={(e) => onChangeSortBy(e.target.value)}
             className="bg-slate-50 dark:bg-slate-900 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 px-2.5 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
           >
-            <option value="latest">⚡ Newest Discovered</option>
-            <option value="oldest">🕰️ Oldest Discovered</option>
-            <option value="most_scaled">🔥 Most Scaled (Active Ads)</option>
-            <option value="top_lasting">⏳ Longest Lasting (Evergreen)</option>
-            <option value="price_desc">💰 Price (High to Low)</option>
-            <option value="price_asc">🏷️ Price (Low to High)</option>
-            <option value="title">🔤 Title (A-Z)</option>
+            <option value="latest">Newest Discovered</option>
+            <option value="oldest">Oldest Discovered</option>
+            <option value="most_scaled">Most Scaled (Active Ads)</option>
+            <option value="top_lasting">Longest Lasting (Evergreen)</option>
+            <option value="price_desc">Price: High to Low</option>
+            <option value="price_asc">Price: Low to High</option>
+            <option value="title">Title: A to Z</option>
           </select>
 
           {/* Active / Inactive Toggle Button */}
@@ -473,7 +473,7 @@ export function ProductsFilterToolbar({
                       : "bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800"
                   }`}
                 >
-                  <option value="all">📅 All Discovery Dates</option>
+                  <option value="all">All Discovery Dates</option>
                   <option value="today">Today</option>
                   <option value="yesterday">Yesterday</option>
                   <option value="last_3d">Last 3 Days</option>

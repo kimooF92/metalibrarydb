@@ -42,138 +42,148 @@ export function ProductsKpiBar({
   onSelectPreset,
 }: ProductsKpiBarProps) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
       {/* Total Products */}
       <div
         onClick={() => onSelectPreset("all")}
-        title="View All Products"
-        className={`p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md select-none ${
+        title={`View All Products (${stats.successfulProducts} fully scraped, ${stats.pendingProducts} pending)`}
+        className={`px-3 py-2 rounded-lg bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-150 select-none ${
           smartPreset === "all"
-            ? "border-indigo-500/60 ring-2 ring-indigo-500/20 bg-indigo-50/20 dark:bg-indigo-950/20"
-            : "border-slate-200 dark:border-slate-800/80 hover:border-indigo-500/40"
+            ? "border-indigo-500/60 ring-1 ring-indigo-500/25 bg-indigo-50/25 dark:bg-indigo-950/20"
+            : "border-slate-200 dark:border-slate-800/80 hover:border-indigo-500/35"
         }`}
       >
-        <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
-          <span>Total Products</span>
-          <ShoppingBag className="w-4 h-4 text-indigo-500" />
+        <div className="flex items-center justify-between text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+          <span className="truncate">Total Products</span>
+          <ShoppingBag className="w-3.5 h-3.5 text-indigo-500 shrink-0 ml-1" />
         </div>
-        <p
-          className={`text-2xl font-black text-slate-900 dark:text-white mt-1 ${
-            statsLoading ? "animate-pulse opacity-60" : ""
-          }`}
-        >
-          {stats.totalProducts}
-        </p>
-        <span className="text-[11px] text-slate-500 font-medium">
-          {stats.successfulProducts} fully scraped • {stats.pendingProducts} pending
-        </span>
+        <div className="flex items-baseline justify-between gap-1.5 mt-0.5">
+          <span
+            className={`text-base sm:text-lg font-black text-slate-900 dark:text-white leading-tight ${
+              statsLoading ? "animate-pulse opacity-60" : ""
+            }`}
+          >
+            {stats.totalProducts}
+          </span>
+          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium truncate">
+            {stats.successfulProducts} scraped
+          </span>
+        </div>
       </div>
 
       {/* Starred Favorites */}
       <div
         onClick={() => onSelectPreset("favorites")}
         title="Filter by Starred Favorites"
-        className={`p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md select-none ${
+        className={`px-3 py-2 rounded-lg bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-150 select-none ${
           smartPreset === "favorites"
-            ? "border-amber-500/60 ring-2 ring-amber-500/20 bg-amber-50/20 dark:bg-amber-950/20"
-            : "border-slate-200 dark:border-slate-800/80 hover:border-amber-500/40"
+            ? "border-amber-500/60 ring-1 ring-amber-500/25 bg-amber-50/25 dark:bg-amber-950/20"
+            : "border-slate-200 dark:border-slate-800/80 hover:border-amber-500/35"
         }`}
       >
-        <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
-          <span>⭐ Starred Favorites</span>
-          <Star className="w-4 h-4 text-amber-500 fill-amber-500/20" />
+        <div className="flex items-center justify-between text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+          <span className="truncate">Favorites</span>
+          <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500/20 shrink-0 ml-1" />
         </div>
-        <p
-          className={`text-2xl font-black text-amber-600 dark:text-amber-400 mt-1 ${
-            statsLoading ? "animate-pulse opacity-60" : ""
-          }`}
-        >
-          {stats.favoritesCount}
-        </p>
-        <span className="text-[11px] text-slate-500 font-medium">
-          Saved to product watchlist
-        </span>
+        <div className="flex items-baseline justify-between gap-1.5 mt-0.5">
+          <span
+            className={`text-base sm:text-lg font-black text-amber-600 dark:text-amber-400 leading-tight ${
+              statsLoading ? "animate-pulse opacity-60" : ""
+            }`}
+          >
+            {stats.favoritesCount}
+          </span>
+          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium truncate">
+            watchlist
+          </span>
+        </div>
       </div>
 
       {/* Fresh Drops (Last 7 Days) */}
       <div
         onClick={() => onSelectPreset("new_discovered", "latest")}
         title="Filter by Fresh Drops discovered in the last 7 days"
-        className={`p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md select-none ${
+        className={`px-3 py-2 rounded-lg bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-150 select-none ${
           smartPreset === "new_discovered"
-            ? "border-emerald-500/60 ring-2 ring-emerald-500/20 bg-emerald-50/20 dark:bg-emerald-950/20"
-            : "border-slate-200 dark:border-slate-800/80 hover:border-emerald-500/40"
+            ? "border-emerald-500/60 ring-1 ring-emerald-500/25 bg-emerald-50/25 dark:bg-emerald-950/20"
+            : "border-slate-200 dark:border-slate-800/80 hover:border-emerald-500/35"
         }`}
       >
-        <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
-          <span>Fresh Drops (7d)</span>
-          <Zap className="w-4 h-4 text-emerald-500" />
+        <div className="flex items-center justify-between text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+          <span className="truncate">Fresh Drops (7d)</span>
+          <Zap className="w-3.5 h-3.5 text-emerald-500 shrink-0 ml-1" />
         </div>
-        <p
-          className={`text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1 ${
-            statsLoading ? "animate-pulse opacity-60" : ""
-          }`}
-        >
-          {stats.newThisWeekCount}
-        </p>
-        <span className="text-[11px] text-slate-500 font-medium">
-          Newly discovered this week
-        </span>
+        <div className="flex items-baseline justify-between gap-1.5 mt-0.5">
+          <span
+            className={`text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400 leading-tight ${
+              statsLoading ? "animate-pulse opacity-60" : ""
+            }`}
+          >
+            {stats.newThisWeekCount}
+          </span>
+          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium truncate">
+            this week
+          </span>
+        </div>
       </div>
 
       {/* Top Lasting (Evergreen 30d+) */}
       <div
         onClick={() => onSelectPreset("top_lasting", "top_lasting")}
         title="Filter by Longest Running Evergreen products (30d+)"
-        className={`p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md select-none ${
+        className={`px-3 py-2 rounded-lg bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-150 select-none ${
           smartPreset === "top_lasting"
-            ? "border-purple-500/60 ring-2 ring-purple-500/20 bg-purple-50/20 dark:bg-purple-950/20"
-            : "border-slate-200 dark:border-slate-800/80 hover:border-purple-500/40"
+            ? "border-purple-500/60 ring-1 ring-purple-500/25 bg-purple-50/25 dark:bg-purple-950/20"
+            : "border-slate-200 dark:border-slate-800/80 hover:border-purple-500/35"
         }`}
       >
-        <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
-          <span>Evergreen (30d+)</span>
-          <Clock className="w-4 h-4 text-purple-500" />
+        <div className="flex items-center justify-between text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+          <span className="truncate">Evergreen (30d+)</span>
+          <Clock className="w-3.5 h-3.5 text-purple-500 shrink-0 ml-1" />
         </div>
-        <p
-          className={`text-2xl font-black text-purple-600 dark:text-purple-400 mt-1 ${
-            statsLoading ? "animate-pulse opacity-60" : ""
-          }`}
-        >
-          {stats.evergreenCount}
-        </p>
-        <span className="text-[11px] text-slate-500 font-medium">
-          Longest running proven winners
-        </span>
+        <div className="flex items-baseline justify-between gap-1.5 mt-0.5">
+          <span
+            className={`text-base sm:text-lg font-black text-purple-600 dark:text-purple-400 leading-tight ${
+              statsLoading ? "animate-pulse opacity-60" : ""
+            }`}
+          >
+            {stats.evergreenCount}
+          </span>
+          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium truncate">
+            proven
+          </span>
+        </div>
       </div>
 
       {/* With Discounts / Bundle Offers */}
       <div
         onClick={() => onSelectPreset("with_offers")}
         title="Filter by Products with bundle offers and discounts"
-        className={`p-3.5 rounded-xl bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md select-none col-span-2 sm:col-span-1 ${
+        className={`px-3 py-2 rounded-lg bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-150 select-none col-span-2 sm:col-span-1 ${
           smartPreset === "with_offers"
-            ? "border-blue-500/60 ring-2 ring-blue-500/20 bg-blue-50/20 dark:bg-blue-950/20"
-            : "border-slate-200 dark:border-slate-800/80 hover:border-blue-500/40"
+            ? "border-blue-500/60 ring-1 ring-blue-500/25 bg-blue-50/25 dark:bg-blue-950/20"
+            : "border-slate-200 dark:border-slate-800/80 hover:border-blue-500/35"
         }`}
       >
-        <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
-          <span>Offers &amp; Bundles</span>
-          <Tag className="w-4 h-4 text-blue-500" />
+        <div className="flex items-center justify-between text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+          <span className="truncate">Offers &amp; Bundles</span>
+          <Tag className="w-3.5 h-3.5 text-blue-500 shrink-0 ml-1" />
         </div>
-        <p
-          className={`text-2xl font-black text-blue-600 dark:text-blue-400 mt-1 ${
-            statsLoading ? "animate-pulse opacity-60" : ""
-          }`}
-        >
-          {stats.withOffersCount}
-        </p>
-        <span className="text-[11px] text-slate-500 font-medium">
-          {stats.totalProducts > 0
-            ? Math.round((stats.withOffersCount / stats.totalProducts) * 100)
-            : 0}
-          % promotional rate
-        </span>
+        <div className="flex items-baseline justify-between gap-1.5 mt-0.5">
+          <span
+            className={`text-base sm:text-lg font-black text-blue-600 dark:text-blue-400 leading-tight ${
+              statsLoading ? "animate-pulse opacity-60" : ""
+            }`}
+          >
+            {stats.withOffersCount}
+          </span>
+          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium truncate">
+            {stats.totalProducts > 0
+              ? Math.round((stats.withOffersCount / stats.totalProducts) * 100)
+              : 0}
+            % promo
+          </span>
+        </div>
       </div>
     </div>
   );
