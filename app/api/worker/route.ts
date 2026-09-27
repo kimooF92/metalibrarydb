@@ -74,7 +74,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const currentState = await getOrCreateWorkerState();
 
-    if (body.resetLimits === true) {
+    if (body.resetLimits === true || body.resetCircuitBreaker === true) {
       const now = new Date();
       const [updated] = await db
         .update(workerState)
@@ -85,6 +85,10 @@ export async function POST(request: Request) {
           dayWindowStart: now,
           consecutiveFailures: 0,
           backoffUntil: null,
+          circuitBreakerTripped: false,
+          circuitBreakerReason: null,
+          circuitBreakerUntil: null,
+          consecutiveZeroPages: 0,
           updatedAt: now,
         })
         .where(eq(workerState.id, 1))
@@ -92,7 +96,9 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         success: true,
-        message: "Worker rate limits reset successfully.",
+        message: body.resetCircuitBreaker
+          ? "Circuit breaker reset successfully."
+          : "Worker rate limits and circuit breaker reset successfully.",
         state: updated,
       });
     }
@@ -101,18 +107,30 @@ export async function POST(request: Request) {
     const targetPaused =
       typeof body.pause === "boolean" ? body.pause : !currentState.isPaused;
 
+    const updateFields: any = {
+      isPaused: targetPaused,
+      updatedAt: new Date(),
+    };
+
+    // When explicitly resuming, also clear active backoff and circuit breaker cooldowns
+    if (!targetPaused) {
+      updateFields.circuitBreakerTripped = false;
+      updateFields.circuitBreakerReason = null;
+      updateFields.circuitBreakerUntil = null;
+      updateFields.consecutiveZeroPages = 0;
+      updateFields.backoffUntil = null;
+      updateFields.consecutiveFailures = 0;
+    }
+
     const [updated] = await db
       .update(workerState)
-      .set({
-        isPaused: targetPaused,
-        updatedAt: new Date(),
-      })
+      .set(updateFields)
       .where(eq(workerState.id, 1))
       .returning();
 
     return NextResponse.json({
       success: true,
-      message: `Worker manually ${targetPaused ? "paused" : "resumed"}.`,
+      message: `Worker manually ${targetPaused ? "paused" : "resumed and cooldowns cleared"}.`,
       state: updated,
     });
   } catch (error) {

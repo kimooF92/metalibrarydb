@@ -92,6 +92,24 @@ async function runWorker() {
     process.env.CI === "true" ||
     process.env.GITHUB_ACTIONS === "true";
 
+  // Canary Sanity Check (Verification of Meta Ad Library health)
+  if (isCoordinator && (args.includes("--canary") || process.env.RUN_CANARY_CHECK === "true")) {
+    try {
+      const { runCanarySanityCheck } = await import("./circuit-breaker");
+      const { page } = await getBrowserSession();
+      const canaryRes = await runCanarySanityCheck(page);
+      if (!canaryRes.isHealthy) {
+        console.warn(`[Worker Startup] 🛑 Canary check failed (${canaryRes.reason}). Meta Ad Library is unavailable.`);
+        if (isSingleRun) {
+          console.log("[Worker Startup] Single run mode with failed canary. Exiting cleanly.");
+          process.exit(0);
+        }
+      }
+    } catch (canaryErr: any) {
+      console.warn("[Worker Startup] Canary check warning:", canaryErr?.message);
+    }
+  }
+
   if (isCountOnly) {
     console.log(
       "[Worker Mode] ⚡ Count-Only Mode Active: Creative spy scans will be skipped and reserved for local residential runner."
@@ -507,6 +525,19 @@ async function runWorker() {
             outcome.status,
             { failureReason: outcome.failureReason }
           );
+
+          if (res?.circuitBreakerTripped) {
+            console.warn(
+              "[Worker] 🛑 Circuit Breaker tripped during count scan. Halting scanning batch to protect data integrity."
+            );
+            if (isSingleRun) {
+              console.log("[Single Run] Circuit Breaker tripped. Exiting worker cleanly.");
+              await emitSessionSummary();
+              process.exit(0);
+            }
+            continue;
+          }
+
           sessionScanned++;
           if (res && res.difference && res.difference > 0) {
             sessionMovers.push({

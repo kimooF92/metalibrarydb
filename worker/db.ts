@@ -54,10 +54,14 @@ export async function enqueueAllPagesForRefresh(cooldownHours: number = 12) {
     ? await db.query.trackedPages.findMany({
       where: (pages, { or, and, isNull, lt, ne, eq }) =>
         or(
-          // Active or on_hold pages: standard cooldown (default 12h)
+          // Active or on_hold pages: standard cooldown (default 12h) or explicitly pending
           and(
             or(isNull(pages.holdStatus), ne(pages.holdStatus, "inactive")),
-            or(isNull(pages.lastChecked), lt(pages.lastChecked, activeCutoff))
+            or(
+              isNull(pages.lastChecked),
+              lt(pages.lastChecked, activeCutoff),
+              eq(pages.status, "pending")
+            )
           ),
           // Inactive pages: 3-day (72h) cooldown to detect ad relaunches without wasting budget
           and(
@@ -565,17 +569,7 @@ export async function markJobCompleted(
   const scanError = options?.failureReason || null;
   const scanQuality = options?.scanQuality || (status === "success" && !scanError ? "complete" : "unclear");
 
-  // 2. Insert scan_history record (truthful audit log)
-  await db.insert(scanHistory).values({
-    trackedPageId: pageId,
-    results,
-    difference,
-    checkedAt: now,
-    status,
-    failureReason: scanError,
-  });
-
-  // 3. Cliff-Drop Detection & Grace Period State Machine
+  // 2. Cliff-Drop Detection & Grace Period State Machine Preparation
   const CONFIRM_SCANS = 3; // consecutive zero scans before archiving
 
   const prevCount = trackedPage?.lastKnownValidResults
@@ -585,6 +579,94 @@ export async function markJobCompleted(
   const hadActiveAds = prevCount > 0;
   let isOnHold = trackedPage?.holdStatus === "on_hold";
   const isInactive = trackedPage?.holdStatus === "inactive";
+  const brandName = trackedPage?.displayName || trackedPage?.url || "Tracked Brand";
+
+  // 2a. Global Circuit Breaker Check (3+ Pages Zero-Ad Anomaly)
+  // When 3+ distinct pages return 0 ads within the rolling window, it indicates an Ad Library outage/block,
+  // not independent brand shutdowns. Intercept, trip circuit breaker, quarantine scans, and halt archival.
+  if (results === 0 && (hadActiveAds || isOnHold)) {
+    const { checkZeroAdAnomaly } = await import("./circuit-breaker");
+    const anomaly = await checkZeroAdAnomaly(pageId, results);
+
+    if (anomaly.isAnomalous) {
+      console.warn(
+        `[Count Scan] 🛑 0-ad result for page "${brandName}" (${pageId}) REJECTED by Circuit Breaker: ${anomaly.reason}`
+      );
+
+      // Record truthful incident record in scan_history with status "unclear" and null results to avoid polluting sparklines
+      await db.insert(scanHistory).values({
+        trackedPageId: pageId,
+        results: null,
+        difference: null,
+        checkedAt: now,
+        status: "unclear",
+        failureReason: "circuit_breaker_meta_outage",
+      });
+
+      // Nuanced GAP-1 Fix: If the trigger page entered on_hold during this outage window, rescue it back to active.
+      // If it entered on_hold before the outage, freeze it cleanly without resetting or incrementing its count.
+      const { getCircuitBreakerConfig } = await import("./circuit-breaker");
+      const cbConfig = getCircuitBreakerConfig();
+      const outageWindowStart = new Date(now.getTime() - cbConfig.windowMinutes * 60 * 1000);
+      const enteredHoldDuringOutage =
+        isOnHold && trackedPage?.holdStartedAt && new Date(trackedPage.holdStartedAt) >= outageWindowStart;
+
+      if (enteredHoldDuringOutage) {
+        console.log(
+          `[Count Scan] 🛡️ Rescuing trigger page "${brandName}" — reverting false on_hold status to active.`
+        );
+        await db
+          .update(trackedPages)
+          .set({
+            holdStatus: "active",
+            currentResults: trackedPage?.lastKnownValidResults ?? trackedPage?.currentResults ?? prevCount,
+            consecutiveZeroScans: 0,
+            lastKnownValidResults: null,
+            holdStartedAt: null,
+            status: "pending",
+            updatedAt: now,
+          })
+          .where(eq(trackedPages.id, pageId));
+      } else {
+        // Keep page in its prior state, set status to 'pending' so it can be cleanly retried after cooldown
+        await db
+          .update(trackedPages)
+          .set({
+            status: "pending",
+            updatedAt: now,
+          })
+          .where(eq(trackedPages.id, pageId));
+      }
+
+      // Reset the current queue job to pending with priority 1 so it retries automatically once cooldown expires
+      await db
+        .update(queue)
+        .set({
+          status: "pending",
+          priority: 1,
+          startedAt: null,
+          finishedAt: null,
+        })
+        .where(eq(queue.id, queueId));
+
+      return {
+        brandName,
+        results: prevCount,
+        difference: 0,
+        circuitBreakerTripped: true,
+      };
+    }
+  }
+
+  // 2b. Insert scan_history record (truthful audit log for verified scans)
+  await db.insert(scanHistory).values({
+    trackedPageId: pageId,
+    results,
+    difference,
+    checkedAt: now,
+    status,
+    failureReason: scanError,
+  });
 
   const isValidatedZero = results === 0
     && status === "success"
@@ -608,7 +690,6 @@ export async function markJobCompleted(
     && !scanError;
 
   let displayDifference = difference;
-  const brandName = trackedPage?.displayName || trackedPage?.url || "Tracked Brand";
 
   if (isDropToZero) {
     // First drop to 0: enter grace period, NEVER shut down ads directly
@@ -624,11 +705,11 @@ export async function markJobCompleted(
       updatedAt: now,
     }).where(eq(trackedPages.id, pageId));
 
-    // Immediately enqueue a priority recheck scan to verify whether it is really 0 or a glitch
+    // Recheck with priority 2 (spaced ahead of normal 1, but without monopolizing an instant loop)
     try {
-      await enqueueOrEscalateJob(pageId, "count", 10);
+      await enqueueOrEscalateJob(pageId, "count", 2);
     } catch (e) {
-      console.error(`[Count Scan] Failed to enqueue priority recheck for ${pageId}:`, e);
+      console.error(`[Count Scan] Failed to enqueue recheck for ${pageId}:`, e);
     }
 
     // Fire amber hold notification instead of "Brand Went Dark"
@@ -694,7 +775,7 @@ export async function markJobCompleted(
       }).where(eq(trackedPages.id, pageId));
 
       try {
-        await enqueueOrEscalateJob(pageId, "count", 10);
+        await enqueueOrEscalateJob(pageId, "count", 2);
       } catch {}
     }
   } else if (isRecovering || isRelaunching) {

@@ -1,4 +1,5 @@
 import { getWorkerState, updateWorkerState } from "./db";
+import { isCircuitBreakerActive } from "./circuit-breaker";
 
 export async function checkBackoffStatus(): Promise<{ inBackoff: boolean; reason?: string }> {
   const state = await getWorkerState();
@@ -7,6 +8,14 @@ export async function checkBackoffStatus(): Promise<{ inBackoff: boolean; reason
     return {
       inBackoff: true,
       reason: "Worker is manually paused via kill switch.",
+    };
+  }
+
+  const breaker = await isCircuitBreakerActive();
+  if (breaker.isActive) {
+    return {
+      inBackoff: true,
+      reason: `Meta Ad Library Circuit Breaker active (${breaker.minutesRemaining} min remaining): ${breaker.reason || "3+ pages returned 0 ads"}.`,
     };
   }
 
@@ -63,9 +72,21 @@ export async function handleFailure() {
 export async function handleSuccess() {
   const state = await getWorkerState();
   if ((state.consecutiveFailures || 0) > 0 || state.backoffUntil !== null) {
-    await updateWorkerState({
-      consecutiveFailures: 0,
-      backoffUntil: null,
-    });
+    const now = new Date();
+    const isBreakerActive =
+      state.circuitBreakerTripped &&
+      state.circuitBreakerUntil &&
+      now < new Date(state.circuitBreakerUntil);
+
+    if (!isBreakerActive) {
+      await updateWorkerState({
+        consecutiveFailures: 0,
+        backoffUntil: null,
+      });
+    } else {
+      await updateWorkerState({
+        consecutiveFailures: 0,
+      });
+    }
   }
 }

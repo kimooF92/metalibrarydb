@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   uuid,
@@ -74,6 +75,9 @@ export const scanHistory = pgTable(
       table.trackedPageId,
       table.checkedAt.desc()
     ),
+    index("idx_scan_history_recent_zeros")
+      .on(table.checkedAt)
+      .where(sql`results = 0`),
   ]
 );
 
@@ -277,6 +281,10 @@ export const workerState = pgTable("worker_state", {
   hourWindowStart: timestamp("hour_window_start", { withTimezone: true }),
   scansToday: integer("scans_today").default(0),
   dayWindowStart: timestamp("day_window_start", { withTimezone: true }),
+  consecutiveZeroPages: integer("consecutive_zero_pages").default(0),
+  circuitBreakerTripped: boolean("circuit_breaker_tripped").default(false),
+  circuitBreakerReason: text("circuit_breaker_reason"),
+  circuitBreakerUntil: timestamp("circuit_breaker_until", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 

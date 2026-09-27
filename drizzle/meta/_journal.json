@@ -106,6 +106,34 @@
       "when": 1789078900000,
       "tag": "0014_add_page_hold_tracking",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1789079000000,
+      "tag": "0015_nightly_maintenance_cron",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1789079100000,
+      "tag": "0016_add_foreign_key_covering_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1789079200000,
+      "tag": "0017_add_circuit_breaker_to_worker_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1789079300000,
+      "tag": "0018_add_scan_history_zero_index",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,12 @@
 name: Meta Ad Tracker Worker
 
 on:
-  workflow_dispatch: # Triggered exclusively via external cron (cron-job.org) or manual UI trigger
+  workflow_dispatch: # Triggered via external cron or manual trigger
+    inputs:
+      run_canary:
+        description: 'Run Meta Ad Library Canary check on startup (true/false)'
+        required: false
+        default: 'false'
 
 # Dedicated concurrency group with cancel-in-progress to prevent stalled runs from blocking the queue
 concurrency:
@@ -83,4 +88,8 @@ jobs:
           TOTAL_SHARDS: 4
           COUNT_ONLY: "true"
           AUTO_ENQUEUE_SPY: "false"
+          RUN_CANARY_CHECK: ${{ github.event.inputs.run_canary || 'false' }}
+          ZERO_AD_ANOMALY_THRESHOLD: "3"
+          ZERO_AD_ANOMALY_WINDOW_MINUTES: "20"
+          CIRCUIT_BREAKER_COOLDOWN_MINUTES: "45"
         run: npm run worker
