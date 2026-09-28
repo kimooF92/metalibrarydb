@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { discoveryRuns } from "@/db/schema";
 import { desc, gte, or, eq, and, sql } from "drizzle-orm";
 import { triggerGitHubWorkflow } from "@/lib/github";
+import { parseMetaAdLibraryDiscoveryUrl } from "@/lib/url-parser";
 
 export async function GET() {
   try {
@@ -29,6 +30,43 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
+
+    // Mode 1: Direct Meta Ad Library URL
+    const rawUrl = body.url || body.searchUrl;
+    if (rawUrl && typeof rawUrl === "string" && rawUrl.trim()) {
+      const parsed = parseMetaAdLibraryDiscoveryUrl(rawUrl);
+      if (!parsed.isValid) {
+        return NextResponse.json(
+          { success: false, error: parsed.error || "Invalid Meta Ad Library URL" },
+          { status: 400 }
+        );
+      }
+
+      const startDateMin = parsed.startDateMin ? new Date(parsed.startDateMin) : null;
+      const startDateMax = parsed.startDateMax ? new Date(parsed.startDateMax) : null;
+
+      const [newRun] = await db
+        .insert(discoveryRuns)
+        .values({
+          country: parsed.country,
+          searchUrl: parsed.cleanUrl,
+          query: parsed.query,
+          startDateMin,
+          startDateMax,
+          status: "pending",
+          totalAdsScanned: 0,
+          totalPagesDiscovered: 0,
+        })
+        .returning();
+
+      return NextResponse.json({
+        success: true,
+        runId: newRun.id,
+        run: newRun,
+      });
+    }
+
+    // Mode 2: Existing Search Controls (Form Builder)
     const country = (body.country || "TN").toUpperCase().trim();
     const query = body.query || "\u200D";
     const mediaType = body.mediaType || "video";

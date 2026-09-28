@@ -12,7 +12,7 @@ const META_AD_LIBRARY_PATH = "/ads/library/";
 const WEBSITE_DOMAIN_REGEX =
   /^(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)\/?$/i;
 
-function isMetaAdLibraryUrl(url: string): boolean {
+export function isMetaAdLibraryUrl(url: string): boolean {
   try {
     const trimmed = url.trim();
     const urlToTest = trimmed.match(/^https?:\/\//i) ? trimmed : `https://${trimmed}`;
@@ -24,6 +24,143 @@ function isMetaAdLibraryUrl(url: string): boolean {
     return isFacebookDomain && isAdLibraryPath;
   } catch {
     return false;
+  }
+}
+
+export interface ParsedMetaAdUrl {
+  isValid: boolean;
+  cleanUrl: string;
+  country: string;
+  query: string;
+  mediaType: string;
+  startDateMin: string | null;
+  startDateMax: string | null;
+  pageId: string | null;
+  languages: string[];
+  platforms: string[];
+  error?: string;
+}
+
+export function parseMetaAdLibraryDiscoveryUrl(rawUrl: string): ParsedMetaAdUrl {
+  if (!rawUrl || typeof rawUrl !== "string") {
+    return {
+      isValid: false,
+      cleanUrl: "",
+      country: "TN",
+      query: "\u200D",
+      mediaType: "all",
+      startDateMin: null,
+      startDateMax: null,
+      pageId: null,
+      languages: [],
+      platforms: [],
+      error: "URL is empty",
+    };
+  }
+
+  const trimmed = rawUrl.trim();
+  const urlToTest = trimmed.match(/^https?:\/\//i) ? trimmed : `https://${trimmed}`;
+
+  try {
+    const parsed = new URL(urlToTest);
+    const isFacebookDomain = /(^|\.)facebook\.com$/i.test(parsed.hostname);
+    const isAdLibraryPath = /^\/ads\/library(\/|\?|$)/i.test(parsed.pathname);
+
+    if (!isFacebookDomain || !isAdLibraryPath) {
+      return {
+        isValid: false,
+        cleanUrl: urlToTest,
+        country: "TN",
+        query: "\u200D",
+        mediaType: "all",
+        startDateMin: null,
+        startDateMax: null,
+        pageId: null,
+        languages: [],
+        platforms: [],
+        error: "Not a valid Facebook Ad Library URL (must start with https://www.facebook.com/ads/library/...)",
+      };
+    }
+
+    // Force hostname to www.facebook.com and https
+    parsed.protocol = "https:";
+    parsed.hostname = "www.facebook.com";
+
+    const params = parsed.searchParams;
+
+    // Extract country
+    const rawCountry = params.get("country");
+    const country = rawCountry ? rawCountry.toUpperCase().trim() : "ALL";
+
+    // Extract query / keyword
+    const rawQuery = params.get("q");
+    let query = "\u200D";
+    if (rawQuery !== null && rawQuery !== undefined && rawQuery.trim() !== "") {
+      query = rawQuery.trim();
+    }
+
+    // Extract Page ID if present
+    const rawPageId = params.get("view_all_page_id")?.trim() || null;
+    const pageId = rawPageId && isValidPageId(rawPageId) ? rawPageId : null;
+
+    if ((query === "\u200D" || !query) && pageId) {
+      query = `page:${pageId}`;
+    }
+
+    // Extract Media Type
+    const mediaType = params.get("media_type") || "all";
+
+    // Extract Date Filters
+    const startDateMin = params.get("start_date[min]") || null;
+    const startDateMax = params.get("start_date[max]") || null;
+
+    // Extract Languages
+    const languages: string[] = [];
+    params.forEach((val, key) => {
+      if (key.startsWith("content_languages") && !languages.includes(val)) {
+        languages.push(val);
+      }
+    });
+
+    // Extract Platforms
+    const platforms: string[] = [];
+    params.forEach((val, key) => {
+      if (key.startsWith("publisher_platforms") && !platforms.includes(val)) {
+        platforms.push(val);
+      }
+    });
+
+    // Ensure active_status is set if missing
+    if (!params.has("active_status")) {
+      params.set("active_status", "active");
+    }
+
+    return {
+      isValid: true,
+      cleanUrl: parsed.toString(),
+      country,
+      query,
+      mediaType,
+      startDateMin,
+      startDateMax,
+      pageId,
+      languages,
+      platforms,
+    };
+  } catch (e: any) {
+    return {
+      isValid: false,
+      cleanUrl: urlToTest,
+      country: "TN",
+      query: "\u200D",
+      mediaType: "all",
+      startDateMin: null,
+      startDateMax: null,
+      pageId: null,
+      languages: [],
+      platforms: [],
+      error: e.message || "Invalid URL syntax",
+    };
   }
 }
 
