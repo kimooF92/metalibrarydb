@@ -13,7 +13,7 @@ export interface ZeroAdAnomalyResult {
 
 // Configurable constants via environment variables
 export function getCircuitBreakerConfig() {
-  const threshold = parseInt(process.env.ZERO_AD_ANOMALY_THRESHOLD || "3", 10);
+  const threshold = parseInt(process.env.ZERO_AD_ANOMALY_THRESHOLD || "5", 10);
   const windowMinutes = parseInt(process.env.ZERO_AD_ANOMALY_WINDOW_MINUTES || "20", 10);
   const cooldownMinutes = parseInt(process.env.CIRCUIT_BREAKER_COOLDOWN_MINUTES || "45", 10);
   const defaultCanaries = [
@@ -36,14 +36,31 @@ export function getCircuitBreakerConfig() {
 
 /**
  * Checks whether the current 0-result scan is part of a multi-page cluster anomaly.
- * When 3+ distinct pages report 0 ads within the rolling window, it declares an Ad Library incident,
- * trips the circuit breaker, puts all worker shards into cooldown, and quarantines previous false-zero scans.
+ * When distinct pages report 0 ads within the rolling window, it verifies platform health via canary.
+ * Only if the canary fails or is unavailable does it declare an incident and trip the circuit breaker.
  */
 export async function checkZeroAdAnomaly(
   currentPageId: string,
-  currentResults: number | null
+  currentResults: number | null,
+  browserPage?: Page | null
 ): Promise<ZeroAdAnomalyResult> {
   const config = getCircuitBreakerConfig();
+
+  // 0. Inactive page filter: Never scrutinize or flag pages that are confirmed inactive or already zero
+  const currentPage = await db.query.trackedPages.findFirst({
+    where: eq(trackedPages.id, currentPageId),
+    columns: { id: true, holdStatus: true, currentResults: true, lastKnownValidResults: true },
+  });
+
+  const isCurrentPageInactive =
+    currentPage?.holdStatus === "inactive" ||
+    (currentPage?.holdStatus === "active" &&
+      (currentPage?.currentResults ?? 0) === 0 &&
+      !currentPage?.lastKnownValidResults);
+
+  if (isCurrentPageInactive) {
+    return { isAnomalous: false };
+  }
 
   // Fast-path concurrency guard: if another shard already tripped the breaker, respect it without duplicate alerts or writes
   const currentState = await getWorkerState();
@@ -75,7 +92,7 @@ export async function checkZeroAdAnomaly(
 
   const windowStart = new Date(Date.now() - config.windowMinutes * 60 * 1000);
 
-  // Find distinct pages that DROPPED to 0 ads in the rolling window (excluding already quarantined scans and already-0 pages)
+  // Find distinct pages that DROPPED to 0 ads in the rolling window (excluding already quarantined scans, already-0 pages, and inactive pages)
   const recentZeroScans = await db
     .select({
       trackedPageId: scanHistory.trackedPageId,
@@ -87,7 +104,9 @@ export async function checkZeroAdAnomaly(
         gte(scanHistory.checkedAt, windowStart),
         eq(scanHistory.results, 0),
         sql`(${scanHistory.failureReason} IS NULL OR ${scanHistory.failureReason} != 'circuit_breaker_meta_outage')`,
-        // Crucial Guard: Only count genuine drops to 0 (had active ads before) or pages currently in on_hold grace period.
+        // Crucial Guard: Exclude inactive pages strictly!
+        sql`${trackedPages.holdStatus} != 'inactive'`,
+        // Only count genuine drops to 0 (had active ads before) or pages currently in on_hold grace period.
         // Never count brands that were already confirmed 0 (inactive or zero-ad pages).
         sql`(${scanHistory.difference} < 0 OR ${trackedPages.holdStatus} = 'on_hold' OR (${trackedPages.lastKnownValidResults} IS NOT NULL AND ${trackedPages.lastKnownValidResults} > 0))`
       )
@@ -104,6 +123,35 @@ export async function checkZeroAdAnomaly(
   const count = distinctZeroPageIds.size;
 
   if (count >= config.threshold) {
+    // Before declaring an Ad Library outage, run a sanity check on a mega-advertiser (e.g. Nike Global)
+    // If the canary returns active ads, Meta Ad Library is operational — these 0-counts are natural brand pauses/churn!
+    if (browserPage) {
+      console.log(
+        `[Circuit Breaker] 🔍 Cluster threshold reached (${count} pages with 0 ads). Verifying platform health via canary check before tripping...`
+      );
+      try {
+        const canary = await runCanarySanityCheck(browserPage);
+        if (canary.isHealthy) {
+          console.log(
+            `[Circuit Breaker] 🟢 Canary check passed (${canary.results} active ads found). Meta Ad Library is operational! ${count} 0-ad results are natural brand pauses, not an outage.`
+          );
+          await updateWorkerState({ consecutiveZeroPages: 0 });
+          return {
+            isAnomalous: false,
+            distinctPagesCount: count,
+          };
+        } else {
+          console.warn(
+            `[Circuit Breaker] ⚠️ Canary check confirmed outage (${canary.reason}). Proceeding to trip circuit breaker.`
+          );
+        }
+      } catch (canaryErr: any) {
+        console.warn(
+          `[Circuit Breaker] Canary verification failed with error: ${canaryErr?.message}. Proceeding with outage trip.`
+        );
+      }
+    }
+
     const cooldownUntil = new Date(Date.now() + config.cooldownMinutes * 60 * 1000);
     const reason = `Meta Ad Library Outage Guard: ${count} distinct brands returned 0 ads within ${config.windowMinutes}m (Threshold: >= ${config.threshold}).`;
 

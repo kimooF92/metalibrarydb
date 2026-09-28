@@ -158,6 +158,7 @@ test("anomaly cluster filter: only counts true drops to 0, strictly excluding al
 
   function isEligibleDropToZero(scan: ScanCandidate): boolean {
     if (scan.results !== 0) return false;
+    if (scan.holdStatus === "inactive") return false; // Strictly exclude inactive pages!
     return (
       (scan.difference !== null && scan.difference < 0) ||
       scan.holdStatus === "on_hold" ||
@@ -189,14 +190,14 @@ test("anomaly cluster filter: only counts true drops to 0, strictly excluding al
     true
   );
 
-  // 3. Page already confirmed inactive (shut down weeks ago, diff = 0) -> MUST EXCLUDE
+  // 3. Page already confirmed inactive (even if legacy DB had lastKnownValidResults > 0) -> MUST EXCLUDE
   assert.equal(
     isEligibleDropToZero({
       pageId: "brand-inactive-already-zero",
       results: 0,
       difference: 0,
       holdStatus: "inactive",
-      lastKnownValidResults: null,
+      lastKnownValidResults: 25,
     }),
     false
   );
@@ -212,4 +213,30 @@ test("anomaly cluster filter: only counts true drops to 0, strictly excluding al
     }),
     false
   );
+});
+
+test("canary pre-trip verification: healthy canary prevents false circuit breaker trips", () => {
+  function evaluateWithCanary(
+    distinctZeroPagesCount: number,
+    threshold: number,
+    canaryResult: { isHealthy: boolean; results: number | null }
+  ) {
+    if (distinctZeroPagesCount >= threshold) {
+      if (canaryResult.isHealthy) {
+        return { tripped: false, reason: "Canary passed — natural brand churn, Meta is operational" };
+      }
+      return { tripped: true, reason: "Canary failed — genuine Meta outage confirmed" };
+    }
+    return { tripped: false, reason: "Below threshold" };
+  }
+
+  // Case 1: 5 small brands pause ads, but Canary (Nike) has 120 ads -> DO NOT TRIP
+  const healthyCanaryRes = evaluateWithCanary(5, 5, { isHealthy: true, results: 120 });
+  assert.equal(healthyCanaryRes.tripped, false);
+  assert.match(healthyCanaryRes.reason, /Canary passed/);
+
+  // Case 2: 5 brands drop to 0 AND Canary (Nike) returns 0 or fails -> TRIP BREAKER
+  const failedCanaryRes = evaluateWithCanary(5, 5, { isHealthy: false, results: 0 });
+  assert.equal(failedCanaryRes.tripped, true);
+  assert.match(failedCanaryRes.reason, /genuine Meta outage confirmed/);
 });

@@ -523,7 +523,7 @@ async function runWorker() {
             trackedPage.id,
             outcome.results,
             outcome.status,
-            { failureReason: outcome.failureReason }
+            { failureReason: outcome.failureReason, page }
           );
 
           if (res?.circuitBreakerTripped) {

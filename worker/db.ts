@@ -531,6 +531,7 @@ export async function markJobCompleted(
   options?: {
     failureReason?: string | null;
     scanQuality?: "complete" | "partial" | "unclear";
+    page?: any;
   }
 ) {
   const now = new Date();
@@ -581,12 +582,18 @@ export async function markJobCompleted(
   const isInactive = trackedPage?.holdStatus === "inactive";
   const brandName = trackedPage?.displayName || trackedPage?.url || "Tracked Brand";
 
-  // 2a. Global Circuit Breaker Check (3+ Pages Zero-Ad Anomaly)
-  // When 3+ distinct pages return 0 ads within the rolling window, it indicates an Ad Library outage/block,
-  // not independent brand shutdowns. Intercept, trip circuit breaker, quarantine scans, and halt archival.
-  if (results === 0 && (hadActiveAds || isOnHold)) {
+  // 2a. Global Circuit Breaker Check (Zero-Ad Anomaly Outage Guard)
+  // When distinct pages return 0 ads within the rolling window, it indicates a possible Ad Library outage/block.
+  // We strictly exclude already-inactive pages, and verify platform health via canary before pausing the worker.
+  const isAlreadyConfirmedInactive =
+    trackedPage?.holdStatus === "inactive" ||
+    (trackedPage?.holdStatus === "active" &&
+      (trackedPage?.currentResults ?? 0) === 0 &&
+      !trackedPage?.lastKnownValidResults);
+
+  if (results === 0 && !isAlreadyConfirmedInactive && (hadActiveAds || isOnHold)) {
     const { checkZeroAdAnomaly } = await import("./circuit-breaker");
-    const anomaly = await checkZeroAdAnomaly(pageId, results);
+    const anomaly = await checkZeroAdAnomaly(pageId, results, options?.page);
 
     if (anomaly.isAnomalous) {
       console.warn(
@@ -705,9 +712,9 @@ export async function markJobCompleted(
       updatedAt: now,
     }).where(eq(trackedPages.id, pageId));
 
-    // Recheck with priority 2 (spaced ahead of normal 1, but without monopolizing an instant loop)
+    // Recheck with priority 1 (keep in normal queue order so other pages are not starved)
     try {
-      await enqueueOrEscalateJob(pageId, "count", 2);
+      await enqueueOrEscalateJob(pageId, "count", 1);
     } catch (e) {
       console.error(`[Count Scan] Failed to enqueue recheck for ${pageId}:`, e);
     }
@@ -734,6 +741,7 @@ export async function markJobCompleted(
         holdStatus: "inactive",
         consecutiveZeroScans: nextZeroCount,
         currentResults: results,
+        lastKnownValidResults: null,
         lastChecked: now,
         lastSuccessAt: now,
         status: "success",
