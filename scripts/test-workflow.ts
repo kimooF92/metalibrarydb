@@ -380,6 +380,80 @@ async function runTests() {
     assert(!resultIds.includes(pageB.id), "API query must EXCLUDE growing page (>= 20 ads)");
   }
 
+  // --------------------------------------------------------------------------
+  // SCENARIO 10: Micro-page with 0 new ads (routine count pending) excluded from creative scan
+  // --------------------------------------------------------------------------
+  console.log("\n--- Scenario 10: Micro-page with 0 new ads excluded from creative scan ---");
+  {
+    // Page with previous creative scan, status set to 'pending' by routine count refresh, diff = 0
+    const pageZeroDiff = await createTestTrackedPage({
+      currentResults: 15,
+      lastCreativeScan: new Date(Date.now() - 86400000), // Scanned 24h ago
+      status: "pending", // Set by routine count refresh
+    });
+
+    await db.insert(scanHistory).values({
+      trackedPageId: pageZeroDiff.id,
+      results: 15,
+      difference: 0,
+      status: "success",
+      checkedAt: new Date(Date.now() - 3600000), // Scanned 1h ago, 0 new ads
+    });
+
+    // Page with previous creative scan, +3 new ads verified
+    const pageWithNewAds = await createTestTrackedPage({
+      currentResults: 18,
+      lastCreativeScan: new Date(Date.now() - 86400000),
+      status: "pending",
+    });
+
+    await db.insert(scanHistory).values({
+      trackedPageId: pageWithNewAds.id,
+      results: 18,
+      difference: 3,
+      status: "success",
+      checkedAt: new Date(Date.now() - 3600000), // +3 new ads since last creative scan
+    });
+
+    // Query matching the refined small-pages-scan route logic
+    const rawRows: any = await db.execute(sql`
+      WITH active_creative_queue AS (
+        SELECT DISTINCT tracked_page_id
+        FROM queue
+        WHERE job_type = 'creative' AND status IN ('pending', 'running')
+      )
+      SELECT tp.id, tp.current_results, COALESCE(lsh.difference, 0) as latest_difference
+      FROM tracked_pages tp
+      LEFT JOIN active_creative_queue acq ON acq.tracked_page_id = tp.id
+      LEFT JOIN LATERAL (
+        SELECT s.difference, s.results, s.checked_at
+        FROM scan_history s
+        WHERE s.tracked_page_id = tp.id AND s.status = 'success'
+        ORDER BY s.checked_at DESC
+        LIMIT 1
+      ) lsh ON true
+      WHERE 
+        tp.current_results > 0 
+        AND tp.current_results < 20
+        AND (tp.hold_status IS NULL OR (tp.hold_status != 'on_hold' AND tp.hold_status != 'inactive'))
+        AND (tp.search_type IS NULL OR tp.search_type != 'keyword_exact_phrase')
+        AND (
+          acq.tracked_page_id IS NOT NULL
+          OR tp.last_creative_scan IS NULL
+          OR (
+            lsh.difference IS NOT NULL 
+            AND lsh.difference >= 2 
+            AND (tp.last_creative_scan IS NULL OR lsh.checked_at > tp.last_creative_scan)
+          )
+        )
+        AND tp.id IN (${pageZeroDiff.id}, ${pageWithNewAds.id})
+    `);
+
+    const resultIds = (rawRows || []).map((r: any) => r.id);
+    assert(!resultIds.includes(pageZeroDiff.id), "Page with 0 new ads must NOT be included in creative scan list");
+    assert(resultIds.includes(pageWithNewAds.id), "Page with verified new ads (+3) must be included in creative scan list");
+  }
+
   await cleanupTestData();
   await client.end();
 

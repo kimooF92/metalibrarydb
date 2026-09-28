@@ -89,7 +89,7 @@ export function SmallPagesScanBanner() {
               <span className="hidden lg:inline text-slate-400 dark:text-slate-600">•</span>
 
               <p className="text-xs text-slate-700 dark:text-slate-300 line-clamp-1 sm:line-clamp-none">
-                {count} small {count === 1 ? "page" : "pages"} (&lt; 50 ads) have detected new ads or first scans.
+                {count} small {count === 1 ? "page" : "pages"} (&lt; 20 ads) have detected new ads or first scans.
                 {pendingEnqueueCount > 0 ? ` ${pendingEnqueueCount} waiting to enqueue.` : " All queued in local worker."}
               </p>
             </div>
@@ -369,7 +369,7 @@ export function SmallPagesScanModal() {
                   ) : isNewAds ? (
                     <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                       <TrendingUp className="w-3 h-3" />
-                      <span>+{p.latestDifference} New Ads</span>
+                      <span>{p.latestDifference > 0 ? `+${p.latestDifference} New Ads` : "New Ads"}</span>
                     </span>
                   ) : isNeverScanned ? (
                     <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">

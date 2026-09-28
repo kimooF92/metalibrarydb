@@ -20,8 +20,11 @@ export interface SmallPageNeedingScan {
 
 export async function GET() {
   try {
-    // Ultra-lightweight query: relies on page status = 'pending' set when ad count changes,
-    // plus active queue jobs. Zero heavy table scans or CTEs on history.
+    // Selects small pages (< 20 active ads) that legitimately need a local creative scan:
+    // 1. Pages already enqueued with an active 'creative' job in queue (in_queue)
+    // 2. Pages that have NEVER had a creative scan (never_scanned)
+    // 3. Pages with verified new ads detected since their last creative scan (new_ads with delta >= 2)
+    // Pages undergoing routine count refresh with 0 new ads are strictly excluded.
     const rawRows: any = await db.execute(sql`
       WITH active_creative_queue AS (
         SELECT DISTINCT tracked_page_id
@@ -42,18 +45,30 @@ export async function GET() {
           WHEN tp.last_creative_scan IS NULL THEN 'never_scanned'
           ELSE 'new_ads'
         END as reason,
-        0 as latest_difference,
+        COALESCE(lsh.difference, 0) as latest_difference,
         (acq.tracked_page_id IS NOT NULL) as is_in_queue
       FROM tracked_pages tp
       LEFT JOIN active_creative_queue acq ON acq.tracked_page_id = tp.id
+      LEFT JOIN LATERAL (
+        SELECT s.difference, s.results, s.checked_at
+        FROM scan_history s
+        WHERE s.tracked_page_id = tp.id AND s.status = 'success'
+        ORDER BY s.checked_at DESC
+        LIMIT 1
+      ) lsh ON true
       WHERE 
         tp.current_results > 0 
         AND tp.current_results < 20
         AND (tp.hold_status IS NULL OR (tp.hold_status != 'on_hold' AND tp.hold_status != 'inactive'))
         AND (tp.search_type IS NULL OR tp.search_type != 'keyword_exact_phrase')
         AND (
-          tp.status = 'pending'
-          OR acq.tracked_page_id IS NOT NULL
+          acq.tracked_page_id IS NOT NULL
+          OR tp.last_creative_scan IS NULL
+          OR (
+            lsh.difference IS NOT NULL 
+            AND lsh.difference >= 2 
+            AND (tp.last_creative_scan IS NULL OR lsh.checked_at > tp.last_creative_scan)
+          )
         )
       ORDER BY 
         CASE WHEN acq.tracked_page_id IS NOT NULL THEN 0 ELSE 1 END,
@@ -103,7 +118,8 @@ export async function GET() {
 
 export async function POST() {
   try {
-    // Fetch small pages with status = 'pending' that are not yet in queue
+    // Fetch small pages needing creative scan that are not yet in queue:
+    // (Never scanned OR verified new ads with delta >= 2 since last creative scan)
     const rawRows: any = await db.execute(sql`
       WITH active_creative_queue AS (
         SELECT DISTINCT tracked_page_id
@@ -118,16 +134,31 @@ export async function POST() {
         CASE 
           WHEN tp.last_creative_scan IS NULL THEN 'never_scanned'
           ELSE 'new_ads'
-        END as reason
+        END as reason,
+        COALESCE(lsh.difference, tp.current_results) as latest_difference
       FROM tracked_pages tp
       LEFT JOIN active_creative_queue acq ON acq.tracked_page_id = tp.id
+      LEFT JOIN LATERAL (
+        SELECT s.difference, s.results, s.checked_at
+        FROM scan_history s
+        WHERE s.tracked_page_id = tp.id AND s.status = 'success'
+        ORDER BY s.checked_at DESC
+        LIMIT 1
+      ) lsh ON true
       WHERE 
         acq.tracked_page_id IS NULL
-        AND tp.status = 'pending'
         AND tp.current_results > 0 
         AND tp.current_results < 20
         AND (tp.hold_status IS NULL OR (tp.hold_status != 'on_hold' AND tp.hold_status != 'inactive'))
         AND (tp.search_type IS NULL OR tp.search_type != 'keyword_exact_phrase')
+        AND (
+          tp.last_creative_scan IS NULL
+          OR (
+            lsh.difference IS NOT NULL 
+            AND lsh.difference >= 2 
+            AND (tp.last_creative_scan IS NULL OR lsh.checked_at > tp.last_creative_scan)
+          )
+        )
       ORDER BY tp.current_results DESC
     `);
 
@@ -145,9 +176,10 @@ export async function POST() {
               runner: "playwright",
               manualEnqueue: true,
               reason: page.reason,
+              delta: page.latest_difference,
               totalResults: page.current_results,
             }),
-            outcomeDetails: `Enqueued for local Playwright creative scan (${page.reason})`,
+            outcomeDetails: `Enqueued for local Playwright creative scan (${page.reason}${page.latest_difference ? `, +${page.latest_difference} ads` : ""})`,
           })
           .returning();
 
