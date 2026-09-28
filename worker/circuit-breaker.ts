@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { scanHistory, trackedPages, queue } from "../db/schema";
-import { sql, and, gte, eq, inArray } from "drizzle-orm";
+import { sql, and, gte, eq, inArray, or, lt } from "drizzle-orm";
 import { updateWorkerState, getWorkerState } from "./db";
 import { Page } from "playwright";
 import { scanMetaAdPage } from "./scanner";
@@ -114,7 +114,13 @@ export async function checkZeroAdAnomaly(
         // Strictly exclude internal synthetic test pages
         sql`(${trackedPages.url} NOT LIKE '%test-wf-%' AND (${trackedPages.pageId} IS NULL OR ${trackedPages.pageId} NOT LIKE 'test-wf-%'))`,
         // Only count genuine drops to 0 (had active ads before) or pages that freshly entered hold during this rolling window
-        sql`(${scanHistory.difference} < 0 OR (${trackedPages.holdStatus} = 'on_hold' AND ${trackedPages.holdStartedAt} >= ${windowStart}))`
+        or(
+          lt(scanHistory.difference, 0),
+          and(
+            eq(trackedPages.holdStatus, "on_hold"),
+            gte(trackedPages.holdStartedAt, windowStart)
+          )
+        )
       )
     );
 
