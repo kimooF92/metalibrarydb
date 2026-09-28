@@ -547,7 +547,7 @@ export async function markJobCompleted(
   });
 
   let mostRecentSuccessfulPositiveScan = null;
-  if (!trackedPage?.lastKnownValidResults) {
+  if (!trackedPage?.lastKnownValidResults && trackedPage?.holdStatus !== "inactive") {
     mostRecentSuccessfulPositiveScan = await db.query.scanHistory.findFirst({
       where: and(
         eq(scanHistory.trackedPageId, pageId),
@@ -680,7 +680,7 @@ export async function markJobCompleted(
     && scanQuality === "complete"
     && !scanError;
 
-  const isDropToZero = isValidatedZero && !isOnHold && hadActiveAds;
+  const isDropToZero = isValidatedZero && !isOnHold && !isInactive && hadActiveAds;
   const isZeroWhileOnHold = isOnHold && isValidatedZero;
   const isAmbiguousZero = results === 0 && !isValidatedZero;
   const isRecovering = isOnHold
@@ -835,11 +835,21 @@ export async function markJobCompleted(
         `[Count Scan] 🟢 Page ${pageId} recovered from hold: ${results} ads (baseline was ${baseline}, displayDiff: ${displayDifference}).`
       );
     }
+  } else if (isInactive && isValidatedZero) {
+    // Inactive brand routine check: verified still 0 ads (dark).
+    // Remain inactive, preserve consecutiveZeroScans at 3 (or current count), and update timestamps.
+    await db.update(trackedPages).set({
+      currentResults: 0,
+      lastChecked: now,
+      lastSuccessAt: now,
+      status: "success",
+      updatedAt: now,
+    }).where(eq(trackedPages.id, pageId));
   } else if (results === 0 || status !== "success" || scanQuality !== "complete" || scanError) {
     // Ambiguous/failed scan: preserve previous state and never archive.
     await db.update(trackedPages).set({
       currentResults: trackedPage?.currentResults ?? mostRecentSuccessfulPositiveScan?.results ?? null,
-      consecutiveZeroScans: isOnHold ? 0 : (trackedPage?.consecutiveZeroScans ?? 0),
+      consecutiveZeroScans: trackedPage?.consecutiveZeroScans ?? 0,
       lastChecked: now,
       status,
       updatedAt: now,
@@ -895,7 +905,7 @@ export async function markJobCompleted(
     .where(eq(queue.id, queueId));
 
   // 4b. Log in-app activity notification
-  if (!isDropToZero && !isAmbiguousZero && !(isZeroWhileOnHold && ((trackedPage?.consecutiveZeroScans ?? 0) + 1) < CONFIRM_SCANS)) {
+  if (!isDropToZero && !isAmbiguousZero && !(isInactive && isValidatedZero) && !(isZeroWhileOnHold && ((trackedPage?.consecutiveZeroScans ?? 0) + 1) < CONFIRM_SCANS)) {
     try {
       const { logCountScanNotification } = await import("../lib/notifications");
       await logCountScanNotification({

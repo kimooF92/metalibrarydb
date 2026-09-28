@@ -46,9 +46,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# playwright
-.playwright_profile/
-.playwright_profile_fallback/
 
 # local runner scripts
 # *.bat
@@ -60,3 +57,10 @@ _bmad-output/implementation-artifacts/sprint-status.yaml
 .mcp.json
 debug.log
 skills-lock.json
+
+# playwright
+.playwright_profile*/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

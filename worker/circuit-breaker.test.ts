@@ -240,3 +240,80 @@ test("canary pre-trip verification: healthy canary prevents false circuit breake
   assert.equal(failedCanaryRes.tripped, true);
   assert.match(failedCanaryRes.reason, /genuine Meta outage confirmed/);
 });
+
+test("inactive brand state machine: confirmed inactive brand rechecking 0 ads remains inactive without re-entering hold", () => {
+  function evaluateScanTransition(params: {
+    results: number | null;
+    status: "success" | "unclear";
+    scanQuality: "complete" | "partial" | "unclear";
+    scanError: string | null;
+    holdStatus: "active" | "on_hold" | "inactive";
+    hadActiveAds: boolean;
+  }) {
+    const isOnHold = params.holdStatus === "on_hold";
+    const isInactive = params.holdStatus === "inactive";
+    const isValidatedZero =
+      params.results === 0 &&
+      params.status === "success" &&
+      params.scanQuality === "complete" &&
+      !params.scanError;
+
+    const isDropToZero = isValidatedZero && !isOnHold && !isInactive && params.hadActiveAds;
+    const isZeroWhileOnHold = isOnHold && isValidatedZero;
+    const isRecovering =
+      isOnHold &&
+      params.results !== null &&
+      params.results > 0 &&
+      params.status === "success" &&
+      params.scanQuality === "complete" &&
+      !params.scanError;
+    const isRelaunching =
+      isInactive &&
+      params.results !== null &&
+      params.results > 0 &&
+      params.status === "success" &&
+      params.scanQuality === "complete" &&
+      !params.scanError;
+
+    if (isDropToZero) return "ENTER_ON_HOLD";
+    if (isZeroWhileOnHold) return "INCREMENT_HOLD_OR_INACTIVATE";
+    if (isRecovering) return "RECOVER_ACTIVE";
+    if (isRelaunching) return "RELAUNCH_ACTIVE";
+    if (isInactive && isValidatedZero) return "MAINTAIN_INACTIVE";
+    return "NORMAL_UPDATE";
+  }
+
+  // 1. Inactive brand checked after 72h returns 0 ads -> MUST REMAIN INACTIVE (not enter hold!)
+  const inactiveRecheck = evaluateScanTransition({
+    results: 0,
+    status: "success",
+    scanQuality: "complete",
+    scanError: null,
+    holdStatus: "inactive",
+    hadActiveAds: true, // even if it had ads historically
+  });
+  assert.equal(inactiveRecheck, "MAINTAIN_INACTIVE");
+
+  // 2. Active brand dropping from 11 ads to 0 -> MUST ENTER HOLD
+  const activeDrop = evaluateScanTransition({
+    results: 0,
+    status: "success",
+    scanQuality: "complete",
+    scanError: null,
+    holdStatus: "active",
+    hadActiveAds: true,
+  });
+  assert.equal(activeDrop, "ENTER_ON_HOLD");
+
+  // 3. Inactive brand launching 5 new ads -> MUST RELAUNCH TO ACTIVE
+  const inactiveRelaunch = evaluateScanTransition({
+    results: 5,
+    status: "success",
+    scanQuality: "complete",
+    scanError: null,
+    holdStatus: "inactive",
+    hadActiveAds: false,
+  });
+  assert.equal(inactiveRelaunch, "RELAUNCH_ACTIVE");
+});
+
