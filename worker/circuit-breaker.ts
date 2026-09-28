@@ -49,8 +49,13 @@ export async function checkZeroAdAnomaly(
   // 0. Inactive page filter: Never scrutinize or flag pages that are confirmed inactive or already zero
   const currentPage = await db.query.trackedPages.findFirst({
     where: eq(trackedPages.id, currentPageId),
-    columns: { id: true, holdStatus: true, currentResults: true, lastKnownValidResults: true },
+    columns: { id: true, holdStatus: true, currentResults: true, lastKnownValidResults: true, url: true, pageId: true },
   });
+
+  // Never scrutinize synthetic test pages
+  if (currentPage?.url?.includes("test-wf-") || currentPage?.pageId?.startsWith("test-wf-")) {
+    return { isAnomalous: false };
+  }
 
   const isCurrentPageInactive =
     currentPage?.holdStatus === "inactive" ||
@@ -92,7 +97,7 @@ export async function checkZeroAdAnomaly(
 
   const windowStart = new Date(Date.now() - config.windowMinutes * 60 * 1000);
 
-  // Find distinct pages that DROPPED to 0 ads in the rolling window (excluding already quarantined scans, already-0 pages, and inactive pages)
+  // Find distinct pages that DROPPED to 0 ads in the rolling window (excluding already quarantined scans, already-0 pages, inactive pages, and test pages)
   const recentZeroScans = await db
     .select({
       trackedPageId: scanHistory.trackedPageId,
@@ -106,9 +111,10 @@ export async function checkZeroAdAnomaly(
         sql`(${scanHistory.failureReason} IS NULL OR ${scanHistory.failureReason} != 'circuit_breaker_meta_outage')`,
         // Crucial Guard: Exclude inactive pages strictly!
         sql`${trackedPages.holdStatus} != 'inactive'`,
-        // Only count genuine drops to 0 (had active ads before) or pages currently in on_hold grace period.
-        // Never count brands that were already confirmed 0 (inactive or zero-ad pages).
-        sql`(${scanHistory.difference} < 0 OR ${trackedPages.holdStatus} = 'on_hold' OR (${trackedPages.lastKnownValidResults} IS NOT NULL AND ${trackedPages.lastKnownValidResults} > 0))`
+        // Strictly exclude internal synthetic test pages
+        sql`(${trackedPages.url} NOT LIKE '%test-wf-%' AND (${trackedPages.pageId} IS NULL OR ${trackedPages.pageId} NOT LIKE 'test-wf-%'))`,
+        // Only count genuine drops to 0 (had active ads before) or pages that freshly entered hold during this rolling window
+        sql`(${scanHistory.difference} < 0 OR (${trackedPages.holdStatus} = 'on_hold' AND ${trackedPages.holdStartedAt} >= ${windowStart}))`
       )
     );
 
