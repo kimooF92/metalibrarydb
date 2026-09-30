@@ -343,7 +343,8 @@ export async function updateWorkerState(
 export async function enqueueOrEscalateJob(
   trackedPageId: string,
   jobType: "count" | "creative" = "count",
-  priority: number = 1
+  priority: number = 1,
+  creativeScanId?: string | null
 ) {
   const existingJob = await db.query.queue.findFirst({
     where: (q, { and, eq, inArray }) =>
@@ -364,6 +365,23 @@ export async function enqueueOrEscalateJob(
     return { job: existingJob, isNew: false };
   }
 
+  let effectiveScanId = creativeScanId || null;
+  if (jobType === "creative" && !effectiveScanId) {
+    const [newScan] = await db
+      .insert(creativeScans)
+      .values({
+        trackedPageId,
+        status: "pending",
+        configSnapshot: JSON.stringify({
+          runner: "local",
+          maxScrolls: 15,
+          timeoutMs: 25000,
+        }),
+      })
+      .returning();
+    effectiveScanId = newScan.id;
+  }
+
   const [newJob] = await db
     .insert(queue)
     .values({
@@ -371,6 +389,7 @@ export async function enqueueOrEscalateJob(
       jobType,
       priority,
       status: "pending",
+      creativeScanId: effectiveScanId,
     })
     .returning();
 
@@ -446,11 +465,35 @@ export async function claimNextPendingJob() {
   if (!page && !discoveredPage) return null;
 
   let creativeScanRecord = null;
-  if (job.jobType === "creative" && job.creativeScanId) {
-    await db
-      .update(creativeScans)
-      .set({ status: "running", startedAt: new Date() })
-      .where(eq(creativeScans.id, job.creativeScanId));
+  if (job.jobType === "creative") {
+    let scanId = job.creativeScanId;
+    if (!scanId && job.trackedPageId) {
+      const [newScan] = await db
+        .insert(creativeScans)
+        .values({
+          trackedPageId: job.trackedPageId,
+          status: "running",
+          startedAt: new Date(),
+          configSnapshot: JSON.stringify({
+            runner: "local",
+            maxScrolls: 15,
+            timeoutMs: 25000,
+          }),
+        })
+        .returning();
+      scanId = newScan.id;
+      await db.update(queue).set({ creativeScanId: scanId }).where(eq(queue.id, job.id));
+      creativeScanRecord = newScan;
+    } else if (scanId) {
+      await db
+        .update(creativeScans)
+        .set({ status: "running", startedAt: new Date() })
+        .where(eq(creativeScans.id, scanId));
+
+      creativeScanRecord = await db.query.creativeScans.findFirst({
+        where: eq(creativeScans.id, scanId),
+      });
+    }
 
     if (job.trackedPageId) {
       await db
@@ -458,10 +501,6 @@ export async function claimNextPendingJob() {
         .set({ status: "scanning", updatedAt: new Date() })
         .where(eq(trackedPages.id, job.trackedPageId));
     }
-
-    creativeScanRecord = await db.query.creativeScans.findFirst({
-      where: eq(creativeScans.id, job.creativeScanId),
-    });
   } else if (job.trackedPageId) {
     await db
       .update(trackedPages)

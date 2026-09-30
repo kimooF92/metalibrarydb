@@ -18,6 +18,7 @@ import {
   LayoutList,
   Building2,
   Calendar,
+  PlusCircle,
 } from "lucide-react";
 import type { SmartPreset } from "./products-kpi-bar";
 
@@ -89,6 +90,7 @@ export interface FilterToolbarProps {
   onChangeDiscoveryTo: (value: string) => void;
 
   onResetFilters: () => void;
+  onOpenAddProduct?: () => void;
 
   // Computed helpers
   activeFilterCount: number;
@@ -127,6 +129,7 @@ export function ProductsFilterToolbar({
   discoveryTo,
   onChangeDiscoveryTo,
   onResetFilters,
+  onOpenAddProduct,
   activeFilterCount,
   discoveryLabels,
   stats,
@@ -346,6 +349,19 @@ export function ProductsFilterToolbar({
               <LayoutList className="w-3.5 h-3.5" />
             </button>
           </div>
+
+          {/* Add Product Link Action Button */}
+          {onOpenAddProduct && (
+            <button
+              type="button"
+              onClick={onOpenAddProduct}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-sm shadow-indigo-600/20 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+              title="Add a new product page link or store website"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>Add Product</span>
+            </button>
+          )}
         </div>
       </div>
 

@@ -7,8 +7,9 @@ import {
   queue,
   discoveredPages,
   activityNotifications,
+  scrapedProducts,
 } from "@/db/schema";
-import { eq, or, sql } from "drizzle-orm";
+import { eq, or, sql, and, isNull } from "drizzle-orm";
 
 import { isValidPageId } from "@/lib/utils";
 
@@ -86,6 +87,23 @@ export async function mergeExactMatchWithPageId(
         .where(eq(trackedPages.id, exactMatchTrackedPageId))
         .returning();
 
+      // Backfill any unlinked scraped products for this domain
+      if (preservedDomain) {
+        try {
+          await db
+            .update(scrapedProducts)
+            .set({ pageId: cleanPageId, updatedAt: now })
+            .where(
+              and(
+                sql`lower(${scrapedProducts.domain}) = ${preservedDomain.toLowerCase().trim()}`,
+                isNull(scrapedProducts.pageId)
+              )
+            );
+        } catch (prodErr) {
+          console.warn("[Merge] Non-fatal error backfilling scraped_products:", prodErr);
+        }
+      }
+
       return {
         success: true,
         message: `Successfully upgraded exact match page to Page ID "${cleanPageId}".`,
@@ -152,6 +170,23 @@ export async function mergeExactMatchWithPageId(
       await db
         .delete(trackedPages)
         .where(eq(trackedPages.id, exactMatchTrackedPageId));
+
+      // Backfill any unlinked scraped products for this domain
+      if (preservedDomain) {
+        try {
+          await db
+            .update(scrapedProducts)
+            .set({ pageId: cleanPageId, updatedAt: now })
+            .where(
+              and(
+                sql`lower(${scrapedProducts.domain}) = ${preservedDomain.toLowerCase().trim()}`,
+                isNull(scrapedProducts.pageId)
+              )
+            );
+        } catch (prodErr) {
+          console.warn("[Merge] Non-fatal error backfilling scraped_products:", prodErr);
+        }
+      }
 
       return {
         success: true,

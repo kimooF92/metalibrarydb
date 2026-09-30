@@ -97,7 +97,7 @@ export function AddUrlForm({ onSuccess }: AddUrlFormProps) {
       <div className="flex items-center space-x-2 mb-3">
         <Link2 className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
         <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-          Add a Website
+          Track a Website or Product Page
         </h3>
       </div>
 
@@ -107,7 +107,7 @@ export function AddUrlForm({ onSuccess }: AddUrlFormProps) {
             type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="website domain or Meta Ad Library link"
+            placeholder="website domain, product link, or Meta Ad Library URL"
             className="w-full bg-white dark:bg-slate-950/80 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-lg pl-4 pr-10 py-2.5 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all"
             disabled={loading}
           />
@@ -122,7 +122,7 @@ export function AddUrlForm({ onSuccess }: AddUrlFormProps) {
             </button>
           )}
           <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-            Enter a website domain or paste the full Meta Ad Library link directly.
+            Enter a website domain, product page URL, or paste the full Meta Ad Library link directly.
           </p>
         </div>
 

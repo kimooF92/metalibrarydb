@@ -7,6 +7,7 @@ import { ScrapedProduct } from "@/types";
 import { ProductCard } from "@/components/products/product-card";
 import { ProductRow } from "@/components/products/product-row";
 import { ProductDetailsModal } from "@/components/products/product-details-modal";
+import { AddProductModal } from "@/components/products/add-product-modal";
 import { ProductsKpiBar } from "@/components/products/products-kpi-bar";
 import type { SmartPreset } from "@/components/products/products-kpi-bar";
 import { ProductsFilterToolbar } from "@/components/products/products-filter-toolbar";
@@ -20,6 +21,7 @@ import {
   ArrowUp,
   Loader2,
   CheckCircle2,
+  PlusCircle,
 } from "lucide-react";
 
 export default function ProductsPage() {
@@ -34,6 +36,7 @@ export default function ProductsPage() {
   const [smartPreset, setSmartPreset] = useState<SmartPreset>("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
 
   // Filters & Pagination
   const [searchInput, setSearchInput] = useState("");
@@ -787,9 +790,18 @@ export default function ProductsPage() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setIsAddProductModalOpen(true)}
+            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-sm shadow-indigo-600/30 transition-all cursor-pointer"
+            title="Add product page link or store website"
+          >
+            <PlusCircle className="w-3.5 h-3.5" />
+            <span>Add Product Link</span>
+          </button>
+
           <Link
             href="/spy"
-            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm shadow-indigo-600/30 transition-all cursor-pointer"
+            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white border border-slate-700/50 shadow-xs transition-all cursor-pointer"
           >
             <Eye className="w-3.5 h-3.5" />
             <span>Ad Spy Feed</span>
@@ -850,6 +862,7 @@ export default function ProductsPage() {
         discoveryTo={discoveryTo}
         onChangeDiscoveryTo={(v) => { setDiscoveryTo(v); setPage(1); }}
         onResetFilters={handleResetFilters}
+        onOpenAddProduct={() => setIsAddProductModalOpen(true)}
         activeFilterCount={activeFilterCount}
         discoveryLabels={discoveryLabels}
         stats={stats}
@@ -1075,6 +1088,16 @@ export default function ProductsPage() {
         hasNext={currentProductIndex >= 0 && currentProductIndex < products.length - 1}
         onNavigatePrev={handleNavigatePrev}
         onNavigateNext={handleNavigateNext}
+      />
+
+      {/* Direct Add Product Link Modal */}
+      <AddProductModal
+        isOpen={isAddProductModalOpen}
+        onClose={() => setIsAddProductModalOpen(false)}
+        onSuccess={() => {
+          fetchProducts(1, false);
+          fetchStats(true);
+        }}
       />
     </div>
   );

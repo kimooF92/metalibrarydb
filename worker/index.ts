@@ -575,6 +575,9 @@ async function runWorker() {
                   resolvedPageName: single.pageName || `Page ${single.pageId}`,
                   resolvedPageId: single.pageId,
                 });
+
+                // Immediately schedule creative scan workflow for the newly resolved brand page
+                await enqueueOrEscalateJob(finalPageId, "creative", 10);
               } else if (pageCandidates.length > 1) {
                 console.log(
                   `[Local Multi-Page Conflict] Detected ${pageCandidates.length} candidate Facebook Pages for "${targetDisplayName}". Posting notification for user review.`
