@@ -88,6 +88,9 @@ function AdSpyContent() {
         title: "Feed Refreshed",
         message: "Latest ad creatives, stats, and Apify cloud sync completed.",
       });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("apify:refresh-balance"));
+      }
     } catch (err: any) {
       showToast({
         type: "error",
@@ -132,7 +135,7 @@ function AdSpyContent() {
   const isSpinning = manualRefreshing || isRefreshing || isLoading || isFetchingMore;
 
   return (
-    <div className="h-full overflow-y-auto bg-background text-foreground space-y-4">
+    <div className="h-full overflow-y-auto overflow-x-hidden bg-background text-foreground space-y-4">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800/40">
         <div className="flex items-center space-x-2">

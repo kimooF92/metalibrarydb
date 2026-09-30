@@ -6,6 +6,21 @@
 
 const APIFY_BASE_URL = "https://api.apify.com/v2";
 
+export interface ApifyTokenStatus {
+  index: number;
+  token: string;
+  isActive: boolean;
+  isExhausted: boolean;
+  status: "active" | "standby" | "exhausted" | "error";
+  maxMonthlyUsageUsd: number;
+  monthlyUsageUsd: number;
+  remainingUsd: number;
+  usagePercent: number;
+  cycleStartAt?: string;
+  cycleEndAt?: string;
+  error?: string;
+}
+
 export interface ApifyBalanceInfo {
   token: string;
   maxMonthlyUsageUsd: number;
@@ -16,6 +31,10 @@ export interface ApifyBalanceInfo {
   cycleEndAt: string;
   activeTokenIndex: number;
   totalTokensCount: number;
+  totalPoolRemainingUsd: number;
+  totalPoolMaxUsd: number;
+  totalPoolUsagePercent: number;
+  keys: ApifyTokenStatus[];
 }
 
 export interface ApifyActorRunResponse {
@@ -108,57 +127,168 @@ export function ensureMostRecentSortingUrl(rawUrl: string): string {
   }
 }
 
+let cachedBalanceData: {
+  data: ApifyBalanceInfo;
+  timestamp: number;
+} | null = null;
+const BALANCE_CACHE_TTL_MS = 25_000; // 25 seconds cache to avoid rate limit spam
+
 /**
- * Fetches current credit balance across configured tokens.
- * Automatically selects the first active token with remaining credit.
+ * Fetches current credit balance across all configured tokens in parallel.
+ * Identifies the current active in-use token, standby failover keys, and exhausted keys.
  */
-export async function getApifyAccountBalance(): Promise<ApifyBalanceInfo | null> {
+export async function getApifyAccountBalance(options?: {
+  forceRefresh?: boolean;
+}): Promise<ApifyBalanceInfo | null> {
   const tokens = getApifyTokens();
   if (tokens.length === 0) {
     console.warn("[Apify] No APIFY_API_TOKEN environment variable configured.");
     return null;
   }
 
-  for (let idx = 0; idx < tokens.length; idx++) {
-    const token = tokens[idx];
-    try {
-      const res = await fetch(`${APIFY_BASE_URL}/users/me/limits?token=${token}`, {
-        cache: "no-store",
-      });
-
-      if (!res.ok) {
-        console.warn(`[Apify] Token #${idx + 1} balance check failed (HTTP ${res.status}). Trying next token...`);
-        continue;
-      }
-
-      const json = await res.json();
-      const data = json.data;
-
-      const maxMonthlyUsageUsd = Number(data?.limits?.maxMonthlyUsageUsd || 5);
-      const monthlyUsageUsd = Number(data?.current?.monthlyUsageUsd || 0);
-      const remainingUsd = Math.max(0, maxMonthlyUsageUsd - monthlyUsageUsd);
-      const usagePercent = Math.min(100, Math.round((monthlyUsageUsd / maxMonthlyUsageUsd) * 100));
-
-      // If this token still has remaining budget or is the last available token, return it
-      if (remainingUsd > 0.05 || idx === tokens.length - 1) {
-        return {
-          token: token.substring(0, 10) + "...",
-          maxMonthlyUsageUsd,
-          monthlyUsageUsd,
-          remainingUsd,
-          usagePercent,
-          cycleStartAt: data?.monthlyUsageCycle?.startAt || "",
-          cycleEndAt: data?.monthlyUsageCycle?.endAt || "",
-          activeTokenIndex: idx + 1,
-          totalTokensCount: tokens.length,
-        };
-      }
-    } catch (error) {
-      console.error(`[Apify] Error checking balance for token #${idx + 1}:`, error);
-    }
+  if (
+    !options?.forceRefresh &&
+    cachedBalanceData &&
+    Date.now() - cachedBalanceData.timestamp < BALANCE_CACHE_TTL_MS
+  ) {
+    return cachedBalanceData.data;
   }
 
-  return null;
+  try {
+    const keyStatuses: ApifyTokenStatus[] = await Promise.all(
+      tokens.map(async (token, idx): Promise<ApifyTokenStatus> => {
+        const masked =
+          token.length > 18
+            ? `${token.slice(0, 14)}...${token.slice(-4)}`
+            : `${token.slice(0, 8)}...`;
+        const processExhausted = exhaustedTokens.has(token);
+
+        try {
+          const res = await fetch(`${APIFY_BASE_URL}/users/me/limits?token=${token}`, {
+            cache: "no-store",
+            signal: AbortSignal.timeout(6000),
+          });
+
+          if (!res.ok) {
+            const errText = await res.text().catch(() => "");
+            const isLimited =
+              res.status === 402 ||
+              res.status === 403 ||
+              res.status === 429 ||
+              errText.toLowerCase().includes("limit") ||
+              errText.toLowerCase().includes("credit");
+
+            if (isLimited) {
+              exhaustedTokens.add(token);
+            }
+
+            return {
+              index: idx + 1,
+              token: masked,
+              isActive: false,
+              isExhausted: true,
+              status: isLimited ? "exhausted" : "error",
+              maxMonthlyUsageUsd: 5,
+              monthlyUsageUsd: 5,
+              remainingUsd: 0,
+              usagePercent: 100,
+              error: `HTTP ${res.status}: ${errText.slice(0, 80)}`,
+            };
+          }
+
+          const json = await res.json();
+          const data = json.data;
+
+          const maxMonthlyUsageUsd = Number(data?.limits?.maxMonthlyUsageUsd || 5);
+          const monthlyUsageUsd = Number(data?.current?.monthlyUsageUsd || 0);
+          const remainingUsd = Math.max(0, maxMonthlyUsageUsd - monthlyUsageUsd);
+          const usagePercent = Math.min(
+            100,
+            Math.round((monthlyUsageUsd / maxMonthlyUsageUsd) * 100)
+          );
+          const isDepleted = remainingUsd <= 0.05 || processExhausted;
+
+          if (isDepleted && remainingUsd <= 0.05) {
+            exhaustedTokens.add(token);
+          }
+
+          return {
+            index: idx + 1,
+            token: masked,
+            isActive: false,
+            isExhausted: isDepleted,
+            status: isDepleted ? "exhausted" : "standby",
+            maxMonthlyUsageUsd,
+            monthlyUsageUsd,
+            remainingUsd,
+            usagePercent,
+            cycleStartAt: data?.monthlyUsageCycle?.startAt || "",
+            cycleEndAt: data?.monthlyUsageCycle?.endAt || "",
+          };
+        } catch (err: any) {
+          return {
+            index: idx + 1,
+            token: masked,
+            isActive: false,
+            isExhausted: processExhausted,
+            status: processExhausted ? "exhausted" : "error",
+            maxMonthlyUsageUsd: 5,
+            monthlyUsageUsd: 5,
+            remainingUsd: 0,
+            usagePercent: 100,
+            error: err.message || "Network error",
+          };
+        }
+      })
+    );
+
+    // Identify active token: First token that is healthy and not exhausted
+    let activeIdx = keyStatuses.findIndex((k) => !k.isExhausted && k.status !== "error");
+    if (activeIdx === -1) {
+      activeIdx = 0; // Default to first token if all are exhausted
+    }
+    keyStatuses[activeIdx].isActive = true;
+    keyStatuses[activeIdx].status = "active";
+
+    const totalPoolRemainingUsd =
+      Math.round(keyStatuses.reduce((acc, k) => acc + (k.remainingUsd || 0), 0) * 100) / 100;
+    const totalPoolMaxUsd =
+      Math.round(keyStatuses.reduce((acc, k) => acc + (k.maxMonthlyUsageUsd || 0), 0) * 100) / 100;
+    const totalPoolUsagePercent =
+      totalPoolMaxUsd > 0
+        ? Math.min(
+            100,
+            Math.round(((totalPoolMaxUsd - totalPoolRemainingUsd) / totalPoolMaxUsd) * 100)
+          )
+        : 0;
+
+    const activeKey = keyStatuses[activeIdx];
+    const result: ApifyBalanceInfo = {
+      token: activeKey.token,
+      maxMonthlyUsageUsd: activeKey.maxMonthlyUsageUsd,
+      monthlyUsageUsd: activeKey.monthlyUsageUsd,
+      remainingUsd: activeKey.remainingUsd,
+      usagePercent: activeKey.usagePercent,
+      cycleStartAt: activeKey.cycleStartAt || "",
+      cycleEndAt: activeKey.cycleEndAt || "",
+      activeTokenIndex: activeKey.index,
+      totalTokensCount: tokens.length,
+      totalPoolRemainingUsd,
+      totalPoolMaxUsd,
+      totalPoolUsagePercent,
+      keys: keyStatuses,
+    };
+
+    cachedBalanceData = {
+      data: result,
+      timestamp: Date.now(),
+    };
+
+    return result;
+  } catch (error) {
+    console.error("[Apify] Error in getApifyAccountBalance:", error);
+    return null;
+  }
 }
 
 /**

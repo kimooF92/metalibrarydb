@@ -3,9 +3,11 @@ import { getApifyAccountBalance } from "@/lib/apify";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const balance = await getApifyAccountBalance();
+    const { searchParams } = new URL(request.url);
+    const force = searchParams.get("force") === "true";
+    const balance = await getApifyAccountBalance({ forceRefresh: force });
     if (!balance) {
       return NextResponse.json(
         { error: "Apify credentials not configured or API error" },
