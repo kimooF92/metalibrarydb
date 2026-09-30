@@ -65,7 +65,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { displayName, notes, isWatchlisted } = body;
+    const { displayName, notes, isWatchlisted, autoCreativeScan } = body;
 
     if (!id) {
       return NextResponse.json({ error: "Page ID is required" }, { status: 400 });
@@ -81,6 +81,9 @@ export async function PATCH(
     }
     if (isWatchlisted !== undefined) {
       updatePayload.isWatchlisted = Boolean(isWatchlisted);
+    }
+    if (autoCreativeScan !== undefined) {
+      updatePayload.autoCreativeScan = Boolean(autoCreativeScan);
     }
 
     const [updated] = await db

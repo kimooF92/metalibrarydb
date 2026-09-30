@@ -1,5 +1,5 @@
 import { parseProductHtmlContent } from "./html-scraper";
-import { ExtractedProductData } from "./firecrawl";
+import type { ExtractedProductData } from "@/types";
 
 let localBrowserContext: any = null;
 

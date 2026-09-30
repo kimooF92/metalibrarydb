@@ -22,6 +22,7 @@ interface CronOptions {
   maxPages: number;
   forceAll: boolean;
   pageId?: string;
+  includePaused?: boolean;
   maxWaitPerRunSeconds: number;
 }
 
@@ -30,6 +31,7 @@ function parseCliArgs(): CronOptions {
   const options: CronOptions = {
     maxPages: parseInt(process.env.SPY_MAX_PAGES_PER_RUN || "25", 10),
     forceAll: process.env.SPY_FORCE_ALL === "true",
+    includePaused: process.env.SPY_INCLUDE_PAUSED === "true",
     maxWaitPerRunSeconds: parseInt(process.env.APIFY_RUN_TIMEOUT_SECONDS || "300", 10), // 5 min default
   };
 
@@ -40,6 +42,8 @@ function parseCliArgs(): CronOptions {
       i++;
     } else if (arg === "--force-all") {
       options.forceAll = true;
+    } else if (arg === "--include-paused") {
+      options.includePaused = true;
     } else if (arg === "--page-id" && args[i + 1]) {
       options.pageId = args[i + 1];
       i++;
@@ -53,6 +57,7 @@ Usage:
 Options:
   --max-pages <N>       Maximum eligible pages to scan in this run (default: 25)
   --force-all           Force-scan all pages with active ads (bypasses +1 diff requirement)
+  --include-paused      Include pages where auto-creative scan is paused (default: false)
   --page-id <ID>        Target a specific tracked page ID
   --help, -h            Show this help message
       `);
@@ -191,6 +196,14 @@ async function main() {
   for (const page of candidatePages) {
     if (activePageIds.has(page.id)) {
       console.log(`[Skip] "${page.displayName || page.id}": creative scan already in progress.`);
+      continue;
+    }
+
+    // Skip pages where user explicitly paused automatic creative scanning
+    const isSingleTarget = Boolean(options.pageId);
+    const isPaused = page.autoCreativeScan === false;
+    if (isPaused && !isSingleTarget && !options.includePaused) {
+      console.log(`[Skip] "${page.displayName || page.id}": auto creative scan is paused.`);
       continue;
     }
 

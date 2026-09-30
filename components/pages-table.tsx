@@ -1018,6 +1018,21 @@ export function PagesTable({
                                 </span>
                               )}
 
+                              {p.autoCreativeScan === false && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setRunnerModalPages([p]);
+                                    setRunnerModalOpen(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 text-[9.5px] font-extrabold px-1.5 py-0.2 rounded border bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30 shadow-2xs hover:bg-amber-500/20 transition-colors cursor-pointer"
+                                  title="Automatic creative scans are paused for this brand. Click to open modal and resume or run a manual scan."
+                                >
+                                  <span>⏸️</span>
+                                  <span>Auto Paused</span>
+                                </button>
+                              )}
+
                               {scaling.archetype !== "emerging" && scaling.archetype !== "inactive" && (
                                 <span
                                   className={`inline-flex items-center gap-1 text-[9.5px] font-extrabold px-1.5 py-0.2 rounded border shadow-2xs ${scaling.badgeClass}`}
@@ -1463,6 +1478,16 @@ export function PagesTable({
         }}
         trackedPages={runnerModalPages}
         onConfirm={handleLaunchScan}
+        onAutoScanChanged={(pageIds, enabled) => {
+          // Optimistically update in-memory pages array
+          pageIds.forEach((id) => {
+            const target = pages.find((p) => p.id === id);
+            if (target) {
+              target.autoCreativeScan = enabled;
+            }
+          });
+          onWatchlistToggle?.();
+        }}
       />
 
       {/* Multi-Page Brand Resolution Modal */}

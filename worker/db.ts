@@ -161,6 +161,7 @@ export async function enqueuePagesForCreativeScan(
       pageId: true,
       lastCreativeScan: true,
       currentResults: true,
+      autoCreativeScan: true,
     },
   });
 
@@ -173,7 +174,12 @@ export async function enqueuePagesForCreativeScan(
       continue;
     }
 
-    // 1b. Skip pages that are currently on hold or inactive (paused)
+    // 1b. Skip pages where user explicitly paused automatic creative scanning
+    if (page.autoCreativeScan === false) {
+      continue;
+    }
+
+    // 1c. Skip pages that are currently on hold or inactive (paused)
     if (page.holdStatus === "on_hold" || page.holdStatus === "inactive") {
       continue;
     }
@@ -1003,6 +1009,13 @@ export async function markJobCompleted(
   // Guard with effectiveDifference and ensure holdStatus !== "on_hold"
   if (status === "success" && !isOnHold && !isDropToZero && effectiveDifference >= 1) {
     try {
+      if (trackedPage?.autoCreativeScan === false) {
+        console.log(
+          `[Creative Routing] ⏸️ Skipping auto creative scan for "${brandName}": auto-scan paused by user.`
+        );
+        return { difference: displayDifference, results, brandName };
+      }
+
       const isCloudEligible = (results || 0) >= 20;
 
       if (!isCloudEligible) {
@@ -1134,6 +1147,14 @@ async function executeApifyDeltaScan(pageId: string, difference: number) {
   });
 
   if (!page || !page.url) return;
+
+  // Strict guard: Skip if user paused automatic creative scans
+  if (page.autoCreativeScan === false) {
+    console.log(
+      `[Apify Auto-Trigger] ⏸️ Skipping "${page.displayName || pageId}": auto creative scan is paused.`
+    );
+    return;
+  }
 
   // Strict guard: Apify must NEVER scan micro-pages (< 20 ads)
   if ((page.currentResults || 0) < 20) {

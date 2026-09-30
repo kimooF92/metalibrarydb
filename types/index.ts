@@ -34,6 +34,7 @@ export interface TrackedPage {
   lastKnownValidResults?: number | null;
   holdStartedAt?: string | null;
   consecutiveZeroScans?: number | null;
+  autoCreativeScan?: boolean;
 }
 
 export interface ScanHistoryEntry {
@@ -294,4 +295,22 @@ export interface AdFilterParams {
   page?: number;
   limit?: number;
   enabled?: boolean;
+}
+
+export interface ExtractedProductData {
+  title: string;
+  current_price: string;
+  original_price?: string;
+  currency?: string;
+  discount_or_offer?: string;
+  delivery_cost?: string;
+  main_image_url?: string;
+  gallery_images?: string[];
+  store_platform?: string;
+  resolved_url?: string;
+  all_offers?: Array<{
+    tier_name: string;
+    price: string;
+    savings?: string;
+  }>;
 }

@@ -1,5 +1,123 @@
-import { isValidPageId } from "./utils";
-import { normalizeProductUrl } from "./firecrawl";
+import { isValidPageId, resolveDestinationUrl } from "./utils";
+
+/**
+ * Normalizes a URL for deduplication:
+ * 1. Unwraps Facebook/Instagram redirect shims
+ * 2. Strips tracking params (UTMs, fbclid, gclid, etc.)
+ * 3. Normalizes protocol & removes trailing slash
+ */
+export function normalizeProductUrl(rawUrl: string | null | undefined): string | null {
+  const unwrapped = resolveDestinationUrl(rawUrl);
+  if (!unwrapped) return null;
+
+  try {
+    // Strip carriage returns, tabs, and invalid whitespace
+    const sanitizedUrl = unwrapped.trim().replace(/[\r\n\t]+/g, "").replace(/\s+/g, "");
+    const parsed = new URL(sanitizedUrl);
+
+    // Comprehensive list of advertising, analytics, and affiliate tracking query parameters
+    const trackingParams = [
+      "utm_source",
+      "utm_medium",
+      "utm_campaign",
+      "utm_term",
+      "utm_content",
+      "utm_id",
+      "utm_source_platform",
+      "utm_creative",
+      "fbclid",
+      "gclid",
+      "wbraid",
+      "gbraid",
+      "ttclid",
+      "msclkid",
+      "twclid",
+      "yclid",
+      "dclid",
+      "sc_clickid",
+      "s_kwcid",
+      "ref",
+      "ref_src",
+      "source",
+      "origin",
+      "_ga",
+      "_gl",
+      "_kx",
+      "_ke",
+      "mc_cid",
+      "mc_eid",
+      "fbadid",
+      "ad_id",
+      "adset_id",
+      "campaign_id",
+      "ad_name",
+      "adset_name",
+      "campaign_name",
+      "placement",
+      "site_source_name",
+      "cuid",
+      "click_id",
+      "clickid",
+      "affiliateid",
+      "aff_id",
+      "affiliate_id",
+      "pixel_id",
+      "hsa_acc",
+      "hsa_cam",
+      "hsa_grp",
+      "hsa_ad",
+      "hsa_src",
+      "hsa_net",
+      "hsa_ver",
+      // Shopify predictive search & theme session parameters
+      "_pos",
+      "_psq",
+      "_psid",
+      "_ss",
+      "_v",
+    ];
+
+    const keysToDelete: string[] = [];
+    parsed.searchParams.forEach((val, key) => {
+      const cleanKey = key.replace(/^[+\s]+/, "").toLowerCase();
+      if (
+        trackingParams.includes(cleanKey) ||
+        key.startsWith("+") ||
+        key.includes("\n") ||
+        key.includes("\r") ||
+        val.includes("{{") ||
+        val.includes("%7B%7B") ||
+        key.includes("{{") ||
+        key.includes("%7B%7B")
+      ) {
+        keysToDelete.push(key);
+      }
+    });
+
+    keysToDelete.forEach((key) => parsed.searchParams.delete(key));
+
+    // Remove empty hash or trailing hash
+    parsed.hash = "";
+
+    // Normalize protocol & hostname to lowercase
+    let cleaned = `${parsed.protocol.toLowerCase()}//${parsed.host.toLowerCase()}${parsed.pathname}`;
+
+    // Remove trailing slash if path is longer than 1 character
+    if (cleaned.length > 1 && cleaned.endsWith("/")) {
+      cleaned = cleaned.slice(0, -1);
+    }
+
+    // Append remaining query params if any
+    const remainingQuery = parsed.searchParams.toString();
+    if (remainingQuery) {
+      cleaned += `?${remainingQuery}`;
+    }
+
+    return cleaned;
+  } catch {
+    return unwrapped.trim();
+  }
+}
 
 export interface UrlMetadata {
   url: string;

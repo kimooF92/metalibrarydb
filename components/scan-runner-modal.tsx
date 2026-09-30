@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Zap, Monitor, Sparkles, X, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Zap, Monitor, Sparkles, X, Loader2, Pause, Play, CheckCircle2 } from "lucide-react";
 import { TrackedPage } from "@/types";
 
 interface ScanRunnerModalProps {
@@ -9,6 +9,7 @@ interface ScanRunnerModalProps {
   onClose: () => void;
   trackedPages: TrackedPage[];
   onConfirm: (runner: "local" | "apify") => Promise<void>;
+  onAutoScanChanged?: (pageIds: string[], enabled: boolean) => void;
 }
 
 export function ScanRunnerModal({
@@ -16,17 +17,90 @@ export function ScanRunnerModal({
   onClose,
   trackedPages,
   onConfirm,
+  onAutoScanChanged,
 }: ScanRunnerModalProps) {
   const [selectedRunner, setSelectedRunner] = useState<"local" | "apify">("apify");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isTogglingAutoScan, setIsTogglingAutoScan] = useState(false);
+  const [localAutoScanState, setLocalAutoScanState] = useState<Record<string, boolean>>({});
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen && trackedPages.length > 0) {
+      const initial: Record<string, boolean> = {};
+      trackedPages.forEach((p) => {
+        initial[p.id] = p.autoCreativeScan !== false;
+      });
+      setLocalAutoScanState(initial);
+      setFeedback(null);
+    }
+  }, [isOpen, trackedPages]);
 
   if (!isOpen || trackedPages.length === 0) return null;
 
   const count = trackedPages.length;
-  const targetLabel =
-    count === 1
-      ? trackedPages[0].displayName || trackedPages[0].pageId || "Tracked Page"
-      : `${count} selected pages`;
+  const isSingle = count === 1;
+  const targetLabel = isSingle
+    ? trackedPages[0].displayName || trackedPages[0].pageId || "Tracked Page"
+    : `${count} selected pages`;
+
+  const singlePage = trackedPages[0];
+  const isSingleActive = isSingle
+    ? (localAutoScanState[singlePage.id] ?? (singlePage.autoCreativeScan !== false))
+    : true;
+
+  // Multi-page counts
+  const activeCount = trackedPages.filter(
+    (p) => (localAutoScanState[p.id] ?? (p.autoCreativeScan !== false))
+  ).length;
+  const pausedCount = count - activeCount;
+
+  const handleToggleAutoScan = async (enable: boolean) => {
+    setIsTogglingAutoScan(true);
+    setFeedback(null);
+    try {
+      const pageIds = trackedPages.map((p) => p.id);
+      let res: Response;
+      if (isSingle) {
+        res = await fetch(`/api/page/${pageIds[0]}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ autoCreativeScan: enable }),
+        });
+      } else {
+        res = await fetch("/api/pages/auto-scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pageIds, autoCreativeScan: enable }),
+        });
+      }
+
+      if (res.ok) {
+        const nextState = { ...localAutoScanState };
+        pageIds.forEach((id) => {
+          nextState[id] = enable;
+        });
+        setLocalAutoScanState(nextState);
+        onAutoScanChanged?.(pageIds, enable);
+        setFeedback(
+          enable
+            ? isSingle
+              ? "⚡ Automatic creative scans enabled"
+              : `⚡ Enabled auto-scan for ${pageIds.length} pages`
+            : isSingle
+            ? "⏸️ Automatic creative scans paused (Apify credits saved)"
+            : `⏸️ Paused auto-scan for ${pageIds.length} pages`
+        );
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setFeedback(errData.error || "Failed to update auto-scan settings");
+      }
+    } catch {
+      setFeedback("Network error updating auto-scan");
+    } finally {
+      setIsTogglingAutoScan(false);
+    }
+  };
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -46,22 +120,155 @@ export function ScanRunnerModal({
           <div className="flex items-center space-x-2">
             <Sparkles className="w-5 h-5 text-indigo-500" />
             <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-              Choose Extraction Engine
+              Creative Scan & Auto-Scan Control
             </h2>
           </div>
           <button
             onClick={onClose}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isTogglingAutoScan}
             className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Select how you want to extract ad creatives for{" "}
-          <strong className="text-slate-800 dark:text-slate-200">{targetLabel}</strong>:
-        </p>
+        {/* Target Label */}
+        <div className="text-xs text-slate-500 dark:text-slate-400">
+          Target: <strong className="text-slate-800 dark:text-slate-200">{targetLabel}</strong>
+        </div>
+
+        {/* Auto-Scan Status & Quick Toggle Card */}
+        <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Automatic Creative Scanning
+              </span>
+            </div>
+
+            {isSingle ? (
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  isSingleActive
+                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                    : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                }`}
+              >
+                {isSingleActive ? (
+                  <>
+                    <Zap className="w-3 h-3 fill-emerald-500/30 text-emerald-500" />
+                    Active
+                  </>
+                ) : (
+                  <>
+                    <Pause className="w-3 h-3 text-amber-500" />
+                    Paused
+                  </>
+                )}
+              </span>
+            ) : (
+              <div className="flex items-center gap-1.5 text-[10px] font-semibold">
+                <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  {activeCount} Active
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                  {pausedCount} Paused
+                </span>
+              </div>
+            )}
+          </div>
+
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+            {isSingle ? (
+              isSingleActive ? (
+                "Routine count scans & Apify crons automatically extract newly added ads. Pause to prevent Apify credit consumption."
+              ) : (
+                "Automatic scans are paused. Apify credits saved. Manual scans triggered below will still run on-demand anytime."
+              )
+            ) : (
+              "Control whether background sweeps and cron jobs automatically extract newly detected ads for all selected brands."
+            )}
+          </p>
+
+          {/* Toggle Action Buttons */}
+          <div className="pt-1 flex items-center gap-2">
+            {isSingle ? (
+              <button
+                type="button"
+                onClick={() => handleToggleAutoScan(!isSingleActive)}
+                disabled={isTogglingAutoScan || isSubmitting}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  isSingleActive
+                    ? "bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                    : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                }`}
+              >
+                {isTogglingAutoScan ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Updating...</span>
+                  </>
+                ) : isSingleActive ? (
+                  <>
+                    <Pause className="w-3.5 h-3.5" />
+                    <span>Pause Auto-Scan</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-3.5 h-3.5" />
+                    <span>Resume Auto-Scan</span>
+                  </>
+                )}
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleToggleAutoScan(false)}
+                  disabled={isTogglingAutoScan || isSubmitting}
+                  className="flex-1 flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isTogglingAutoScan ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Pause className="w-3.5 h-3.5" />
+                  )}
+                  <span>Pause All</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggleAutoScan(true)}
+                  disabled={isTogglingAutoScan || isSubmitting}
+                  className="flex-1 flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isTogglingAutoScan ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Play className="w-3.5 h-3.5" />
+                  )}
+                  <span>Enable All</span>
+                </button>
+              </>
+            )}
+          </div>
+
+          {feedback && (
+            <div className="flex items-center gap-1.5 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 pt-1">
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              <span>{feedback}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Section Divider & Manual Trigger Title */}
+        <div className="space-y-1 pt-1">
+          <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+            Manual Extraction Engine
+          </div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            Select an engine to launch an immediate creative scan:
+          </p>
+        </div>
 
         {/* Runner Options Grid */}
         <div className="grid grid-cols-1 gap-3">
@@ -127,16 +334,16 @@ export function ScanRunnerModal({
           <button
             type="button"
             onClick={onClose}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isTogglingAutoScan}
             className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
-            Cancel
+            Close
           </button>
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={isSubmitting}
-            className="flex items-center space-x-1.5 px-4 py-1.5 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
+            disabled={isSubmitting || isTogglingAutoScan}
+            className="flex items-center space-x-1.5 px-4 py-1.5 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 transition-all cursor-pointer disabled:opacity-50"
           >
             {isSubmitting ? (
               <>
@@ -146,7 +353,7 @@ export function ScanRunnerModal({
             ) : (
               <>
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Launch Scan ({selectedRunner === "apify" ? "Apify Cloud" : "Local"})</span>
+                <span>Launch Manual Scan ({selectedRunner === "apify" ? "Apify Cloud" : "Local"})</span>
               </>
             )}
           </button>

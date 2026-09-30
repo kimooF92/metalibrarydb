@@ -1,4 +1,4 @@
-import { ExtractedProductData } from "./firecrawl";
+import type { ExtractedProductData } from "@/types";
 
 /**
  * Extracts JSON-LD schema objects from HTML content.

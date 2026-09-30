@@ -45,12 +45,14 @@ export const trackedPages = pgTable(
     lastKnownValidResults: integer("last_known_valid_results"),
     holdStartedAt: timestamp("hold_started_at", { withTimezone: true }),
     consecutiveZeroScans: integer("consecutive_zero_scans").default(0),
+    autoCreativeScan: boolean("auto_creative_scan").default(true).notNull(),
   },
   (table) => [
     index("idx_tracked_pages_status").on(table.status),
     index("idx_tracked_pages_page_id").on(table.pageId),
     index("idx_tracked_pages_watchlist").on(table.isWatchlisted),
     index("idx_tracked_pages_hold_status").on(table.holdStatus),
+    index("idx_tracked_pages_auto_creative_scan").on(table.autoCreativeScan),
   ]
 );
 

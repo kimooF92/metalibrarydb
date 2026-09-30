@@ -422,6 +422,7 @@ export async function GET(request: Request) {
         lastKnownValidResults: p.lastKnownValidResults ?? null,
         holdStartedAt: p.holdStartedAt ? p.holdStartedAt.toISOString() : null,
         consecutiveZeroScans: p.consecutiveZeroScans ?? 0,
+        autoCreativeScan: p.autoCreativeScan ?? true,
       };
     });
 
