@@ -89,6 +89,17 @@ export interface FilterToolbarProps {
   discoveryTo: string;
   onChangeDiscoveryTo: (value: string) => void;
 
+  // Ad Launch Date & Winner Longevity
+  adLaunchFilter: string;
+  onChangeAdLaunchFilter: (value: string) => void;
+  adLaunchFrom: string;
+  onChangeAdLaunchFrom: (value: string) => void;
+  adLaunchTo: string;
+  onChangeAdLaunchTo: (value: string) => void;
+  stillRunningOnly: boolean;
+  onToggleStillRunningOnly: () => void;
+  adLaunchLabels?: Record<string, string>;
+
   onResetFilters: () => void;
   onOpenAddProduct?: () => void;
 
@@ -128,6 +139,15 @@ export function ProductsFilterToolbar({
   onChangeDiscoveryFrom,
   discoveryTo,
   onChangeDiscoveryTo,
+  adLaunchFilter,
+  onChangeAdLaunchFilter,
+  adLaunchFrom,
+  onChangeAdLaunchFrom,
+  adLaunchTo,
+  onChangeAdLaunchTo,
+  stillRunningOnly,
+  onToggleStillRunningOnly,
+  adLaunchLabels,
   onResetFilters,
   onOpenAddProduct,
   activeFilterCount,
@@ -474,10 +494,84 @@ export function ProductsFilterToolbar({
               </select>
             </div>
 
+            {/* Ad Launch Date & Winner Longevity Filter */}
+            <div className="space-y-1 sm:col-span-2 md:col-span-4 p-3 rounded-xl bg-gradient-to-r from-amber-500/5 via-indigo-500/5 to-purple-500/5 border border-amber-500/20 dark:border-amber-500/15">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1.5 border-b border-amber-500/10 dark:border-amber-500/10">
+                <div className="flex items-center gap-1.5">
+                  <Flame className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                  <span className="text-[11px] font-extrabold text-amber-900 dark:text-amber-300 uppercase tracking-wider">
+                    Ad Launch Date &bull; Winner Longevity
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-medium hidden sm:inline">
+                    (Filters by when Meta ads launched, identifying winning campaigns)
+                  </span>
+                </div>
+
+                {/* Still running toggle */}
+                <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold select-none text-slate-700 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={stillRunningOnly}
+                    onChange={onToggleStillRunningOnly}
+                    className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500 border-slate-300 dark:border-slate-700 cursor-pointer"
+                  />
+                  <span className="text-[11px] font-bold text-amber-800 dark:text-amber-400">
+                    Ads Still Running (Active Only)
+                  </span>
+                </label>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {/* Preset quick buttons */}
+                <div className="flex items-center gap-1 flex-wrap">
+                  {[
+                    { id: "all", label: "All Launches" },
+                    { id: "7d", label: "🚀 7+ Days Running" },
+                    { id: "15d", label: "🔥 15+ Days Running" },
+                    { id: "21d", label: "⭐ 21+ Days Running" },
+                    { id: "30d", label: "🏆 1 Month+ (Evergreen)" },
+                    { id: "custom", label: "📅 Custom Range..." },
+                  ].map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => onChangeAdLaunchFilter(preset.id)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        adLaunchFilter === preset.id
+                          ? "bg-amber-500 text-slate-950 shadow-xs shadow-amber-500/25 scale-[1.02]"
+                          : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-amber-500/10 border border-slate-200 dark:border-slate-800"
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+
+                {adLaunchFilter === "custom" && (
+                  <div className="inline-flex items-center gap-2 bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-800/60 rounded-lg px-2.5 py-1 text-xs shadow-2xs">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">From</span>
+                    <input
+                      type="date"
+                      value={adLaunchFrom}
+                      onChange={(e) => onChangeAdLaunchFrom(e.target.value)}
+                      className="bg-transparent text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer text-xs"
+                    />
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">To</span>
+                    <input
+                      type="date"
+                      value={adLaunchTo}
+                      onChange={(e) => onChangeAdLaunchTo(e.target.value)}
+                      className="bg-transparent text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer text-xs"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Discovery Date Filter & Custom Range */}
             <div className="space-y-1 sm:col-span-2 md:col-span-4 pt-1">
               <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                Discovery Date
+                Discovery Date (When Crawled)
               </label>
               <div className="flex flex-wrap items-center gap-2">
                 <select
@@ -613,6 +707,28 @@ export function ProductsFilterToolbar({
                 }}
                 className="hover:text-indigo-950 dark:hover:text-white ml-0.5 p-0.5 cursor-pointer rounded-full transition-colors"
                 title="Remove discovery date filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+
+          {adLaunchFilter !== "all" && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 font-semibold text-[11px]">
+              <Flame className="w-3 h-3 text-amber-500 shrink-0" />
+              <span>
+                Ad Launch: <strong>{adLaunchLabels?.[adLaunchFilter] || adLaunchFilter}</strong>
+                {stillRunningOnly ? " (Still Running)" : ""}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  onChangeAdLaunchFilter("all");
+                  onChangeAdLaunchFrom("");
+                  onChangeAdLaunchTo("");
+                }}
+                className="hover:text-amber-950 dark:hover:text-white ml-0.5 p-0.5 cursor-pointer rounded-full transition-colors"
+                title="Remove ad launch filter"
               >
                 <X className="w-3 h-3" />
               </button>

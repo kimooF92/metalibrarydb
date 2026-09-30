@@ -26,7 +26,14 @@ export async function GET(req: NextRequest) {
     const isFavoriteOnly = searchParams.get("isFavorite") === "true";
     const status = searchParams.get("status") || "all";
     const hideInactive = searchParams.get("hideInactive") === "true";
-    const activeStatus = searchParams.get("activeStatus") || (hideInactive ? "active" : "all");
+    const adLaunch = searchParams.get("adLaunch") || searchParams.get("adLaunchFilter") || "all";
+    const adLaunchFrom = searchParams.get("adLaunchFrom");
+    const adLaunchTo = searchParams.get("adLaunchTo");
+    const stillRunningParam = searchParams.get("stillRunning");
+    const stillRunning = stillRunningParam !== null
+      ? stillRunningParam === "true"
+      : (adLaunch !== "all" || hideInactive);
+    const activeStatus = searchParams.get("activeStatus") || (hideInactive || (stillRunning && adLaunch !== "all") ? "active" : "all");
     const smartPreset = searchParams.get("smartPreset") || "all";
     const discovery = searchParams.get("discovery") || "all";
     const discoveryFrom = searchParams.get("discoveryFrom");
@@ -57,7 +64,8 @@ export async function GET(req: NextRequest) {
     }
 
     // Filter by Active / Inactive (Off-Air) Ads status
-    if (activeStatus === "active" || hideInactive) {
+    const requireActiveAds = activeStatus === "active" || hideInactive || (stillRunning && adLaunch !== "all");
+    if (requireActiveAds) {
       conditions.push(
         sql`EXISTS (
           SELECT 1 FROM ${ads}
@@ -169,6 +177,62 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Ad Launch Date / Winner Longevity Filters (7d+, 15d+, 21d+, 30d+, custom)
+    if (adLaunch === "7d") {
+      conditions.push(
+        sql`EXISTS (
+          SELECT 1 FROM ${ads}
+          WHERE ${ads.productId} = ${scrapedProducts.id}
+          AND COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) <= NOW() - INTERVAL '7 days'
+        )`
+      );
+    } else if (adLaunch === "15d") {
+      conditions.push(
+        sql`EXISTS (
+          SELECT 1 FROM ${ads}
+          WHERE ${ads.productId} = ${scrapedProducts.id}
+          AND COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) <= NOW() - INTERVAL '15 days'
+        )`
+      );
+    } else if (adLaunch === "21d") {
+      conditions.push(
+        sql`EXISTS (
+          SELECT 1 FROM ${ads}
+          WHERE ${ads.productId} = ${scrapedProducts.id}
+          AND COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) <= NOW() - INTERVAL '21 days'
+        )`
+      );
+    } else if (adLaunch === "30d" || adLaunch === "month" || adLaunch === "1m") {
+      conditions.push(
+        sql`EXISTS (
+          SELECT 1 FROM ${ads}
+          WHERE ${ads.productId} = ${scrapedProducts.id}
+          AND COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) <= NOW() - INTERVAL '30 days'
+        )`
+      );
+    } else if (adLaunch === "custom" || (!adLaunch && (adLaunchFrom || adLaunchTo))) {
+      const launchConditions: any[] = [];
+      if (adLaunchFrom && /^\d{4}-\d{2}-\d{2}$/.test(adLaunchFrom.trim())) {
+        launchConditions.push(
+          sql`COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) >= ${adLaunchFrom.trim() + " 00:00:00"}::timestamptz`
+        );
+      }
+      if (adLaunchTo && /^\d{4}-\d{2}-\d{2}$/.test(adLaunchTo.trim())) {
+        launchConditions.push(
+          sql`COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) < (${adLaunchTo.trim() + " 00:00:00"}::timestamptz + INTERVAL '1 day')`
+        );
+      }
+      if (launchConditions.length > 0) {
+        conditions.push(
+          sql`EXISTS (
+            SELECT 1 FROM ${ads}
+            WHERE ${ads.productId} = ${scrapedProducts.id}
+            AND ${and(...launchConditions)}
+          )`
+        );
+      }
+    }
+
     // Smart Preset: Breakout Scalers (new ads <= 7 days with >= 3 duplications)
     if (smartPreset === "breakout") {
       conditions.push(
@@ -215,6 +279,14 @@ export async function GET(req: NextRequest) {
       orderByClauses.push(desc(safePriceSql));
     } else if (sortBy === "oldest") {
       orderByClauses.push(asc(scrapedProducts.createdAt));
+    } else if (sortBy === "top_lasting" || sortBy === "longevity" || sortBy === "longest_running") {
+      orderByClauses.push(
+        sql`(SELECT MIN(COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt})) FROM ${ads} WHERE ${ads.productId} = ${scrapedProducts.id}) ASC NULLS LAST`
+      );
+    } else if (sortBy === "most_scaled" || sortBy === "ads") {
+      orderByClauses.push(
+        sql`(SELECT COUNT(${ads.id}) FROM ${ads} WHERE ${ads.productId} = ${scrapedProducts.id} AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)) DESC`
+      );
     } else {
       // Default: latest discovery
       orderByClauses.push(

@@ -392,7 +392,17 @@ export const ProductCard = memo(function ProductCard({
           {/* Duration of the first ads discovered */}
           {Boolean(product.daysRunning && product.daysRunning > 0) && (
             <span
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20"
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border ${
+                product.daysRunning! >= 30
+                  ? "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/25"
+                  : product.daysRunning! >= 21
+                  ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/25"
+                  : product.daysRunning! >= 15
+                  ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/25"
+                  : product.daysRunning! >= 7
+                  ? "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/25"
+                  : "bg-slate-500/10 text-slate-700 dark:text-slate-400 border-slate-500/20"
+              }`}
               title={
                 product.earliestAdDate
                   ? `First ad launched: ${formatDate(product.earliestAdDate)} (${product.daysRunning} days running)`

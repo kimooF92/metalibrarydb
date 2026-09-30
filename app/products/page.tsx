@@ -51,6 +51,10 @@ export default function ProductsPage() {
   const [discoveryFilter, setDiscoveryFilter] = useState("all");
   const [discoveryFrom, setDiscoveryFrom] = useState("");
   const [discoveryTo, setDiscoveryTo] = useState("");
+  const [adLaunchFilter, setAdLaunchFilter] = useState("all");
+  const [adLaunchFrom, setAdLaunchFrom] = useState("");
+  const [adLaunchTo, setAdLaunchTo] = useState("");
+  const [stillRunningOnly, setStillRunningOnly] = useState(true);
   const [sortBy, setSortBy] = useState<string>("latest");
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({
@@ -179,6 +183,15 @@ export default function ProductsPage() {
       if (discoveryFromParam) setDiscoveryFrom(discoveryFromParam);
       const discoveryToParam = params.get("discoveryTo");
       if (discoveryToParam) setDiscoveryTo(discoveryToParam);
+      const adLaunchParam = params.get("adLaunch") || params.get("adLaunchFilter");
+      if (adLaunchParam) setAdLaunchFilter(adLaunchParam);
+      const adLaunchFromParam = params.get("adLaunchFrom");
+      if (adLaunchFromParam) setAdLaunchFrom(adLaunchFromParam);
+      const adLaunchToParam = params.get("adLaunchTo");
+      if (adLaunchToParam) setAdLaunchTo(adLaunchToParam);
+      const stillRunningParam = params.get("stillRunning");
+      if (stillRunningParam === "false") setStillRunningOnly(false);
+      else if (stillRunningParam === "true") setStillRunningOnly(true);
 
       // Check for deep-linked product ID (?id=... or ?productId=...)
       const idParam = params.get("id") || params.get("productId");
@@ -273,6 +286,12 @@ export default function ProductsPage() {
       if (discoveryFrom) newParams.set("discoveryFrom", discoveryFrom);
       if (discoveryTo) newParams.set("discoveryTo", discoveryTo);
     }
+    if (adLaunchFilter !== "all") newParams.set("adLaunch", adLaunchFilter);
+    if (adLaunchFilter === "custom") {
+      if (adLaunchFrom) newParams.set("adLaunchFrom", adLaunchFrom);
+      if (adLaunchTo) newParams.set("adLaunchTo", adLaunchTo);
+    }
+    if (!stillRunningOnly) newParams.set("stillRunning", "false");
 
     const nextSearch = newParams.toString();
     const nextUrl = nextSearch ? `${url.pathname}?${nextSearch}` : url.pathname;
@@ -289,6 +308,10 @@ export default function ProductsPage() {
     discoveryFilter,
     discoveryFrom,
     discoveryTo,
+    adLaunchFilter,
+    adLaunchFrom,
+    adLaunchTo,
+    stillRunningOnly,
   ]);
 
   const fetchProducts = useCallback(
@@ -327,6 +350,12 @@ export default function ProductsPage() {
           if (discoveryFrom) query.set("discoveryFrom", discoveryFrom);
           if (discoveryTo) query.set("discoveryTo", discoveryTo);
         }
+        if (adLaunchFilter !== "all") query.set("adLaunch", adLaunchFilter);
+        if (adLaunchFilter === "custom") {
+          if (adLaunchFrom) query.set("adLaunchFrom", adLaunchFrom);
+          if (adLaunchTo) query.set("adLaunchTo", adLaunchTo);
+        }
+        if (!stillRunningOnly) query.set("stillRunning", "false");
 
         const res = await fetch(`/api/products?${query.toString()}`, {
           signal: currentController.signal,
@@ -378,6 +407,10 @@ export default function ProductsPage() {
       discoveryFilter,
       discoveryFrom,
       discoveryTo,
+      adLaunchFilter,
+      adLaunchFrom,
+      adLaunchTo,
+      stillRunningOnly,
     ]
   );
 
@@ -733,6 +766,10 @@ export default function ProductsPage() {
     setDiscoveryFilter("all");
     setDiscoveryFrom("");
     setDiscoveryTo("");
+    setAdLaunchFilter("all");
+    setAdLaunchFrom("");
+    setAdLaunchTo("");
+    setStillRunningOnly(true);
     setSortBy("latest");
     setHideInactive(false);
     setPage(1);
@@ -758,6 +795,7 @@ export default function ProductsPage() {
     (platform !== "all" ? 1 : 0) +
     (statusFilter !== "all" ? 1 : 0) +
     (discoveryFilter !== "all" ? 1 : 0) +
+    (adLaunchFilter !== "all" ? 1 : 0) +
     (hideInactive ? 1 : 0);
 
   const discoveryLabels: Record<string, string> = {
@@ -769,6 +807,21 @@ export default function ProductsPage() {
     last_30d: "Last 30 Days",
     this_month: "This Month",
     custom: discoveryFrom && discoveryTo ? `${discoveryFrom} to ${discoveryTo}` : "Custom Date",
+  };
+
+  const adLaunchLabels: Record<string, string> = {
+    "7d": "7+ Days Running",
+    "15d": "15+ Days Running",
+    "21d": "21+ Days Running",
+    "30d": "1 Month+ (Evergreen)",
+    custom:
+      adLaunchFrom && adLaunchTo
+        ? `${adLaunchFrom} to ${adLaunchTo}`
+        : adLaunchFrom
+        ? `From ${adLaunchFrom}`
+        : adLaunchTo
+        ? `Up to ${adLaunchTo}`
+        : "Custom Launch Range",
   };
 
   return (
@@ -861,6 +914,15 @@ export default function ProductsPage() {
         onChangeDiscoveryFrom={(v) => { setDiscoveryFrom(v); setPage(1); }}
         discoveryTo={discoveryTo}
         onChangeDiscoveryTo={(v) => { setDiscoveryTo(v); setPage(1); }}
+        adLaunchFilter={adLaunchFilter}
+        onChangeAdLaunchFilter={(v) => { setAdLaunchFilter(v); setPage(1); }}
+        adLaunchFrom={adLaunchFrom}
+        onChangeAdLaunchFrom={(v) => { setAdLaunchFrom(v); setPage(1); }}
+        adLaunchTo={adLaunchTo}
+        onChangeAdLaunchTo={(v) => { setAdLaunchTo(v); setPage(1); }}
+        stillRunningOnly={stillRunningOnly}
+        onToggleStillRunningOnly={() => { setStillRunningOnly((prev) => !prev); setPage(1); }}
+        adLaunchLabels={adLaunchLabels}
         onResetFilters={handleResetFilters}
         onOpenAddProduct={() => setIsAddProductModalOpen(true)}
         activeFilterCount={activeFilterCount}

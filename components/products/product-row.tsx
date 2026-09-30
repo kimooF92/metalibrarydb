@@ -281,8 +281,23 @@ export const ProductRow = memo(function ProductRow({
               </span>
             )}
 
-            {!isInactive && product.daysRunning && product.daysRunning >= 30 && (
-              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+            {!isInactive && Boolean(product.daysRunning && product.daysRunning >= 7) && (
+              <span
+                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                  product.daysRunning! >= 30
+                    ? "bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800"
+                    : product.daysRunning! >= 21
+                    ? "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+                    : product.daysRunning! >= 15
+                    ? "bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800"
+                    : "bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+                }`}
+                title={
+                  product.earliestAdDate
+                    ? `Ad launched: ${new Date(product.earliestAdDate).toLocaleDateString()} (${product.daysRunning} days running)`
+                    : `${product.daysRunning} days running`
+                }
+              >
                 ⏳ {product.daysRunning}d Running
               </span>
             )}
