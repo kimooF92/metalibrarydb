@@ -45,14 +45,25 @@ export async function enqueueAllPagesForRefresh(cooldownHours: number = 12) {
   // Apply a 30-minute grace buffer so that 12-hour scheduled workflow runs (e.g. 8:00 & 20:00 UTC)
   // match pages scanned in the previous workflow window without failing strict boundary checks
   const effectiveCooldown = Math.max(0.5, cooldownHours > 1 ? cooldownHours - 0.5 : cooldownHours);
-  const activeCutoff = new Date(Date.now() - effectiveCooldown * 60 * 60 * 1000);
-  // Inactive pages (confirmed shutdown) are scanned once every 3 days (72h) to detect ad relaunches
-  const inactiveCutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+  const now = Date.now();
+  const activeCutoff = new Date(now - effectiveCooldown * 60 * 60 * 1000);
+
+  // Adaptive Decay Cadence for Inactive Pages to detect ad relaunches:
+  // 1. VIP Watchlist inactive: checked at active cutoff rate (12h-24h)
+  // 2. Fresh inactive (went dark <= 7 days ago): checked every 24h (highest probability of temporary hold/relaunch)
+  // 3. Dormant inactive (went dark 8-30 days ago): checked every 72h (3 days)
+  // 4. Cold inactive (>30 days dark or holdStartedAt missing): checked every 7 days (weekly to preserve proxy quota)
+  const freshInactiveCutoff = new Date(now - 24 * 60 * 60 * 1000);
+  const dormantInactiveCutoff = new Date(now - 72 * 60 * 60 * 1000);
+  const coldInactiveCutoff = new Date(now - 7 * 24 * 60 * 60 * 1000);
+
+  const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
 
   // Find pages that either have never been checked, or were last checked before their respective cutoff
   const pagesToRefresh = cooldownHours > 0
     ? await db.query.trackedPages.findMany({
-      where: (pages, { or, and, isNull, lt, ne, eq }) =>
+      where: (pages, { or, and, isNull, lt, gt, lte, ne, eq }) =>
         or(
           // Active or on_hold pages: standard cooldown (default 12h) or explicitly pending
           and(
@@ -63,10 +74,30 @@ export async function enqueueAllPagesForRefresh(cooldownHours: number = 12) {
               eq(pages.status, "pending")
             )
           ),
-          // Inactive pages: 3-day (72h) cooldown to detect ad relaunches without wasting budget
+          // Inactive pages: adaptive recheck cadence based on how recently they went dark
           and(
             eq(pages.holdStatus, "inactive"),
-            or(isNull(pages.lastChecked), lt(pages.lastChecked, inactiveCutoff))
+            or(
+              isNull(pages.lastChecked),
+              // VIP Watchlist: always checked with active cutoff (12h)
+              and(eq(pages.isWatchlisted, true), lt(pages.lastChecked, activeCutoff)),
+              // Fresh inactive (went dark <= 7 days ago): checked every 24h
+              and(
+                gt(pages.holdStartedAt, sevenDaysAgo),
+                lt(pages.lastChecked, freshInactiveCutoff)
+              ),
+              // Dormant inactive (went dark 8-30 days ago): checked every 72h
+              and(
+                lte(pages.holdStartedAt, sevenDaysAgo),
+                gt(pages.holdStartedAt, thirtyDaysAgo),
+                lt(pages.lastChecked, dormantInactiveCutoff)
+              ),
+              // Cold inactive (>30 days dark or holdStartedAt missing): checked every 7 days
+              and(
+                or(isNull(pages.holdStartedAt), lte(pages.holdStartedAt, thirtyDaysAgo)),
+                lt(pages.lastChecked, coldInactiveCutoff)
+              )
+            )
           )
         ),
       columns: { id: true, holdStatus: true },
@@ -832,7 +863,8 @@ export async function markJobCompleted(
 
     const isSmallPage = (results || 0) < 20;
     const hasPreviousScan = Boolean(trackedPage?.lastCreativeScan);
-    const isMeaningfulDelta = !hasPreviousScan
+    // For relaunches, any positive ad count (even 1 test ad) is meaningful!
+    const isMeaningfulDelta = (isRelaunching || !hasPreviousScan)
       ? ((displayDifference !== null && displayDifference >= 1) || (results !== null && results >= 1))
       : (displayDifference !== null && displayDifference >= 2);
     const finalStatus = (status === "success" && isMeaningfulDelta && isSmallPage) ? "pending" : "success";
@@ -865,6 +897,7 @@ export async function markJobCompleted(
           brandName,
           recoveredResults: results,
           pageId: trackedPage?.pageId,
+          isRelaunch: true,
         });
       } catch (notifErr) {
         console.error("[Count Scan] Failed to log relaunch notification:", notifErr);
@@ -962,8 +995,8 @@ export async function markJobCompleted(
 
   // 5. Intelligent Creative Routing
   const hasPreviousScan = Boolean(trackedPage?.lastCreativeScan);
-  // For a brand-new page with no previous creative scan, all positive results count as new ads to extract
-  const effectiveDifference = (!hasPreviousScan && (displayDifference === null || displayDifference < 1) && (results || 0) >= 1)
+  // For a brand-new page with no previous creative scan OR a brand relaunching from inactive, all positive results count as new ads to extract
+  const effectiveDifference = (isRelaunching || (!hasPreviousScan && (displayDifference === null || displayDifference < 1) && (results || 0) >= 1))
     ? (results || 0)
     : (displayDifference ?? 0);
 
@@ -974,8 +1007,8 @@ export async function markJobCompleted(
 
       if (!isCloudEligible) {
         // MICRO-PAGE (< 20 active ads): Always enqueue for local free Playwright worker.
-        // Require meaningful delta: first-time scan (>= 1) or subsequent jump (>= 2)
-        const isMeaningfulDelta = !hasPreviousScan || effectiveDifference >= 2;
+        // Require meaningful delta: first-time scan (>= 1), relaunch (>= 1), or subsequent jump (>= 2)
+        const isMeaningfulDelta = isRelaunching || !hasPreviousScan || effectiveDifference >= 2;
 
         if (isMeaningfulDelta) {
           const existingJob = await db.query.queue.findFirst({
@@ -998,8 +1031,11 @@ export async function markJobCompleted(
                   autoTriggered: true,
                   delta: displayDifference,
                   totalResults: results,
+                  isRelaunch: isRelaunching,
                 }),
-                outcomeDetails: `Queued for local Playwright creative scan (+${displayDifference} new ads, total ${results} < 20)`,
+                outcomeDetails: isRelaunching
+                  ? `🚀 Queued urgent Playwright creative scan for relaunched brand (${results} active ad(s))`
+                  : `Queued for local Playwright creative scan (+${displayDifference} new ads, total ${results} < 20)`,
               })
               .returning();
 
@@ -1008,7 +1044,7 @@ export async function markJobCompleted(
               jobType: "creative",
               creativeScanId: scanRecord.id,
               status: "pending",
-              priority: 5,
+              priority: isRelaunching ? 1 : 5, // Priority 1 (urgent) for relaunches
             });
 
             await db
@@ -1017,7 +1053,7 @@ export async function markJobCompleted(
               .where(eq(trackedPages.id, pageId));
 
             console.log(
-              `[Local Creative Queue] 🟢 Enqueued "${brandName}" for free local Playwright scan (+${displayDifference} ads, total: ${results} < 20).`
+              `[Local Creative Queue] 🟢 Enqueued "${brandName}" for ${isRelaunching ? "URGENT relaunch" : "free local Playwright"} scan (+${displayDifference} ads, total: ${results} < 20).`
             );
           }
         } else {

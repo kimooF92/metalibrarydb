@@ -180,15 +180,19 @@ export async function logHoldLiftedNotification(params: {
   brandName: string;
   recoveredResults: number;
   pageId?: string | null;
+  isRelaunch?: boolean;
 }) {
+  const isRelaunch = params.isRelaunch ?? false;
   return createNotification({
     type: "count_scan",
-    title: `🟢 Ads Relaunched: ${params.brandName}`,
-    message: `"${params.brandName}" is advertising again with ${params.recoveredResults} active ad(s). Account hold lifted.`,
+    title: isRelaunch ? `🚀 Brand Relaunched Ads: ${params.brandName}` : `🟢 Account Hold Lifted: ${params.brandName}`,
+    message: isRelaunch
+      ? `"${params.brandName}" is advertising again with ${params.recoveredResults} active ad(s). Urgent creative scan queued.`
+      : `"${params.brandName}" is advertising again with ${params.recoveredResults} active ad(s). Account hold lifted.`,
     severity: "success",
     trackedPageId: params.trackedPageId,
     actionUrl: `/spy/brand/${encodeURIComponent(params.pageId || params.trackedPageId)}`,
-    metadata: { recoveredResults: params.recoveredResults, isOnHold: false },
+    metadata: { recoveredResults: params.recoveredResults, isOnHold: false, isRelaunch },
   });
 }
 

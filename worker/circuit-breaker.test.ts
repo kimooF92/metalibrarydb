@@ -317,3 +317,149 @@ test("inactive brand state machine: confirmed inactive brand rechecking 0 ads re
   assert.equal(inactiveRelaunch, "RELAUNCH_ACTIVE");
 });
 
+test("relaunch with 1 single ad satisfies meaningful delta and queues creative scan with urgent priority", () => {
+  function evaluateCreativeRouting(params: {
+    results: number;
+    hasPreviousScan: boolean;
+    displayDifference: number;
+    isRelaunching: boolean;
+  }) {
+    const effectiveDifference = (params.isRelaunching || (!params.hasPreviousScan && (params.displayDifference === null || params.displayDifference < 1) && (params.results || 0) >= 1))
+      ? (params.results || 0)
+      : (params.displayDifference ?? 0);
+
+    const isMeaningfulDelta = params.isRelaunching || !params.hasPreviousScan || effectiveDifference >= 2;
+    const priority = params.isRelaunching ? 1 : 5;
+
+    return { effectiveDifference, isMeaningfulDelta, priority };
+  }
+
+  // Case 1: Inactive brand relaunches with just 1 ad (previously scanned)
+  const relaunchSingleAd = evaluateCreativeRouting({
+    results: 1,
+    hasPreviousScan: true,
+    displayDifference: 1,
+    isRelaunching: true,
+  });
+  assert.equal(relaunchSingleAd.isMeaningfulDelta, true, "1-ad relaunch must be treated as meaningful delta");
+  assert.equal(relaunchSingleAd.priority, 1, "Relaunch must be queued with urgent priority 1");
+  assert.equal(relaunchSingleAd.effectiveDifference, 1);
+
+  // Case 2: Standard existing active page with only +1 ad (not relaunching)
+  const regularMinorDelta = evaluateCreativeRouting({
+    results: 15,
+    hasPreviousScan: true,
+    displayDifference: 1,
+    isRelaunching: false,
+  });
+  assert.equal(regularMinorDelta.isMeaningfulDelta, false, "Regular +1 fluctuation on existing page should not trigger creative scan");
+});
+
+test("adaptive decay cadence evaluates due status based on inactivity age and watchlist", () => {
+  const now = Date.now();
+  const activeCutoff = new Date(now - 12 * 60 * 60 * 1000);
+  const freshInactiveCutoff = new Date(now - 24 * 60 * 60 * 1000);
+  const dormantInactiveCutoff = new Date(now - 72 * 60 * 60 * 1000);
+  const coldInactiveCutoff = new Date(now - 7 * 24 * 60 * 60 * 1000);
+
+  const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
+
+  function isPageDueForRefresh(page: {
+    holdStatus: "active" | "on_hold" | "inactive";
+    lastChecked: Date | null;
+    isWatchlisted: boolean;
+    holdStartedAt: Date | null;
+    status: string;
+  }): boolean {
+    if (page.holdStatus !== "inactive") {
+      return (
+        !page.lastChecked ||
+        page.lastChecked < activeCutoff ||
+        page.status === "pending"
+      );
+    }
+
+    if (!page.lastChecked) return true;
+    if (page.isWatchlisted && page.lastChecked < activeCutoff) return true;
+
+    // Fresh inactive (<= 7 days dark): checked every 24h
+    if (page.holdStartedAt && page.holdStartedAt > sevenDaysAgo) {
+      return page.lastChecked < freshInactiveCutoff;
+    }
+
+    // Dormant inactive (8-30 days dark): checked every 72h
+    if (
+      page.holdStartedAt &&
+      page.holdStartedAt <= sevenDaysAgo &&
+      page.holdStartedAt > thirtyDaysAgo
+    ) {
+      return page.lastChecked < dormantInactiveCutoff;
+    }
+
+    // Cold inactive (>30 days dark or holdStartedAt is null): checked every 7 days
+    return page.lastChecked < coldInactiveCutoff;
+  }
+
+  // 1. Fresh inactive (went dark 3 days ago), checked 10h ago -> NOT due yet (needs 24h)
+  const fresh10h = isPageDueForRefresh({
+    holdStatus: "inactive",
+    lastChecked: new Date(now - 10 * 60 * 60 * 1000),
+    isWatchlisted: false,
+    holdStartedAt: new Date(now - 3 * 24 * 60 * 60 * 1000),
+    status: "success",
+  });
+  assert.equal(fresh10h, false, "Fresh inactive checked 10h ago should not be due");
+
+  // 2. Fresh inactive (went dark 3 days ago), checked 26h ago -> DUE
+  const fresh26h = isPageDueForRefresh({
+    holdStatus: "inactive",
+    lastChecked: new Date(now - 26 * 60 * 60 * 1000),
+    isWatchlisted: false,
+    holdStartedAt: new Date(now - 3 * 24 * 60 * 60 * 1000),
+    status: "success",
+  });
+  assert.equal(fresh26h, true, "Fresh inactive checked 26h ago MUST be due");
+
+  // 3. Dormant inactive (went dark 15 days ago), checked 26h ago -> NOT due (needs 72h)
+  const dormant26h = isPageDueForRefresh({
+    holdStatus: "inactive",
+    lastChecked: new Date(now - 26 * 60 * 60 * 1000),
+    isWatchlisted: false,
+    holdStartedAt: new Date(now - 15 * 24 * 60 * 60 * 1000),
+    status: "success",
+  });
+  assert.equal(dormant26h, false, "Dormant inactive checked 26h ago should not be due");
+
+  // 4. Dormant inactive (went dark 15 days ago), checked 75h ago -> DUE
+  const dormant75h = isPageDueForRefresh({
+    holdStatus: "inactive",
+    lastChecked: new Date(now - 75 * 60 * 60 * 1000),
+    isWatchlisted: false,
+    holdStartedAt: new Date(now - 15 * 24 * 60 * 60 * 1000),
+    status: "success",
+  });
+  assert.equal(dormant75h, true, "Dormant inactive checked 75h ago MUST be due");
+
+  // 5. Cold inactive (went dark 60 days ago), checked 4 days ago -> NOT due (needs 7 days)
+  const cold4d = isPageDueForRefresh({
+    holdStatus: "inactive",
+    lastChecked: new Date(now - 4 * 24 * 60 * 60 * 1000),
+    isWatchlisted: false,
+    holdStartedAt: new Date(now - 60 * 24 * 60 * 60 * 1000),
+    status: "success",
+  });
+  assert.equal(cold4d, false, "Cold inactive checked 4 days ago should not be due");
+
+  // 6. VIP Watchlist page: went dark 60 days ago, checked 14h ago -> DUE (12h cadence)
+  const vipWatchlist = isPageDueForRefresh({
+    holdStatus: "inactive",
+    lastChecked: new Date(now - 14 * 60 * 60 * 1000),
+    isWatchlisted: true,
+    holdStartedAt: new Date(now - 60 * 24 * 60 * 60 * 1000),
+    status: "success",
+  });
+  assert.equal(vipWatchlist, true, "Watchlisted inactive page checked 14h ago MUST be due");
+});
+
+

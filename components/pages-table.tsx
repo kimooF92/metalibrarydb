@@ -1008,6 +1008,16 @@ export function PagesTable({
                                 </span>
                               )}
 
+                              {p.holdStatus === "inactive" && (
+                                <span
+                                  className="inline-flex items-center gap-1 text-[9.5px] font-extrabold px-1.5 py-0.2 rounded border bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20 shadow-2xs"
+                                  title="Brand inactive (0 active ads confirmed over 3 scans). Monitored adaptively for ad relaunches."
+                                >
+                                  <span>💤</span>
+                                  <span>Inactive</span>
+                                </span>
+                              )}
+
                               {scaling.archetype !== "emerging" && scaling.archetype !== "inactive" && (
                                 <span
                                   className={`inline-flex items-center gap-1 text-[9.5px] font-extrabold px-1.5 py-0.2 rounded border shadow-2xs ${scaling.badgeClass}`}

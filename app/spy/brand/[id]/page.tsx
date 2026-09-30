@@ -171,6 +171,7 @@ export default function BrandDeepDivePage({
   const [isRefreshingMedia, setIsRefreshingMedia] = useState(false);
   const [isWatchlisted, setIsWatchlisted] = useState(false);
   const [isTogglingWatchlist, setIsTogglingWatchlist] = useState(false);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
 
   // Products Tab State
   const [isSyncingProducts, setIsSyncingProducts] = useState(false);
@@ -230,6 +231,37 @@ export default function BrandDeepDivePage({
       setError(err.message || "Failed to load brand data");
     } finally {
       setIsLoadingAnalytics(false);
+    }
+  };
+
+  const handleCheckAdLibraryNow = async () => {
+    const pageId = data?.brand?.id || id;
+    if (!pageId || isCheckingStatus) return;
+    setIsCheckingStatus(true);
+    try {
+      const res = await fetch("/api/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [pageId] }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to trigger scan");
+      showToast({
+        title: "⚡ Ad Library Check Enqueued",
+        message: "Triggered real-time verification scan for this brand.",
+        type: "success",
+      });
+      setTimeout(() => {
+        fetchBrandData(true);
+      }, 3500);
+    } catch (err: any) {
+      showToast({
+        title: "Check Failed",
+        message: err.message || "Failed to trigger check",
+        type: "error",
+      });
+    } finally {
+      setIsCheckingStatus(false);
     }
   };
 
@@ -670,6 +702,27 @@ export default function BrandDeepDivePage({
             <div>
               <strong>Brand on Hold:</strong> Meta Ad Library returned 0 active ads during the last scan, but existing ads and products are temporarily preserved under grace period ({brand.consecutiveZeroScans || 1}/3 scans).
             </div>
+          </div>
+        )}
+
+        {/* Inactive Brand Notification Banner */}
+        {brand.holdStatus === "inactive" && (
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-xs">
+            <div className="flex items-center gap-2.5">
+              <span className="text-base shrink-0">💤</span>
+              <div>
+                <strong>Brand Inactive (Confirmed Dark):</strong> 0 active ads detected over 3 consecutive scans. The system rechecks this brand adaptively for ad relaunches.
+              </div>
+            </div>
+            <button
+              onClick={handleCheckAdLibraryNow}
+              disabled={isCheckingStatus}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-xs cursor-pointer disabled:opacity-50 shrink-0"
+              title="Trigger immediate live count check on Meta Ad Library"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isCheckingStatus ? "animate-spin" : ""}`} />
+              <span>{isCheckingStatus ? "Checking..." : "⚡ Check Ad Library Now"}</span>
+            </button>
           </div>
         )}
 
