@@ -18,6 +18,7 @@ export async function GET(req: Request) {
         id: trackedPages.id,
         pageId: trackedPages.pageId,
         displayName: trackedPages.displayName,
+        landingPage: trackedPages.landingPage,
         adCount: trackedPages.currentResults,
         isWatchlisted: trackedPages.isWatchlisted,
       })
@@ -38,7 +39,7 @@ export async function GET(req: Request) {
 
       return {
         id: p.id,
-        pageId: validPageId || p.id,
+        pageId: validPageId || p.landingPage || p.displayName || validDisplayName,
         displayName: validDisplayName,
         adCount: p.adCount || 0,
         isWatchlisted: Boolean(p.isWatchlisted),

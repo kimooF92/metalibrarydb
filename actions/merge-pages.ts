@@ -104,6 +104,22 @@ export async function mergeExactMatchWithPageId(
         }
       }
 
+      // Backfill any ads in ad_observations for this tracked page that had page_id = '0' or NULL
+      try {
+        await db.execute(sql`
+          UPDATE ads
+          SET page_id = ${cleanPageId},
+              page_name = COALESCE(NULLIF(${resolvedDisplayName || null}, ''), page_name),
+              updated_at = ${now}
+          WHERE (page_id = '0' OR page_id IS NULL OR page_id = '')
+            AND id IN (
+              SELECT ad_id FROM ad_observations WHERE tracked_page_id = ${exactMatchTrackedPageId}
+            )
+        `);
+      } catch (adErr) {
+        console.warn("[Merge] Non-fatal error backfilling ads:", adErr);
+      }
+
       return {
         success: true,
         message: `Successfully upgraded exact match page to Page ID "${cleanPageId}".`,
@@ -186,6 +202,22 @@ export async function mergeExactMatchWithPageId(
         } catch (prodErr) {
           console.warn("[Merge] Non-fatal error backfilling scraped_products:", prodErr);
         }
+      }
+
+      // Backfill any ads in ad_observations for this tracked page that had page_id = '0' or NULL
+      try {
+        await db.execute(sql`
+          UPDATE ads
+          SET page_id = ${cleanPageId},
+              page_name = COALESCE(NULLIF(${resolvedDisplayName || null}, ''), page_name),
+              updated_at = ${now}
+          WHERE (page_id = '0' OR page_id IS NULL OR page_id = '')
+            AND id IN (
+              SELECT ad_id FROM ad_observations WHERE tracked_page_id = ${existingTargetPage.id}
+            )
+        `);
+      } catch (adErr) {
+        console.warn("[Merge] Non-fatal error backfilling ads:", adErr);
       }
 
       return {

@@ -741,8 +741,13 @@ export default function ProductsPage() {
   }, [currentProductIndex, products, handleViewDetails]);
 
   const handleViewCreatives = useCallback((product: ScrapedProduct) => {
-    if (product.brandPageId) {
-      router.push(`/spy/brand/${encodeURIComponent(product.brandPageId)}?tab=creatives`);
+    const isUuid = (s?: string | null) => Boolean(s && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s));
+    const brandTarget = (product.brandPageId && !isUuid(product.brandPageId) && product.brandPageId !== "0")
+      ? product.brandPageId
+      : (product.domain || (product.brandName && !isUuid(product.brandName) ? product.brandName : null));
+
+    if (brandTarget) {
+      router.push(`/spy/brand/${encodeURIComponent(brandTarget)}?tab=creatives`);
     } else {
       router.push(`/spy?productId=${encodeURIComponent(product.id)}`);
     }

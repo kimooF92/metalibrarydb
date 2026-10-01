@@ -964,7 +964,7 @@ export function PagesTable({
                           <div className="flex flex-col gap-0.5">
                             <div className="flex items-center space-x-1.5 min-w-0">
                               <Link
-                                href={`/spy/brand/${encodeURIComponent(p.pageId || p.id || "")}`}
+                                href={`/spy/brand/${encodeURIComponent(p.pageId || p.landingPage || p.displayName || "")}`}
                                 title={`Open ${p.displayName || "brand"} Analytics${p.pageId ? ` (ID: ${p.pageId})` : ""}`}
                                 className="font-bold text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 underline-offset-2 hover:underline transition-colors truncate max-w-[200px]"
                               >
@@ -1143,7 +1143,7 @@ export function PagesTable({
                       {/* Exact Products Count */}
                       <td className="px-3 py-2 text-center">
                         <Link
-                          href={`/spy/brand/${encodeURIComponent(p.pageId || p.id || "")}?tab=products`}
+                          href={`/spy/brand/${encodeURIComponent(p.pageId || p.landingPage || p.displayName || "")}?tab=products`}
                           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-all cursor-pointer"
                           title={`Open ${p.displayName || "brand"} Product Catalog (${p.approxProductCount || 0} products)`}
                         >

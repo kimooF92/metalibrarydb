@@ -227,6 +227,13 @@ export default function BrandDeepDivePage({
       }
       setData(json);
       setIsWatchlisted(Boolean(json.brand?.isWatchlisted));
+
+      // If user navigated with a legacy UUID, automatically replace URL with canonical numeric pageId or clean name
+      const isUuid = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+      if (isUuid(id) && json.brand?.pageId && !isUuid(json.brand.pageId)) {
+        const currentUrl = new URL(window.location.href);
+        router.replace(`/spy/brand/${encodeURIComponent(json.brand.pageId)}${currentUrl.search}`);
+      }
     } catch (err: any) {
       setError(err.message || "Failed to load brand data");
     } finally {

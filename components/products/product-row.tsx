@@ -217,19 +217,29 @@ export const ProductRow = memo(function ProductRow({
               </span>
             )}
 
-            {product.brandPageId ? (
-              <Link
-                href={`/spy/brand/${encodeURIComponent(product.brandPageId)}?tab=products`}
-                onClick={(e) => e.stopPropagation()}
-                className={`text-[10px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded border hover:underline ${
-                  isInactive
-                    ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
-                    : "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800/60"
-                }`}
-              >
-                {product.brandName || "Brand"} &rarr;
-              </Link>
-            ) : product.brandName ? (
+            {(() => {
+              const isUuid = (s?: string | null) => Boolean(s && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s));
+              const brandTarget = (product.brandPageId && !isUuid(product.brandPageId) && product.brandPageId !== "0")
+                ? product.brandPageId
+                : (product.domain || (product.brandName && !isUuid(product.brandName) ? product.brandName : null));
+
+              if (brandTarget) {
+                return (
+                  <Link
+                    href={`/spy/brand/${encodeURIComponent(brandTarget)}?tab=products`}
+                    onClick={(e) => e.stopPropagation()}
+                    className={`text-[10px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded border hover:underline ${
+                      isInactive
+                        ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                        : "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800/60"
+                    }`}
+                  >
+                    {product.brandName || "Brand"} &rarr;
+                  </Link>
+                );
+              }
+
+              return product.brandName ? (
               <button
                 type="button"
                 onClick={(e) => {
@@ -248,7 +258,8 @@ export const ProductRow = memo(function ProductRow({
               <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
                 {product.domain}
               </span>
-            ) : null}
+            ) : null;
+          })()}
 
             {product.category && (
               <span

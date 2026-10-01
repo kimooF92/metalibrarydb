@@ -48,12 +48,17 @@ export async function GET(
     }
 
     if (!trackedPage) {
-      // Try finding by pageId in tracked_pages
+      // Try finding by pageId, landingPage, displayName, or URL in tracked_pages
       trackedPage = await db.query.trackedPages.findFirst({
-        where: eq(trackedPages.pageId, decodedId),
+        where: or(
+          eq(trackedPages.pageId, decodedId),
+          sql`lower(${trackedPages.landingPage}) = ${decodedId.toLowerCase()}`,
+          sql`lower(trim(${trackedPages.displayName})) = ${decodedId.toLowerCase()}`,
+          eq(trackedPages.url, decodedId)
+        ),
       });
       if (trackedPage) {
-        pageId = trackedPage.pageId;
+        pageId = trackedPage.pageId || decodedId;
         displayName = trackedPage.displayName || `Brand ${trackedPage.pageId || decodedId}`;
       }
     }

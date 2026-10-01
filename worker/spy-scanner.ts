@@ -5,7 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { cacheThumbnail } from "./thumbnail-cache";
 import { extractAdsFromDOM, extractPageIdsFromPage } from "./dom-scanner";
 import { uploadMediaWithHashing, isB2Configured } from "../lib/b2-storage";
-import { extractMedia } from "../lib/apify-ingest";
+import { extractMedia, extractPageInfo } from "../lib/apify-ingest";
 import { parseResultCountFromText } from "./scanner";
 import { resolveDestinationUrl } from "../lib/utils";
 import { linkAndAutoScrapeProduct } from "../lib/product-ingest";
@@ -51,8 +51,9 @@ function parseAdGraphQLNode(node: any): ExtractedAdData | null {
       node.adArchiveID || node.ad_archive_id || node.id || node.adArchiveId;
     if (!adArchiveId) return null;
 
-    const pageId = node.pageID || node.page_id || "";
-    const pageName = node.pageName || node.page_name || node.publisherPlatformPageName || null;
+    const pageInfo = extractPageInfo(node);
+    const pageId = pageInfo.pageId || (node.pageID && String(node.pageID) !== "0" && !String(node.pageID).includes("-") ? String(node.pageID) : "");
+    const pageName = pageInfo.pageName || node.publisherPlatformPageName || null;
 
     // Started running date parsing
     let startedRunningOn: Date | null = null;
@@ -405,7 +406,7 @@ export async function scanAdCreatives(
     // 3. Query tracked page record to get the official numeric pageId if present
     const trackedPageRecord = await db.query.trackedPages.findFirst({
       where: eq(trackedPages.id, trackedPageId),
-      columns: { pageId: true, displayName: true, searchType: true },
+      columns: { pageId: true, displayName: true, searchType: true, landingPage: true, country: true },
     });
     const fallbackNumericPageId = (trackedPageRecord?.pageId && trackedPageRecord.pageId !== "0" && !trackedPageRecord.pageId.includes("-"))
       ? trackedPageRecord.pageId
@@ -564,6 +565,7 @@ export async function scanAdCreatives(
     // 4. Save extracted ads and observations transactionally
     let savedCount = 0;
     let newProductsCount = 0;
+    const savedAdIds: string[] = [];
 
     for (const adData of collectedAds.values()) {
       let finalMediaUrls = adData.mediaUrls || [];
@@ -681,6 +683,7 @@ export async function scanAdCreatives(
 
       // Insert ad observation snapshot for this scan
       if (upsertedAd) {
+        savedAdIds.push(upsertedAd.id);
         await db.insert(adObservations).values({
           creativeScanId,
           adId: upsertedAd.id,
@@ -726,15 +729,98 @@ export async function scanAdCreatives(
       });
     }
 
-    // Update tracked page status & last_creative_scan
+    // Resolve canonical numeric Page ID if tracked page has no valid numeric page_id yet
+    let resolvedPageId = (trackedPageRecord?.pageId && /^\d{6,25}$/.test(trackedPageRecord.pageId.trim()))
+      ? trackedPageRecord.pageId.trim()
+      : null;
+
+    let resolvedPageName: string | null = null;
+
+    if (!resolvedPageId) {
+      // 1. Check dynamic filter pages (most authoritative)
+      for (const [pId, pName] of canonicalPageIdsFromFilter.entries()) {
+        if (/^\d{6,25}$/.test(pId.trim())) {
+          resolvedPageId = pId.trim();
+          resolvedPageName = pName;
+          break;
+        }
+      }
+
+      // 2. Check extracted page IDs
+      if (!resolvedPageId) {
+        for (const pId of extractedPageIds) {
+          if (/^\d{6,25}$/.test(pId.trim())) {
+            resolvedPageId = pId.trim();
+            break;
+          }
+        }
+      }
+
+      // 3. Check ads collected in this scan
+      if (!resolvedPageId) {
+        for (const ad of collectedAds.values()) {
+          if (ad.pageId && /^\d{6,25}$/.test(ad.pageId.trim())) {
+            resolvedPageId = ad.pageId.trim();
+            resolvedPageName = ad.pageName;
+            break;
+          }
+        }
+      }
+    }
+
+    const pageCountry = (trackedPageRecord as any)?.country || country || "ALL";
+    const pageUpdates: any = {
+      status: "success",
+      lastCreativeScan: now,
+      lastSuccessAt: now,
+      updatedAt: now,
+    };
+
+    if (resolvedPageId && (!trackedPageRecord?.pageId || trackedPageRecord.pageId === "0")) {
+      pageUpdates.pageId = resolvedPageId;
+      pageUpdates.searchType = "page";
+      pageUpdates.url = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${pageCountry}&view_all_page_id=${resolvedPageId}&search_type=page&media_type=all`;
+      if (resolvedPageName && (!trackedPageRecord?.displayName || trackedPageRecord.displayName.startsWith("http") || trackedPageRecord.displayName.includes("."))) {
+        pageUpdates.displayName = resolvedPageName;
+      }
+
+      // Backfill any ads in this scan that had page_id = '0'
+      if (savedAdIds.length > 0) {
+        try {
+          await db.execute(sql`
+            UPDATE ads
+            SET page_id = ${resolvedPageId},
+                page_name = COALESCE(NULLIF(${resolvedPageName || null}, ''), page_name),
+                updated_at = ${now}
+            WHERE id IN (${sql.join(savedAdIds.map((id) => sql`${id}`), sql`, `)})
+              AND (page_id = '0' OR page_id IS NULL OR page_id = '')
+          `);
+        } catch (adErr) {
+          console.warn("[Spy Scanner] Non-fatal error backfilling ads with resolvedPageId:", adErr);
+        }
+      }
+
+      // Backfill any scraped products for this domain
+      const targetDomain = (trackedPageRecord as any)?.landingPage || trackedPageRecord?.displayName;
+      if (targetDomain && targetDomain.includes(".")) {
+        try {
+          await db.execute(sql`
+            UPDATE scraped_products
+            SET page_id = ${resolvedPageId},
+                updated_at = ${now}
+            WHERE (lower(domain) = ${targetDomain.toLowerCase().trim()} OR url ILIKE ${`%${targetDomain.trim()}%`})
+              AND (page_id IS NULL OR page_id = '0')
+          `);
+        } catch (prodErr) {
+          console.warn("[Spy Scanner] Non-fatal error backfilling scraped_products:", prodErr);
+        }
+      }
+    }
+
+    // Update tracked page status & last_creative_scan & pageId
     await db
       .update(trackedPages)
-      .set({
-        status: "success",
-        lastCreativeScan: now,
-        lastSuccessAt: now,
-        updatedAt: now,
-      })
+      .set(pageUpdates)
       .where(eq(trackedPages.id, trackedPageId));
 
     return {

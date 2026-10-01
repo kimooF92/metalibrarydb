@@ -154,14 +154,23 @@ export function parseAdStartDate(item: any): Date | null {
 export function extractPageInfo(item: any): { pageId: string | null; pageName: string | null } {
   const isNumericPageId = (str: any) => typeof str === "string" && /^\d{6,25}$/.test(str.trim());
 
-  // Check all candidate keys in Apify dataset item
+  // Check all candidate keys in Apify dataset item & GraphQL nodes
   const candidateIds = [
     item.pageId,
     item.page_id,
+    item.pageID,
     item.snapshot?.page_id,
+    item.snapshot?.pageId,
+    item.snapshot?.pageID,
     item.publisher_page_id,
     item.snapshot?.publisher_page_id,
+    item.publisherPlatformPageId,
+    item.snapshot?.publisherPlatformPageId,
+    item.node?.page_id,
+    item.node?.pageID,
+    item.node?.snapshot?.page_id,
     typeof item.page_profile_uri === "string" ? item.page_profile_uri.match(/id=(\d+)/)?.[1] : null,
+    typeof item.snapshot?.page_profile_uri === "string" ? item.snapshot.page_profile_uri.match(/id=(\d+)/)?.[1] : null,
   ];
 
   let resolvedPageId: string | null = null;
@@ -179,8 +188,14 @@ export function extractPageInfo(item: any): { pageId: string | null; pageName: s
     item.pageName,
     item.page_name,
     item.snapshot?.page_name,
+    item.snapshot?.pageName,
     item.snapshot?.byline,
     item.page_profile_name,
+    item.snapshot?.page_profile_name,
+    item.publisherPlatformPageName,
+    item.snapshot?.publisherPlatformPageName,
+    item.node?.page_name,
+    item.node?.pageName,
   ];
 
   let resolvedPageName: string | null = null;
@@ -572,6 +587,38 @@ export async function ingestApifyDatasetItems(
     pageUpdates.pageId = detectedPageId;
     if (detectedPageName && (!pageRecord.displayName || pageRecord.displayName.startsWith("http"))) {
       pageUpdates.displayName = detectedPageName;
+    }
+
+    // Backfill any ads in this scan that had page_id = '0'
+    try {
+      await db.execute(sql`
+        UPDATE ads
+        SET page_id = ${detectedPageId},
+            page_name = COALESCE(NULLIF(${detectedPageName || null}, ''), page_name),
+            updated_at = ${now}
+        WHERE (page_id = '0' OR page_id IS NULL OR page_id = '')
+          AND id IN (
+            SELECT ad_id FROM ad_observations WHERE tracked_page_id = ${trackedPageId}
+          )
+      `);
+    } catch (adErr) {
+      console.warn("[Apify Ingest] Non-fatal error backfilling ads with detectedPageId:", adErr);
+    }
+
+    // Backfill any unlinked scraped products for this domain
+    const targetDomain = pageRecord.landingPage || pageRecord.displayName;
+    if (targetDomain && targetDomain.includes(".")) {
+      try {
+        await db.execute(sql`
+          UPDATE scraped_products
+          SET page_id = ${detectedPageId},
+              updated_at = ${now}
+          WHERE (lower(domain) = ${targetDomain.toLowerCase().trim()} OR url ILIKE ${`%${targetDomain.trim()}%`})
+            AND (page_id IS NULL OR page_id = '0')
+        `);
+      } catch (prodErr) {
+        console.warn("[Apify Ingest] Non-fatal error backfilling scraped_products:", prodErr);
+      }
     }
   }
 

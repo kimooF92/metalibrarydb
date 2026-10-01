@@ -79,7 +79,7 @@ export function TopMovers({ pages }: TopMoversProps) {
               >
                 <div className="flex items-center space-x-2 min-w-0 mr-2">
                   <Link
-                    href={`/spy/brand/${encodeURIComponent(p.pageId || p.id)}`}
+                    href={`/spy/brand/${encodeURIComponent(p.pageId || p.displayName || "")}`}
                     className="text-xs font-semibold text-slate-800 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 truncate max-w-[150px] transition-colors"
                     title={`Open ${p.displayName || "brand"} Analytics`}
                   >
@@ -127,7 +127,7 @@ export function TopMovers({ pages }: TopMoversProps) {
               >
                 <div className="flex items-center space-x-2 min-w-0 mr-2">
                   <Link
-                    href={`/spy/brand/${encodeURIComponent(p.pageId || p.id)}`}
+                    href={`/spy/brand/${encodeURIComponent(p.pageId || p.displayName || "")}`}
                     className="text-xs font-semibold text-slate-800 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 truncate max-w-[150px] transition-colors"
                     title={`Open ${p.displayName || "brand"} Analytics`}
                   >

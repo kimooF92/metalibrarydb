@@ -328,40 +328,55 @@ export const ProductCard = memo(function ProductCard({
         {/* Brand Name Link & Discovery Date */}
         <div className="flex items-center justify-between gap-2 mb-1.5">
           <div className="min-w-0 flex-1">
-            {product.brandPageId ? (
-              <Link
-                href={`/spy/brand/${encodeURIComponent(product.brandPageId)}?tab=products`}
-                onClick={(e) => e.stopPropagation()}
-                className={`text-xs font-bold uppercase tracking-wider truncate block hover:underline ${
-                  isInactive
-                    ? "text-slate-500 dark:text-slate-400"
-                    : "text-indigo-600 dark:text-indigo-400"
-                }`}
-                title={`View ${product.brandName || "Brand"} Catalog`}
-              >
-                {product.brandName || product.domain || "View Brand"} &rarr;
-              </Link>
-            ) : product.brandName ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onFilterBrand?.(product.brandName!);
-                }}
-                className={`text-xs font-bold uppercase tracking-wider truncate block text-left cursor-pointer hover:underline ${
-                  isInactive
-                    ? "text-slate-500 dark:text-slate-400"
-                    : "text-indigo-600 dark:text-indigo-400"
-                }`}
-                title={`Filter by ${product.brandName}`}
-              >
-                {product.brandName}
-              </button>
-            ) : product.domain ? (
-              <span className="text-xs font-semibold text-slate-500 truncate block">
-                {product.domain}
-              </span>
-            ) : null}
+            {(() => {
+              const isUuid = (s?: string | null) => Boolean(s && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s));
+              const brandTarget = (product.brandPageId && !isUuid(product.brandPageId) && product.brandPageId !== "0")
+                ? product.brandPageId
+                : (product.domain || (product.brandName && !isUuid(product.brandName) ? product.brandName : null));
+
+              if (brandTarget) {
+                return (
+                  <Link
+                    href={`/spy/brand/${encodeURIComponent(brandTarget)}?tab=products`}
+                    onClick={(e) => e.stopPropagation()}
+                    className={`text-xs font-bold uppercase tracking-wider truncate block hover:underline ${
+                      isInactive
+                        ? "text-slate-500 dark:text-slate-400"
+                        : "text-indigo-600 dark:text-indigo-400"
+                    }`}
+                    title={`View ${product.brandName || "Brand"} Catalog`}
+                  >
+                    {product.brandName || product.domain || "View Brand"} &rarr;
+                  </Link>
+                );
+              }
+
+              if (product.brandName) {
+                return (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onFilterBrand?.(product.brandName!);
+                    }}
+                    className={`text-xs font-bold uppercase tracking-wider truncate block text-left cursor-pointer hover:underline ${
+                      isInactive
+                        ? "text-slate-500 dark:text-slate-400"
+                        : "text-indigo-600 dark:text-indigo-400"
+                    }`}
+                    title={`Filter by ${product.brandName}`}
+                  >
+                    {product.brandName}
+                  </button>
+                );
+              }
+
+              return product.domain ? (
+                <span className="text-xs font-semibold text-slate-500 truncate block">
+                  {product.domain}
+                </span>
+              ) : null;
+            })()}
           </div>
 
           {product.createdAt && (

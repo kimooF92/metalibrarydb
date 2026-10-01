@@ -23,6 +23,20 @@ export interface CreateNotificationParams {
   metadata?: Record<string, any> | null;
 }
 
+const isUuid = (str?: string | null) =>
+  Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str));
+
+export const getBrandActionUrl = (pageId?: string | null, brandName?: string | null, fallbackId?: string | null) => {
+  const cleanFallback = fallbackId && !isUuid(fallbackId) ? fallbackId : null;
+  const target = (pageId && !isUuid(pageId))
+    ? pageId
+    : (brandName && !isUuid(brandName))
+      ? brandName
+      : cleanFallback;
+
+  return target ? `/spy/brand/${encodeURIComponent(target)}` : "/spy";
+};
+
 /**
  * Creates a persistent in-app notification record.
  * Deduplicates identical notifications created within the last 5 minutes.
@@ -93,7 +107,7 @@ export async function logCountScanNotification(params: {
   isAmbiguousZero?: boolean;
 }) {
   const { trackedPageId, brandName, currentResults, difference, status, pageId, isOnHold, isAmbiguousZero } = params;
-  const brandPath = `/spy/brand/${encodeURIComponent(pageId || trackedPageId)}`;
+  const brandPath = getBrandActionUrl(pageId, brandName, trackedPageId);
 
   // 1. Log errors or unclear navigation warnings
   if (status !== "success") {
@@ -170,7 +184,7 @@ export async function logHoldDetectedNotification(params: {
     message: `"${params.brandName}" scanned 0 ads (was ${params.prevResults ?? "?"} ads). Entering 3-scan grace period before archiving. May be a billing pause or Meta glitch.`,
     severity: "warning",
     trackedPageId: params.trackedPageId,
-    actionUrl: `/spy/brand/${encodeURIComponent(params.pageId || params.trackedPageId)}`,
+    actionUrl: getBrandActionUrl(params.pageId, params.brandName, params.trackedPageId),
     metadata: { prevResults: params.prevResults, isOnHold: true },
   });
 }
@@ -191,7 +205,7 @@ export async function logHoldLiftedNotification(params: {
       : `"${params.brandName}" is advertising again with ${params.recoveredResults} active ad(s). Account hold lifted.`,
     severity: "success",
     trackedPageId: params.trackedPageId,
-    actionUrl: `/spy/brand/${encodeURIComponent(params.pageId || params.trackedPageId)}`,
+    actionUrl: getBrandActionUrl(params.pageId, params.brandName, params.trackedPageId),
     metadata: { recoveredResults: params.recoveredResults, isOnHold: false, isRelaunch },
   });
 }
@@ -216,7 +230,7 @@ export async function logAdSpyNotification(params: {
     return null;
   }
 
-  const brandPath = `/spy/brand/${encodeURIComponent(pageId || trackedPageId)}`;
+  const brandPath = getBrandActionUrl(pageId, brandName, trackedPageId);
 
   if (extractedCount > 0 || newProductsCount > 0) {
     let title = `✨ Ingested ${extractedCount} New Ad(s): ${brandName}`;

@@ -531,11 +531,12 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                       {n.type === "batch_summary" && movers.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 pt-0.5">
                           {movers.slice(0, 4).map((m, idx) => {
-                            const moverUrl = m.pageId
+                            const isUuidStr = (s?: string | null) => Boolean(s && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s));
+                            const moverUrl = m.pageId && !isUuidStr(m.pageId)
                               ? `/spy/brand/${encodeURIComponent(m.pageId)}`
-                              : m.trackedPageId
-                              ? `/spy/brand/${encodeURIComponent(m.trackedPageId)}`
-                              : `/?search=${encodeURIComponent(m.name)}`;
+                              : m.name && !isUuidStr(m.name)
+                              ? `/spy/brand/${encodeURIComponent(m.name)}`
+                              : `/?search=${encodeURIComponent(m.name || "")}`;
                             return (
                               <Link
                                 key={idx}

@@ -153,18 +153,33 @@ export function ModalHeader({
                 {product.title || "Product Landing Page"}
               </h2>
               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                {product.brandPageId ? (
-                  <a
-                    href={`/spy/brand/${encodeURIComponent(product.brandPageId)}?tab=products`}
-                    className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline uppercase tracking-wider"
-                  >
-                    {product.brandName || "Brand"} &rarr;
-                  </a>
-                ) : product.brandName ? (
-                  <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                    {product.brandName}
-                  </span>
-                ) : null}
+                {(() => {
+                  const isUuid = (s?: string | null) => Boolean(s && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s));
+                  const brandTarget = (product.brandPageId && !isUuid(product.brandPageId) && product.brandPageId !== "0")
+                    ? product.brandPageId
+                    : (product.domain || (product.brandName && !isUuid(product.brandName) ? product.brandName : null));
+
+                  if (brandTarget) {
+                    return (
+                      <a
+                        href={`/spy/brand/${encodeURIComponent(brandTarget)}?tab=products`}
+                        className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline uppercase tracking-wider"
+                      >
+                        {product.brandName || product.domain || "Brand"} &rarr;
+                      </a>
+                    );
+                  }
+
+                  if (product.brandName) {
+                    return (
+                      <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                        {product.brandName}
+                      </span>
+                    );
+                  }
+
+                  return null;
+                })()}
 
                 {product.domain && (
                   <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">

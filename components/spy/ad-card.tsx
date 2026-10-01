@@ -303,7 +303,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
               <Link
-                href={`/spy/brand/${encodeURIComponent(currentAd.pageId || currentAd.trackedPageId || "")}`}
+                href={`/spy/brand/${encodeURIComponent((currentAd.pageId && currentAd.pageId !== "0" && !currentAd.pageId.includes("-")) ? currentAd.pageId : currentAd.pageName || "")}`}
                 className="text-xs font-bold text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline transition-colors truncate"
                 title={`Open ${currentAd.pageName || currentAd.pageId} Analytics & Ad Library`}
               >
