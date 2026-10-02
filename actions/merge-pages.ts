@@ -121,7 +121,7 @@ export async function mergeExactMatchWithPageId(
           UPDATE ads
           SET page_id = ${cleanPageId},
               page_name = COALESCE(NULLIF(${resolvedDisplayName || null}, ''), page_name),
-              updated_at = ${now}
+              updated_at = NOW()
           WHERE (page_id = '0' OR page_id IS NULL OR page_id = '')
             AND id IN (
               SELECT ad_id FROM ad_observations WHERE tracked_page_id = ${exactMatchTrackedPageId}

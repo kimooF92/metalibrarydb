@@ -595,7 +595,7 @@ export async function ingestApifyDatasetItems(
         UPDATE ads
         SET page_id = ${detectedPageId},
             page_name = COALESCE(NULLIF(${detectedPageName || null}, ''), page_name),
-            updated_at = ${now}
+            updated_at = NOW()
         WHERE (page_id = '0' OR page_id IS NULL OR page_id = '')
           AND id IN (
             SELECT ad_id FROM ad_observations WHERE tracked_page_id = ${trackedPageId}
@@ -612,7 +612,7 @@ export async function ingestApifyDatasetItems(
         await db.execute(sql`
           UPDATE scraped_products
           SET page_id = ${detectedPageId},
-              updated_at = ${now}
+              updated_at = NOW()
           WHERE (lower(domain) = ${targetDomain.toLowerCase().trim()} OR url ILIKE ${`%${targetDomain.trim()}%`})
             AND (page_id IS NULL OR page_id = '0')
         `);
