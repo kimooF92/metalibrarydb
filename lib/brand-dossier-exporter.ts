@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { trackedPages, scanHistory, scrapedProducts, ads, adObservations } from "@/db/schema";
-import { eq, desc, or } from "drizzle-orm";
+import { eq, desc, or, inArray } from "drizzle-orm";
 import { getCleanDomain } from "./utils";
 
 export type DossierPersona = "strategic" | "media_buyer" | "product_scout" | "counter_intel";
@@ -133,10 +133,30 @@ export async function generateBrandDossierPrompt(
     .orderBy(desc(scanHistory.checkedAt))
     .limit(60);
 
-  // 3. Fetch Scraped Products
+  // 3. Fetch Scraped Products & Sister Page IDs
+  let sisterPageIds: string[] = pageId ? [pageId] : [];
+  let sisterTrackedPageIds: string[] = [trackedPage.id];
+
+  if (trackedPage.brandDomainId) {
+    try {
+      const sisterPages = await db.query.trackedPages.findMany({
+        where: eq(trackedPages.brandDomainId, trackedPage.brandDomainId),
+      });
+      sisterPageIds = Array.from(
+        new Set([...sisterPageIds, ...sisterPages.map((p) => p.pageId).filter(Boolean)] as string[])
+      );
+      sisterTrackedPageIds = Array.from(
+        new Set([...sisterTrackedPageIds, ...sisterPages.map((p) => p.id)])
+      );
+    } catch (err) {
+      console.warn("[Brand Dossier] Non-fatal error loading sister pages:", err);
+    }
+  }
+
   const productConditions = [];
-  if (pageId) productConditions.push(eq(scrapedProducts.pageId, pageId));
+  if (sisterPageIds.length > 0) productConditions.push(inArray(scrapedProducts.pageId, sisterPageIds));
   if (brandDomain) productConditions.push(eq(scrapedProducts.domain, brandDomain));
+  if (trackedPage.brandDomainId) productConditions.push(eq(scrapedProducts.brandDomainId, trackedPage.brandDomainId));
 
   let products: any[] = [];
   if (productConditions.length > 0) {
@@ -162,7 +182,7 @@ export async function generateBrandDossierPrompt(
       .limit(40);
   }
 
-  // 4. Fetch Ads & Creative Signals
+  // 4. Fetch Ads & Creative Signals across all sister pages
   const adRows = await db
     .select({
       id: ads.id,
@@ -179,8 +199,8 @@ export async function generateBrandDossierPrompt(
     .innerJoin(adObservations, eq(ads.id, adObservations.adId))
     .where(
       or(
-        eq(ads.pageId, pageId),
-        eq(adObservations.trackedPageId, trackedPage.id)
+        inArray(ads.pageId, sisterPageIds),
+        inArray(adObservations.trackedPageId, sisterTrackedPageIds)
       )
     )
     .orderBy(desc(ads.lastSeenAt))

@@ -198,6 +198,12 @@ function syncSpyParamsToUrlAndStorage(params: AdFilterParams, skipStorage = fals
       url.searchParams.delete("pageId");
     }
 
+    if (params.brandDomainId) url.searchParams.set("brandDomainId", params.brandDomainId);
+    else url.searchParams.delete("brandDomainId");
+
+    if (params.sisterPageId) url.searchParams.set("sisterPageId", params.sisterPageId);
+    else url.searchParams.delete("sisterPageId");
+
     if (params.search) url.searchParams.set("search", params.search);
     else {
       url.searchParams.delete("search");
@@ -400,6 +406,8 @@ export function useSpy(initialParams?: AdFilterParams) {
 
       const query = new URLSearchParams();
       if (params.trackedPageId) query.set("trackedPageId", params.trackedPageId);
+      if (params.brandDomainId) query.set("brandDomainId", params.brandDomainId);
+      if (params.sisterPageId) query.set("sisterPageId", params.sisterPageId);
       if (params.search) query.set("search", params.search);
       if (params.dateFrom) query.set("dateFrom", params.dateFrom);
       if (params.dateTo) query.set("dateTo", params.dateTo);

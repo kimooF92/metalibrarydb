@@ -7,6 +7,7 @@ import { HistoryModal } from "./history-modal";
 import { DeleteConfirmModal } from "./delete-confirm-modal";
 import { ScanRunnerModal } from "./scan-runner-modal";
 import { ResolveBrandModal } from "./resolve-brand-modal";
+import { ManageDomainModal } from "./manage-domain-modal";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import {
   Search,
@@ -36,6 +37,7 @@ import {
   Clock,
   CheckCircle2,
   Package,
+  Globe,
 } from "lucide-react";
 
 function formatRelativeTime(dateInput: string | Date | null | undefined): string {
@@ -286,6 +288,7 @@ export function PagesTable({
   const [runnerModalOpen, setRunnerModalOpen] = useState(false);
 
   const [resolveModalPageId, setResolveModalPageId] = useState<string | null>(null);
+  const [manageDomainId, setManageDomainId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -293,6 +296,10 @@ export function PagesTable({
       const target = params.get("resolveModal");
       if (target) {
         setResolveModalPageId(target);
+      }
+      const domainParam = params.get("manageDomain");
+      if (domainParam) {
+        setManageDomainId(domainParam);
       }
     }
   }, []);
@@ -1069,7 +1076,18 @@ export function PagesTable({
                               )}
                             </div>
 
-                            {Boolean(
+                            {p.brandDomainId && p.brandDomain && (p.brandDomain.linkedPagesCount ?? 0) > 1 ? (
+                              <div>
+                                <button
+                                  onClick={() => setManageDomainId(p.brandDomainId!)}
+                                  className="mt-0.5 inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-600 dark:text-indigo-400 text-[9.5px] font-bold border border-indigo-500/25 transition-all shadow-2xs cursor-pointer"
+                                  title={`Part of ${p.brandDomain.domain} portfolio (${p.brandDomain.linkedPagesCount} pages, ${p.brandDomain.totalCombinedAds} combined ads). Click to manage.`}
+                                >
+                                  <Globe className="w-2.5 h-2.5" />
+                                  <span>{p.brandDomain.linkedPagesCount} Pages Linked ({p.brandDomain.domain})</span>
+                                </button>
+                              </div>
+                            ) : Boolean(
                               (p.discoveredPagesCount && p.discoveredPagesCount >= 2) ||
                               (p.searchType !== "page" && p.discoveredPagesCount && p.discoveredPagesCount > 0)
                             ) && (
@@ -1495,6 +1513,14 @@ export function PagesTable({
         trackedPageId={resolveModalPageId}
         isOpen={Boolean(resolveModalPageId)}
         onClose={() => setResolveModalPageId(null)}
+        onSuccess={() => onWatchlistToggle?.()}
+      />
+
+      {/* Multi-Page Brand Domain Portfolio Modal */}
+      <ManageDomainModal
+        domainOrId={manageDomainId}
+        isOpen={Boolean(manageDomainId)}
+        onClose={() => setManageDomainId(null)}
         onSuccess={() => onWatchlistToggle?.()}
       />
     </div>

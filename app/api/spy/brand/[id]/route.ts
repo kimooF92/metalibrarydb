@@ -32,39 +32,77 @@ export async function GET(
 
     const decodedId = decodeURIComponent(id).trim();
 
-    // 1. Locate tracked page or ad record for this brand identifier
+    // 1. Locate domain portfolio or tracked page record
+    const { brandDomains } = await import("@/db/schema");
+    let brandDomain = await db.query.brandDomains.findFirst({
+      where: isUuid(decodedId)
+        ? or(eq(brandDomains.id, decodedId), eq(brandDomains.domain, decodedId.toLowerCase()))
+        : eq(brandDomains.domain, decodedId.toLowerCase()),
+    });
+
     let trackedPage: any = null;
     let pageId: string | null = null;
     let displayName: string = "";
+    let sisterPages: any[] = [];
 
-    if (isUuid(decodedId)) {
-      trackedPage = await db.query.trackedPages.findFirst({
-        where: eq(trackedPages.id, decodedId),
+    if (brandDomain) {
+      sisterPages = await db.query.trackedPages.findMany({
+        where: eq(trackedPages.brandDomainId, brandDomain.id),
+        orderBy: [
+          sql`CASE WHEN ${trackedPages.pageRole} = 'primary' THEN 0 ELSE 1 END`,
+          desc(trackedPages.currentResults),
+        ],
       });
-      if (trackedPage) {
-        pageId = trackedPage.pageId;
-        displayName = trackedPage.displayName || `Brand ${trackedPage.pageId || decodedId}`;
+      const primaryPage = sisterPages.find((p) => p.pageRole === "primary") || sisterPages[0] || null;
+      pageId = primaryPage?.pageId || null;
+      displayName = brandDomain.displayName || brandDomain.domain;
+      trackedPage = primaryPage;
+    } else {
+      if (isUuid(decodedId)) {
+        trackedPage = await db.query.trackedPages.findFirst({
+          where: eq(trackedPages.id, decodedId),
+        });
+        if (trackedPage) {
+          pageId = trackedPage.pageId;
+          displayName = trackedPage.displayName || `Brand ${trackedPage.pageId || decodedId}`;
+        }
       }
-    }
 
-    if (!trackedPage) {
-      // Try finding by pageId, landingPage, displayName, or URL in tracked_pages
-      trackedPage = await db.query.trackedPages.findFirst({
-        where: or(
-          eq(trackedPages.pageId, decodedId),
-          sql`lower(${trackedPages.landingPage}) = ${decodedId.toLowerCase()}`,
-          sql`lower(trim(${trackedPages.displayName})) = ${decodedId.toLowerCase()}`,
-          eq(trackedPages.url, decodedId)
-        ),
-      });
-      if (trackedPage) {
-        pageId = trackedPage.pageId || decodedId;
-        displayName = trackedPage.displayName || `Brand ${trackedPage.pageId || decodedId}`;
+      if (!trackedPage) {
+        // Try finding by pageId, landingPage, displayName, or URL in tracked_pages
+        trackedPage = await db.query.trackedPages.findFirst({
+          where: or(
+            eq(trackedPages.pageId, decodedId),
+            sql`lower(${trackedPages.landingPage}) = ${decodedId.toLowerCase()}`,
+            sql`lower(trim(${trackedPages.displayName})) = ${decodedId.toLowerCase()}`,
+            eq(trackedPages.url, decodedId)
+          ),
+        });
+        if (trackedPage) {
+          pageId = trackedPage.pageId || decodedId;
+          displayName = trackedPage.displayName || `Brand ${trackedPage.pageId || decodedId}`;
+        }
+      }
+
+      // Check if tracked page has brandDomainId
+      if (trackedPage?.brandDomainId) {
+        brandDomain = await db.query.brandDomains.findFirst({
+          where: eq(brandDomains.id, trackedPage.brandDomainId),
+        });
+        if (brandDomain) {
+          sisterPages = await db.query.trackedPages.findMany({
+            where: eq(trackedPages.brandDomainId, brandDomain.id),
+            orderBy: [
+              sql`CASE WHEN ${trackedPages.pageRole} = 'primary' THEN 0 ELSE 1 END`,
+              desc(trackedPages.currentResults),
+            ],
+          });
+        }
       }
     }
 
     // If still not in tracked_pages, look in ads table
-    if (!pageId) {
+    if (!pageId && !brandDomain) {
       const sampleAd = await db.query.ads.findFirst({
         where: or(eq(ads.pageId, decodedId), eq(ads.pageName, decodedId)),
       });
@@ -77,9 +115,22 @@ export async function GET(
       }
     }
 
-    // 2. Fetch all ads for this brand (distinct by ad id with latest observation)
+    // Optional sister page sub-filter
+    const filterSisterPageId = req.nextUrl.searchParams.get("sisterPageId")?.trim();
+
+    // 2. Fetch all ads for this brand / portfolio (distinct by ad id with latest observation)
     const adConditions = [];
-    if (trackedPage) {
+
+    if (filterSisterPageId) {
+      adConditions.push(eq(ads.pageId, filterSisterPageId));
+    } else if (brandDomain && sisterPages.length > 0) {
+      const sisterPids = sisterPages.map((p) => p.pageId).filter(Boolean) as string[];
+      const sisterTpIds = sisterPages.map((p) => p.id);
+      const orClauses = [];
+      if (sisterPids.length > 0) orClauses.push(inArray(ads.pageId, sisterPids));
+      if (sisterTpIds.length > 0) orClauses.push(inArray(adObservations.trackedPageId, sisterTpIds));
+      adConditions.push(or(...orClauses));
+    } else if (trackedPage) {
       adConditions.push(
         or(
           eq(ads.pageId, pageId!),
@@ -629,6 +680,15 @@ export async function GET(
       products: brandProductsList,
       topWinners,
       history,
+      brandDomain: brandDomain || null,
+      sisterPages: sisterPages.map((sp) => ({
+        id: sp.id,
+        pageId: sp.pageId,
+        displayName: sp.displayName,
+        pageRole: sp.pageRole,
+        currentResults: sp.currentResults,
+      })),
+      isDomainPortfolio: Boolean(brandDomain && sisterPages.length > 1),
       storeTech: {
         platforms: Array.from(detectedPlatforms),
         pixelIds: Array.from(detectedPixels),

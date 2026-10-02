@@ -36,6 +36,7 @@ export default function SettingsPage() {
   const [savedSettings, setSavedSettings] = useState({
     defaultCountry: "TN",
     autoMerge: true,
+    autoDomainLink: true,
     staleHours: 12,
     autoSpyThreshold: 1,
     discoveryWindowDays: 7,
@@ -53,6 +54,7 @@ export default function SettingsPage() {
           setSavedSettings({
             defaultCountry: data.settings.defaultCountry ?? "TN",
             autoMerge: data.settings.autoMerge ?? true,
+            autoDomainLink: data.settings.autoDomainLink ?? true,
             staleHours: data.settings.staleHours ?? 12,
             autoSpyThreshold: data.settings.autoSpyThreshold ?? 1,
             discoveryWindowDays: data.settings.discoveryWindowDays ?? 7,
@@ -249,6 +251,27 @@ export default function SettingsPage() {
               </div>
               <div className="p-3 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/50 dark:border-indigo-800/30 text-[11px] text-indigo-700 dark:text-indigo-300">
                 ✓ Enabled: Verified numeric Page IDs (e.g. <code>920201531178963</code>) automatically become primary tracked targets.
+              </div>
+            </div>
+
+            {/* Auto-Link Domain Portfolios */}
+            <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 space-y-3">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Auto-Link Sister Pages (Domain Portfolios)</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Automatically group multiple Facebook Pages sharing the same checkout/store domain into unified brand domain portfolios.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={savedSettings.autoDomainLink}
+                  onChange={(e) => setSavedSettings({ ...savedSettings, autoDomainLink: e.target.checked })}
+                  className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer mt-1"
+                />
+              </div>
+              <div className="p-3 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/50 dark:border-emerald-800/30 text-[11px] text-emerald-700 dark:text-emerald-300">
+                ✓ Enabled: Pages driving traffic to the same destination store (e.g. flagship + promo pages) are linked with combined ad intelligence.
               </div>
             </div>
 

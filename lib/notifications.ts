@@ -7,6 +7,7 @@ export type NotificationType =
   | "ad_spy"
   | "page_merged"
   | "multi_page_detected"
+  | "domain_portfolio_linked"
   | "batch_summary"
   | "system_alert";
 
@@ -498,6 +499,32 @@ export async function logMultiPageDetectedNotification(params: {
     metadata: {
       domainName: params.domainName,
       candidates: params.candidatePages,
+    },
+  });
+}
+
+/**
+ * Helper to log successful domain portfolio linking.
+ */
+export async function logDomainPortfolioLinkedNotification(params: {
+  trackedPageId?: string;
+  domainName: string;
+  brandDomainId: string;
+  pageCount: number;
+  primaryPageName: string;
+}) {
+  return createNotification({
+    type: "domain_portfolio_linked",
+    title: `🌐 Domain Portfolio Linked: ${params.domainName}`,
+    message: `${params.pageCount} Facebook Pages are now grouped under "${params.domainName}". Flagship: "${params.primaryPageName}".`,
+    severity: "success",
+    trackedPageId: params.trackedPageId,
+    actionUrl: `/spy/brand/${encodeURIComponent(params.domainName)}`,
+    metadata: {
+      domainName: params.domainName,
+      brandDomainId: params.brandDomainId,
+      pageCount: params.pageCount,
+      primaryPageName: params.primaryPageName,
     },
   });
 }

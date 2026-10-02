@@ -194,7 +194,15 @@ const MULTI_PART_TLDS = new Set([
  * - For custom domains (e.g. store.nike.com, shop.brand.com.tn), strips store prefixes down to apex domain.
  */
 export function resolveTrackableDomain(hostname: string): string {
-  const cleanHost = hostname.trim().toLowerCase().replace(/^\.+|\.+$/g, "");
+  let raw = hostname.trim().toLowerCase();
+  try {
+    if (raw.startsWith("http://") || raw.startsWith("https://")) {
+      raw = new URL(raw).hostname.toLowerCase();
+    }
+  } catch {
+    raw = raw.replace(/^https?:\/\//i, "").split("/")[0].split("?")[0].split(":")[0];
+  }
+  const cleanHost = raw.replace(/^\.+|\.+$/g, "");
   if (!cleanHost) return "";
 
   // 1. Multi-tenant SaaS platform preservation

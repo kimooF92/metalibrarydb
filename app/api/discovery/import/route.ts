@@ -97,6 +97,31 @@ export async function POST(req: Request) {
           where: eq(trackedPages.pageId, discPage.pageId),
         });
 
+        let candidateDomain = "";
+        if (discPage.sampleUrls && discPage.sampleUrls.length > 0) {
+          const { resolveTrackableDomain } = await import("@/lib/url-parser");
+          const SHORTENERS = new Set(["bit.ly", "shorturl.at", "tinyurl.com", "wa.me", "api.whatsapp.com", "facebook.com", "instagram.com"]);
+          for (const u of discPage.sampleUrls) {
+            try {
+              const parsedHost = new URL(u.startsWith("http") ? u : `https://${u}`).hostname;
+              const dom = resolveTrackableDomain(parsedHost);
+              if (dom && !SHORTENERS.has(dom) && dom.includes(".")) {
+                candidateDomain = dom;
+                break;
+              }
+            } catch (e) {}
+          }
+        }
+
+        let brandDomainId: string | null = null;
+        if (candidateDomain) {
+          try {
+            const { getOrCreateBrandDomain } = await import("@/lib/domain-portfolio");
+            const bd = await getOrCreateBrandDomain(candidateDomain, discPage.displayName);
+            brandDomainId = bd.id;
+          } catch (e) {}
+        }
+
         if (existingByPageId) {
           tpId = existingByPageId.id;
           await db
@@ -105,6 +130,8 @@ export async function POST(req: Request) {
               url: pageUrl,
               displayName: discPage.displayName || existingByPageId.displayName,
               searchType: "page",
+              brandDomainId: brandDomainId || existingByPageId.brandDomainId || null,
+              canonicalDomain: candidateDomain || existingByPageId.canonicalDomain || null,
               updatedAt: new Date(),
             })
             .where(eq(trackedPages.id, existingByPageId.id));
@@ -119,6 +146,8 @@ export async function POST(req: Request) {
               country: discPage.country || "TN",
               adCount: discPage.matchingAdCount,
               currentResults: discPage.verifiedAdCount || discPage.matchingAdCount,
+              brandDomainId: brandDomainId || null,
+              canonicalDomain: candidateDomain || null,
               status: "pending",
             })
             .onConflictDoUpdate({
@@ -127,6 +156,8 @@ export async function POST(req: Request) {
                 displayName: discPage.displayName || trackedPages.displayName,
                 pageId: discPage.pageId,
                 searchType: "page",
+                brandDomainId: brandDomainId || null,
+                canonicalDomain: candidateDomain || null,
                 updatedAt: new Date(),
               },
             })

@@ -1,6 +1,25 @@
 import type { ScalingArchetype, ScalingPatternResult } from "@/lib/scaling-classifier";
 export type { ScalingArchetype, ScalingPatternResult };
 
+export interface BrandDomain {
+  id: string;
+  domain: string;
+  displayName: string;
+  category?: string | null;
+  storePlatform?: string | null;
+  notes?: string | null;
+  isWatchlisted: boolean;
+  createdAt: string;
+  updatedAt: string;
+  // Hydrated aggregation fields
+  totalCombinedAds?: number;
+  totalProducts?: number;
+  linkedPagesCount?: number;
+  primaryPageId?: string | null;
+  primaryDisplayName?: string | null;
+  sisterPages?: TrackedPage[];
+}
+
 export interface TrackedPage {
   id: string;
   url: string;
@@ -35,6 +54,19 @@ export interface TrackedPage {
   holdStartedAt?: string | null;
   consecutiveZeroScans?: number | null;
   autoCreativeScan?: boolean;
+  // Multi-page domain linking fields
+  brandDomainId?: string | null;
+  pageRole?: "primary" | "satellite" | "backup" | null;
+  canonicalDomain?: string | null;
+  brandDomain?: {
+    id: string;
+    domain: string;
+    displayName: string;
+    category?: string | null;
+    storePlatform?: string | null;
+    linkedPagesCount?: number;
+    totalCombinedAds?: number;
+  } | null;
 }
 
 export interface ScanHistoryEntry {
@@ -267,6 +299,8 @@ export interface BrandOption {
 
 export interface AdFilterParams {
   trackedPageId?: string;
+  brandDomainId?: string;
+  sisterPageId?: string;
   search?: string;
   dateFrom?: string;
   dateTo?: string;

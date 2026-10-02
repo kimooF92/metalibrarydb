@@ -10,8 +10,8 @@ import {
   scrapedProducts,
 } from "@/db/schema";
 import { eq, or, sql, and, isNull } from "drizzle-orm";
-
 import { isValidPageId } from "@/lib/utils";
+import { getOrCreateBrandDomain, linkPageToDomain, setPrimaryPage } from "@/lib/domain-portfolio";
 
 export interface MergeResult {
   success: boolean;
@@ -21,7 +21,8 @@ export interface MergeResult {
 }
 
 /**
- * Merges an exact match domain tracked page with a specific Facebook Page ID.
+ * Links an exact match domain tracked page with a specific Facebook Page ID
+ * in a brand domain portfolio without destructively deleting historical tracking.
  */
 export async function mergeExactMatchWithPageId(
   exactMatchTrackedPageId: string,
@@ -31,7 +32,10 @@ export async function mergeExactMatchWithPageId(
   try {
     const cleanPageId = resolvedPageId?.trim() || "";
     if (!isValidPageId(cleanPageId)) {
-      return { success: false, message: `Invalid Page ID format: "${resolvedPageId}". Page ID must be purely numeric (5-25 digits).` };
+      return {
+        success: false,
+        message: `Invalid Page ID format: "${resolvedPageId}". Page ID must be purely numeric (5-25 digits).`,
+      };
     }
 
     // 1. Fetch exact match tracked page
@@ -43,21 +47,25 @@ export async function mergeExactMatchWithPageId(
       return { success: false, message: "Exact match tracked page not found." };
     }
 
-    // Check if exact match page already has this pageId
-    if (exactMatchPage.pageId === cleanPageId && exactMatchPage.searchType === "page") {
-      return {
-        success: true,
-        message: "Page is already merged with this Page ID.",
-        mergedPageId: exactMatchPage.id,
-      };
-    }
-
     const pageCountry = exactMatchPage.country || "TN";
     const newPageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${pageCountry}&view_all_page_id=${cleanPageId}&search_type=page&media_type=all`;
     const preservedDomain =
       exactMatchPage.landingPage ||
       exactMatchPage.displayName ||
       exactMatchPage.url;
+
+    // Resolve or create brand domain record
+    let brandDomain = null;
+    if (preservedDomain && preservedDomain.includes(".")) {
+      try {
+        brandDomain = await getOrCreateBrandDomain(
+          preservedDomain,
+          resolvedDisplayName || exactMatchPage.displayName
+        );
+      } catch (e) {
+        console.warn("[Merge] Could not resolve brand domain for:", preservedDomain, e);
+      }
+    }
 
     // 2. Check if a separate target page already exists for this pageId or new URL
     const existingTargetPage = await db.query.trackedPages.findFirst({
@@ -71,7 +79,7 @@ export async function mergeExactMatchWithPageId(
     const now = new Date();
 
     if (!existingTargetPage || existingTargetPage.id === exactMatchTrackedPageId) {
-      // Single record upgrade: update exactMatchPage in-place
+      // Single record: upgrade exactMatchPage in-place and link to domain portfolio
       const [updatedPage] = await db
         .update(trackedPages)
         .set({
@@ -82,21 +90,24 @@ export async function mergeExactMatchWithPageId(
           displayName: resolvedDisplayName || exactMatchPage.displayName || preservedDomain,
           status: exactMatchPage.status || "success",
           discoveredPagesCount: 0,
+          brandDomainId: brandDomain?.id || exactMatchPage.brandDomainId || null,
+          pageRole: "primary",
+          canonicalDomain: brandDomain?.domain || exactMatchPage.canonicalDomain || null,
           updatedAt: now,
         })
         .where(eq(trackedPages.id, exactMatchTrackedPageId))
         .returning();
 
-      // Backfill any unlinked scraped products for this domain
-      if (preservedDomain) {
+      // Backfill products for this domain
+      if (brandDomain) {
         try {
           await db
             .update(scrapedProducts)
-            .set({ pageId: cleanPageId, updatedAt: now })
+            .set({ brandDomainId: brandDomain.id, pageId: cleanPageId, updatedAt: now })
             .where(
               and(
-                sql`lower(${scrapedProducts.domain}) = ${preservedDomain.toLowerCase().trim()}`,
-                isNull(scrapedProducts.pageId)
+                eq(scrapedProducts.domain, brandDomain.domain),
+                isNull(scrapedProducts.brandDomainId)
               )
             );
         } catch (prodErr) {
@@ -122,116 +133,45 @@ export async function mergeExactMatchWithPageId(
 
       return {
         success: true,
-        message: `Successfully upgraded exact match page to Page ID "${cleanPageId}".`,
+        message: `Successfully linked page to Page ID "${cleanPageId}" under domain portfolio.`,
         mergedPageId: updatedPage.id,
         isDuplicateMerged: false,
       };
     } else {
-      // Duplicate record merge: re-link all child relations to existingTargetPage
-      await db
-        .update(scanHistory)
-        .set({ trackedPageId: existingTargetPage.id })
-        .where(eq(scanHistory.trackedPageId, exactMatchTrackedPageId));
+      // Both records exist: Link BOTH to the same domain portfolio rather than deleting exactMatchPage!
+      if (brandDomain) {
+        // Link existing target page as primary
+        await linkPageToDomain(existingTargetPage.id, brandDomain.id, "primary", {
+          forceReassign: true,
+        });
 
-      // De-duplicate adObservations before re-pointing to prevent duplicate (tracked_page_id, ad_id) pairs
-      await db.execute(sql`
-        DELETE FROM ad_observations
-        WHERE tracked_page_id = ${exactMatchTrackedPageId}
-          AND ad_id IN (
-            SELECT ad_id FROM ad_observations WHERE tracked_page_id = ${existingTargetPage.id}
-          )
-      `);
+        // Link exact match page as satellite or backup domain search
+        await linkPageToDomain(exactMatchTrackedPageId, brandDomain.id, "satellite", {
+          forceReassign: true,
+        });
+      }
 
-      await db
-        .update(adObservations)
-        .set({ trackedPageId: existingTargetPage.id })
-        .where(eq(adObservations.trackedPageId, exactMatchTrackedPageId));
-
-      await db
-        .update(creativeScans)
-        .set({ trackedPageId: existingTargetPage.id })
-        .where(eq(creativeScans.trackedPageId, exactMatchTrackedPageId));
-
-      await db
-        .update(queue)
-        .set({ trackedPageId: existingTargetPage.id })
-        .where(eq(queue.trackedPageId, exactMatchTrackedPageId));
-
-      await db
-        .update(discoveredPages)
-        .set({ trackedPageId: existingTargetPage.id })
-        .where(eq(discoveredPages.trackedPageId, exactMatchTrackedPageId));
-
-      await db
-        .update(activityNotifications)
-        .set({ trackedPageId: existingTargetPage.id })
-        .where(eq(activityNotifications.trackedPageId, exactMatchTrackedPageId));
-
-      // Update existingTargetPage metadata and ensure official Page ID URL and searchType
+      // Clear candidate alerts on the exact match page
       await db
         .update(trackedPages)
         .set({
-          url: newPageUrl,
-          pageId: cleanPageId,
-          searchType: "page",
-          landingPage: existingTargetPage.landingPage || preservedDomain,
-          displayName:
-            resolvedDisplayName || existingTargetPage.displayName || exactMatchPage.displayName,
           discoveredPagesCount: 0,
           updatedAt: now,
         })
-        .where(eq(trackedPages.id, existingTargetPage.id));
-
-      // Remove redundant exact match page
-      await db
-        .delete(trackedPages)
         .where(eq(trackedPages.id, exactMatchTrackedPageId));
-
-      // Backfill any unlinked scraped products for this domain
-      if (preservedDomain) {
-        try {
-          await db
-            .update(scrapedProducts)
-            .set({ pageId: cleanPageId, updatedAt: now })
-            .where(
-              and(
-                sql`lower(${scrapedProducts.domain}) = ${preservedDomain.toLowerCase().trim()}`,
-                isNull(scrapedProducts.pageId)
-              )
-            );
-        } catch (prodErr) {
-          console.warn("[Merge] Non-fatal error backfilling scraped_products:", prodErr);
-        }
-      }
-
-      // Backfill any ads in ad_observations for this tracked page that had page_id = '0' or NULL
-      try {
-        await db.execute(sql`
-          UPDATE ads
-          SET page_id = ${cleanPageId},
-              page_name = COALESCE(NULLIF(${resolvedDisplayName || null}, ''), page_name),
-              updated_at = ${now}
-          WHERE (page_id = '0' OR page_id IS NULL OR page_id = '')
-            AND id IN (
-              SELECT ad_id FROM ad_observations WHERE tracked_page_id = ${existingTargetPage.id}
-            )
-        `);
-      } catch (adErr) {
-        console.warn("[Merge] Non-fatal error backfilling ads:", adErr);
-      }
 
       return {
         success: true,
-        message: `Successfully merged exact match page into existing Page ID record (${existingTargetPage.displayName || cleanPageId}).`,
+        message: `Successfully grouped Page "${cleanPageId}" and domain tracking under "${brandDomain?.domain || preservedDomain}".`,
         mergedPageId: existingTargetPage.id,
         isDuplicateMerged: true,
       };
     }
   } catch (error: any) {
-    console.error("Error in mergeExactMatchWithPageId:", error);
+    console.error("[Merge] Error in mergeExactMatchWithPageId:", error);
     return {
       success: false,
-      message: error.message || "Failed to merge exact match page with Page ID.",
+      message: error.message || "Failed to link pages into domain portfolio.",
     };
   }
 }

@@ -64,3 +64,4 @@ skills-lock.json
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+logs/

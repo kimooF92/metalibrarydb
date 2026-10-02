@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { trackedPages, scanHistory, queue, ads, scrapedProducts } from "@/db/schema";
+import { trackedPages, scanHistory, queue, ads, scrapedProducts, brandDomains } from "@/db/schema";
 import { addSingleUrl } from "@/actions/add-url";
 import { singleUrlSchema } from "@/lib/validators";
 import { eq, ne, ilike, or, and, sql, desc, asc, inArray, gte, lte, isNotNull, isNull, count } from "drizzle-orm";
@@ -384,6 +384,65 @@ export async function GET(request: Request) {
       }
     }
 
+    // Hydrate domain portfolio metadata for pages linked to brand_domains
+    const domainIds = Array.from(
+      new Set(pages.map((p) => p.brandDomainId).filter(Boolean))
+    ) as string[];
+    let domainMap: Record<
+      string,
+      {
+        id: string;
+        domain: string;
+        displayName: string;
+        category?: string | null;
+        storePlatform?: string | null;
+        linkedPagesCount: number;
+        totalCombinedAds: number;
+      }
+    > = {};
+
+    if (domainIds.length > 0) {
+      try {
+        const domains = await db.query.brandDomains.findMany({
+          where: inArray(brandDomains.id, domainIds),
+        });
+
+        const sisterPageRows = await db
+          .select({
+            brandDomainId: trackedPages.brandDomainId,
+            count: sql<number>`count(*)`,
+            totalAds: sql<number>`coalesce(sum(${trackedPages.currentResults}), 0)`,
+          })
+          .from(trackedPages)
+          .where(inArray(trackedPages.brandDomainId, domainIds))
+          .groupBy(trackedPages.brandDomainId);
+
+        const sisterMap = Object.fromEntries(
+          sisterPageRows.map((r) => [
+            r.brandDomainId!,
+            { count: Number(r.count), totalAds: Number(r.totalAds) },
+          ])
+        );
+
+        domainMap = Object.fromEntries(
+          domains.map((d) => [
+            d.id,
+            {
+              id: d.id,
+              domain: d.domain,
+              displayName: d.displayName,
+              category: d.category,
+              storePlatform: d.storePlatform,
+              linkedPagesCount: sisterMap[d.id]?.count || 1,
+              totalCombinedAds: sisterMap[d.id]?.totalAds || 0,
+            },
+          ])
+        );
+      } catch (err) {
+        console.warn("[Pages API] Error hydrating brand domains:", err);
+      }
+    }
+
     const pagesWithPrev = pages.map((p) => {
       let prev = prevResultsMap[p.id] ?? null;
       if (p.currentResults && p.currentResults > 0 && prev === 0) {
@@ -423,6 +482,7 @@ export async function GET(request: Request) {
         holdStartedAt: p.holdStartedAt ? p.holdStartedAt.toISOString() : null,
         consecutiveZeroScans: p.consecutiveZeroScans ?? 0,
         autoCreativeScan: p.autoCreativeScan ?? true,
+        brandDomain: p.brandDomainId && domainMap[p.brandDomainId] ? domainMap[p.brandDomainId] : null,
       };
     });
 

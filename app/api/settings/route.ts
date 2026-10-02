@@ -7,6 +7,7 @@ const DEFAULT_SETTINGS = {
   id: "default",
   defaultCountry: "TN",
   autoMerge: true,
+  autoDomainLink: true,
   staleHours: 12,
   autoSpyThreshold: 1,
   discoveryWindowDays: 7,
@@ -45,6 +46,7 @@ export async function POST(request: Request) {
     const updatePayload = {
       defaultCountry: typeof body.defaultCountry === "string" ? body.defaultCountry : "TN",
       autoMerge: typeof body.autoMerge === "boolean" ? body.autoMerge : true,
+      autoDomainLink: typeof body.autoDomainLink === "boolean" ? body.autoDomainLink : true,
       staleHours: typeof body.staleHours === "number" ? Math.max(1, Math.min(72, body.staleHours)) : 12,
       autoSpyThreshold: typeof body.autoSpyThreshold === "number" ? Math.max(1, Math.min(20, body.autoSpyThreshold)) : 1,
       discoveryWindowDays: typeof body.discoveryWindowDays === "number" ? Math.max(1, Math.min(90, body.discoveryWindowDays)) : 7,

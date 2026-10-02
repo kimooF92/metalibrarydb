@@ -26,7 +26,7 @@ import { useToast } from "@/components/toast-context";
 
 export interface ActivityNotification {
   id: string;
-  type: "count_scan" | "ad_spy" | "page_merged" | "multi_page_detected" | "batch_summary" | "system_alert";
+  type: "count_scan" | "ad_spy" | "page_merged" | "multi_page_detected" | "domain_portfolio_linked" | "batch_summary" | "system_alert";
   title: string;
   message: string;
   severity: "info" | "success" | "warning" | "error";
@@ -241,6 +241,13 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
         </div>
       );
     }
+    if (type === "domain_portfolio_linked") {
+      return (
+        <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
+          <Globe className="w-4 h-4" />
+        </div>
+      );
+    }
     return (
       <div className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0">
         <AlertCircle className="w-4 h-4" />
@@ -397,7 +404,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
               { id: "batch_summary", label: "Summaries" },
               { id: "count_scan", label: "Surges & Drops" },
               { id: "ad_spy", label: "Ad Spy" },
-              { id: "page_merged,multi_page_detected,system_alert", label: "Alerts & Merges" },
+              { id: "page_merged,multi_page_detected,domain_portfolio_linked,system_alert", label: "Alerts & Merges" },
             ].map((tab) => (
               <button
                 key={tab.id}

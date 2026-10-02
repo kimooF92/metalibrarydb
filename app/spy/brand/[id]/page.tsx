@@ -10,6 +10,7 @@ import { ProductCard } from "@/components/products/product-card";
 import { resolveProductForRefresh } from "@/lib/product-extraction";
 import { ProductDetailsModal } from "@/components/products/product-details-modal";
 import { ExportDossierModal } from "@/components/export-dossier-modal";
+import { ManageDomainModal } from "@/components/manage-domain-modal";
 import { useToast } from "@/components/toast-context";
 import { Ad, ScrapedProduct } from "@/types";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
@@ -147,6 +148,19 @@ interface BrandAnalyticsData {
     checkedAt: string;
     status: string;
   }>;
+  brandDomain?: {
+    id: string;
+    domain: string;
+    displayName: string;
+  } | null;
+  sisterPages?: Array<{
+    id: string;
+    pageId: string;
+    displayName: string;
+    pageRole: "primary" | "satellite" | "backup" | null;
+    currentResults: number;
+  }>;
+  isDomainPortfolio?: boolean;
   storeTech: {
     platforms: string[];
     pixelIds: string[];
@@ -166,6 +180,8 @@ export default function BrandDeepDivePage({
 
   const [activeTab, setActiveTab] = useState<"analytics" | "products" | "creatives">("analytics");
   const [data, setData] = useState<BrandAnalyticsData | null>(null);
+  const [selectedSisterPageId, setSelectedSisterPageId] = useState<string | null>(null);
+  const [isManageDomainModalOpen, setIsManageDomainModalOpen] = useState(false);
   const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshingMedia, setIsRefreshingMedia] = useState(false);
@@ -213,12 +229,16 @@ export default function BrandDeepDivePage({
   }, []);
 
   // Load brand analytics payload
-  const fetchBrandData = async (forceRefresh = false) => {
+  const fetchBrandData = async (forceRefresh = false, sisterPageIdOverride?: string | null) => {
     setIsLoadingAnalytics(true);
     setError(null);
     try {
-      const cacheBust = forceRefresh ? `?_t=${Date.now()}` : "";
-      const res = await fetch(`/api/spy/brand/${encodeURIComponent(id)}${cacheBust}`, {
+      const activeSisterId = sisterPageIdOverride !== undefined ? sisterPageIdOverride : selectedSisterPageId;
+      const params = new URLSearchParams();
+      if (forceRefresh) params.set("_t", Date.now().toString());
+      if (activeSisterId) params.set("sisterPageId", activeSisterId);
+      const queryString = params.toString() ? `?${params.toString()}` : "";
+      const res = await fetch(`/api/spy/brand/${encodeURIComponent(id)}${queryString}`, {
         cache: forceRefresh ? "no-store" : "default",
       });
       const json = await res.json();
@@ -286,7 +306,9 @@ export default function BrandDeepDivePage({
     updateFilters,
     updateAdInFeed,
   } = useAdFeed({
-    trackedPageId: data?.brand?.pageId || data?.brand?.id || id,
+    trackedPageId: selectedSisterPageId || (!data?.brandDomain ? (data?.brand?.pageId || data?.brand?.id || id) : undefined),
+    brandDomainId: !selectedSisterPageId && data?.brandDomain ? data.brandDomain.id : undefined,
+    sisterPageId: selectedSisterPageId || undefined,
     search: feedSearch,
     productId: filteredProductForCreatives?.id,
     mediaType: feedMediaType as any,
@@ -730,6 +752,111 @@ export default function BrandDeepDivePage({
               <RefreshCw className={`w-3.5 h-3.5 ${isCheckingStatus ? "animate-spin" : ""}`} />
               <span>{isCheckingStatus ? "Checking..." : "⚡ Check Ad Library Now"}</span>
             </button>
+          </div>
+        )}
+
+        {/* Domain Portfolio Sister Pages Filter */}
+        {data.sisterPages && data.sisterPages.length > 1 && (
+          <div className="flex flex-col gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                  <Globe className="w-3 h-3" />
+                  <span>Domain Portfolio ({data.brandDomain?.domain})</span>
+                </span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  {data.sisterPages.length} linked Facebook pages driving traffic to this store
+                </span>
+              </div>
+
+              {data.brandDomain && (
+                <button
+                  type="button"
+                  onClick={() => setIsManageDomainModalOpen(true)}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 hover:underline cursor-pointer"
+                >
+                  <span>⚙️ Manage Portfolio</span>
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedSisterPageId(null);
+                  fetchBrandData(true, null);
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                  selectedSisterPageId === null
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>All Pages (Combined)</span>
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                    selectedSisterPageId === null
+                      ? "bg-white/20 text-white"
+                      : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
+                  }`}
+                >
+                  {summary.totalAdsCaptured}
+                </span>
+              </button>
+
+              {data.sisterPages.map((sp) => {
+                const isSelected = selectedSisterPageId === sp.pageId || selectedSisterPageId === sp.id;
+                return (
+                  <button
+                    key={sp.id}
+                    type="button"
+                    onClick={() => {
+                      const targetId = sp.pageId || sp.id;
+                      setSelectedSisterPageId(targetId);
+                      fetchBrandData(true, targetId);
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${
+                      isSelected
+                        ? "bg-indigo-600 text-white shadow-xs"
+                        : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
+                    }`}
+                  >
+                    {sp.pageRole === "primary" ? (
+                      <Star
+                        className={`w-3.5 h-3.5 ${
+                          isSelected ? "text-amber-300 fill-amber-300" : "text-amber-500 fill-amber-500"
+                        }`}
+                      />
+                    ) : (
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                    )}
+                    <span>{sp.displayName || `Page ${sp.pageId}`}</span>
+                    {sp.pageRole === "primary" && (
+                      <span
+                        className={`text-[9.5px] font-bold px-1 rounded ${
+                          isSelected
+                            ? "bg-white/20 text-white"
+                            : "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300"
+                        }`}
+                      >
+                        Flagship
+                      </span>
+                    )}
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                        isSelected
+                          ? "bg-white/20 text-white"
+                          : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
+                      }`}
+                    >
+                      {sp.currentResults ?? 0}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -1602,6 +1729,16 @@ export default function BrandDeepDivePage({
           }}
           isOpen={isDossierModalOpen}
           onClose={() => setIsDossierModalOpen(false)}
+        />
+      )}
+
+      {/* Domain Portfolio Sister Pages Manager Modal */}
+      {data.brandDomain && (
+        <ManageDomainModal
+          domainOrId={data.brandDomain.domain || data.brandDomain.id}
+          isOpen={isManageDomainModalOpen}
+          onClose={() => setIsManageDomainModalOpen(false)}
+          onSuccess={() => fetchBrandData(true)}
         />
       )}
     </div>

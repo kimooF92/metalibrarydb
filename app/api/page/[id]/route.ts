@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { trackedPages, ads, scrapedProducts } from "@/db/schema";
-import { eq, or } from "drizzle-orm";
+import { eq, or, and, ne, desc } from "drizzle-orm";
 
 export async function DELETE(
   request: Request,
@@ -24,29 +24,65 @@ export async function DELETE(
     }
 
     const pageId = targetPage.pageId;
+    const brandDomainId = targetPage.brandDomainId;
+    const wasPrimary = targetPage.pageRole === "primary";
 
-    // 2. Delete associated ads and scraped products for this brand
+    // 2. Check sister pages if linked to a domain
+    let remainingSisterPages: any[] = [];
+    if (brandDomainId) {
+      remainingSisterPages = await db.query.trackedPages.findMany({
+        where: and(
+          eq(trackedPages.brandDomainId, brandDomainId),
+          ne(trackedPages.id, id)
+        ),
+        orderBy: [desc(trackedPages.currentResults), desc(trackedPages.createdAt)],
+      });
+    }
+
+    // 3. Delete ads specific to this page ID
     if (pageId && pageId !== "0" && !pageId.startsWith("pending-")) {
       await Promise.allSettled([
         db.delete(ads).where(or(eq(ads.pageId, pageId), eq(ads.pageId, id))),
-        db.delete(scrapedProducts).where(or(eq(scrapedProducts.pageId, pageId), eq(scrapedProducts.pageId, id))),
+        // Only delete products if no other sister pages share this domain
+        remainingSisterPages.length === 0
+          ? db.delete(scrapedProducts).where(or(eq(scrapedProducts.pageId, pageId), eq(scrapedProducts.pageId, id)))
+          : Promise.resolve(),
       ]);
     } else {
       await Promise.allSettled([
         db.delete(ads).where(eq(ads.pageId, id)),
-        db.delete(scrapedProducts).where(eq(scrapedProducts.pageId, id)),
+        remainingSisterPages.length === 0
+          ? db.delete(scrapedProducts).where(eq(scrapedProducts.pageId, id))
+          : Promise.resolve(),
       ]);
     }
 
-    // 3. Delete tracked page record (cascades to scan_history, creative_scans, ad_observations)
+    // 4. Delete tracked page record (cascades to scan_history, creative_scans, ad_observations)
     const [deleted] = await db
       .delete(trackedPages)
       .where(eq(trackedPages.id, id))
       .returning();
 
+    // 5. Post-delete domain cleanup & primary re-election
+    if (brandDomainId) {
+      if (remainingSisterPages.length > 0 && wasPrimary) {
+        // Re-elect next highest volume sister page as primary
+        await db
+          .update(trackedPages)
+          .set({ pageRole: "primary", updatedAt: new Date() })
+          .where(eq(trackedPages.id, remainingSisterPages[0].id));
+      } else if (remainingSisterPages.length === 0) {
+        // Remove empty brand_domains record
+        const { brandDomains } = await import("@/db/schema");
+        await db.delete(brandDomains).where(eq(brandDomains.id, brandDomainId));
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message: "Tracked page, ads, and product catalog deleted successfully",
+      message: remainingSisterPages.length > 0
+        ? "Sister page removed; domain portfolio preserved."
+        : "Tracked page, ads, and product catalog deleted successfully",
       deletedId: id,
     });
   } catch (error) {

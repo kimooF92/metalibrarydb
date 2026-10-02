@@ -776,12 +776,61 @@ export async function scanAdCreatives(
       updatedAt: now,
     };
 
-    if (resolvedPageId && (!trackedPageRecord?.pageId || trackedPageRecord.pageId === "0")) {
-      pageUpdates.pageId = resolvedPageId;
-      pageUpdates.searchType = "page";
-      pageUpdates.url = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${pageCountry}&view_all_page_id=${resolvedPageId}&search_type=page&media_type=all`;
-      if (resolvedPageName && (!trackedPageRecord?.displayName || trackedPageRecord.displayName.startsWith("http") || trackedPageRecord.displayName.includes("."))) {
-        pageUpdates.displayName = resolvedPageName;
+    if (resolvedPageId && resolvedPageId !== "0") {
+      const targetDomain = (trackedPageRecord as any)?.landingPage || trackedPageRecord?.displayName || (trackedPageRecord as any)?.url;
+
+      if (targetDomain && targetDomain.includes(".")) {
+        try {
+          const { getOrCreateBrandDomain, linkPageToDomain } = await import("../lib/domain-portfolio");
+          const bDomain = await getOrCreateBrandDomain(targetDomain, trackedPageRecord?.displayName);
+          pageUpdates.brandDomainId = bDomain.id;
+          pageUpdates.canonicalDomain = bDomain.domain;
+
+          // If current tracked page was an exact match/domain search, keep its searchType intact!
+          if (trackedPageRecord?.searchType !== "page") {
+            pageUpdates.pageRole = "satellite";
+
+            // Register or link the resolved Page ID as primary page under this domain
+            const existingSister = await db.query.trackedPages.findFirst({
+              where: eq(trackedPages.pageId, resolvedPageId),
+            });
+
+            if (!existingSister) {
+              const newPageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${pageCountry}&view_all_page_id=${resolvedPageId}&search_type=page&media_type=all`;
+              await db.insert(trackedPages).values({
+                url: newPageUrl,
+                pageId: resolvedPageId,
+                displayName: resolvedPageName || `Page ${resolvedPageId}`,
+                searchType: "page",
+                country: pageCountry,
+                brandDomainId: bDomain.id,
+                pageRole: "primary",
+                canonicalDomain: bDomain.domain,
+                status: "success",
+                currentResults: savedAdIds.length,
+                lastChecked: now,
+                lastSuccessAt: now,
+                lastCreativeScan: now,
+              });
+            } else {
+              await linkPageToDomain(existingSister.id, bDomain.id, "primary", { forceReassign: false });
+            }
+          } else {
+            // Already a page search type
+            pageUpdates.brandDomainId = bDomain.id;
+            pageUpdates.canonicalDomain = bDomain.domain;
+          }
+        } catch (domainErr) {
+          console.warn("[Spy Scanner] Non-fatal error managing brand domain portfolio:", domainErr);
+        }
+      } else if (!trackedPageRecord?.pageId || trackedPageRecord.pageId === "0") {
+        // Fallback for non-domain searches
+        pageUpdates.pageId = resolvedPageId;
+        pageUpdates.searchType = "page";
+        pageUpdates.url = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${pageCountry}&view_all_page_id=${resolvedPageId}&search_type=page&media_type=all`;
+        if (resolvedPageName && (!trackedPageRecord?.displayName || trackedPageRecord.displayName.startsWith("http"))) {
+          pageUpdates.displayName = resolvedPageName;
+        }
       }
 
       // Backfill any ads in this scan that had page_id = '0'
@@ -801,7 +850,6 @@ export async function scanAdCreatives(
       }
 
       // Backfill any scraped products for this domain
-      const targetDomain = (trackedPageRecord as any)?.landingPage || trackedPageRecord?.displayName;
       if (targetDomain && targetDomain.includes(".")) {
         try {
           await db.execute(sql`

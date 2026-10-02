@@ -648,14 +648,100 @@ export async function ingestApifyDatasetItems(
         resolvedPageId: single.pageId,
       });
     } else if (candidatePages.length > 1) {
-      console.log(`[Apify Ingest] Multi-page conflict: ${candidatePages.length} Facebook Pages detected for "${pageRecord.displayName || pageRecord.url}". Posting multi-page notification for user resolution.`);
+      console.log(`[Apify Ingest] Multi-page detected: ${candidatePages.length} Facebook Pages detected for "${pageRecord.displayName || pageRecord.url}".`);
 
-      const { logMultiPageDetectedNotification } = await import("@/lib/notifications");
-      await logMultiPageDetectedNotification({
-        trackedPageId,
-        domainName: pageRecord.displayName || pageRecord.url,
-        candidatePages,
-      });
+      const targetDomain = pageRecord.landingPage || pageRecord.displayName || pageRecord.url;
+      try {
+        const { getOrCreateBrandDomain, linkPageToDomain } = await import("@/lib/domain-portfolio");
+        const bDomain = await getOrCreateBrandDomain(targetDomain, pageRecord.displayName);
+
+        // Fetch app settings for autoDomainLink
+        const { appSettings } = await import("@/db/schema");
+        const settings = await db.query.appSettings.findFirst({
+          where: eq(appSettings.id, "default"),
+        });
+
+        const shouldAutoLink = settings?.autoDomainLink ?? true;
+
+        if (shouldAutoLink) {
+          // Link the current domain record as satellite
+          await linkPageToDomain(trackedPageId, bDomain.id, "satellite");
+
+          // Sort candidates by ad count descending
+          const sortedCandidates = [...candidatePages].sort((a, b) => (b.adCount || 0) - (a.adCount || 0));
+
+          let linkedCount = 0;
+          let primaryName = "";
+
+          for (let i = 0; i < sortedCandidates.length; i++) {
+            const cand = sortedCandidates[i];
+            const isPrimary = i === 0;
+
+            const existingSister = await db.query.trackedPages.findFirst({
+              where: eq(trackedPages.pageId, cand.pageId),
+            });
+
+            if (!existingSister) {
+              const pageCountry = pageRecord.country || "TN";
+              const newPageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${pageCountry}&view_all_page_id=${cand.pageId}&search_type=page&media_type=all`;
+              await db
+                .insert(trackedPages)
+                .values({
+                  url: newPageUrl,
+                  pageId: cand.pageId,
+                  displayName: cand.pageName || `Page ${cand.pageId}`,
+                  searchType: "page",
+                  country: pageCountry,
+                  brandDomainId: bDomain.id,
+                  pageRole: isPrimary ? "primary" : "satellite",
+                  canonicalDomain: bDomain.domain,
+                  status: "success",
+                  currentResults: cand.adCount || 0,
+                  lastChecked: now,
+                  lastSuccessAt: now,
+                  lastCreativeScan: now,
+                });
+              linkedCount++;
+              if (isPrimary) primaryName = cand.pageName || `Page ${cand.pageId}`;
+            } else {
+              await linkPageToDomain(existingSister.id, bDomain.id, isPrimary ? "primary" : "satellite");
+              linkedCount++;
+              if (isPrimary) primaryName = existingSister.displayName || `Page ${cand.pageId}`;
+            }
+          }
+
+          // Clear candidate alert badge since pages are now linked
+          await db
+            .update(trackedPages)
+            .set({ discoveredPagesCount: 0, updatedAt: now })
+            .where(eq(trackedPages.id, trackedPageId));
+
+          const { logDomainPortfolioLinkedNotification } = await import("@/lib/notifications");
+          await logDomainPortfolioLinkedNotification({
+            trackedPageId,
+            domainName: bDomain.domain,
+            brandDomainId: bDomain.id,
+            pageCount: linkedCount,
+            primaryPageName: primaryName || bDomain.displayName,
+          });
+        } else {
+          // If autoDomainLink is disabled, post warning notification for user manual resolution
+          const { logMultiPageDetectedNotification } = await import("@/lib/notifications");
+          await logMultiPageDetectedNotification({
+            trackedPageId,
+            domainName: pageRecord.displayName || pageRecord.url,
+            candidatePages,
+          });
+        }
+      } catch (domainErr) {
+        console.warn("[Apify Ingest] Error auto-linking domain portfolio:", domainErr);
+        const { logMultiPageDetectedNotification } = await import("@/lib/notifications");
+        await logMultiPageDetectedNotification({
+          trackedPageId,
+          domainName: pageRecord.displayName || pageRecord.url,
+          candidatePages,
+        });
+      }
     }
   }
 

@@ -38,6 +38,9 @@ export async function GET(request: Request) {
         lastKnownValidResults: trackedPages.lastKnownValidResults,
         holdStartedAt: trackedPages.holdStartedAt,
         consecutiveZeroScans: trackedPages.consecutiveZeroScans,
+        brandDomainId: trackedPages.brandDomainId,
+        pageRole: trackedPages.pageRole,
+        canonicalDomain: trackedPages.canonicalDomain,
       })
       .from(trackedPages)
       .orderBy(desc(trackedPages.currentResults), desc(trackedPages.createdAt), desc(trackedPages.id));

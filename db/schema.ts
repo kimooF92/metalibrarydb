@@ -7,8 +7,29 @@ import {
   boolean,
   timestamp,
   index,
+  uniqueIndex,
   json,
 } from "drizzle-orm/pg-core";
+
+// 0. Brand Domains Table (Multi-Page Brand Domain Portfolios)
+export const brandDomains = pgTable(
+  "brand_domains",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    domain: text("domain").notNull().unique(), // e.g. "tuni-go.com" or "mystore.youcan.shop"
+    displayName: text("display_name").notNull(),
+    category: text("category"),
+    storePlatform: text("store_platform"),
+    notes: text("notes"),
+    isWatchlisted: boolean("is_watchlisted").default(false).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_brand_domains_domain").on(table.domain),
+    index("idx_brand_domains_watchlist").on(table.isWatchlisted),
+  ]
+);
 
 // 1. Tracked Pages Table
 export const trackedPages = pgTable(
@@ -46,6 +67,11 @@ export const trackedPages = pgTable(
     holdStartedAt: timestamp("hold_started_at", { withTimezone: true }),
     consecutiveZeroScans: integer("consecutive_zero_scans").default(0),
     autoCreativeScan: boolean("auto_creative_scan").default(true).notNull(),
+
+    // Multi-page domain linking fields
+    brandDomainId: uuid("brand_domain_id").references(() => brandDomains.id, { onDelete: "set null" }),
+    pageRole: text("page_role").default("primary"), // "primary" | "satellite" | "backup"
+    canonicalDomain: text("canonical_domain"), // cached apex/tenant domain for fast lookup
   },
   (table) => [
     index("idx_tracked_pages_status").on(table.status),
@@ -53,6 +79,11 @@ export const trackedPages = pgTable(
     index("idx_tracked_pages_watchlist").on(table.isWatchlisted),
     index("idx_tracked_pages_hold_status").on(table.holdStatus),
     index("idx_tracked_pages_auto_creative_scan").on(table.autoCreativeScan),
+    index("idx_tracked_pages_brand_domain_id").on(table.brandDomainId),
+    index("idx_tracked_pages_canonical_domain").on(table.canonicalDomain),
+    uniqueIndex("idx_tracked_pages_unique_primary")
+      .on(table.brandDomainId)
+      .where(sql`page_role = 'primary'`),
   ]
 );
 
@@ -149,6 +180,7 @@ export const scrapedProducts = pgTable(
     scrapeStatus: text("scrape_status").default("pending").notNull(), // pending | scraping | success | failed
     failureReason: text("failure_reason"),
     lastScrapedAt: timestamp("last_scraped_at", { withTimezone: true }),
+    brandDomainId: uuid("brand_domain_id").references(() => brandDomains.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -156,6 +188,7 @@ export const scrapedProducts = pgTable(
     index("idx_scraped_products_url").on(table.url),
     index("idx_scraped_products_domain").on(table.domain),
     index("idx_scraped_products_page_id").on(table.pageId),
+    index("idx_scraped_products_brand_domain_id").on(table.brandDomainId),
     index("idx_scraped_products_category").on(table.category),
     index("idx_scraped_products_is_favorite").on(table.isFavorite),
     index("idx_scraped_products_status").on(table.scrapeStatus),
@@ -374,6 +407,7 @@ export const appSettings = pgTable("app_settings", {
   id: text("id").primaryKey().default("default"),
   defaultCountry: text("default_country").default("TN").notNull(),
   autoMerge: boolean("auto_merge").default(true).notNull(),
+  autoDomainLink: boolean("auto_domain_link").default(true).notNull(),
   staleHours: integer("stale_hours").default(12).notNull(),
   autoSpyThreshold: integer("auto_spy_threshold").default(1).notNull(),
   discoveryWindowDays: integer("discovery_window_days").default(7).notNull(),

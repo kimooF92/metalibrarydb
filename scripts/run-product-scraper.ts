@@ -274,6 +274,7 @@ async function runProductScraperBatch() {
           id: `temp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
           url,
           domain: getCleanDomain(url),
+          brandDomainId: null,
           pageId: resolvedPageId,
           title: null,
           currentPrice: null,

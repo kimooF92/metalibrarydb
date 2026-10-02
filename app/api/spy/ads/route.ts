@@ -21,6 +21,8 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
 
     const trackedPageId = searchParams.get("trackedPageId");
+    const brandDomainId = searchParams.get("brandDomainId");
+    const sisterPageId = searchParams.get("sisterPageId");
     const search = searchParams.get("search");
     const dateFrom = searchParams.get("dateFrom");
     const dateTo = searchParams.get("dateTo");
@@ -99,7 +101,37 @@ export async function GET(req: NextRequest) {
     const isUuid = (str: string) =>
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
-    if (trackedPageId) {
+    if (sisterPageId) {
+      if (isUuid(sisterPageId)) {
+        conditions.push(
+          or(
+            eq(adObservations.trackedPageId, sisterPageId),
+            eq(trackedPages.id, sisterPageId),
+            eq(ads.pageId, sisterPageId)
+          )
+        );
+      } else {
+        conditions.push(
+          or(
+            eq(trackedPages.pageId, sisterPageId),
+            eq(ads.pageId, sisterPageId)
+          )
+        );
+      }
+    } else if (brandDomainId) {
+      const sisters = await db.query.trackedPages.findMany({
+        where: eq(trackedPages.brandDomainId, brandDomainId),
+        columns: { id: true, pageId: true },
+      });
+      const sisterPids = sisters.map((s) => s.pageId).filter(Boolean) as string[];
+      const sisterIds = sisters.map((s) => s.id);
+      const domainClauses = [];
+      if (sisterPids.length > 0) domainClauses.push(inArray(ads.pageId, sisterPids));
+      if (sisterIds.length > 0) domainClauses.push(inArray(adObservations.trackedPageId, sisterIds));
+      if (domainClauses.length > 0) {
+        conditions.push(or(...domainClauses));
+      }
+    } else if (trackedPageId) {
       if (isUuid(trackedPageId)) {
         conditions.push(
           or(
