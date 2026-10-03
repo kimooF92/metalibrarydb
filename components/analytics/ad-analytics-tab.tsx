@@ -23,9 +23,10 @@ import { KPICard } from "./kpi-card";
 import { ProgressBarRow } from "./progress-bar-row";
 import { LeaderboardRow } from "./leaderboard-row";
 import { DateRange, getDateRangeDescription } from "./date-range-filter";
+import { AdsAnalyticsData, BreakoutAd, CTAStats, FormatEfficiency, LongevityCohort, TopAdvertiser } from "@/types";
 
 interface AdAnalyticsTabProps {
-  data: any;
+  data?: AdsAnalyticsData | null;
   isLoading: boolean;
   onRefresh: () => void;
   dateRange?: DateRange;
@@ -40,16 +41,18 @@ export function AdAnalyticsTab({
   const [breakoutSearch, setBreakoutSearch] = useState<string>("");
 
   const summary = data?.summary || {};
-  const cohorts: any[] = data?.longevityCohorts || [];
-  const formatEfficiency: any[] = data?.formatEfficiency || [];
+  const cohorts: LongevityCohort[] = data?.longevityCohorts || [];
+  const formatEfficiency: FormatEfficiency[] = data?.formatEfficiency || [];
   const ctaPsychology = data?.ctaPsychology || { allCtas: [], scaledCtas: [] };
   const copyIntelligence = data?.copyIntelligence || { lengths: [], triggers: {} };
-  const duplicationTiers: any[] = data?.duplicationTiers || [];
-  const breakoutAds: any[] = data?.breakoutAds || [];
-  const topAdvertisers: any[] = data?.topAdvertisers || [];
+  const duplicationTiers = data?.duplicationTiers || [];
+  const breakoutAds: BreakoutAd[] = data?.breakoutAds || [];
+  const topAdvertisers: TopAdvertiser[] = data?.topAdvertisers || [];
 
   const topScaledCTA = useMemo(() => {
-    return ctaPsychology.scaledCtas?.length > 0 ? ctaPsychology.scaledCtas[0] : null;
+    return ctaPsychology.scaledCtas && ctaPsychology.scaledCtas.length > 0
+      ? ctaPsychology.scaledCtas[0]
+      : null;
   }, [ctaPsychology]);
 
   const filteredBreakoutAds = useMemo(() => {
@@ -267,12 +270,12 @@ export function AdAnalyticsTab({
           </div>
 
           <div className="space-y-3">
-            {ctaPsychology.scaledCtas?.length === 0 ? (
+            {!ctaPsychology.scaledCtas || ctaPsychology.scaledCtas.length === 0 ? (
               <div className="py-6 text-center text-xs text-slate-400">
                 No scaled ads recorded for CTA breakdown.
               </div>
             ) : (
-              ctaPsychology.scaledCtas.map((cta: any, idx: number) => {
+              ctaPsychology.scaledCtas.map((cta, idx) => {
                 const colorClasses = [
                   "bg-emerald-500",
                   "bg-indigo-500",
@@ -390,7 +393,13 @@ export function AdAnalyticsTab({
                 imageUrl={ad.thumbnailStoragePath || ad.thumbnailUrl}
                 mediaType={ad.mediaType}
                 title={ad.pageName || "Brand"}
-                subtitle={ad.caption ? ad.caption.slice(0, 75) + "..." : "Ad Creative"}
+                subtitle={
+                  ad.caption
+                    ? ad.caption.length > 75
+                      ? `${ad.caption.slice(0, 75)}...`
+                      : ad.caption
+                    : "Ad Creative"
+                }
                 tag={ad.ctaText || "Shop Now"}
                 badge={{
                   text: `🔥 Scaled: ${ad.duplicationCount} Copies`,

@@ -179,6 +179,7 @@ export interface ScrapedProduct {
   isBreakout?: boolean;
   brandHoldStatus?: "active" | "on_hold" | "inactive" | null;
   brandCurrentResults?: number | null;
+  winnerScore?: number;
 }
 
 export interface Ad {
@@ -348,3 +349,6 @@ export interface ExtractedProductData {
     savings?: string;
   }>;
 }
+
+export * from "./analytics";
+

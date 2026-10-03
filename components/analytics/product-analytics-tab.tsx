@@ -24,11 +24,19 @@ import { KPICard } from "./kpi-card";
 import { ProgressBarRow } from "./progress-bar-row";
 import { LeaderboardRow } from "./leaderboard-row";
 import { ProductDetailsModal } from "@/components/products/product-details-modal";
-import { ScrapedProduct } from "@/types";
+import {
+  ProductsAnalyticsData,
+  ProductCategoryStats,
+  ProductSubCategoryStats,
+  ProductPriceTierStats,
+  ProductPlatformStats,
+  CrossStoreClone,
+  ScrapedProduct,
+} from "@/types";
 import { DateRange, getDateRangeDescription } from "./date-range-filter";
 
 interface ProductAnalyticsTabProps {
-  data: any;
+  data?: ProductsAnalyticsData | null;
   isLoading: boolean;
   onRefresh: () => void;
   dateRange?: DateRange;
@@ -47,12 +55,12 @@ export function ProductAnalyticsTab({
 
   const summary = data?.summary || {};
   const dataQuality = data?.dataQuality || {};
-  const categories: any[] = data?.categories || [];
-  const subCategories: any[] = data?.subCategories || [];
-  const priceTiers: any[] = data?.priceTiers || [];
-  const platforms: any[] = data?.platforms || [];
-  const topProducts: any[] = data?.topProducts || [];
-  const crossStoreClones: any[] = data?.crossStoreClones || [];
+  const categories: ProductCategoryStats[] = data?.categories || [];
+  const subCategories: ProductSubCategoryStats[] = data?.subCategories || [];
+  const priceTiers: ProductPriceTierStats[] = data?.priceTiers || [];
+  const platforms: ProductPlatformStats[] = data?.platforms || [];
+  const topProducts: ScrapedProduct[] = data?.topProducts || [];
+  const crossStoreClones: CrossStoreClone[] = data?.crossStoreClones || [];
 
   const topCategory = useMemo(() => {
     return categories.length > 0 ? categories[0] : null;
@@ -117,7 +125,7 @@ export function ProductAnalyticsTab({
         <KPICard
           title="Offer & Bundle Rate"
           value={`${
-            summary.totalProducts > 0
+            (summary.totalProducts ?? 0) > 0
               ? Math.round((Number(summary.withOffersCount || 0) / Number(summary.totalProducts)) * 100)
               : 0
           }%`}
@@ -408,7 +416,7 @@ export function ProductAnalyticsTab({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
             {crossStoreClones.map((clone, idx) => (
               <div
-                key={idx}
+                key={`${clone.title}-${idx}`}
                 className="p-3 rounded-xl bg-white dark:bg-slate-900/80 border border-amber-500/20 shadow-xs flex items-center space-x-3"
               >
                 {clone.sampleImage && (
@@ -510,7 +518,7 @@ export function ProductAnalyticsTab({
           product={selectedProduct}
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
-          onDelete={async (productId) => {
+          onDelete={async (productId: string) => {
             await fetch(`/api/products?id=${productId}`, { method: "DELETE" });
             setIsModalOpen(false);
             onRefresh();

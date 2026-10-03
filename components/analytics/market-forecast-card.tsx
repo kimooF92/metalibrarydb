@@ -31,8 +31,16 @@ export function MarketForecastCard() {
     try {
       const cached = localStorage.getItem("ai_market_intelligence_data");
       if (cached) {
-        setResearch(JSON.parse(cached));
-        setLoading(false);
+        try {
+          const parsed = JSON.parse(cached);
+          if (parsed && typeof parsed === "object") {
+            setResearch(parsed);
+            setIsExpanded(true);
+            setLoading(false);
+          }
+        } catch {
+          localStorage.removeItem("ai_market_intelligence_data");
+        }
       }
     } catch {}
 
@@ -43,6 +51,7 @@ export function MarketForecastCard() {
           const json = await res.json();
           if (json.forecast) {
             setResearch(json.forecast);
+            setIsExpanded(true);
             try {
               localStorage.setItem("ai_market_intelligence_data", JSON.stringify(json.forecast));
             } catch {}

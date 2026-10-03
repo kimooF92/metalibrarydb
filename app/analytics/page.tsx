@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { TrackedPage, DashboardStats } from "@/types";
+import {
+  TrackedPage,
+  DashboardStats,
+  ProductsAnalyticsData,
+  AdsAnalyticsData,
+  BrandAnalyticsCalculations,
+  MainAnalyticsTab,
+} from "@/types";
 import {
   BarChart3,
   TrendingUp,
@@ -9,20 +16,17 @@ import {
   Eye,
   RefreshCw,
   Sparkles,
-  Layers,
-  Zap,
+  AlertTriangle,
 } from "lucide-react";
 import { PulseBanner } from "@/components/analytics/pulse-banner";
 import { MarketForecastCard } from "@/components/analytics/market-forecast-card";
 import { ProductAnalyticsTab } from "@/components/analytics/product-analytics-tab";
 import { AdAnalyticsTab } from "@/components/analytics/ad-analytics-tab";
-import { BrandAnalyticsTab } from "@/components/analytics/brand-analytics-tab";
+import { BrandAnalyticsTab, BrandSubTab } from "@/components/analytics/brand-analytics-tab";
 import {
   DateRange,
   DateRangeFilter,
 } from "@/components/analytics/date-range-filter";
-
-type MainAnalyticsTab = "products" | "ads" | "pages";
 
 function getInitialTab(): MainAnalyticsTab {
   if (typeof window === "undefined") return "pages";
@@ -44,6 +48,18 @@ function getInitialTab(): MainAnalyticsTab {
   return "pages";
 }
 
+function getInitialSubTab(): BrandSubTab {
+  if (typeof window === "undefined") return "scaling";
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const subParam = urlParams.get("sub");
+    if (subParam && ["scaling", "descaling", "top", "watchlist", "attention"].includes(subParam)) {
+      return subParam as BrandSubTab;
+    }
+  } catch {}
+  return "scaling";
+}
+
 function isDateRange(value: string | null): value is DateRange {
   return value === "today" || value === "7d" || value === "15d" || value === "30d";
 }
@@ -60,12 +76,17 @@ function getInitialDateRange(): DateRange {
   return "7d";
 }
 
-function syncStateToUrl(tab: MainAnalyticsTab, range: DateRange) {
+function syncStateToUrl(tab: MainAnalyticsTab, range: DateRange, subTab?: BrandSubTab) {
   if (typeof window === "undefined") return;
   try {
     const query = new URLSearchParams(window.location.search);
     query.set("tab", tab);
     query.set("range", range);
+    if (tab === "pages" && subTab) {
+      query.set("sub", subTab);
+    } else {
+      query.delete("sub");
+    }
     const newUrl = `${window.location.pathname}?${query.toString()}`;
     window.history.replaceState(null, "", newUrl);
     localStorage.setItem("analytics_main_tab", tab);
@@ -76,29 +97,62 @@ function syncStateToUrl(tab: MainAnalyticsTab, range: DateRange) {
 export default function AnalyticsPage() {
   const [activeTab, setActiveTab] = useState<MainAnalyticsTab>(() => getInitialTab());
   const [dateRange, setDateRange] = useState<DateRange>(() => getInitialDateRange());
+  const [pageSubTab, setPageSubTab] = useState<BrandSubTab>(() => getInitialSubTab());
 
   // Data states
-  const [productsData, setProductsData] = useState<any>(null);
-  const [adsData, setAdsData] = useState<any>(null);
+  const [productsData, setProductsData] = useState<ProductsAnalyticsData | null>(null);
+  const [adsData, setAdsData] = useState<AdsAnalyticsData | null>(null);
   const [pages, setPages] = useState<TrackedPage[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
 
+  // Range tracking for lazy loading
+  const [productsFetchedRange, setProductsFetchedRange] = useState<string | null>(null);
+  const [adsFetchedRange, setAdsFetchedRange] = useState<string | null>(null);
+  const [pagesFetchedRange, setPagesFetchedRange] = useState<string | null>(null);
+
   // Loading states
-  const [loadingProducts, setLoadingProducts] = useState(true);
-  const [loadingAds, setLoadingAds] = useState(true);
-  const [loadingPages, setLoadingPages] = useState(true);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [loadingAds, setLoadingAds] = useState(false);
+  const [loadingPages, setLoadingPages] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+  const [isStale, setIsStale] = useState(false);
   const [updatingWatchlistId, setUpdatingWatchlistId] = useState<string | null>(null);
+
+  // Error states
+  const [productsError, setProductsError] = useState<string | null>(null);
+  const [adsError, setAdsError] = useState<string | null>(null);
+  const [pagesError, setPagesError] = useState<string | null>(null);
+
+  // Check staleness every minute
+  useEffect(() => {
+    const checkStaleness = () => {
+      if (!lastRefreshed) return;
+      const diffMin = (Date.now() - lastRefreshed.getTime()) / 60000;
+      setIsStale(diffMin >= 30);
+    };
+    checkStaleness();
+    const interval = setInterval(checkStaleness, 60000);
+    return () => clearInterval(interval);
+  }, [lastRefreshed]);
 
   // Sync tab with URL
   const handleTabChange = (tab: MainAnalyticsTab) => {
     setActiveTab(tab);
-    syncStateToUrl(tab, dateRange);
+    syncStateToUrl(tab, dateRange, tab === "pages" ? pageSubTab : undefined);
   };
 
   const handleDateRangeChange = (range: DateRange) => {
     setDateRange(range);
-    syncStateToUrl(activeTab, range);
+    // Invalidate stale range markers so tabs refetch on visit
+    setProductsFetchedRange(null);
+    setAdsFetchedRange(null);
+    setPagesFetchedRange(null);
+    syncStateToUrl(activeTab, range, activeTab === "pages" ? pageSubTab : undefined);
+  };
+
+  const handlePageSubTabChange = (sub: BrandSubTab) => {
+    setPageSubTab(sub);
+    syncStateToUrl(activeTab, dateRange, sub);
   };
 
   // Popstate listener for back/forward navigation
@@ -106,6 +160,7 @@ export default function AnalyticsPage() {
     const handlePopState = () => {
       setActiveTab(getInitialTab());
       setDateRange(getInitialDateRange());
+      setPageSubTab(getInitialSubTab());
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
@@ -115,16 +170,22 @@ export default function AnalyticsPage() {
   const fetchProductsAnalytics = useCallback(async (forceRefresh = false) => {
     try {
       setLoadingProducts(true);
+      setProductsError(null);
       const cacheBust = forceRefresh ? `&_t=${Date.now()}` : "";
       const res = await fetch(`/api/analytics/products?range=${dateRange}${cacheBust}`, {
         cache: forceRefresh ? "no-store" : "default",
       });
-      if (res.ok) {
-        const json = await res.json();
-        setProductsData(json);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `Failed to fetch products analytics (${res.status})`);
       }
-    } catch (err) {
+      const json = await res.json();
+      setProductsData(json);
+      setProductsFetchedRange(dateRange);
+      setLastRefreshed(new Date());
+    } catch (err: any) {
       console.error("Failed to fetch products analytics:", err);
+      setProductsError(err?.message || "Failed to load product analytics data");
     } finally {
       setLoadingProducts(false);
     }
@@ -134,16 +195,22 @@ export default function AnalyticsPage() {
   const fetchAdsAnalytics = useCallback(async (forceRefresh = false) => {
     try {
       setLoadingAds(true);
+      setAdsError(null);
       const cacheBust = forceRefresh ? `&_t=${Date.now()}` : "";
       const res = await fetch(`/api/analytics/ads?range=${dateRange}${cacheBust}`, {
         cache: forceRefresh ? "no-store" : "default",
       });
-      if (res.ok) {
-        const json = await res.json();
-        setAdsData(json);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `Failed to fetch ads analytics (${res.status})`);
       }
-    } catch (err) {
+      const json = await res.json();
+      setAdsData(json);
+      setAdsFetchedRange(dateRange);
+      setLastRefreshed(new Date());
+    } catch (err: any) {
       console.error("Failed to fetch ads analytics:", err);
+      setAdsError(err?.message || "Failed to load ad creatives data");
     } finally {
       setLoadingAds(false);
     }
@@ -153,6 +220,7 @@ export default function AnalyticsPage() {
   const fetchPagesData = useCallback(async (forceRefresh = false) => {
     try {
       setLoadingPages(true);
+      setPagesError(null);
       const cacheBust = forceRefresh ? `&_t=${Date.now()}` : "";
       const [pagesRes, statsRes] = await Promise.all([
         fetch(`/api/analytics/pages?range=${dateRange}${cacheBust}`, {
@@ -163,34 +231,61 @@ export default function AnalyticsPage() {
         }),
       ]);
 
-      if (pagesRes.ok) {
-        const data = await pagesRes.json();
-        setPages(data.data || []);
+      if (!pagesRes.ok) {
+        const errJson = await pagesRes.json().catch(() => ({}));
+        throw new Error(errJson.error || `Failed to fetch pages data (${pagesRes.status})`);
       }
+
+      const data = await pagesRes.json();
+      setPages(data.data || []);
       if (statsRes.ok) {
-        const data = await statsRes.json();
-        setStats(data);
+        const statsData = await statsRes.json();
+        setStats(statsData);
       }
-    } catch (err) {
+      setPagesFetchedRange(dateRange);
+      setLastRefreshed(new Date());
+    } catch (err: any) {
       console.error("Failed to fetch pages data:", err);
+      setPagesError(err?.message || "Failed to load page velocity data");
     } finally {
       setLoadingPages(false);
     }
   }, [dateRange]);
 
-  // Fetch all in parallel
-  const fetchAll = useCallback(async (forceRefresh = false) => {
-    await Promise.all([
-      fetchProductsAnalytics(forceRefresh),
-      fetchAdsAnalytics(forceRefresh),
-      fetchPagesData(forceRefresh),
-    ]);
-    setLastRefreshed(new Date());
-  }, [fetchProductsAnalytics, fetchAdsAnalytics, fetchPagesData]);
-
+  // Lazy-load: only fetch data for the active tab if it hasn't been loaded for current dateRange
   useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
+    if (activeTab === "products" && productsFetchedRange !== dateRange) {
+      fetchProductsAnalytics();
+    } else if (activeTab === "ads" && adsFetchedRange !== dateRange) {
+      fetchAdsAnalytics();
+    } else if (activeTab === "pages" && pagesFetchedRange !== dateRange) {
+      fetchPagesData();
+    }
+  }, [
+    activeTab,
+    dateRange,
+    productsFetchedRange,
+    adsFetchedRange,
+    pagesFetchedRange,
+    fetchProductsAnalytics,
+    fetchAdsAnalytics,
+    fetchPagesData,
+  ]);
+
+  // Force-refresh all loaded tabs or currently active tab
+  const handleRefresh = useCallback(async (forceAll = false) => {
+    if (forceAll) {
+      await Promise.all([
+        fetchProductsAnalytics(true),
+        fetchAdsAnalytics(true),
+        fetchPagesData(true),
+      ]);
+    } else {
+      if (activeTab === "products") await fetchProductsAnalytics(true);
+      else if (activeTab === "ads") await fetchAdsAnalytics(true);
+      else await fetchPagesData(true);
+    }
+  }, [activeTab, fetchProductsAnalytics, fetchAdsAnalytics, fetchPagesData]);
 
   // Watchlist toggle handler
   const toggleWatchlist = async (pageId: string, currentStatus?: boolean) => {
@@ -214,7 +309,7 @@ export default function AnalyticsPage() {
   };
 
   // Calculations for Page Velocity tab
-  const pageAnalytics = useMemo(() => {
+  const pageAnalytics: BrandAnalyticsCalculations = useMemo(() => {
     const getDelta = (page: TrackedPage) => page.windowDelta ?? page.difference;
     const completed = pages.filter((p) => p.status === "success");
     const withResults = pages.filter((p) => p.currentResults !== null && p.currentResults > 0);
@@ -256,7 +351,8 @@ export default function AnalyticsPage() {
     const watchlistedDescaling = watchlistedPages.filter((p) => (getDelta(p) ?? 0) < 0);
 
     const totalAds = pages.reduce((sum, p) => sum + (p.currentResults ?? 0), 0);
-    const maxResults = Math.max(...pages.map((p) => p.currentResults ?? 0), 1);
+    // Safe reduce instead of Math.max(...spread) to avoid stack overflows on large arrays
+    const maxResults = pages.reduce((max, p) => Math.max(max, p.currentResults ?? 0), 1);
 
     return {
       scalingPages,
@@ -288,15 +384,30 @@ export default function AnalyticsPage() {
     };
   }, [pages]);
 
-  const isGlobalLoading = loadingProducts || loadingAds || loadingPages;
+  const isCurrentTabLoading =
+    activeTab === "products"
+      ? loadingProducts
+      : activeTab === "ads"
+      ? loadingAds
+      : loadingPages;
+
+  const currentTabError =
+    activeTab === "products"
+      ? productsError
+      : activeTab === "ads"
+      ? adsError
+      : pagesError;
 
   // Pulse metrics extraction
   const pulseMetrics = useMemo(() => {
     const breakoutCount = adsData?.summary?.breakoutAdsCount || 0;
-    const topCat = productsData?.categories?.length > 0 ? productsData.categories[0] : null;
+    const topCat = productsData?.categories && productsData.categories.length > 0 ? productsData.categories[0] : null;
     const topNiche = topCat?.name || "Beauty & Care";
     const topNichePrice = topCat?.avgPrice || 0;
-    const dominantCTAObj = adsData?.ctaPsychology?.scaledCtas?.length > 0 ? adsData.ctaPsychology.scaledCtas[0] : null;
+    const dominantCTAObj =
+      adsData?.ctaPsychology?.scaledCtas && adsData.ctaPsychology.scaledCtas.length > 0
+        ? adsData.ctaPsychology.scaledCtas[0]
+        : null;
     const dominantCTA = dominantCTAObj?.name || "Shop Now";
     const dominantCTAPct = dominantCTAObj?.sharePct || 0;
     const catalogHealthPct = productsData?.dataQuality?.classifiedRate ?? 100;
@@ -318,7 +429,7 @@ export default function AnalyticsPage() {
         <div className="flex items-center flex-wrap gap-2">
           <div className="flex items-center space-x-2">
             <BarChart3 className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
-            <h1 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight">
+            <h1 className="text-base font-extrabold text-slate-900 dark:white tracking-tight">
               Competitor & Market Intelligence
             </h1>
           </div>
@@ -328,19 +439,31 @@ export default function AnalyticsPage() {
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
-            {lastRefreshed && (
+          {lastRefreshed && (
             <span className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:inline-block">
               Updated {lastRefreshed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </span>
           )}
           <DateRangeFilter value={dateRange} onChange={handleDateRangeChange} />
           <button
-            onClick={() => fetchAll(true)}
-            disabled={isGlobalLoading}
-            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer disabled:opacity-50"
+            onClick={() => handleRefresh(false)}
+            disabled={isCurrentTabLoading}
+            className={`flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border transition-all cursor-pointer disabled:opacity-50 ${
+              isStale
+                ? "border-amber-400 dark:border-amber-500/60 ring-1 ring-amber-400/40"
+                : "border-slate-200 dark:border-slate-700"
+            }`}
+            title={isStale ? "Data is older than 30 minutes. Click to refresh." : "Refresh active tab"}
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-indigo-500 ${isGlobalLoading ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${isStale ? "text-amber-500" : "text-indigo-500"} ${
+                isCurrentTabLoading ? "animate-spin" : ""
+              }`}
+            />
             <span>Refresh Analytics</span>
+            {isStale && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+            )}
           </button>
         </div>
       </div>
@@ -354,13 +477,13 @@ export default function AnalyticsPage() {
         dominantCTAPct={pulseMetrics.dominantCTAPct}
         catalogHealthPct={pulseMetrics.catalogHealthPct}
         dateRange={dateRange}
-        isLoading={isGlobalLoading && !productsData && !adsData}
+        isLoading={isCurrentTabLoading && !productsData && !adsData}
       />
 
       {/* AI Market Forecast & Strategic Playbook (DeepSeek / OpenRouter) */}
       <MarketForecastCard />
 
-      {/* Primary 3-Pillar Tab Switcher */}
+      {/* Tab Switcher */}
       <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800/80 pb-3">
         <div className="flex items-center flex-wrap gap-2">
           {/* Tab 1: Products & Winner Niches */}
@@ -375,13 +498,13 @@ export default function AnalyticsPage() {
             <ShoppingBag className="w-3.5 h-3.5" />
             <span>🛍️ Products & Winner Niches</span>
             <span
-              className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+              className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
                 activeTab === "products"
                   ? "bg-white/20 text-white"
                   : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
               }`}
             >
-              {productsData?.summary?.totalProducts || 0}
+              {loadingProducts && !productsData ? "—" : productsData?.summary?.totalProducts || 0}
             </span>
           </button>
 
@@ -397,13 +520,13 @@ export default function AnalyticsPage() {
             <Eye className="w-3.5 h-3.5" />
             <span>🎯 Ad Creatives & Campaigns</span>
             <span
-              className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+              className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
                 activeTab === "ads"
                   ? "bg-white/20 text-white"
                   : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
               }`}
             >
-              {adsData?.summary?.totalAds || 0}
+              {loadingAds && !adsData ? "—" : adsData?.summary?.totalAds || 0}
             </span>
           </button>
 
@@ -419,46 +542,65 @@ export default function AnalyticsPage() {
             <TrendingUp className="w-3.5 h-3.5" />
             <span>📈 Page Velocity & Scaling</span>
             <span
-              className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+              className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
                 activeTab === "pages"
                   ? "bg-white/20 text-white"
                   : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
               }`}
             >
-              {pages.length}
+              {loadingPages && pages.length === 0 ? "—" : pages.length}
             </span>
           </button>
         </div>
       </div>
 
-      {/* Tab Content Rendering */}
-      {activeTab === "products" && (
+      {/* Active Tab Error Banner with Retry */}
+      {currentTabError && (
+        <div className="flex items-center justify-between p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+            <span>{currentTabError}</span>
+          </div>
+          <button
+            onClick={() => handleRefresh(false)}
+            className="flex items-center space-x-1 font-bold bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 rounded-xl transition-all cursor-pointer shrink-0"
+          >
+            <RefreshCw className="w-3 h-3" />
+            <span>Retry</span>
+          </button>
+        </div>
+      )}
+
+      {/* Tab Content Rendering: kept mounted using hidden CSS to preserve state, filters & pagination */}
+      <div className={activeTab === "products" ? "block" : "hidden"}>
         <ProductAnalyticsTab
           data={productsData}
           isLoading={loadingProducts}
-          onRefresh={fetchProductsAnalytics}
+          onRefresh={() => fetchProductsAnalytics(true)}
           dateRange={dateRange}
         />
-      )}
+      </div>
 
-      {activeTab === "ads" && (
+      <div className={activeTab === "ads" ? "block" : "hidden"}>
         <AdAnalyticsTab
           data={adsData}
           isLoading={loadingAds}
-          onRefresh={fetchAdsAnalytics}
+          onRefresh={() => fetchAdsAnalytics(true)}
           dateRange={dateRange}
         />
-      )}
+      </div>
 
-      {activeTab === "pages" && (
+      <div className={activeTab === "pages" ? "block" : "hidden"}>
         <BrandAnalyticsTab
           pages={pages}
           analytics={pageAnalytics}
           isLoading={loadingPages}
           onToggleWatchlist={toggleWatchlist}
           updatingWatchlistId={updatingWatchlistId}
+          subTab={pageSubTab}
+          onSubTabChange={handlePageSubTabChange}
         />
-      )}
+      </div>
     </div>
   );
 }
