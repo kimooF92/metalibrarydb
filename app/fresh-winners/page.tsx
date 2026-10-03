@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { FreshWinnersHeader } from "@/components/fresh-winners/fresh-winners-header";
 import { FreshWinnersToolbar } from "@/components/fresh-winners/fresh-winners-toolbar";
@@ -11,7 +11,7 @@ import { useToast } from "@/components/toast-context";
 import { ChevronLeft, ChevronRight, Loader2, Sparkles, Flame, Layers } from "lucide-react";
 import type { FreshWinnerItem, FreshWinnersStats } from "@/types";
 
-export default function FreshWinnersPage() {
+function FreshWinnersContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { showToast } = useToast();
@@ -329,5 +329,32 @@ export default function FreshWinnersPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function FreshWinnersSkeleton() {
+  return (
+    <div className="space-y-6 pb-20 max-w-7xl mx-auto px-3 sm:px-6 pt-2 animate-pulse">
+      <div className="h-10 w-64 bg-slate-200 dark:bg-slate-800 rounded-xl" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="h-24 bg-slate-200 dark:bg-slate-800/60 rounded-2xl" />
+        ))}
+      </div>
+      <div className="h-24 bg-slate-200 dark:bg-slate-800/40 rounded-2xl" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="h-80 bg-slate-200 dark:bg-slate-800/40 rounded-2xl" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function FreshWinnersPage() {
+  return (
+    <Suspense fallback={<FreshWinnersSkeleton />}>
+      <FreshWinnersContent />
+    </Suspense>
   );
 }
