@@ -21,12 +21,21 @@ import {
   Moon,
   Globe,
   Crown,
+  Rocket,
 } from "lucide-react";
 import { useToast } from "@/components/toast-context";
 
 export interface ActivityNotification {
   id: string;
-  type: "count_scan" | "ad_spy" | "page_merged" | "multi_page_detected" | "domain_portfolio_linked" | "batch_summary" | "system_alert";
+  type:
+    | "count_scan"
+    | "ad_spy"
+    | "page_merged"
+    | "multi_page_detected"
+    | "domain_portfolio_linked"
+    | "batch_summary"
+    | "system_alert"
+    | "breakout_alert";
   title: string;
   message: string;
   severity: "info" | "success" | "warning" | "error";
@@ -177,6 +186,14 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
     const isMegaBrand = n.metadata?.isMegaBrand === true || (typeof n.metadata?.currentResults === "number" && n.metadata.currentResults >= 50);
     const isSurge = n.metadata?.isSurge === true;
     const isDiscovery = n.metadata?.runnerType === "discovery";
+
+    if (type === "breakout_alert") {
+      return (
+        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-pink-500/20 via-rose-500/20 to-amber-500/20 text-rose-500 border border-rose-500/40 flex items-center justify-center shrink-0 shadow-sm shadow-rose-500/10 animate-pulse">
+          <Rocket className="w-4 h-4 text-rose-500" />
+        </div>
+      );
+    }
 
     if (isWentDark) {
       return (
@@ -401,6 +418,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
           <div className="flex items-center px-3 py-2 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/30 dark:bg-slate-900/30 overflow-x-auto gap-1 text-[11px] font-semibold">
             {[
               { id: "all", label: "All" },
+              { id: "breakout_alert", label: "🔥 Breakouts" },
               { id: "batch_summary", label: "Summaries" },
               { id: "count_scan", label: "Surges & Drops" },
               { id: "ad_spy", label: "Ad Spy" },
@@ -431,6 +449,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
               notifications.map((n) => {
                 const movers = (n.metadata?.movers as any[]) || [];
                 const topBrands = (n.metadata?.topBrands as any[]) || [];
+                const isBreakout = n.type === "breakout_alert";
                 const isWentDark = n.metadata?.wentDark === true;
                 const isMegaBrand = n.metadata?.isMegaBrand === true || (typeof n.metadata?.currentResults === "number" && n.metadata.currentResults >= 50);
                 const isSurge = n.metadata?.isSurge === true;
@@ -438,6 +457,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                 const newProductsCount = (n.metadata?.newProductsCount as number) || 0;
 
                 const getActionLabel = () => {
+                  if (isBreakout) return "🔥 View in Fresh Winners →";
                   const runnerType = n.metadata?.runnerType as string | undefined;
                   const newAdsCount = n.metadata?.newAdsCount as number | undefined;
                   const moversCount = movers.length;
@@ -476,6 +496,8 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                     className={`relative p-3.5 flex items-start space-x-3 transition-colors cursor-pointer group ${
                       n.isRead
                         ? "bg-transparent hover:bg-slate-50/50 dark:hover:bg-slate-800/30 opacity-75 hover:opacity-100"
+                        : isBreakout
+                        ? "bg-gradient-to-r from-rose-500/[0.08] via-pink-500/[0.06] to-amber-500/[0.08] border-l-2 border-rose-500 hover:from-rose-500/[0.12] hover:to-amber-500/[0.12]"
                         : isWentDark
                         ? "bg-rose-500/[0.06] dark:bg-rose-500/[0.1] hover:bg-rose-500/[0.09]"
                         : isMegaBrand
@@ -499,6 +521,11 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                           >
                             {n.title}
                           </h4>
+                          {isBreakout && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-gradient-to-r from-pink-500 to-rose-600 text-white shrink-0 shadow-xs shadow-rose-500/20 animate-pulse">
+                              🔥 BREAKOUT
+                            </span>
+                          )}
                           {newProductsCount > 0 && (
                             <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 shrink-0 border border-indigo-500/30">
                               🛍️ +{newProductsCount} {newProductsCount === 1 ? "Product" : "Products"}
@@ -533,6 +560,25 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                       <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed break-words">
                         {n.message}
                       </p>
+
+                      {/* Breakout Velocity Indicators */}
+                      {isBreakout && n.metadata && (
+                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                            🚀 {n.metadata.prevDuplication ?? 1} ➔ {n.metadata.currentDuplication} Copies
+                          </span>
+                          {n.metadata.winnerScore && (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                              ⚡ Score {n.metadata.winnerScore}/100
+                            </span>
+                          )}
+                          {typeof n.metadata.daysRunning === "number" && (
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                              • Launched {n.metadata.daysRunning === 0 ? "today" : `${n.metadata.daysRunning}d ago`}
+                            </span>
+                          )}
+                        </div>
+                      )}
 
                       {/* Movers Pills for Batch Count Summaries */}
                       {n.type === "batch_summary" && movers.length > 0 && (

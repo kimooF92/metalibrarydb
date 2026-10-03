@@ -1,7 +1,8 @@
 import { Page, Response } from "playwright";
 import { db } from "../db";
-import { ads, adObservations, creativeScans, trackedPages, scanHistory } from "../db/schema";
-import { eq, sql } from "drizzle-orm";
+import { ads, adObservations, trackedPages, scanHistory } from "../db/schema";
+import { eq, sql, and, desc, ne } from "drizzle-orm";
+import { checkAndRecordBreakout } from "../lib/breakout-detector";
 import { cacheThumbnail } from "./thumbnail-cache";
 import { extractAdsFromDOM, extractPageIdsFromPage } from "./dom-scanner";
 import { uploadMediaWithHashing, isB2Configured } from "../lib/b2-storage";
@@ -684,6 +685,22 @@ export async function scanAdCreatives(
       // Insert ad observation snapshot for this scan
       if (upsertedAd) {
         savedAdIds.push(upsertedAd.id);
+
+        // Check prior observation from earlier scans to detect velocity breakouts
+        let priorDuplication: number | undefined = undefined;
+        try {
+          const priorObs = await db.query.adObservations.findFirst({
+            where: and(
+              eq(adObservations.adId, upsertedAd.id),
+              ne(adObservations.creativeScanId, creativeScanId)
+            ),
+            orderBy: [desc(adObservations.observedAt)],
+          });
+          if (priorObs) {
+            priorDuplication = priorObs.duplicationCount;
+          }
+        } catch {}
+
         await db.insert(adObservations).values({
           creativeScanId,
           adId: upsertedAd.id,
@@ -693,6 +710,25 @@ export async function scanAdCreatives(
           collationId: adData.collationId,
           observedAt: now,
         });
+
+        // Trigger breakout detection if scaling criteria met (min 3 copies)
+        if (adData.duplicationCount >= 3) {
+          checkAndRecordBreakout({
+            adId: upsertedAd.id,
+            adArchiveId: adData.adArchiveId,
+            pageId: adData.pageId || (extractedPageIds[0] ?? ""),
+            brandName: adData.pageName || "Brand",
+            trackedPageId,
+            currentDuplication: adData.duplicationCount,
+            prevDuplication: priorDuplication,
+            startedRunningOn: adData.startedRunningOn,
+            firstSeenAt: now,
+            lastSeenAt: now,
+            mediaType: adData.mediaType,
+            linkUrl: adData.linkUrl,
+            isActive: adData.isActive,
+          }).catch((err) => console.warn("[Worker Spy Scanner] Breakout check error:", err));
+        }
 
         // Automated Product Landing Page Extraction & Background Scraper Trigger
         if (adData.linkUrl) {

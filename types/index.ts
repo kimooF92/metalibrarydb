@@ -350,5 +350,101 @@ export interface ExtractedProductData {
   }>;
 }
 
-export * from "./analytics";
+export interface BreakoutAlertMetadata {
+  adId: string;
+  adArchiveId: string;
+  pageId: string;
+  brandName: string;
+  productId?: string | null;
+  productTitle?: string | null;
+  prevDuplication: number;
+  currentDuplication: number;
+  daysRunning: number;
+  winnerScore: number;
+  mediaType?: string | null;
+  isBreakout: boolean;
+  scaleJump: number;
+  detectedAt: string;
+}
 
+export interface FreshWinnersFilterParams {
+  window?: "3d" | "7d" | "14d";
+  minCopies?: number;
+  mediaType?: "all" | "video" | "image" | "carousel";
+  category?: string;
+  hasProduct?: boolean;
+  search?: string;
+  sortBy?: "velocity" | "winner_score" | "duplication_count" | "newest";
+  page?: number;
+  limit?: number;
+}
+
+export interface FreshWinnersStats {
+  totalBreakouts: number;
+  videoRatePercent: number;
+  topCategory: string | null;
+  medianPrice: string | null;
+  activeBrandsCount: number;
+}
+
+export interface FreshWinnerItem {
+  id: string; // ad id
+  adArchiveId: string;
+  pageId: string;
+  pageName: string | null;
+  startedRunningOn: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  caption: string | null;
+  title: string | null;
+  ctaText: string | null;
+  linkUrl: string | null;
+  mediaType: "image" | "video" | "carousel" | "unknown" | null;
+  mediaUrls: string[] | null;
+  thumbnailUrl: string | null;
+  signedThumbnailUrl?: string | null;
+  duplicationCount: number;
+  prevDuplicationCount?: number;
+  isActive: boolean;
+  isArchived: boolean;
+  daysRunning: number;
+  winnerScore: number;
+  winnerTier: "super" | "high" | "promising" | "testing";
+  isBreakout: boolean;
+  velocityScore: number; // calculated scale/day velocity
+  product?: {
+    id: string;
+    url: string;
+    domain: string | null;
+    title: string | null;
+    currentPrice: string | null;
+    originalPrice: string | null;
+    currency: string | null;
+    discountOrOffer: string | null;
+    mainImageUrl: string | null;
+    category: string | null;
+    storePlatform: string | null;
+    isFavorite: boolean;
+    supplierUrls?: string[] | null;
+  } | null;
+  brand?: {
+    id: string;
+    displayName: string | null;
+    scalingPattern?: ScalingPatternResult;
+    isWatchlisted?: boolean;
+  } | null;
+}
+
+export interface FreshWinnersResponse {
+  success: boolean;
+  winners: FreshWinnerItem[];
+  stats: FreshWinnersStats;
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export * from "./analytics";

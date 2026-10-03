@@ -16,6 +16,7 @@ import {
   ChevronRight,
   LogOut,
   Sparkles,
+  Flame,
 } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
 import { useSidebar } from "@/components/sidebar-context";
@@ -32,6 +33,7 @@ export function Navigation() {
 
   const navItems = [
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/fresh-winners", label: "Fresh Winners", icon: Flame, isFlame: true },
     { href: "/opportunities", label: "Opportunity Seeker", icon: Sparkles, isAi: true },
     { href: "/discovery", label: "Discover Pages", icon: Globe },
     { href: "/spy", label: "Ad Spy Feed", icon: Eye },
@@ -135,6 +137,11 @@ export function Navigation() {
                   {item.isAi && (
                     <span className="px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider rounded-md bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-xs ml-1.5 shrink-0">
                       AI
+                    </span>
+                  )}
+                  {(item as any).isFlame && (
+                    <span className="px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider rounded-md bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 text-white shadow-xs shadow-rose-500/20 ml-1.5 shrink-0 animate-pulse">
+                      HOT
                     </span>
                   )}
                 </Link>
@@ -255,6 +262,11 @@ export function Navigation() {
                   {item.isAi && (
                     <span className="px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider rounded-md bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-xs">
                       AI
+                    </span>
+                  )}
+                  {(item as any).isFlame && (
+                    <span className="px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider rounded-md bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 text-white shadow-xs shadow-rose-500/20 animate-pulse">
+                      HOT
                     </span>
                   )}
                 </Link>

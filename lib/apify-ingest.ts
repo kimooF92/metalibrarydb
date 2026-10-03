@@ -1,8 +1,9 @@
 import { db } from "@/db";
 import { ads, adObservations, creativeScans, trackedPages } from "@/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, desc, ne } from "drizzle-orm";
 import { uploadMediaWithHashing, isB2Configured } from "@/lib/b2-storage";
 import { linkAndAutoScrapeProduct } from "@/lib/product-ingest";
+import { checkAndRecordBreakout } from "@/lib/breakout-detector";
 
 /**
  * Robustly extracts adArchiveId from multiple candidate fields & URL parameters.
@@ -458,7 +459,22 @@ export async function ingestApifyDatasetItems(
     }
 
     if (upsertedAd) {
-      // 2. Strict Observation De-duplication: Check if observation already exists for (creativeScanId, adId)
+      // 2a. Check prior observation from a previous scan to detect velocity jumps
+      let priorDuplication: number | undefined = undefined;
+      try {
+        const priorObs = await db.query.adObservations.findFirst({
+          where: and(
+            eq(adObservations.adId, upsertedAd.id),
+            ne(adObservations.creativeScanId, creativeScanId)
+          ),
+          orderBy: [desc(adObservations.observedAt)],
+        });
+        if (priorObs) {
+          priorDuplication = priorObs.duplicationCount;
+        }
+      } catch {}
+
+      // 2b. Strict Observation De-duplication: Check if observation already exists for (creativeScanId, adId)
       const existingObservation = await db.query.adObservations.findFirst({
         where: and(
           eq(adObservations.creativeScanId, creativeScanId),
@@ -493,6 +509,25 @@ export async function ingestApifyDatasetItems(
         .update(adObservations)
         .set({ isActive: true })
         .where(and(eq(adObservations.adId, upsertedAd.id), eq(adObservations.isActive, false)));
+
+      // 2c. Check for Breakout Velocity Alert (e.g. 1 -> 3+ copies in <= 7d)
+      if (duplicationCount >= 3) {
+        checkAndRecordBreakout({
+          adId: upsertedAd.id,
+          adArchiveId,
+          pageId: (pageId && !pageId.includes("-")) ? pageId : (detectedPageId && !detectedPageId.includes("-") ? detectedPageId : ""),
+          brandName: pageName || pageRecord?.displayName || "Brand",
+          trackedPageId,
+          currentDuplication: duplicationCount,
+          prevDuplication: priorDuplication ?? existingObservation?.duplicationCount,
+          startedRunningOn,
+          firstSeenAt: now,
+          lastSeenAt: now,
+          mediaType,
+          linkUrl,
+          isActive: true,
+        }).catch((err) => console.warn("[Apify Ingest] Breakout check error:", err));
+      }
 
       // 3. Automated Product Landing Page Extraction & Background Scraper Trigger
       if (linkUrl) {

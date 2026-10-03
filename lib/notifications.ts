@@ -9,7 +9,8 @@ export type NotificationType =
   | "multi_page_detected"
   | "domain_portfolio_linked"
   | "batch_summary"
-  | "system_alert";
+  | "system_alert"
+  | "breakout_alert";
 
 export type NotificationSeverity = "info" | "success" | "warning" | "error";
 
@@ -525,6 +526,74 @@ export async function logDomainPortfolioLinkedNotification(params: {
       brandDomainId: params.brandDomainId,
       pageCount: params.pageCount,
       primaryPageName: params.primaryPageName,
+    },
+  });
+}
+
+/**
+ * Convenience helper to log Breakout Velocity notifications.
+ * Fired when an ad launched recently (<= 7 days) scales to 3+ copies or experiences a rapid duplication surge.
+ */
+export async function logBreakoutNotification(params: {
+  trackedPageId?: string | null;
+  brandName: string;
+  pageId?: string | null;
+  adArchiveId: string;
+  productTitle?: string | null;
+  prevDuplication: number;
+  currentDuplication: number;
+  daysRunning: number;
+  winnerScore: number;
+  mediaType?: string | null;
+  actionUrl?: string;
+  adId?: string;
+  productId?: string | null;
+}) {
+  const {
+    trackedPageId,
+    brandName,
+    pageId,
+    adArchiveId,
+    productTitle,
+    prevDuplication,
+    currentDuplication,
+    daysRunning,
+    winnerScore,
+    mediaType,
+    actionUrl,
+    adId,
+    productId,
+  } = params;
+
+  const title = `🔥 Breakout Detected: ${brandName} (${prevDuplication} ➔ ${currentDuplication} copies)`;
+  const productText = productTitle ? `"${productTitle}"` : "Ad creative";
+  const daysText = daysRunning === 0 ? "today" : daysRunning === 1 ? "yesterday" : `${daysRunning}d ago`;
+  const message = `${productText} on "${brandName}" jumped to ${currentDuplication} active copies (launched ${daysText})! Winner score: ${winnerScore}/100.`;
+
+  const fallbackAction = actionUrl || `/fresh-winners?highlight=${encodeURIComponent(adId || adArchiveId)}`;
+
+  return createNotification({
+    type: "breakout_alert",
+    title,
+    message,
+    severity: "success",
+    trackedPageId,
+    adArchiveId,
+    actionUrl: fallbackAction,
+    metadata: {
+      adId,
+      adArchiveId,
+      productId,
+      productTitle,
+      brandName,
+      pageId,
+      prevDuplication,
+      currentDuplication,
+      daysRunning,
+      winnerScore,
+      mediaType,
+      isBreakout: true,
+      scaleJump: currentDuplication - prevDuplication,
     },
   });
 }
