@@ -29,11 +29,47 @@ export async function GET() {
       settings = inserted || DEFAULT_SETTINGS as any;
     }
 
-    return NextResponse.json({ success: true, settings });
+    const rawTokens = process.env.APIFY_API_TOKENS || process.env.APIFY_API_TOKEN || "";
+    const apifyTokensConfigured = rawTokens
+      ? rawTokens
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean).length
+      : 0;
+
+    const b2Configured = Boolean(
+      process.env.B2_APPLICATION_KEY_ID && process.env.B2_APPLICATION_KEY
+    );
+    const b2Bucket = process.env.B2_BUCKET || "meta-ad-media-feed";
+    const isProduction = process.env.NODE_ENV === "production";
+    const hasSavedReports = Boolean(
+      settings?.savedOpportunityReport || settings?.savedMarketForecast
+    );
+
+    const telemetry = {
+      apifyTokensConfigured,
+      b2Configured,
+      b2Bucket,
+      isProduction,
+      hasSavedReports,
+    };
+
+    return NextResponse.json({ success: true, settings, telemetry });
   } catch (error) {
     console.error("Error in GET /api/settings:", error);
     return NextResponse.json(
-      { success: false, settings: DEFAULT_SETTINGS, error: "Failed to fetch settings from DB" },
+      {
+        success: false,
+        settings: DEFAULT_SETTINGS,
+        telemetry: {
+          apifyTokensConfigured: 0,
+          b2Configured: false,
+          b2Bucket: "meta-ad-media-feed",
+          isProduction: process.env.NODE_ENV === "production",
+          hasSavedReports: false,
+        },
+        error: "Failed to fetch settings from DB",
+      },
       { status: 500 }
     );
   }
@@ -42,6 +78,22 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+
+    if (body.clearAiCache) {
+      await db
+        .update(appSettings)
+        .set({
+          savedOpportunityReport: null,
+          savedMarketForecast: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(appSettings.id, "default"));
+
+      return NextResponse.json({
+        success: true,
+        message: "AI reports cache cleared successfully",
+      });
+    }
 
     const updatePayload = {
       defaultCountry: typeof body.defaultCountry === "string" ? body.defaultCountry : "TN",

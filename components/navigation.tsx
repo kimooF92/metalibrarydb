@@ -22,19 +22,13 @@ import { useSidebar } from "@/components/sidebar-context";
 import { SmallPagesScanBadge } from "./small-pages-scan-banner";
 import { NotificationCenter } from "./notification-center";
 
+import { useLogout } from "@/hooks/use-logout";
+
 export function Navigation() {
   const pathname = usePathname();
-  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const { isCollapsed, toggleSidebar } = useSidebar();
-
-  const handleLogout = async () => {
-    try {
-      await fetch("/api/auth/logout", { method: "POST" });
-    } catch {}
-    router.push("/login");
-    router.refresh();
-  };
+  const { logout, isLoggingOut } = useLogout();
 
   const navItems = [
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -189,19 +183,21 @@ export function Navigation() {
           {/* Logout / Lock Session */}
           {isCollapsed ? (
             <button
-              onClick={handleLogout}
+              onClick={logout}
+              disabled={isLoggingOut}
               title="Lock Session / Log Out"
-              className="flex items-center justify-center w-10 h-10 mx-auto rounded-lg text-slate-500 hover:text-rose-500 hover:bg-rose-500/10 transition-colors border border-transparent hover:border-rose-500/20 cursor-pointer"
+              className="flex items-center justify-center w-10 h-10 mx-auto rounded-lg text-slate-500 hover:text-rose-500 hover:bg-rose-500/10 transition-colors border border-transparent hover:border-rose-500/20 cursor-pointer disabled:opacity-50"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className={`w-4 h-4 ${isLoggingOut ? "animate-spin" : ""}`} />
             </button>
           ) : (
             <button
-              onClick={handleLogout}
-              className="w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 transition-all border border-transparent hover:border-rose-500/20 group cursor-pointer"
+              onClick={logout}
+              disabled={isLoggingOut}
+              className="w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 transition-all border border-transparent hover:border-rose-500/20 group cursor-pointer disabled:opacity-50"
             >
-              <LogOut className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-              <span>Lock Session</span>
+              <LogOut className={`w-4 h-4 group-hover:-translate-x-0.5 transition-transform ${isLoggingOut ? "animate-spin" : ""}`} />
+              <span>{isLoggingOut ? "Locking..." : "Lock Session"}</span>
             </button>
           )}
         </div>
@@ -281,11 +277,12 @@ export function Navigation() {
             </Link>
 
             <button
-              onClick={handleLogout}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-3 rounded-xl text-sm font-semibold text-rose-500 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-all cursor-pointer"
+              onClick={logout}
+              disabled={isLoggingOut}
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 rounded-xl text-sm font-semibold text-rose-500 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-all cursor-pointer disabled:opacity-50"
             >
-              <LogOut className="w-4 h-4" />
-              <span>Lock Session / Sign Out</span>
+              <LogOut className={`w-4 h-4 ${isLoggingOut ? "animate-spin" : ""}`} />
+              <span>{isLoggingOut ? "Locking Session..." : "Lock Session / Sign Out"}</span>
             </button>
           </div>
         </div>
