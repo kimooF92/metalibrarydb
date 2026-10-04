@@ -317,7 +317,7 @@ export default function ProductsPage() {
   ]);
 
   const fetchProducts = useCallback(
-    async (targetPage = 1, append = false) => {
+    async (targetPage = 1, append = false, forceRefresh = false) => {
       // Abort any in-flight requests to eliminate connection-pool pileups
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -338,8 +338,12 @@ export default function ProductsPage() {
           limit: "24",
           sortBy,
           smartPreset,
-          _t: Date.now().toString(),
         });
+
+        // Only bust cache if the user explicitly clicked manual refresh
+        if (forceRefresh) {
+          query.set("_t", Date.now().toString());
+        }
 
         if (debouncedSearch.trim()) query.set("search", debouncedSearch.trim());
         if (debouncedBrand.trim()) query.set("brand", debouncedBrand.trim());
@@ -361,6 +365,7 @@ export default function ProductsPage() {
 
         const res = await fetch(`/api/products?${query.toString()}`, {
           signal: currentController.signal,
+          cache: forceRefresh ? "no-store" : "default",
         });
         if (!res.ok) {
           throw new Error(`Failed to load products (${res.status})`);
@@ -879,7 +884,7 @@ export default function ProductsPage() {
 
           <button
             onClick={() => {
-              fetchProducts(1, false);
+              fetchProducts(1, false, true);
               fetchStats(true);
             }}
             disabled={loading && statsLoading}

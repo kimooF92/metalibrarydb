@@ -95,7 +95,7 @@ export async function addSingleUrl(
       pageId: meta.pageId,
       landingPage: landingPageDomain,
       workspaceId: workspaceId,
-      country: workspace?.countryCode || "TN",
+      country: workspace?.countryCode || "ALL",
       status: "pending",
     })
     .onConflictDoNothing()

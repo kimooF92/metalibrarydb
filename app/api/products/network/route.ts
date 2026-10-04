@@ -10,6 +10,7 @@ import {
 } from "@/lib/network-extractor";
 import { isValidPageId } from "@/lib/utils";
 import { PRODUCT_NETWORK_PROJECTION } from "@/lib/product-projections";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 
 export async function GET(req: NextRequest) {
   const authError = await validateApiSecret(req);
@@ -39,6 +40,9 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    const activeWorkspace = await getActiveWorkspace(req);
+    const targetWsId = targetProduct.workspaceId || activeWorkspace.id;
+
     // 2. Sanitize and validate target fingerprints
     const rawPhones = targetProduct.phoneNumbers || [];
     const rawWhatsApps = targetProduct.whatsappNumbers || [];
@@ -67,12 +71,10 @@ export async function GET(req: NextRequest) {
         .from(scrapedProducts)
         .crossJoin(sql`unnest(${scrapedProducts.phoneNumbers}) as elem`)
         .where(
-          targetProduct.workspaceId
-            ? and(
-                eq(scrapedProducts.workspaceId, targetProduct.workspaceId),
-                sql`elem = ANY(ARRAY[${sql.raw(validPhones.map((p) => `'${p}'`).join(","))}]::text[])`
-              )
-            : sql`elem = ANY(ARRAY[${sql.raw(validPhones.map((p) => `'${p}'`).join(","))}]::text[])`
+          and(
+            eq(scrapedProducts.workspaceId, targetWsId),
+            sql`elem = ANY(ARRAY[${sql.raw(validPhones.map((p) => `'${p}'`).join(","))}]::text[])`
+          )
         )
         .groupBy(sql`elem`);
 
@@ -121,12 +123,10 @@ export async function GET(req: NextRequest) {
         })
         .from(scrapedProducts)
         .where(
-          targetProduct.workspaceId
-            ? and(
-                eq(scrapedProducts.workspaceId, targetProduct.workspaceId),
-                or(...matchingProductConditions)
-              )
-            : or(...matchingProductConditions)
+          and(
+            eq(scrapedProducts.workspaceId, targetWsId),
+            or(...matchingProductConditions)
+          )
         );
     }
 

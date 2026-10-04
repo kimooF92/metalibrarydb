@@ -13,6 +13,15 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const maxDuration = 60;
 
+interface CachedFreshWinners {
+  items: FreshWinnerItem[];
+  stats: FreshWinnersStats;
+  timestamp: number;
+}
+
+const freshWinnersCache = new Map<string, CachedFreshWinners>();
+const FRESH_WINNERS_CACHE_TTL_MS = 60 * 1000; // 60 seconds
+
 export async function GET(req: NextRequest) {
   const authError = await validateApiSecret(req);
   if (authError) return authError;
@@ -31,9 +40,37 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.min(60, Math.max(1, parseInt(searchParams.get("limit") || "24", 10)));
     const offset = (page - 1) * limit;
+    const forceRefresh = searchParams.get("refresh") === "true";
 
     const cutoffDate = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
     const activeWorkspace = await getActiveWorkspace(req);
+
+    const cacheKey = `${activeWorkspace.id}:${windowDays}:${minCopies}:${mediaType || 'all'}:${category || 'all'}:${hasProduct}:${search || ''}:${sortBy}`;
+    const now = Date.now();
+    const cached = freshWinnersCache.get(cacheKey);
+
+    if (!forceRefresh && cached && now - cached.timestamp < FRESH_WINNERS_CACHE_TTL_MS) {
+      const paginatedItems = cached.items.slice(offset, offset + limit);
+      return NextResponse.json(
+        {
+          success: true,
+          winners: paginatedItems,
+          stats: cached.stats,
+          pagination: {
+            page,
+            limit,
+            total: cached.items.length,
+            totalPages: Math.ceil(cached.items.length / limit),
+          },
+        },
+        {
+          headers: {
+            "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
+            Vary: PRIVATE_AUTH_VARY,
+          },
+        }
+      );
+    }
 
     // Build conditions for raw SQL subquery / joins
     const conditions: any[] = [
@@ -68,16 +105,41 @@ export async function GET(req: NextRequest) {
 
     const whereSql = and(...conditions);
 
-    // High performance query: Distinct latest observation per ad meeting scaling threshold
-    // Joining ads, scrapedProducts, and trackedPages
+    // Lean indexed select: Omit huge columns like rawExtract and full payloads
     const query = db
       .select({
-        ad: ads,
+        adId: ads.id,
+        adArchiveId: ads.adArchiveId,
+        pageId: ads.pageId,
+        pageName: ads.pageName,
+        startedRunningOn: ads.startedRunningOn,
+        firstSeenAt: ads.firstSeenAt,
+        lastSeenAt: ads.lastSeenAt,
+        caption: ads.caption,
+        title: ads.title,
+        ctaText: ads.ctaText,
+        linkUrl: ads.linkUrl,
+        mediaType: ads.mediaType,
+        mediaUrls: ads.mediaUrls,
+        thumbnailUrl: ads.thumbnailUrl,
+        isArchived: ads.isArchived,
         obsId: sql<string>`latest_obs.obs_id`,
         duplicationCount: sql<number>`latest_obs.duplication_count`,
         observedAt: sql<Date>`latest_obs.observed_at`,
         trackedPageId: sql<string>`latest_obs.tracked_page_id`,
-        product: scrapedProducts,
+        productId: scrapedProducts.id,
+        productUrl: scrapedProducts.url,
+        productDomain: scrapedProducts.domain,
+        productTitle: scrapedProducts.title,
+        productCurrentPrice: scrapedProducts.currentPrice,
+        productOriginalPrice: scrapedProducts.originalPrice,
+        productCurrency: scrapedProducts.currency,
+        productDiscountOrOffer: scrapedProducts.discountOrOffer,
+        productMainImageUrl: scrapedProducts.mainImageUrl,
+        productCategory: scrapedProducts.category,
+        productStorePlatform: scrapedProducts.storePlatform,
+        productIsFavorite: scrapedProducts.isFavorite,
+        productSupplierUrls: scrapedProducts.supplierUrls,
         pageDisplayName: trackedPages.displayName,
         pageCurrentResults: trackedPages.currentResults,
         pageWatchlisted: trackedPages.isWatchlisted,
@@ -106,21 +168,19 @@ export async function GET(req: NextRequest) {
 
     // Enrich all matching records with algorithmic winner score & velocity score
     const enrichedList: FreshWinnerItem[] = allMatching.map((row) => {
-      const ad = row.ad;
       const dup = row.duplicationCount || 1;
       const metrics = calculateWinnerScore({
-        startedRunningOn: ad.startedRunningOn,
-        firstSeenAt: ad.firstSeenAt,
-        lastSeenAt: ad.lastSeenAt,
+        startedRunningOn: row.startedRunningOn,
+        firstSeenAt: row.firstSeenAt,
+        lastSeenAt: row.lastSeenAt,
         duplicationCount: dup,
         isActive: true,
-        isArchived: ad.isArchived,
-        mediaType: ad.mediaType,
+        isArchived: Boolean(row.isArchived),
+        mediaType: row.mediaType,
       });
 
       const days = metrics.daysRunning;
       // Velocity Score: Copies per day weight + winner score weight
-      // A product that launched 2 days ago and has 4 copies has velocity: (4 / 2) * 15 + score * 0.5
       const velocityScore = Math.round((dup / Math.max(1, days)) * 15 + metrics.winnerScore * 0.5);
 
       const scalingPattern = classifyScalingPattern(
@@ -129,48 +189,48 @@ export async function GET(req: NextRequest) {
       );
 
       return {
-        id: ad.id,
-        adArchiveId: ad.adArchiveId,
-        pageId: ad.pageId,
-        pageName: ad.pageName || row.pageDisplayName,
-        startedRunningOn: ad.startedRunningOn ? ad.startedRunningOn.toISOString() : null,
-        firstSeenAt: ad.firstSeenAt.toISOString(),
-        lastSeenAt: ad.lastSeenAt.toISOString(),
-        caption: ad.caption,
-        title: ad.title,
-        ctaText: ad.ctaText,
-        linkUrl: ad.linkUrl,
-        mediaType: ad.mediaType as any,
-        mediaUrls: ad.mediaUrls,
-        thumbnailUrl: ad.thumbnailUrl,
+        id: row.adId,
+        adArchiveId: row.adArchiveId,
+        pageId: row.pageId,
+        pageName: row.pageName || row.pageDisplayName,
+        startedRunningOn: row.startedRunningOn ? row.startedRunningOn.toISOString() : null,
+        firstSeenAt: row.firstSeenAt.toISOString(),
+        lastSeenAt: row.lastSeenAt.toISOString(),
+        caption: row.caption,
+        title: row.title,
+        ctaText: row.ctaText,
+        linkUrl: row.linkUrl,
+        mediaType: row.mediaType as any,
+        mediaUrls: row.mediaUrls,
+        thumbnailUrl: row.thumbnailUrl,
         duplicationCount: dup,
         isActive: true,
-        isArchived: Boolean(ad.isArchived),
+        isArchived: Boolean(row.isArchived),
         daysRunning: days,
         winnerScore: metrics.winnerScore,
         winnerTier: metrics.winnerTier,
         isBreakout: metrics.isBreakout,
         velocityScore,
-        product: row.product
+        product: row.productId
           ? {
-              id: row.product.id,
-              url: row.product.url,
-              domain: row.product.domain,
-              title: row.product.title,
-              currentPrice: row.product.currentPrice,
-              originalPrice: row.product.originalPrice,
-              currency: row.product.currency,
-              discountOrOffer: row.product.discountOrOffer,
-              mainImageUrl: row.product.mainImageUrl,
-              category: row.product.category,
-              storePlatform: row.product.storePlatform,
-              isFavorite: Boolean(row.product.isFavorite),
-              supplierUrls: row.product.supplierUrls,
+              id: row.productId,
+              url: row.productUrl || "",
+              domain: row.productDomain || "",
+              title: row.productTitle || "",
+              currentPrice: row.productCurrentPrice,
+              originalPrice: row.productOriginalPrice,
+              currency: row.productCurrency,
+              discountOrOffer: row.productDiscountOrOffer,
+              mainImageUrl: row.productMainImageUrl,
+              category: row.productCategory,
+              storePlatform: row.productStorePlatform,
+              isFavorite: Boolean(row.productIsFavorite),
+              supplierUrls: row.productSupplierUrls,
             }
           : null,
         brand: {
           id: row.trackedPageId,
-          displayName: row.pageDisplayName || ad.pageName,
+          displayName: row.pageDisplayName || row.pageName,
           scalingPattern,
           isWatchlisted: Boolean(row.pageWatchlisted),
         },
@@ -241,6 +301,13 @@ export async function GET(req: NextRequest) {
       medianPrice: medianPrice || "49 TND",
       activeBrandsCount: brandSet.size,
     };
+
+    // Store in-memory cache for fast repeated reads & pagination
+    freshWinnersCache.set(cacheKey, {
+      items: enrichedList,
+      stats,
+      timestamp: Date.now(),
+    });
 
     // Apply pagination slice
     const paginatedItems = enrichedList.slice(offset, offset + limit);

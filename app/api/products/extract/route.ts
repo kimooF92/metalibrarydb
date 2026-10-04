@@ -5,7 +5,9 @@ import { eq, or, sql } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { normalizeProductUrl, extractProductFromUrl } from "@/lib/firecrawl";
 import { isPriceString } from "@/lib/html-scraper";
-import { getCleanDomain } from "@/lib/utils";
+import { getCleanDomain, isValidPageId } from "@/lib/utils";
+import { getActiveWorkspace } from "@/lib/workspace-server";
+import { trackedPages, brandDomains } from "@/db/schema";
 import {
   extractTunisianPhoneNumbers,
   extractWhatsAppNumbers,
@@ -51,6 +53,31 @@ export async function POST(req: NextRequest) {
       domain: getCleanDomain(normalizedUrl),
       productId: typeof productId === "string" ? productId : null,
     };
+
+    const activeWorkspace = await getActiveWorkspace(req);
+    let resolvedWorkspaceId = activeWorkspace.id;
+    let resolvedBrandDomainId: string | null = null;
+
+    if (isValidPageId(pageId)) {
+      const pageRec = await db.query.trackedPages.findFirst({
+        where: eq(trackedPages.pageId, pageId),
+        columns: { workspaceId: true, brandDomainId: true },
+      });
+      if (pageRec?.workspaceId) resolvedWorkspaceId = pageRec.workspaceId;
+      if (pageRec?.brandDomainId) resolvedBrandDomainId = pageRec.brandDomainId;
+    }
+
+    const cleanDomain = getCleanDomain(normalizedUrl);
+    if (cleanDomain) {
+      const bd = await db.query.brandDomains.findFirst({
+        where: sql`lower(${brandDomains.domain}) = ${cleanDomain.toLowerCase()}`,
+        columns: { id: true, workspaceId: true },
+      });
+      if (bd) {
+        if (!resolvedBrandDomainId) resolvedBrandDomainId = bd.id;
+        if (bd.workspaceId) resolvedWorkspaceId = bd.workspaceId;
+      }
+    }
 
     // 1. Check for existing product in DB (Deduplication)
     // Priority: 1) explicit productId if provided by product card / row, 2) normalized URL, 3) raw trimmed URL
@@ -189,6 +216,8 @@ export async function POST(req: NextRequest) {
           url: normalizedUrl,
           domain: resolvedDomain || existingProduct.domain,
           pageId: pageId || existingProduct.pageId,
+          workspaceId: existingProduct.workspaceId || resolvedWorkspaceId,
+          brandDomainId: existingProduct.brandDomainId || resolvedBrandDomainId,
           title: extracted.title || existingProduct.title,
           currentPrice: extracted.current_price || existingProduct.currentPrice,
           originalPrice: extracted.original_price || existingProduct.originalPrice,
@@ -218,6 +247,8 @@ export async function POST(req: NextRequest) {
           url: normalizedUrl,
           domain: domain || null,
           pageId: pageId || null,
+          workspaceId: resolvedWorkspaceId,
+          brandDomainId: resolvedBrandDomainId,
           title: extracted.title || null,
           currentPrice: extracted.current_price || null,
           originalPrice: extracted.original_price || null,

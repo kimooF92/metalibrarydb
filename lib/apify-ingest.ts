@@ -532,11 +532,13 @@ export async function ingestApifyDatasetItems(
       // 3. Automated Product Landing Page Extraction & Background Scraper Trigger
       if (linkUrl) {
         try {
+          const effectiveWsId = pageRecord?.workspaceId || null;
           const prodRes = await linkAndAutoScrapeProduct({
             adId: upsertedAd.id,
             linkUrl,
             pageId: (pageId && !pageId.includes("-")) ? pageId : (detectedPageId && !detectedPageId.includes("-") ? detectedPageId : null),
             adCopy: caption,
+            workspaceId: effectiveWsId,
           });
           if (prodRes?.isNew) {
             newProductsCount++;
@@ -646,13 +648,30 @@ export async function ingestApifyDatasetItems(
       try {
         await db.execute(sql`
           UPDATE scraped_products
-          SET page_id = ${detectedPageId},
+          SET page_id = COALESCE(page_id, ${detectedPageId}),
+              workspace_id = COALESCE(${pageRecord.workspaceId || null}, workspace_id),
+              brand_domain_id = COALESCE(${pageRecord.brandDomainId || null}, brand_domain_id),
               updated_at = NOW()
           WHERE (lower(domain) = ${targetDomain.toLowerCase().trim()} OR url ILIKE ${`%${targetDomain.trim()}%`})
-            AND (page_id IS NULL OR page_id = '0')
+            AND (page_id IS NULL OR page_id = '0' OR workspace_id IS NULL OR workspace_id != ${pageRecord.workspaceId})
         `);
       } catch (prodErr) {
         console.warn("[Apify Ingest] Non-fatal error backfilling scraped_products:", prodErr);
+      }
+    }
+
+    if (pageRecord.workspaceId) {
+      try {
+        await db.execute(sql`
+          UPDATE scraped_products
+          SET workspace_id = ${pageRecord.workspaceId},
+              brand_domain_id = COALESCE(${pageRecord.brandDomainId || null}, brand_domain_id),
+              updated_at = NOW()
+          WHERE page_id = ${detectedPageId}
+            AND (workspace_id IS NULL OR workspace_id != ${pageRecord.workspaceId})
+        `);
+      } catch (prodErr) {
+        console.warn("[Apify Ingest] Non-fatal error syncing scraped_products workspace_id by page_id:", prodErr);
       }
     }
   }
@@ -717,8 +736,8 @@ export async function ingestApifyDatasetItems(
             });
 
             if (!existingSister) {
-              const pageCountry = pageRecord.country || "TN";
-              const newPageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${pageCountry}&view_all_page_id=${cand.pageId}&search_type=page&media_type=all`;
+              const pageCountry = pageRecord.country || "ALL";
+              const newPageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&view_all_page_id=${cand.pageId}&search_type=page&media_type=all`;
               await db
                 .insert(trackedPages)
                 .values({

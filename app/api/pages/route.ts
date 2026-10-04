@@ -9,6 +9,14 @@ import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 
+interface CachedPagesResponse {
+  data: any;
+  timestamp: number;
+}
+
+const pagesCacheMap = new Map<string, CachedPagesResponse>();
+const PAGES_CACHE_TTL_MS = 15 * 1000; // 15 seconds
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -30,6 +38,17 @@ export async function GET(request: Request) {
 
     // Resolve active workspace
     const activeWorkspace = await getActiveWorkspace(request);
+
+    // Short-lived in-memory cache check (15s) to eliminate duplicate waterfalls during rapid navigation / polling
+    const forceRefresh = searchParams.get("_t") !== null || searchParams.get("refresh") === "true";
+    const cacheKey = `${activeWorkspace.id}:${request.url}`;
+    const now = Date.now();
+    const cached = pagesCacheMap.get(cacheKey);
+    if (!forceRefresh && cached && now - cached.timestamp < PAGES_CACHE_TTL_MS) {
+      return NextResponse.json(cached.data, {
+        headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY },
+      });
+    }
 
     // Build conditions array
     const conditions: any[] = [
@@ -492,7 +511,7 @@ export async function GET(request: Request) {
       };
     });
 
-    return NextResponse.json({
+    const responsePayload = {
       data: pagesWithPrev,
       pagination: {
         page: effectivePage,
@@ -500,7 +519,16 @@ export async function GET(request: Request) {
         total: totalCount,
         totalPages,
       },
-    }, { headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY } });
+    };
+
+    pagesCacheMap.set(cacheKey, {
+      data: responsePayload,
+      timestamp: Date.now(),
+    });
+
+    return NextResponse.json(responsePayload, {
+      headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY },
+    });
   } catch (error) {
     console.error("Error in GET /api/pages:", error);
     const message = process.env.DATABASE_URL?.includes("[YOUR-PASSWORD]")
@@ -518,6 +546,11 @@ export async function POST(request: Request) {
 
     const activeWorkspace = await getActiveWorkspace(request);
     const result = await addSingleUrl(validated.url, allowDuplicate, activeWorkspace.id);
+
+    // Invalidate pages cache on successful page creation
+    if (result.success) {
+      pagesCacheMap.clear();
+    }
 
     if (!result.success) {
       return NextResponse.json(

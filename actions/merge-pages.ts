@@ -47,8 +47,8 @@ export async function mergeExactMatchWithPageId(
       return { success: false, message: "Exact match tracked page not found." };
     }
 
-    const pageCountry = exactMatchPage.country || "TN";
-    const newPageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${pageCountry}&view_all_page_id=${cleanPageId}&search_type=page&media_type=all`;
+    const pageCountry = exactMatchPage.country || "ALL";
+    const newPageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&view_all_page_id=${cleanPageId}&search_type=page&media_type=all`;
     const preservedDomain =
       exactMatchPage.landingPage ||
       exactMatchPage.displayName ||
@@ -102,17 +102,22 @@ export async function mergeExactMatchWithPageId(
         .where(eq(trackedPages.id, exactMatchTrackedPageId))
         .returning();
 
-      // Backfill products for this domain in the same workspace
-      if (brandDomain) {
+      // Backfill products for this domain in the target workspace
+      if (brandDomain || cleanPageId) {
         try {
+          const effectiveWsId = exactMatchPage.workspaceId || brandDomain?.workspaceId;
           await db
             .update(scrapedProducts)
-            .set({ brandDomainId: brandDomain.id, pageId: cleanPageId, updatedAt: now })
+            .set({
+              brandDomainId: brandDomain?.id || null,
+              pageId: cleanPageId,
+              workspaceId: effectiveWsId || undefined,
+              updatedAt: now,
+            })
             .where(
-              and(
-                eq(scrapedProducts.domain, brandDomain.domain),
-                isNull(scrapedProducts.brandDomainId),
-                exactMatchPage.workspaceId ? eq(scrapedProducts.workspaceId, exactMatchPage.workspaceId) : undefined
+              or(
+                brandDomain ? eq(scrapedProducts.domain, brandDomain.domain) : sql`FALSE`,
+                eq(scrapedProducts.pageId, cleanPageId)
               )
             );
         } catch (prodErr) {

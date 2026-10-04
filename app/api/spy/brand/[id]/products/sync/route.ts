@@ -5,6 +5,7 @@ import { eq, or, inArray, sql, and } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { normalizeProductUrl, extractProductFromUrl } from "@/lib/firecrawl";
 import { getCleanDomain } from "@/lib/utils";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 import {
   PRODUCT_RESPONSE_PROJECTION,
   PRODUCT_SYNC_LOOKUP_PROJECTION,
@@ -98,6 +99,10 @@ export async function POST(
       if (sampleAd) pageId = sampleAd.pageId;
       else pageId = decodedId;
     }
+
+    const activeWorkspace = await getActiveWorkspace(req);
+    const resolvedWorkspaceId = trackedPage?.workspaceId || activeWorkspace.id;
+    const resolvedBrandDomainId = trackedPage?.brandDomainId || null;
 
     // 2. Fetch all ads for this brand
     const adConditions = [];
@@ -252,6 +257,8 @@ export async function POST(
                 url: normalizedUrl,
                 domain: domain || null,
                 pageId: pageId || null,
+                workspaceId: resolvedWorkspaceId,
+                brandDomainId: resolvedBrandDomainId,
                 scrapeStatus: "failed",
                 failureReason: extractionResult.error || "Extraction failed",
                 createdAt: new Date(),
@@ -298,6 +305,8 @@ export async function POST(
             .set({
               domain: resolvedDomain || existingProduct.domain,
               pageId: pageId || existingProduct.pageId,
+              workspaceId: existingProduct.workspaceId || resolvedWorkspaceId,
+              brandDomainId: existingProduct.brandDomainId || resolvedBrandDomainId,
               title: extracted.title || existingProduct.title,
               currentPrice: extracted.current_price || existingProduct.currentPrice,
               originalPrice: extracted.original_price || existingProduct.originalPrice,
@@ -327,6 +336,8 @@ export async function POST(
               url: normalizedUrl,
               domain: domain || null,
               pageId: pageId || null,
+              workspaceId: resolvedWorkspaceId,
+              brandDomainId: resolvedBrandDomainId,
               title: extracted.title || null,
               currentPrice: extracted.current_price || null,
               originalPrice: extracted.original_price || null,

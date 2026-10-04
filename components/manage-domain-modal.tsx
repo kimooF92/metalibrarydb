@@ -442,7 +442,7 @@ export function ManageDomainModal({
                         <div className="flex items-center gap-2 shrink-0">
                           {page.pageId && (
                             <a
-                              href={`https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${page.country || "ALL"}&view_all_page_id=${page.pageId}&search_type=page&media_type=all`}
+                              href={`https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&view_all_page_id=${page.pageId}&search_type=page&media_type=all`}
                               target="_blank"
                               rel="noreferrer"
                               className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"

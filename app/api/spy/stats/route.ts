@@ -10,12 +10,34 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const maxDuration = 60;
 
+interface CachedSpyStats {
+  data: any;
+  timestamp: number;
+}
+
+const spyStatsCacheMap = new Map<string, CachedSpyStats>();
+const SPY_STATS_CACHE_TTL_MS = 45 * 1000; // 45 seconds
+
 export async function GET(req: NextRequest) {
   const authError = await validateApiSecret(req);
   if (authError) return authError;
 
   try {
     const activeWorkspace = await getActiveWorkspace(req);
+    const { searchParams } = new URL(req.url);
+    const forceRefresh = searchParams.get("refresh") === "true";
+
+    const now = Date.now();
+    const cached = spyStatsCacheMap.get(activeWorkspace.id);
+    if (!forceRefresh && cached && now - cached.timestamp < SPY_STATS_CACHE_TTL_MS) {
+      return NextResponse.json(cached.data, {
+        headers: {
+          "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
+          Vary: PRIVATE_AUTH_VARY,
+        },
+      });
+    }
+
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
@@ -83,13 +105,20 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const responseData = {
+      totalAdsCaptured,
+      launchedLast7Days,
+      scaledAdsCount,
+      mediaDistribution,
+    };
+
+    spyStatsCacheMap.set(activeWorkspace.id, {
+      data: responseData,
+      timestamp: Date.now(),
+    });
+
     return NextResponse.json(
-      {
-        totalAdsCaptured,
-        launchedLast7Days,
-        scaledAdsCount,
-        mediaDistribution,
-      },
+      responseData,
       {
         headers: {
           "Cache-Control": PRIVATE_READ_CACHE_CONTROL,

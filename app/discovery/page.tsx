@@ -1569,7 +1569,7 @@ export default function DiscoveryPage() {
                 ) : (
                   filteredPages.map((page) => {
                     const isSelected = selectedPageIds.has(page.id);
-                    const metaAdLibraryUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${page.country || "TN"}&view_all_page_id=${page.pageId}&search_type=page&media_type=all`;
+                    const metaAdLibraryUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${page.country || country}&view_all_page_id=${page.pageId}&search_type=page&media_type=all`;
 
                     return (
                       <tr

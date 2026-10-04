@@ -10,7 +10,7 @@ export async function getAppSettings() {
     });
     return settings || {
       id: "default",
-      defaultCountry: "TN",
+      defaultCountry: "ALL",
       autoMerge: true,
       staleHours: 12,
       autoSpyThreshold: 1,
@@ -21,7 +21,7 @@ export async function getAppSettings() {
     console.warn("[App Settings] Failed to load settings from DB, using defaults:", err);
     return {
       id: "default",
-      defaultCountry: "TN",
+      defaultCountry: "ALL",
       autoMerge: true,
       staleHours: 12,
       autoSpyThreshold: 1,
@@ -277,7 +277,7 @@ export async function enqueuePagesForCreativeScan(
 export async function saveExtractedPageIdsToDiscovery(
   pageIds: string[],
   searchUrl: string,
-  country: string = "TN",
+  country: string = "ALL",
   parentTrackedPageId?: string | null
 ) {
   if (!pageIds || pageIds.length === 0) return [];
@@ -314,7 +314,7 @@ export async function saveExtractedPageIdsToDiscovery(
           eq(tp.pageId, cleanId),
           eq(
             tp.url,
-            `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&view_all_page_id=${cleanId}&search_type=page&media_type=all`
+            `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&view_all_page_id=${cleanId}&search_type=page&media_type=all`
           )
         ),
     });

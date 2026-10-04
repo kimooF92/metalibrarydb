@@ -198,10 +198,16 @@ async function runWorker() {
     const discoveryUrl = args[testDiscoveryIdx + 1];
     console.log(`[Discovery Mode] Running standalone country discovery scan for URL: ${discoveryUrl}`);
 
+    let extractedCountry = "TN";
+    try {
+      const p = new URL(discoveryUrl);
+      extractedCountry = p.searchParams.get("country") || "TN";
+    } catch {}
+
     const [runRecord] = await db
       .insert(discoveryRuns)
       .values({
-        country: "TN",
+        country: extractedCountry,
         searchUrl: discoveryUrl,
         status: "running",
         startedAt: new Date(),
@@ -209,7 +215,7 @@ async function runWorker() {
       .returning();
 
     const { page } = await getBrowserSession();
-    const outcome = await runDiscoveryScan(page, runRecord.id, discoveryUrl, "TN");
+    const outcome = await runDiscoveryScan(page, runRecord.id, discoveryUrl, extractedCountry);
     console.log("[Discovery Mode] Discovery scan outcome:", outcome);
     await closeBrowserSession();
     process.exit(0);
@@ -285,7 +291,7 @@ async function runWorker() {
 
             const { logDiscoverySummaryNotification } = await import("../lib/notifications");
             await logDiscoverySummaryNotification({
-              country: pendingDiscoveryRun.country || "TN",
+              country: pendingDiscoveryRun.country || "ALL",
               totalAdsScanned: outcome.totalAdsScanned || 0,
               totalPagesDiscovered: outcome.totalPagesDiscovered || 0,
               topBrands: topPages.map((p) => ({
@@ -405,8 +411,9 @@ async function runWorker() {
       const { page } = await getBrowserSession();
 
       if (jobType === "discovery_count" && discoveredPage) {
-        // Run Discovery Page Verification count scan
-        const discoveryUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${discoveredPage.country || "TN"}&view_all_page_id=${discoveredPage.pageId}&search_type=page&media_type=all`;
+        // Run Discovery Page Verification count scan using the page's selected country
+        const selectedCountry = discoveredPage.country || "TN";
+        const discoveryUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${selectedCountry}&view_all_page_id=${discoveredPage.pageId}&search_type=page&media_type=all`;
         const outcome = await scanMetaAdPage(page, discoveryUrl);
 
         if (outcome.status === "success" || outcome.status === "unclear") {
@@ -438,7 +445,7 @@ async function runWorker() {
           trackedPage.id,
           trackedPage.url,
           creativeScan.id,
-          trackedPage.country || "TN"
+          "ALL"
         );
         const pageIdsFound = (outcome.extractedPageIds || []).filter(isValidPageId);
 

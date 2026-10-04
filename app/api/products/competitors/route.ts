@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { scrapedProducts, ads } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { findCompetitorMatches } from "@/lib/product-matcher";
 import { PRODUCT_MATCH_PROJECTION } from "@/lib/product-projections";
 import { ScrapedProduct } from "@/types";
+import { getActiveWorkspace } from "@/lib/workspace-server";
+
+interface CachedBenchmark {
+  data: any;
+  timestamp: number;
+}
+
+const competitorCache = new Map<string, CachedBenchmark>();
+const COMPETITOR_CACHE_TTL_MS = 60 * 1000; // 60 seconds
 
 export async function GET(req: NextRequest) {
   const authError = await validateApiSecret(req);
@@ -14,6 +23,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const productId = searchParams.get("productId");
+    const forceRefresh = searchParams.get("refresh") === "true";
 
     if (!productId) {
       return NextResponse.json(
@@ -22,7 +32,13 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 1. Fetch target product
+    const now = Date.now();
+    const cached = competitorCache.get(productId);
+    if (!forceRefresh && cached && now - cached.timestamp < COMPETITOR_CACHE_TTL_MS) {
+      return NextResponse.json(cached.data);
+    }
+
+    // 1. Fetch target product (lean projection)
     const [targetProduct] = await db
       .select(PRODUCT_MATCH_PROJECTION)
       .from(scrapedProducts)
@@ -35,38 +51,75 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 2. Fetch all products with linked ad counts
-    const adCountsSubquery = db
-      .select({
-        productId: ads.productId,
-        linkedAdsCount: sql<number>`count(distinct ${ads.id})`.as("linked_ads_count"),
-      })
-      .from(ads)
-      .where(sql`${ads.productId} IS NOT NULL`)
-      .groupBy(ads.productId)
-      .as("ad_counts");
+    const activeWorkspace = await getActiveWorkspace(req);
+    const targetWsId = targetProduct.workspaceId || activeWorkspace.id;
 
-    const allProducts = await db
-      .select({
-        ...PRODUCT_MATCH_PROJECTION,
-        linkedAdsCount: sql<number>`COALESCE(${adCountsSubquery.linkedAdsCount}, 0)`.mapWith(Number),
-      })
+    // 2. Fetch candidate products in the EXACT same workspace (strictly isolated)
+    // Filter by matching category when available to eliminate scanning thousands of unrelated products
+    const candidateConditions: any[] = [
+      eq(scrapedProducts.workspaceId, targetWsId),
+      sql`${scrapedProducts.id} != ${targetProduct.id}`,
+      sql`${scrapedProducts.scrapeStatus} NOT IN ('deleted', 'ignored')`,
+    ];
+
+    if (targetProduct.category && targetProduct.category !== "General & Other" && targetProduct.category !== "other") {
+      candidateConditions.push(
+        sql`(${scrapedProducts.category} = ${targetProduct.category} OR ${scrapedProducts.category} IS NULL OR ${scrapedProducts.category} = 'General & Other')`
+      );
+    }
+
+    const candidateProducts = await db
+      .select(PRODUCT_MATCH_PROJECTION)
       .from(scrapedProducts)
-      .leftJoin(adCountsSubquery, eq(scrapedProducts.id, adCountsSubquery.productId))
-      .where(targetProduct.workspaceId ? eq(scrapedProducts.workspaceId, targetProduct.workspaceId) : undefined);
+      .where(and(...candidateConditions))
+      .limit(400);
 
-    // 3. Find algorithmic competitor matches
+    // 3. Find algorithmic competitor matches in memory
     const benchmark = findCompetitorMatches(
       targetProduct as unknown as ScrapedProduct,
-      allProducts as unknown as (ScrapedProduct & { linkedAdsCount?: number })[],
+      candidateProducts as unknown as (ScrapedProduct & { linkedAdsCount?: number })[],
       0.40
     );
 
-    return NextResponse.json({
+    // 4. On-demand ad count lookup for actual matching products only (typically 1-5 products, avoiding 24,000 ad group-by)
+    const matchedIds = benchmark.matches.map((m) => m.product.id).filter(Boolean);
+    if (matchedIds.length > 0) {
+      try {
+        const adCountRows = await db
+          .select({
+            productId: ads.productId,
+            count: sql<number>`count(distinct ${ads.id})`.mapWith(Number),
+          })
+          .from(ads)
+          .where(
+            and(
+              sql`${ads.productId} IN (${sql.join(matchedIds.map((id) => sql`${id}`), sql`, `)})`,
+              sql`(${ads.isArchived} = false OR ${ads.isArchived} IS NULL)`
+            )
+          )
+          .groupBy(ads.productId);
+
+        const countMap = new Map(adCountRows.map((r) => [r.productId, r.count]));
+        benchmark.matches.forEach((m) => {
+          (m.product as any).linkedAdsCount = countMap.get(m.product.id) || 0;
+        });
+      } catch (countErr) {
+        console.warn("[Competitors API] Warning fetching ad counts for matches:", countErr);
+      }
+    }
+
+    const responsePayload = {
       success: true,
       targetProduct,
       benchmark,
+    };
+
+    competitorCache.set(productId, {
+      data: responsePayload,
+      timestamp: Date.now(),
     });
+
+    return NextResponse.json(responsePayload);
   } catch (err: any) {
     console.error("[Competitors API] Error:", err);
     return NextResponse.json(

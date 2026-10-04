@@ -92,7 +92,7 @@ export async function POST(req: Request) {
 
       // 2. If not merged via exact match parent, insert or update canonical page
       if (!tpId) {
-        const pageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${discPage.country || activeWorkspace?.countryCode || "TN"}&view_all_page_id=${discPage.pageId}&search_type=page&media_type=all`;
+        const pageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&view_all_page_id=${discPage.pageId}&search_type=page&media_type=all`;
 
         // Check if page with this pageId already exists in this workspace
         const existingByPageId = await db.query.trackedPages.findFirst({
@@ -208,8 +208,8 @@ export async function POST(req: Request) {
       const cleanPageId = directPage.pageId?.trim();
       if (!cleanPageId) continue;
 
-      const pageCountry = directPage.country || activeWorkspace?.countryCode || "TN";
-      const pageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${pageCountry}&view_all_page_id=${cleanPageId}&search_type=page&media_type=all`;
+      const pageCountry = directPage.country || activeWorkspace?.countryCode || "ALL";
+      const pageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&view_all_page_id=${cleanPageId}&search_type=page&media_type=all`;
 
       const existingByPageId = await db.query.trackedPages.findFirst({
         where: and(

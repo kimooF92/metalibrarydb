@@ -273,7 +273,7 @@ export function parseMetaAdLibraryDiscoveryUrl(rawUrl: string): ParsedMetaAdUrl 
     return {
       isValid: false,
       cleanUrl: "",
-      country: "TN",
+      country: "ALL",
       query: "\u200D",
       mediaType: "all",
       startDateMin: null,
@@ -297,7 +297,7 @@ export function parseMetaAdLibraryDiscoveryUrl(rawUrl: string): ParsedMetaAdUrl 
       return {
         isValid: false,
         cleanUrl: urlToTest,
-        country: "TN",
+        country: "ALL",
         query: "\u200D",
         mediaType: "all",
         startDateMin: null,
@@ -378,7 +378,7 @@ export function parseMetaAdLibraryDiscoveryUrl(rawUrl: string): ParsedMetaAdUrl 
     return {
       isValid: false,
       cleanUrl: urlToTest,
-      country: "TN",
+      country: "ALL",
       query: "\u200D",
       mediaType: "all",
       startDateMin: null,
@@ -527,7 +527,7 @@ export function extractUrlMetadata(rawUrl: string): UrlMetadata {
   const normalizedUrl = isMetaAdLibraryUrl(trimmed)
     ? trimmed
     : (normalizeAddUrlInput(trimmed) ?? trimmed);
-  const fullUrl = normalizedUrl.match(/^https?:\/\//i)
+  let fullUrl = normalizedUrl.match(/^https?:\/\//i)
     ? normalizedUrl
     : `https://${normalizedUrl}`;
 
@@ -537,6 +537,11 @@ export function extractUrlMetadata(rawUrl: string): UrlMetadata {
 
   try {
     const parsed = new URL(fullUrl);
+    if (isMetaAdLibraryUrl(fullUrl)) {
+      parsed.searchParams.set("country", "ALL");
+      parsed.searchParams.set("is_targeted_country", "false");
+      fullUrl = parsed.toString();
+    }
     const params = parsed.searchParams;
 
     // 1. Extract Page ID (view_all_page_id)

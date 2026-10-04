@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { ads, scrapedProducts, trackedPages } from "@/db/schema";
+import { ads, scrapedProducts, trackedPages, brandDomains, adObservations, workspaces } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 import { normalizeProductUrl, extractProductFromUrl } from "@/lib/firecrawl";
@@ -123,10 +123,66 @@ export async function linkAndAutoScrapeProduct({
   }
 
   try {
+    // Resolve workspace and brand domain hierarchy
+    let resolvedWorkspaceId = workspaceId;
+    let resolvedBrandDomainId: string | null = null;
+
+    const cleanPageId = isValidPageId(pageId) ? (pageId as string) : null;
+    if (cleanPageId) {
+      const pageRec = await db.query.trackedPages.findFirst({
+        where: eq(trackedPages.pageId, cleanPageId),
+        columns: { workspaceId: true, brandDomainId: true },
+      });
+      if (pageRec?.workspaceId && !resolvedWorkspaceId) {
+        resolvedWorkspaceId = pageRec.workspaceId;
+      }
+      if (pageRec?.brandDomainId) {
+        resolvedBrandDomainId = pageRec.brandDomainId;
+      }
+    }
+
+    if (domain) {
+      const bd = await db.query.brandDomains.findFirst({
+        where: sql`lower(${brandDomains.domain}) = ${domain.toLowerCase()}`,
+        columns: { id: true, workspaceId: true },
+      });
+      if (bd) {
+        if (!resolvedBrandDomainId) resolvedBrandDomainId = bd.id;
+        if (!resolvedWorkspaceId && bd.workspaceId) resolvedWorkspaceId = bd.workspaceId;
+      }
+    }
+
+    if (!resolvedWorkspaceId && adId) {
+      const adObs = await db
+        .select({
+          workspaceId: trackedPages.workspaceId,
+          brandDomainId: trackedPages.brandDomainId,
+        })
+        .from(adObservations)
+        .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+        .where(eq(adObservations.adId, adId))
+        .limit(1);
+
+      if (adObs.length > 0 && adObs[0].workspaceId) {
+        resolvedWorkspaceId = adObs[0].workspaceId;
+        if (!resolvedBrandDomainId && adObs[0].brandDomainId) {
+          resolvedBrandDomainId = adObs[0].brandDomainId;
+        }
+      }
+    }
+
+    if (!resolvedWorkspaceId) {
+      const activeWs = await getActiveWorkspace();
+      resolvedWorkspaceId = activeWs.id;
+    }
+
     // 1. Check if product already exists in scrapedProducts table
     const existing = await db
       .select({
         id: scrapedProducts.id,
+        workspaceId: scrapedProducts.workspaceId,
+        brandDomainId: scrapedProducts.brandDomainId,
+        pageId: scrapedProducts.pageId,
         scrapeStatus: scrapedProducts.scrapeStatus,
         lastScrapedAt: scrapedProducts.lastScrapedAt,
       })
@@ -142,6 +198,27 @@ export async function linkAndAutoScrapeProduct({
       }
 
       const prodId = prod.id;
+
+      // Reconcile and fix workspaceId / brandDomainId / pageId if missing or mismatched
+      const updates: any = {};
+      if (resolvedWorkspaceId && prod.workspaceId !== resolvedWorkspaceId) {
+        updates.workspaceId = resolvedWorkspaceId;
+      }
+      if (resolvedBrandDomainId && prod.brandDomainId !== resolvedBrandDomainId) {
+        updates.brandDomainId = resolvedBrandDomainId;
+      }
+      if (isValidPageId(pageId) && !prod.pageId) {
+        updates.pageId = pageId;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        updates.updatedAt = new Date();
+        await db
+          .update(scrapedProducts)
+          .set(updates)
+          .where(eq(scrapedProducts.id, prodId));
+      }
+
       // Link ad to existing product record immediately
       if (adId) {
         await db
@@ -155,19 +232,6 @@ export async function linkAndAutoScrapeProduct({
     // 2. Insert new pending product entry
     const now = new Date();
 
-    let resolvedWorkspaceId = workspaceId;
-    if (!resolvedWorkspaceId && pageId) {
-      const pageRec = await db.query.trackedPages.findFirst({
-        where: eq(trackedPages.pageId, pageId),
-        columns: { workspaceId: true },
-      });
-      if (pageRec?.workspaceId) resolvedWorkspaceId = pageRec.workspaceId;
-    }
-    if (!resolvedWorkspaceId) {
-      const activeWs = await getActiveWorkspace();
-      resolvedWorkspaceId = activeWs.id;
-    }
-
     const [newProduct] = await db
       .insert(scrapedProducts)
       .values({
@@ -175,6 +239,7 @@ export async function linkAndAutoScrapeProduct({
         domain: domain || null,
         pageId: isValidPageId(pageId) ? pageId : null,
         workspaceId: resolvedWorkspaceId,
+        brandDomainId: resolvedBrandDomainId || null,
         title: domain || "Product",
         scrapeStatus: "pending",
         createdAt: now,
@@ -188,11 +253,19 @@ export async function linkAndAutoScrapeProduct({
     if (!targetProductId) {
       // Handled conflict: Fetch existing ID
       const recheck = await db
-        .select({ id: scrapedProducts.id })
+        .select({ id: scrapedProducts.id, workspaceId: scrapedProducts.workspaceId })
         .from(scrapedProducts)
         .where(eq(scrapedProducts.url, normalizedUrl))
         .limit(1);
       const prodId = recheck[0]?.id || null;
+
+      if (prodId && resolvedWorkspaceId && recheck[0]?.workspaceId !== resolvedWorkspaceId) {
+        await db
+          .update(scrapedProducts)
+          .set({ workspaceId: resolvedWorkspaceId, brandDomainId: resolvedBrandDomainId || undefined, updatedAt: now })
+          .where(eq(scrapedProducts.id, prodId));
+      }
+
       if (adId && prodId) {
         await db
           .update(ads)
@@ -265,6 +338,16 @@ export async function linkAndAutoScrapeProduct({
             savings: offer.savings,
           }));
 
+          // Resolve workspace default currency dynamically
+          let fallbackCurrency = "TND";
+          if (resolvedWorkspaceId) {
+            const ws = await db.query.workspaces.findFirst({
+              where: eq(workspaces.id, resolvedWorkspaceId),
+              columns: { currency: true },
+            });
+            if (ws?.currency) fallbackCurrency = ws.currency;
+          }
+
           const updateTime = new Date();
           await db
             .update(scrapedProducts)
@@ -273,7 +356,7 @@ export async function linkAndAutoScrapeProduct({
               title: extracted.title,
               currentPrice: extracted.current_price,
               originalPrice: extracted.original_price || null,
-              currency: extracted.currency || "TND",
+              currency: extracted.currency || fallbackCurrency,
               discountOrOffer: extracted.discount_or_offer || null,
               mainImageUrl: extracted.main_image_url || null,
               galleryImages: extracted.gallery_images || [],
@@ -336,7 +419,9 @@ export async function bulkLinkAndAutoScrapeProducts(
     linkUrl: string | null | undefined;
     pageId?: string | null;
     caption?: string | null;
-  }>
+    workspaceId?: string | null;
+  }>,
+  batchWorkspaceId?: string | null
 ) {
   if (!adsToProcess || adsToProcess.length === 0) return { linked: 0, newProducts: 0 };
 
@@ -351,6 +436,7 @@ export async function bulkLinkAndAutoScrapeProducts(
         linkUrl: item.linkUrl,
         pageId: item.pageId,
         adCopy: item.caption,
+        workspaceId: item.workspaceId || batchWorkspaceId || null,
       });
       if (res.productId) {
         linkedCount++;

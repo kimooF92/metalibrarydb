@@ -19,8 +19,7 @@ async function run() {
 
   for (const page of mismatched) {
     const cleanPageId = page.pageId!.trim();
-    const country = page.country || "TN";
-    const canonicalUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&view_all_page_id=${cleanPageId}&search_type=page&media_type=all`;
+    const canonicalUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&view_all_page_id=${cleanPageId}&search_type=page&media_type=all`;
 
     console.log(`\nFixing page [${page.id}]: "${page.displayName || cleanPageId}"`);
     console.log(`  Old URL: ${page.url}`);

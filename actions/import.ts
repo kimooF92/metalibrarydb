@@ -177,7 +177,7 @@ export async function processFileImport(
         searchType: m.searchType,
         pageId: m.pageId,
         workspaceId: activeWorkspace.id,
-        country: activeWorkspace.countryCode || "TN",
+        country: activeWorkspace.countryCode || "ALL",
         status: "pending",
       }))
     )

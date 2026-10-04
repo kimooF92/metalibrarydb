@@ -178,8 +178,11 @@ export async function scanAdCreatives(
   trackedPageId: string,
   targetUrl: string,
   creativeScanId: string,
-  country: string = "TN"
+  country: string = "ALL"
 ): Promise<SpyScanOutcome> {
+  const pageRecord = await db.query.trackedPages.findFirst({
+    where: eq(trackedPages.id, trackedPageId),
+  });
   const collectedAds = new Map<string, ExtractedAdData>();
   const canonicalPageIdsFromFilter = new Map<string, string>(); // pageId -> displayName
   let hasCaptchaOrBlock = false;
@@ -311,23 +314,16 @@ export async function scanAdCreatives(
   page.on("response", handleResponse);
 
   try {
-    // Ensure effective country parameter is set (replace country=ALL with tracked country or TN default)
+    // Ensure Meta Ad Library URL uses country=ALL so ads show up regardless of workspace country
     let finalTargetUrl = targetUrl;
     try {
       const parsedUrl = new URL(targetUrl.match(/^https?:\/\//i) ? targetUrl : `https://${targetUrl}`);
       if (!parsedUrl.searchParams.get("view_all_page_id") && !parsedUrl.searchParams.get("id")) {
         console.warn(`[Spy Scanner] Target URL does not contain explicit view_all_page_id parameter: "${targetUrl}"`);
       }
-      const currentCountry = parsedUrl.searchParams.get("country");
-      const effectiveCountry = country && country !== "ALL" ? country : "TN";
-
-      if (!currentCountry || currentCountry === "ALL") {
-        parsedUrl.searchParams.set("country", effectiveCountry);
-        if (!currentCountry) {
-          parsedUrl.searchParams.set("is_targeted_country", "false");
-        }
-        finalTargetUrl = parsedUrl.toString();
-      }
+      parsedUrl.searchParams.set("country", "ALL");
+      parsedUrl.searchParams.set("is_targeted_country", "false");
+      finalTargetUrl = parsedUrl.toString();
     } catch {
       // keep original targetUrl fallback
     }
@@ -738,6 +734,7 @@ export async function scanAdCreatives(
               linkUrl: adData.linkUrl,
               pageId: (adData.pageId && !adData.pageId.includes("-")) ? adData.pageId : (extractedPageIds[0] && !extractedPageIds[0].includes("-") ? extractedPageIds[0] : null),
               adCopy: adData.caption,
+              workspaceId: pageRecord?.workspaceId || null,
             });
             if (prodRes?.isNew) {
               newProductsCount++;
@@ -832,7 +829,7 @@ export async function scanAdCreatives(
             });
 
             if (!existingSister) {
-              const newPageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${pageCountry}&view_all_page_id=${resolvedPageId}&search_type=page&media_type=all`;
+              const newPageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&view_all_page_id=${resolvedPageId}&search_type=page&media_type=all`;
               await db.insert(trackedPages).values({
                 url: newPageUrl,
                 pageId: resolvedPageId,
@@ -864,7 +861,7 @@ export async function scanAdCreatives(
         // Fallback for non-domain searches
         pageUpdates.pageId = resolvedPageId;
         pageUpdates.searchType = "page";
-        pageUpdates.url = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${pageCountry}&view_all_page_id=${resolvedPageId}&search_type=page&media_type=all`;
+        pageUpdates.url = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&view_all_page_id=${resolvedPageId}&search_type=page&media_type=all`;
         if (resolvedPageName && (!trackedPageRecord?.displayName || trackedPageRecord.displayName.startsWith("http"))) {
           pageUpdates.displayName = resolvedPageName;
         }
@@ -891,13 +888,30 @@ export async function scanAdCreatives(
         try {
           await db.execute(sql`
             UPDATE scraped_products
-            SET page_id = ${resolvedPageId},
+            SET page_id = COALESCE(page_id, ${resolvedPageId}),
+                workspace_id = COALESCE(${pageRecord?.workspaceId || null}, workspace_id),
+                brand_domain_id = COALESCE(${pageRecord?.brandDomainId || null}, brand_domain_id),
                 updated_at = NOW()
             WHERE (lower(domain) = ${targetDomain.toLowerCase().trim()} OR url ILIKE ${`%${targetDomain.trim()}%`})
-              AND (page_id IS NULL OR page_id = '0')
+              AND (page_id IS NULL OR page_id = '0' OR workspace_id IS NULL OR workspace_id != ${pageRecord?.workspaceId || null})
           `);
         } catch (prodErr) {
           console.warn("[Spy Scanner] Non-fatal error backfilling scraped_products:", prodErr);
+        }
+      }
+
+      if (pageRecord?.workspaceId && resolvedPageId) {
+        try {
+          await db.execute(sql`
+            UPDATE scraped_products
+            SET workspace_id = ${pageRecord.workspaceId},
+                brand_domain_id = COALESCE(${pageRecord.brandDomainId || null}, brand_domain_id),
+                updated_at = NOW()
+            WHERE page_id = ${resolvedPageId}
+              AND (workspace_id IS NULL OR workspace_id != ${pageRecord.workspaceId})
+          `);
+        } catch (prodErr) {
+          console.warn("[Spy Scanner] Non-fatal error syncing scraped_products workspace_id by resolvedPageId:", prodErr);
         }
       }
     }

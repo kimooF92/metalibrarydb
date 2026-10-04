@@ -32,9 +32,7 @@ async function main() {
     }
 
     if (!tpId) {
-      const pageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${
-        dp.country || "TN"
-      }&view_all_page_id=${dp.pageId}&search_type=page&media_type=all`;
+      const pageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&view_all_page_id=${dp.pageId}&search_type=page&media_type=all`;
 
       const existingByPageId = await db.query.trackedPages.findFirst({
         where: eq(trackedPages.pageId, dp.pageId),
@@ -52,6 +50,9 @@ async function main() {
           })
           .where(eq(trackedPages.id, existingByPageId.id));
       } else {
+        const countryCode = dp.country === "MA" ? "MA" : "TN";
+        const wsId = countryCode === "MA" ? "00000000-0000-0000-0000-000000000002" : "00000000-0000-0000-0000-000000000001";
+
         const [tp] = await db
           .insert(trackedPages)
           .values({
@@ -59,7 +60,8 @@ async function main() {
             displayName: dp.displayName || `Page ${dp.pageId}`,
             pageId: dp.pageId,
             searchType: "page",
-            country: dp.country || "TN",
+            country: countryCode,
+            workspaceId: wsId,
             adCount: dp.matchingAdCount,
             currentResults: dp.verifiedAdCount || dp.matchingAdCount,
             status: "pending",
@@ -70,6 +72,7 @@ async function main() {
               displayName: dp.displayName || trackedPages.displayName,
               pageId: dp.pageId,
               searchType: "page",
+              workspaceId: wsId,
               updatedAt: new Date(),
             },
           })

@@ -6,14 +6,43 @@ import { sql, desc, eq } from "drizzle-orm";
 import { cleanOrphanedScans } from "@/lib/clean-scans";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 
+interface CachedDashboardStats {
+  data: any;
+  timestamp: number;
+}
+
+const statsCacheMap = new Map<string, CachedDashboardStats>();
+const STATS_CACHE_TTL_MS = 30 * 1000; // 30 seconds
+
+let lastCleanupTimestamp = 0;
+const CLEANUP_THROTTLE_MS = 15 * 60 * 1000; // 15 minutes
+
 export async function GET(request: Request) {
   try {
     const activeWorkspace = await getActiveWorkspace(request);
+    const { searchParams } = new URL(request.url);
+    const forceRefresh = searchParams.get("refresh") === "true";
 
-    // 0. Auto-heal any orphaned scans stuck longer than 5 minutes
-    await cleanOrphanedScans(5).catch((err) => {
-      console.warn("Failed to auto-clean orphaned scans in /api/stats:", err);
-    });
+    // 0. Auto-heal orphaned scans asynchronously in the background (at most once every 15 minutes)
+    // Never block the user-facing stats API response on database maintenance routines.
+    const now = Date.now();
+    if (now - lastCleanupTimestamp > CLEANUP_THROTTLE_MS) {
+      lastCleanupTimestamp = now;
+      cleanOrphanedScans(5).catch((err) => {
+        console.warn("Background auto-clean orphaned scans warning:", err);
+      });
+    }
+
+    // Check in-memory cache for active workspace
+    const cached = statsCacheMap.get(activeWorkspace.id);
+    if (!forceRefresh && cached && now - cached.timestamp < STATS_CACHE_TTL_MS) {
+      return NextResponse.json(cached.data, {
+        headers: {
+          "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
+          Vary: PRIVATE_AUTH_VARY,
+        },
+      });
+    }
 
     // 1. Status counts scoped to active workspace
     const statusCounts = await db
@@ -57,7 +86,7 @@ export async function GET(request: Request) {
       orderBy: [desc(importJobs.createdAt)],
     });
 
-    return NextResponse.json({
+    const responseData = {
       totalPages,
       pending: countsMap.pending,
       scanning: countsMap.scanning,
@@ -74,7 +103,17 @@ export async function GET(request: Request) {
             totalRows: lastImport.totalRows,
           }
         : null,
-    }, { headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY } });
+    };
+
+    // Store in in-memory cache
+    statsCacheMap.set(activeWorkspace.id, {
+      data: responseData,
+      timestamp: Date.now(),
+    });
+
+    return NextResponse.json(responseData, {
+      headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY },
+    });
   } catch (error) {
     console.error("Error in GET /api/stats:", error);
     return NextResponse.json(
