@@ -29,6 +29,7 @@ import {
   Link2,
 } from "lucide-react";
 import { parseMetaAdLibraryDiscoveryUrl, type ParsedMetaAdUrl } from "@/lib/url-parser";
+import { useWorkspace } from "@/components/workspace-context";
 
 interface DiscoveryRun {
   id: string;
@@ -214,6 +215,7 @@ function syncDiscoveryStateToUrl(state: {
 }
 
 export default function DiscoveryPage() {
+  const { activeWorkspace } = useWorkspace();
   const [mounted, setMounted] = useState(false);
 
   const [runs, setRuns] = useState<DiscoveryRun[]>([]);
@@ -382,9 +384,19 @@ export default function DiscoveryPage() {
       const data = await res.json();
       if (data.success && Array.isArray(data.runs)) {
         setRuns(data.runs);
-        if (data.runs.length > 0 && !selectedRunId) {
-          setSelectedRunId(data.runs[0].id);
+        if (data.runs.length > 0) {
+          setSelectedRunId((prev) => {
+            const stillExists = prev && data.runs.some((r: DiscoveryRun) => r.id === prev);
+            return stillExists ? prev : data.runs[0].id;
+          });
+        } else {
+          setSelectedRunId(null);
+          setPages([]);
         }
+      } else {
+        setRuns([]);
+        setSelectedRunId(null);
+        setPages([]);
       }
     } catch {
       // Fetch error silently
@@ -411,9 +423,16 @@ export default function DiscoveryPage() {
     }
   };
 
+  // Re-fetch runs and sync default country whenever active workspace changes
   useEffect(() => {
     fetchRuns();
-  }, []);
+    if (activeWorkspace?.countryCode) {
+      const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+      if (!urlParams?.has("country")) {
+        setCountry(activeWorkspace.countryCode);
+      }
+    }
+  }, [activeWorkspace?.id, activeWorkspace?.countryCode]);
 
   useEffect(() => {
     if (selectedRunId) {

@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ads, scrapedProducts } from "@/db/schema";
-import { count, sql } from "drizzle-orm";
+import { count, sql, and, eq } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const maxDuration = 30;
 
-// In-memory cache for product stats (60s TTL) to prevent repeated heavy aggregations
+// In-memory cache for product stats (60s TTL) keyed by workspaceId
 interface CachedStats {
   data: {
     totalProducts: number;
@@ -30,7 +31,7 @@ interface CachedStats {
   timestamp: number;
 }
 
-let cachedStats: CachedStats | null = null;
+const cachedStatsMap = new Map<string, CachedStats>();
 const CACHE_TTL_MS = 60 * 1000; // 60 seconds
 
 export async function GET(req: NextRequest) {
@@ -38,10 +39,12 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    const activeWorkspace = await getActiveWorkspace(req);
     const { searchParams } = new URL(req.url);
     const forceRefresh = searchParams.get("refresh") === "true";
 
     const now = Date.now();
+    const cachedStats = cachedStatsMap.get(activeWorkspace.id);
     if (!forceRefresh && cachedStats && now - cachedStats.timestamp < CACHE_TTL_MS) {
       return NextResponse.json(
         {
@@ -58,7 +61,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Execute the two summary queries in parallel
+    // Execute the two summary queries in parallel scoped to active workspace
     const [productStatsRows, activeAdsStatsRows] = await Promise.all([
       db
         .select({
@@ -78,15 +81,24 @@ export async function GET(req: NextRequest) {
           woocommerceCount: sql<number>`COUNT(CASE WHEN LOWER(${scrapedProducts.storePlatform}) LIKE '%woocommerce%' THEN 1 END)`.mapWith(Number),
         })
         .from(scrapedProducts)
-        .where(sql`${scrapedProducts.scrapeStatus} NOT IN ('deleted', 'ignored')`),
+        .where(
+          and(
+            sql`${scrapedProducts.scrapeStatus} NOT IN ('deleted', 'ignored')`,
+            eq(scrapedProducts.workspaceId, activeWorkspace.id)
+          )
+        ),
 
       db
         .select({
           activeDistinctCount: sql<number>`COUNT(DISTINCT ${ads.productId})`.mapWith(Number),
         })
         .from(ads)
+        .innerJoin(scrapedProducts, eq(ads.productId, scrapedProducts.id))
         .where(
-          sql`${ads.productId} IS NOT NULL AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)`
+          and(
+            sql`${ads.productId} IS NOT NULL AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)`,
+            eq(scrapedProducts.workspaceId, activeWorkspace.id)
+          )
         ),
     ]);
 
@@ -112,10 +124,10 @@ export async function GET(req: NextRequest) {
       },
     };
 
-    cachedStats = {
+    cachedStatsMap.set(activeWorkspace.id, {
       data: statsData,
       timestamp: now,
-    };
+    });
 
     return NextResponse.json(
       {

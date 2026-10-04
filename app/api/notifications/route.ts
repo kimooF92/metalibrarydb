@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { activityNotifications } from "@/db/schema";
 import { desc, eq, and, inArray, sql } from "drizzle-orm";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 
 export async function GET(req: NextRequest) {
   try {
@@ -11,7 +12,11 @@ export async function GET(req: NextRequest) {
     const unreadOnly = searchParams.get("unreadOnly") === "true";
     const summaryOnly = searchParams.get("summary") === "true";
 
-    const conditions = [];
+    const activeWorkspace = await getActiveWorkspace(req);
+
+    const conditions = [
+      eq(activityNotifications.workspaceId, activeWorkspace.id),
+    ];
     if (type && type !== "all") {
       if (type.includes(",")) {
         const types = type.split(",").map((t) => t.trim()).filter(Boolean);
@@ -32,11 +37,11 @@ export async function GET(req: NextRequest) {
           limit,
         });
 
-    // Count unread notifications
+    // Count unread notifications for active workspace
     const [unreadCountResult] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(activityNotifications)
-      .where(eq(activityNotifications.isRead, false));
+      .where(and(eq(activityNotifications.isRead, false), eq(activityNotifications.workspaceId, activeWorkspace.id)));
 
     const unreadCount = unreadCountResult?.count || 0;
 
@@ -55,6 +60,7 @@ export async function GET(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
+    const activeWorkspace = await getActiveWorkspace(req);
     const body = await req.json();
     const { id, ids, action } = body;
 
@@ -62,7 +68,12 @@ export async function PATCH(req: NextRequest) {
       await db
         .update(activityNotifications)
         .set({ isRead: true })
-        .where(eq(activityNotifications.isRead, false));
+        .where(
+          and(
+            eq(activityNotifications.isRead, false),
+            eq(activityNotifications.workspaceId, activeWorkspace.id)
+          )
+        );
 
       return NextResponse.json({ success: true, message: "Marked all notifications as read." });
     }
@@ -96,11 +107,14 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    const activeWorkspace = await getActiveWorkspace(req);
     const body = await req.json().catch(() => ({}));
     const { id, clearAll } = body;
 
     if (clearAll) {
-      await db.delete(activityNotifications);
+      await db
+        .delete(activityNotifications)
+        .where(eq(activityNotifications.workspaceId, activeWorkspace.id));
       return NextResponse.json({ success: true, message: "Cleared all notifications." });
     }
 

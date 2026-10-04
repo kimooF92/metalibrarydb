@@ -7,6 +7,7 @@ import { eq, ne, ilike, or, and, sql, desc, asc, inArray, gte, lte, isNotNull, i
 import { extractProductClusterKey } from "@/lib/product-clustering";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 
 export async function GET(request: Request) {
   try {
@@ -27,8 +28,13 @@ export async function GET(request: Request) {
     const limit = Math.min(5000, Math.max(1, parseInt(searchParams.get("limit") || "25", 10)));
     const offset = (page - 1) * limit;
 
+    // Resolve active workspace
+    const activeWorkspace = await getActiveWorkspace(request);
+
     // Build conditions array
-    const conditions = [];
+    const conditions: any[] = [
+      eq(trackedPages.workspaceId, activeWorkspace.id),
+    ];
 
     if (search) {
       conditions.push(
@@ -510,7 +516,8 @@ export async function POST(request: Request) {
     const validated = singleUrlSchema.parse(body);
     const allowDuplicate = Boolean(body.allowDuplicate);
 
-    const result = await addSingleUrl(validated.url, allowDuplicate);
+    const activeWorkspace = await getActiveWorkspace(request);
+    const result = await addSingleUrl(validated.url, allowDuplicate, activeWorkspace.id);
 
     if (!result.success) {
       return NextResponse.json(

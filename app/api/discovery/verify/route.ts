@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { discoveredPages, queue } from "@/db/schema";
 import { inArray, eq } from "drizzle-orm";
 import { triggerGitHubWorkflow } from "@/lib/github";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 
 /**
  * POST /api/discovery/verify
@@ -16,6 +17,7 @@ import { triggerGitHubWorkflow } from "@/lib/github";
  */
 export async function POST(req: Request) {
   try {
+    const activeWorkspace = await getActiveWorkspace(req);
     const body = await req.json().catch(() => ({}));
     const ids: string[] = body.discoveredPageIds || body.ids || [];
 
@@ -59,6 +61,7 @@ export async function POST(req: Request) {
           jobType: "discovery_count",
           priority: 10,
           status: "pending",
+          workspaceId: activeWorkspace.id,
         });
         enqueuedCount++;
       }

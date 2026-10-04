@@ -4,6 +4,7 @@ import { ads, adObservations, trackedPages } from "@/db/schema";
 import { sql, desc, count, and, eq, or, gte, isNull, inArray } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -14,12 +15,19 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    const activeWorkspace = await getActiveWorkspace(req);
     const range = req.nextUrl.searchParams.get("range") ?? "7d";
     const rangeDays = ({ today: 1, "7d": 7, "15d": 15, "30d": 30 } as Record<string, number>)[range] ?? 7;
     const windowStart = new Date();
     windowStart.setDate(windowStart.getDate() - rangeDays);
     const windowStartIso = windowStart.toISOString();
-    const observationWindow = gte(adObservations.observedAt, windowStart);
+
+    // Observation window scoped strictly to active workspace
+    const workspaceCondition = eq(trackedPages.workspaceId, activeWorkspace.id);
+    const observationWindow = and(
+      gte(adObservations.observedAt, windowStart),
+      workspaceCondition
+    );
 
     // 1. Safe Date Expression for Longevity (Fallback to firstSeenAt or createdAt if startedRunningOn is missing)
     const dateExpr = sql`COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}, ${ads.createdAt})`;
@@ -40,6 +48,7 @@ export async function GET(req: NextRequest) {
       })
       .from(ads)
       .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
       .where(observationWindow);
 
     const totalAdsCount = Math.max(1, Number(summaryRes?.totalAds || 0));
@@ -83,6 +92,7 @@ export async function GET(req: NextRequest) {
       })
       .from(ads)
       .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
       .where(observationWindow)
       .groupBy(sql`1`, sql`2`, sql`3`)
       .orderBy(sql`3`);
@@ -98,6 +108,7 @@ export async function GET(req: NextRequest) {
       })
       .from(ads)
       .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
       .where(observationWindow)
       .groupBy(sql`COALESCE(${ads.mediaType}, 'unknown')`)
       .orderBy(desc(count()));
@@ -111,6 +122,7 @@ export async function GET(req: NextRequest) {
       })
       .from(ads)
       .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
       .where(observationWindow)
       .groupBy(sql`1`)
       .orderBy(desc(count()))
@@ -123,6 +135,7 @@ export async function GET(req: NextRequest) {
       })
       .from(ads)
       .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
       .where(and(observationWindow, gte(adObservations.duplicationCount, 5)))
       .groupBy(sql`1`)
       .orderBy(desc(count()))
@@ -154,6 +167,7 @@ export async function GET(req: NextRequest) {
       })
       .from(ads)
       .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
       .where(observationWindow)
       .groupBy(sql`1`, sql`2`)
       .orderBy(desc(count()));
@@ -176,6 +190,7 @@ export async function GET(req: NextRequest) {
       })
       .from(ads)
       .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
       .where(observationWindow);
 
     // 7. Duplication / Scale Tiers Distribution
@@ -203,6 +218,7 @@ export async function GET(req: NextRequest) {
       })
       .from(ads)
       .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
       .where(observationWindow)
       .groupBy(sql`1`, sql`2`)
       .orderBy(desc(count()));
@@ -228,6 +244,7 @@ export async function GET(req: NextRequest) {
       })
       .from(ads)
       .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
       .where(
         and(
           observationWindow,
@@ -263,7 +280,7 @@ export async function GET(req: NextRequest) {
       })
       .from(ads)
       .innerJoin(adObservations, eq(ads.id, adObservations.adId))
-      .leftJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
       .where(observationWindow)
       .groupBy(sql`1`, ads.pageId)
       .orderBy(desc(count()))

@@ -11,6 +11,29 @@ import {
   json,
 } from "drizzle-orm/pg-core";
 
+// 0a. Workspaces Table (Multi-Workspace Isolation & Management)
+export const workspaces = pgTable(
+  "workspaces",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull().unique(),
+    countryCode: text("country_code").notNull().default("TN"),
+    currency: text("currency").notNull().default("TND"),
+    currencySymbol: text("currency_symbol").notNull().default("DT"),
+    flag: text("flag").notNull().default("🇹🇳"),
+    isDefault: boolean("is_default").default(false).notNull(),
+    description: text("description"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_workspaces_slug").on(table.slug),
+    index("idx_workspaces_country_code").on(table.countryCode),
+    index("idx_workspaces_is_default").on(table.isDefault),
+  ]
+);
+
 // 0. Brand Domains Table (Multi-Page Brand Domain Portfolios)
 export const brandDomains = pgTable(
   "brand_domains",
@@ -22,12 +45,14 @@ export const brandDomains = pgTable(
     storePlatform: text("store_platform"),
     notes: text("notes"),
     isWatchlisted: boolean("is_watchlisted").default(false).notNull(),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     index("idx_brand_domains_domain").on(table.domain),
     index("idx_brand_domains_watchlist").on(table.isWatchlisted),
+    index("idx_brand_domains_workspace_id").on(table.workspaceId),
   ]
 );
 
@@ -72,6 +97,7 @@ export const trackedPages = pgTable(
     brandDomainId: uuid("brand_domain_id").references(() => brandDomains.id, { onDelete: "set null" }),
     pageRole: text("page_role").default("primary"), // "primary" | "satellite" | "backup"
     canonicalDomain: text("canonical_domain"), // cached apex/tenant domain for fast lookup
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
   },
   (table) => [
     index("idx_tracked_pages_status").on(table.status),
@@ -81,6 +107,7 @@ export const trackedPages = pgTable(
     index("idx_tracked_pages_auto_creative_scan").on(table.autoCreativeScan),
     index("idx_tracked_pages_brand_domain_id").on(table.brandDomainId),
     index("idx_tracked_pages_canonical_domain").on(table.canonicalDomain),
+    index("idx_tracked_pages_workspace_id").on(table.workspaceId),
     uniqueIndex("idx_tracked_pages_unique_primary")
       .on(table.brandDomainId)
       .where(sql`page_role = 'primary'`),
@@ -115,16 +142,23 @@ export const scanHistory = pgTable(
 );
 
 // 3. Import Jobs Table
-export const importJobs = pgTable("import_jobs", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  filename: text("filename").notNull(),
-  filePath: text("file_path"), // Supabase Storage path
-  totalRows: integer("total_rows").default(0),
-  successful: integer("successful").default(0),
-  failed: integer("failed").default(0),
-  duplicates: integer("duplicates").default(0),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+export const importJobs = pgTable(
+  "import_jobs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    filename: text("filename").notNull(),
+    filePath: text("file_path"), // Supabase Storage path
+    totalRows: integer("total_rows").default(0),
+    successful: integer("successful").default(0),
+    failed: integer("failed").default(0),
+    duplicates: integer("duplicates").default(0),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("idx_import_jobs_workspace_id").on(table.workspaceId),
+  ]
+);
 
 // 4. Creative Scans Table
 export const creativeScans = pgTable(
@@ -181,6 +215,7 @@ export const scrapedProducts = pgTable(
     failureReason: text("failure_reason"),
     lastScrapedAt: timestamp("last_scraped_at", { withTimezone: true }),
     brandDomainId: uuid("brand_domain_id").references(() => brandDomains.id, { onDelete: "set null" }),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -189,6 +224,7 @@ export const scrapedProducts = pgTable(
     index("idx_scraped_products_domain").on(table.domain),
     index("idx_scraped_products_page_id").on(table.pageId),
     index("idx_scraped_products_brand_domain_id").on(table.brandDomainId),
+    index("idx_scraped_products_workspace_id").on(table.workspaceId),
     index("idx_scraped_products_category").on(table.category),
     index("idx_scraped_products_is_favorite").on(table.isFavorite),
     index("idx_scraped_products_status").on(table.scrapeStatus),
@@ -287,6 +323,7 @@ export const queue = pgTable(
     status: text("status").default("pending"), // pending | running | completed | failed
     attempts: integer("attempts").default(0),
     failureReason: text("failure_reason"),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
@@ -296,6 +333,7 @@ export const queue = pgTable(
     index("idx_queue_job_type_status").on(table.jobType, table.status),
     index("idx_queue_priority_created_at").on(table.priority.desc(), table.createdAt),
     index("idx_queue_created_at").on(table.createdAt),
+    index("idx_queue_workspace_id").on(table.workspaceId),
     index("idx_queue_page_created_at").on(
       table.trackedPageId,
       table.createdAt.desc()
@@ -338,6 +376,7 @@ export const discoveryRuns = pgTable(
     totalPagesDiscovered: integer("total_pages_discovered").default(0).notNull(),
     failureReason: text("failure_reason"),
     outcomeDetails: text("outcome_details"),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
@@ -345,6 +384,7 @@ export const discoveryRuns = pgTable(
   (table) => [
     index("idx_discovery_runs_status").on(table.status),
     index("idx_discovery_runs_created_at").on(table.createdAt),
+    index("idx_discovery_runs_workspace_id").on(table.workspaceId),
   ]
 );
 
@@ -392,6 +432,7 @@ export const activityNotifications = pgTable(
     actionUrl: text("action_url"),
     metadata: json("metadata"),
     isRead: boolean("is_read").default(false).notNull(),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
@@ -399,6 +440,7 @@ export const activityNotifications = pgTable(
     index("idx_notifications_is_read").on(table.isRead),
     index("idx_notifications_type").on(table.type),
     index("idx_notifications_tracked_page_id").on(table.trackedPageId),
+    index("idx_notifications_workspace_id").on(table.workspaceId),
   ]
 );
 

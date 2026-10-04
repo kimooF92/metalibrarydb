@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { ads, adObservations } from "@/db/schema";
-import { sql, gte, eq } from "drizzle-orm";
+import { ads, adObservations, trackedPages } from "@/db/schema";
+import { sql, gte, eq, and } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -14,13 +15,16 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    const activeWorkspace = await getActiveWorkspace(req);
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    // 1. Total Ads Captured (distinct observed ads)
+    // 1. Total Ads Captured (distinct observed ads in active workspace)
     const [totalRes] = await db
       .select({ count: sql<number>`count(distinct ${adObservations.adId})` })
-      .from(adObservations);
+      .from(adObservations)
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+      .where(eq(trackedPages.workspaceId, activeWorkspace.id));
     const totalAdsCaptured = Number(totalRes?.count || 0);
 
     // 2. Launched in Last 7 Days
@@ -28,17 +32,29 @@ export async function GET(req: NextRequest) {
       .select({ count: sql<number>`count(distinct ${ads.id})` })
       .from(ads)
       .innerJoin(adObservations, eq(ads.id, adObservations.adId))
-      .where(gte(ads.startedRunningOn, sevenDaysAgo));
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+      .where(
+        and(
+          gte(ads.startedRunningOn, sevenDaysAgo),
+          eq(trackedPages.workspaceId, activeWorkspace.id)
+        )
+      );
     const launchedLast7Days = Number(recentRes?.count || 0);
 
     // 3. Scaled Ads Count (duplication_count >= 5)
     const [scaledRes] = await db
       .select({ count: sql<number>`count(distinct ${adObservations.adId})` })
       .from(adObservations)
-      .where(gte(adObservations.duplicationCount, 5));
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+      .where(
+        and(
+          gte(adObservations.duplicationCount, 5),
+          eq(trackedPages.workspaceId, activeWorkspace.id)
+        )
+      );
     const scaledAdsCount = Number(scaledRes?.count || 0);
 
-    // 4. Media type distribution (for observed ads)
+    // 4. Media type distribution (for observed ads in active workspace)
     const mediaRows = await db
       .select({
         mediaType: ads.mediaType,
@@ -46,6 +62,8 @@ export async function GET(req: NextRequest) {
       })
       .from(ads)
       .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+      .where(eq(trackedPages.workspaceId, activeWorkspace.id))
       .groupBy(ads.mediaType);
 
     const mediaDistribution = {

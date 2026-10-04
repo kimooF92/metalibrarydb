@@ -8,6 +8,7 @@ import { calculateWinnerScore } from "@/lib/winner-score";
 import { enrichAdsWithProductClusters } from "@/lib/product-clustering";
 import { enrichAdsWithCreativeClusters, getDeduplicatedCreativeHeroAds } from "@/lib/creative-clustering";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -50,8 +51,15 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "24", 10)));
     const offset = (page - 1) * limit;
 
+    const activeWorkspace = await getActiveWorkspace(req);
+
     // Build conditions array
     const conditions = [];
+
+    // Scope to active workspace unless deep-linking to a specific brand/page ID
+    if (!trackedPageId && !sisterPageId && !brandDomainId) {
+      conditions.push(eq(trackedPages.workspaceId, activeWorkspace.id));
+    }
 
     // Apply Smart Presets if designated
     if (smartPreset === "multi_angle") {

@@ -8,6 +8,7 @@ import {
   CreativeRunnerType,
   DispatchCreativeScanResult,
 } from "@/lib/creative-scan-dispatch";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 
 export interface AddProductPageLinkOptions {
   allowDuplicate?: boolean;
@@ -109,6 +110,8 @@ export async function addProductPageLink(
   const { targetDomain, productUrl, metaAdLibraryUrl } = parsed;
 
   try {
+    const activeWorkspace = await getActiveWorkspace();
+
     // 1. Search if website / brand already exists in database
     const existing = await findExistingBrandByDomain(targetDomain, metaAdLibraryUrl);
 
@@ -120,6 +123,7 @@ export async function addProductPageLink(
         const ingestRes = await linkAndAutoScrapeProduct({
           linkUrl: productUrl,
           pageId: existing.pageId || null,
+          workspaceId: existing.workspaceId || activeWorkspace.id,
         });
         productId = ingestRes.productId;
       }
@@ -153,6 +157,8 @@ export async function addProductPageLink(
         displayName: targetDomain,
         landingPage: targetDomain,
         searchType: "keyword_exact_phrase",
+        workspaceId: activeWorkspace.id,
+        country: activeWorkspace.countryCode || "TN",
         status: "pending",
       })
       .onConflictDoNothing()
@@ -178,6 +184,7 @@ export async function addProductPageLink(
       const ingestRes = await linkAndAutoScrapeProduct({
         linkUrl: productUrl,
         pageId: effectivePage.pageId || null,
+        workspaceId: activeWorkspace.id,
       });
       productId = ingestRes.productId;
     }

@@ -9,6 +9,7 @@ import { AdRow } from "@/components/spy/ad-row";
 import { SpyFilters } from "@/components/spy/spy-filters";
 import { ApifyCreditBadge } from "@/components/apify-credit-badge";
 import { useToast } from "@/components/toast-context";
+import { useWorkspace } from "@/components/workspace-context";
 import { Layers, Calendar, Video, Image as ImageIcon, RefreshCw, Eye, ArrowUp } from "lucide-react";
 
 function AdSpyContent() {
@@ -26,11 +27,20 @@ function AdSpyContent() {
     refetch,
   } = useAdFeed();
   const { stats, refetch: refetchStats } = useAdStats();
+  const { activeWorkspace } = useWorkspace();
   const { showToast } = useToast();
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // Re-fetch ad feed & stats when workspace switches
+  useEffect(() => {
+    if (activeWorkspace?.id) {
+      refetch();
+      refetchStats();
+    }
+  }, [activeWorkspace?.id, refetch, refetchStats]);
 
   // Scroll listener for back to top button
   useEffect(() => {

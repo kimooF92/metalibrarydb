@@ -1,6 +1,7 @@
 import { db } from "@/db";
-import { ads, scrapedProducts } from "@/db/schema";
+import { ads, scrapedProducts, trackedPages } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 import { normalizeProductUrl, extractProductFromUrl } from "@/lib/firecrawl";
 import { getCleanDomain, isValidPageId } from "@/lib/utils";
 import {
@@ -90,11 +91,13 @@ export async function linkAndAutoScrapeProduct({
   linkUrl,
   pageId,
   adCopy,
+  workspaceId,
 }: {
   adId?: string;
   linkUrl: string | null | undefined;
   pageId?: string | null;
   adCopy?: string | null;
+  workspaceId?: string | null;
 }): Promise<{ productId: string | null; isNew: boolean }> {
   if (!linkUrl) return { productId: null, isNew: false };
 
@@ -151,12 +154,27 @@ export async function linkAndAutoScrapeProduct({
 
     // 2. Insert new pending product entry
     const now = new Date();
+
+    let resolvedWorkspaceId = workspaceId;
+    if (!resolvedWorkspaceId && pageId) {
+      const pageRec = await db.query.trackedPages.findFirst({
+        where: eq(trackedPages.pageId, pageId),
+        columns: { workspaceId: true },
+      });
+      if (pageRec?.workspaceId) resolvedWorkspaceId = pageRec.workspaceId;
+    }
+    if (!resolvedWorkspaceId) {
+      const activeWs = await getActiveWorkspace();
+      resolvedWorkspaceId = activeWs.id;
+    }
+
     const [newProduct] = await db
       .insert(scrapedProducts)
       .values({
         url: normalizedUrl,
         domain: domain || null,
         pageId: isValidPageId(pageId) ? pageId : null,
+        workspaceId: resolvedWorkspaceId,
         title: domain || "Product",
         scrapeStatus: "pending",
         createdAt: now,

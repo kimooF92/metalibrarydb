@@ -43,16 +43,26 @@ export async function DELETE(
     if (pageId && pageId !== "0" && !pageId.startsWith("pending-")) {
       await Promise.allSettled([
         db.delete(ads).where(or(eq(ads.pageId, pageId), eq(ads.pageId, id))),
-        // Only delete products if no other sister pages share this domain
+        // Only delete products if no other sister pages share this domain in this workspace
         remainingSisterPages.length === 0
-          ? db.delete(scrapedProducts).where(or(eq(scrapedProducts.pageId, pageId), eq(scrapedProducts.pageId, id)))
+          ? db.delete(scrapedProducts).where(
+              and(
+                or(eq(scrapedProducts.pageId, pageId), eq(scrapedProducts.pageId, id)),
+                targetPage.workspaceId ? eq(scrapedProducts.workspaceId, targetPage.workspaceId) : undefined
+              )
+            )
           : Promise.resolve(),
       ]);
     } else {
       await Promise.allSettled([
         db.delete(ads).where(eq(ads.pageId, id)),
         remainingSisterPages.length === 0
-          ? db.delete(scrapedProducts).where(eq(scrapedProducts.pageId, id))
+          ? db.delete(scrapedProducts).where(
+              and(
+                eq(scrapedProducts.pageId, id),
+                targetPage.workspaceId ? eq(scrapedProducts.workspaceId, targetPage.workspaceId) : undefined
+              )
+            )
           : Promise.resolve(),
       ]);
     }

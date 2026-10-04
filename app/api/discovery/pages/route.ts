@@ -1,19 +1,22 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { discoveredPages, trackedPages } from "@/db/schema";
+import { discoveredPages, trackedPages, discoveryRuns } from "@/db/schema";
 import { eq, desc, and, ilike, sql } from "drizzle-orm";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 
 export async function GET(req: Request) {
   try {
+    const activeWorkspace = await getActiveWorkspace(req);
     const { searchParams } = new URL(req.url);
     const runId = searchParams.get("runId");
     const query = searchParams.get("q") || "";
     const status = searchParams.get("status") || "all";
 
     if (!runId) {
-      // Default to latest discovery run if no runId specified
+      // Default to latest discovery run for this workspace if no runId specified
       const latestRun = await db.query.discoveryRuns.findFirst({
-        orderBy: [desc(discoveredPages.createdAt)],
+        where: eq(discoveryRuns.workspaceId, activeWorkspace.id),
+        orderBy: [desc(discoveryRuns.createdAt)],
       });
       if (!latestRun) {
         return NextResponse.json({ success: true, pages: [], total: 0 });

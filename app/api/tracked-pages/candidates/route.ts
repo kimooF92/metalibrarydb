@@ -170,11 +170,14 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 4. Check if candidates are already tracked in trackedPages
+    // 4. Check if candidates are already tracked in trackedPages in this workspace
     const candidatePageIds = Array.from(candidateMap.keys());
     if (candidatePageIds.length > 0) {
       const alreadyTrackedPages = await db.query.trackedPages.findMany({
-        where: inArray(trackedPages.pageId, candidatePageIds),
+        where: and(
+          inArray(trackedPages.pageId, candidatePageIds),
+          trackedPage.workspaceId ? eq(trackedPages.workspaceId, trackedPage.workspaceId) : undefined
+        ),
       });
 
       for (const atp of alreadyTrackedPages) {

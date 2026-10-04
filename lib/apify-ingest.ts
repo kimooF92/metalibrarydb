@@ -688,7 +688,7 @@ export async function ingestApifyDatasetItems(
       const targetDomain = pageRecord.landingPage || pageRecord.displayName || pageRecord.url;
       try {
         const { getOrCreateBrandDomain, linkPageToDomain } = await import("@/lib/domain-portfolio");
-        const bDomain = await getOrCreateBrandDomain(targetDomain, pageRecord.displayName);
+        const bDomain = await getOrCreateBrandDomain(targetDomain, pageRecord.displayName, pageRecord.workspaceId);
 
         // Fetch app settings for autoDomainLink
         const { appSettings } = await import("@/db/schema");
@@ -728,6 +728,7 @@ export async function ingestApifyDatasetItems(
                   searchType: "page",
                   country: pageCountry,
                   brandDomainId: bDomain.id,
+                  workspaceId: pageRecord.workspaceId,
                   pageRole: isPrimary ? "primary" : "satellite",
                   canonicalDomain: bDomain.domain,
                   status: "success",

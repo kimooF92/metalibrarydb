@@ -22,7 +22,7 @@ import { ThemeToggle } from "./theme-toggle";
 import { useSidebar } from "@/components/sidebar-context";
 import { SmallPagesScanBadge } from "./small-pages-scan-banner";
 import { NotificationCenter } from "./notification-center";
-
+import { WorkspaceSwitcher } from "./workspace-switcher";
 import { useLogout } from "@/hooks/use-logout";
 
 export function Navigation() {
@@ -240,7 +240,15 @@ export function Navigation() {
       {/* Mobile Drawer Menu Overlay */}
       {isOpen && (
         <div className="fixed inset-x-0 bottom-0 top-14 z-40 bg-white/98 dark:bg-[#0b0f19]/98 backdrop-blur-md md:hidden flex flex-col p-6 space-y-6 animate-in slide-in-from-top-5 duration-200 justify-between">
-          <nav className="flex flex-col space-y-2">
+          <div className="flex flex-col space-y-4">
+            <div className="pb-3 border-b border-slate-200 dark:border-slate-800">
+              <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-2">
+                Active Workspace
+              </span>
+              <WorkspaceSwitcher />
+            </div>
+
+            <nav className="flex flex-col space-y-2">
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = pathname === item.href;
@@ -273,8 +281,9 @@ export function Navigation() {
               );
             })}
           </nav>
+        </div>
 
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-2">
+        <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-2">
             <Link
               href="/settings"
               onClick={() => setIsOpen(false)}

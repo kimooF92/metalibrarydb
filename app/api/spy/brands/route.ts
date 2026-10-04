@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { trackedPages, brandDomains } from "@/db/schema";
-import { asc, isNotNull, inArray } from "drizzle-orm";
+import { asc, isNotNull, inArray, and, eq } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -13,6 +14,7 @@ export async function GET(req: Request) {
   if (authError) return authError;
 
   try {
+    const activeWorkspace = await getActiveWorkspace(req);
     const pages = await db
       .select({
         id: trackedPages.id,
@@ -26,7 +28,12 @@ export async function GET(req: Request) {
         canonicalDomain: trackedPages.canonicalDomain,
       })
       .from(trackedPages)
-      .where(isNotNull(trackedPages.pageId))
+      .where(
+        and(
+          isNotNull(trackedPages.pageId),
+          eq(trackedPages.workspaceId, activeWorkspace.id)
+        )
+      )
       .orderBy(asc(trackedPages.displayName));
 
     const domainIds = Array.from(new Set(pages.map((p) => p.brandDomainId).filter(Boolean))) as string[];

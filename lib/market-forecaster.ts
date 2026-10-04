@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { ads, scrapedProducts, trackedPages } from "@/db/schema";
-import { sql, desc, count, eq } from "drizzle-orm";
+import { ads, scrapedProducts, trackedPages, adObservations } from "@/db/schema";
+import { sql, desc, count, eq, and } from "drizzle-orm";
 
 export interface MarketTelemetrySnapshot {
   totalActiveAds: number;
@@ -136,34 +136,82 @@ function cleanAndParseJson<T>(rawText: string): T | null {
 /**
  * Extracts pure aggregate market telemetry and scale/descale counts (NO page names or IDs)
  */
-export async function extractMarketSignals(): Promise<MarketTelemetrySnapshot> {
+export async function extractMarketSignals(workspaceId?: string): Promise<MarketTelemetrySnapshot> {
   // 1. Total Active Ads
-  const [activeAdsResult] = await db
-    .select({ count: count() })
-    .from(ads)
-    .where(eq(ads.isArchived, false));
-  const totalActiveAds = Number(activeAdsResult?.count || 0);
+  let totalActiveAds = 0;
+  if (workspaceId) {
+    const [activeAdsResult] = await db
+      .select({ count: count() })
+      .from(ads)
+      .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+      .where(and(eq(ads.isArchived, false), eq(trackedPages.workspaceId, workspaceId)));
+    totalActiveAds = Number(activeAdsResult?.count || 0);
+  } else {
+    const [activeAdsResult] = await db
+      .select({ count: count() })
+      .from(ads)
+      .where(eq(ads.isArchived, false));
+    totalActiveAds = Number(activeAdsResult?.count || 0);
+  }
 
   // 2. New ads in last 7 days
-  const [newAds7dResult] = await db
-    .select({ count: count() })
-    .from(ads)
-    .where(
-      sql`"first_seen_at" >= NOW() - INTERVAL '7 days' OR "last_seen_at" >= NOW() - INTERVAL '7 days'`
-    );
-  const newAdsLast7Days = Number(newAds7dResult?.count || 0);
+  let newAdsLast7Days = 0;
+  if (workspaceId) {
+    const [newAds7dResult] = await db
+      .select({ count: count() })
+      .from(ads)
+      .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+      .where(
+        and(
+          sql`"first_seen_at" >= NOW() - INTERVAL '7 days' OR "last_seen_at" >= NOW() - INTERVAL '7 days'`,
+          eq(trackedPages.workspaceId, workspaceId)
+        )
+      );
+    newAdsLast7Days = Number(newAds7dResult?.count || 0);
+  } else {
+    const [newAds7dResult] = await db
+      .select({ count: count() })
+      .from(ads)
+      .where(
+        sql`"first_seen_at" >= NOW() - INTERVAL '7 days' OR "last_seen_at" >= NOW() - INTERVAL '7 days'`
+      );
+    newAdsLast7Days = Number(newAds7dResult?.count || 0);
+  }
 
   // 3. Video vs Image ads
-  const [videoAdsResult] = await db
-    .select({ count: count() })
-    .from(ads)
-    .where(sql`"media_type" = 'video' AND "is_archived" = false`);
-  const videoCount = Number(videoAdsResult?.count || 0);
+  let videoCount = 0;
+  if (workspaceId) {
+    const [videoAdsResult] = await db
+      .select({ count: count() })
+      .from(ads)
+      .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+      .where(
+        and(
+          sql`"media_type" = 'video' AND "is_archived" = false`,
+          eq(trackedPages.workspaceId, workspaceId)
+        )
+      );
+    videoCount = Number(videoAdsResult?.count || 0);
+  } else {
+    const [videoAdsResult] = await db
+      .select({ count: count() })
+      .from(ads)
+      .where(sql`"media_type" = 'video' AND "is_archived" = false`);
+    videoCount = Number(videoAdsResult?.count || 0);
+  }
+
   const imageCount = Math.max(0, totalActiveAds - videoCount);
   const videoPercent = totalActiveAds > 0 ? Math.round((videoCount / totalActiveAds) * 100) : 60;
   const imagePercent = Math.max(0, 100 - videoPercent);
 
   // 4. Scaling / Descaling Aggregate Counts (Pure counts, NO page names/IDs)
+  const scalingFilterSql = workspaceId
+    ? sql`JOIN tracked_pages tp ON tp.id = sh.tracked_page_id WHERE sh.difference IS NOT NULL AND tp.workspace_id = ${workspaceId}`
+    : sql`WHERE sh.difference IS NOT NULL`;
+
   const scalingStatsRaw = await db.execute(sql`
     WITH latest_scans AS (
       SELECT 
@@ -171,11 +219,11 @@ export async function extractMarketSignals(): Promise<MarketTelemetrySnapshot> {
         s.difference
       FROM (
         SELECT 
-          tracked_page_id, 
-          difference,
-          row_number() OVER (PARTITION BY tracked_page_id ORDER BY checked_at DESC) as rn
-        FROM scan_history
-        WHERE difference IS NOT NULL
+          sh.tracked_page_id, 
+          sh.difference,
+          row_number() OVER (PARTITION BY sh.tracked_page_id ORDER BY sh.checked_at DESC) as rn
+        FROM scan_history sh
+        ${scalingFilterSql}
       ) s
       WHERE s.rn = 1
     )
@@ -200,7 +248,10 @@ export async function extractMarketSignals(): Promise<MarketTelemetrySnapshot> {
   const avgDescalingDelta = descalingPagesCount > 0 ? (totalAdsDescaled / descalingPagesCount).toFixed(1) : "0";
 
   // 5. Total Monitored Brands
-  const [monitoredBrandsResult] = await db.select({ count: count() }).from(trackedPages);
+  const [monitoredBrandsResult] = await db
+    .select({ count: count() })
+    .from(trackedPages)
+    .where(workspaceId ? eq(trackedPages.workspaceId, workspaceId) : sql`true`);
   const monitoredPages = Number(monitoredBrandsResult?.count || 0);
 
   // 6. Top Categories
@@ -210,22 +261,38 @@ export async function extractMarketSignals(): Promise<MarketTelemetrySnapshot> {
       count: count(),
     })
     .from(scrapedProducts)
-    .where(sql`"category" IS NOT NULL`)
+    .where(and(sql`"category" IS NOT NULL`, workspaceId ? eq(scrapedProducts.workspaceId, workspaceId) : sql`true`))
     .groupBy(scrapedProducts.category)
     .orderBy(desc(count()))
     .limit(5);
 
   // 7. Top CTAs
-  const topCtasRaw = await db
-    .select({
-      ctaText: ads.ctaText,
-      count: count(),
-    })
-    .from(ads)
-    .where(sql`"cta_text" IS NOT NULL AND "is_archived" = false`)
-    .groupBy(ads.ctaText)
-    .orderBy(desc(count()))
-    .limit(4);
+  let topCtasRaw: Array<{ ctaText: string | null; count: number | string }> = [];
+  if (workspaceId) {
+    topCtasRaw = await db
+      .select({
+        ctaText: ads.ctaText,
+        count: count(),
+      })
+      .from(ads)
+      .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+      .where(and(sql`"cta_text" IS NOT NULL AND "is_archived" = false`, eq(trackedPages.workspaceId, workspaceId)))
+      .groupBy(ads.ctaText)
+      .orderBy(desc(count()))
+      .limit(4);
+  } else {
+    topCtasRaw = await db
+      .select({
+        ctaText: ads.ctaText,
+        count: count(),
+      })
+      .from(ads)
+      .where(sql`"cta_text" IS NOT NULL AND "is_archived" = false`)
+      .groupBy(ads.ctaText)
+      .orderBy(desc(count()))
+      .limit(4);
+  }
 
   return {
     totalActiveAds,
@@ -257,8 +324,8 @@ export async function extractMarketSignals(): Promise<MarketTelemetrySnapshot> {
 /**
  * Generates Simple, Data-Grounded AI Market Analysis based purely on scaling/descaling counts & telemetry
  */
-export async function generateAiMarketForecast(): Promise<MarketAnalysisData> {
-  const telemetry = await extractMarketSignals();
+export async function generateAiMarketForecast(workspaceId?: string): Promise<MarketAnalysisData> {
+  const telemetry = await extractMarketSignals(workspaceId);
   const openRouterKey = process.env.OPENROUTER_API_KEY || process.env.OPEN_ROUTER_API_KEY;
   const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   const groqKey = process.env.GROQ_API_KEY;

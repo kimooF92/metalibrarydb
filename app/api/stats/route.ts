@@ -2,23 +2,27 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { trackedPages, importJobs } from "@/db/schema";
-import { sql, desc } from "drizzle-orm";
+import { sql, desc, eq } from "drizzle-orm";
 import { cleanOrphanedScans } from "@/lib/clean-scans";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const activeWorkspace = await getActiveWorkspace(request);
+
     // 0. Auto-heal any orphaned scans stuck longer than 5 minutes
     await cleanOrphanedScans(5).catch((err) => {
       console.warn("Failed to auto-clean orphaned scans in /api/stats:", err);
     });
 
-    // 1. Status counts
+    // 1. Status counts scoped to active workspace
     const statusCounts = await db
       .select({
         status: trackedPages.status,
         count: sql<number>`count(*)`.as("count"),
       })
       .from(trackedPages)
+      .where(eq(trackedPages.workspaceId, activeWorkspace.id))
       .groupBy(trackedPages.status);
 
     const countsMap: Record<string, number> = {
@@ -38,16 +42,18 @@ export async function GET() {
       }
     }
 
-    // 2. Aggregate stats (avg and max results)
+    // 2. Aggregate stats (avg and max results) scoped to active workspace
     const [aggregates] = await db
       .select({
         avgResults: sql<number>`round(avg(${trackedPages.currentResults}))`.as("avg"),
         highestResults: sql<number>`max(${trackedPages.currentResults})`.as("max"),
       })
-      .from(trackedPages);
+      .from(trackedPages)
+      .where(eq(trackedPages.workspaceId, activeWorkspace.id));
 
-    // 3. Last import job timestamp
+    // 3. Last import job timestamp for active workspace
     const lastImport = await db.query.importJobs.findFirst({
+      where: eq(importJobs.workspaceId, activeWorkspace.id),
       orderBy: [desc(importJobs.createdAt)],
     });
 

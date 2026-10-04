@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import NextImage from "next/image";
 import { ScrapedProduct, Ad } from "@/types";
 import { useToast } from "@/components/toast-context";
+import { useWorkspace } from "@/components/workspace-context";
 import {
   Building2,
   ExternalLink,
@@ -34,6 +35,7 @@ export function ModalEditForm({
   onRefreshAds,
   onRefreshProduct,
 }: ModalEditFormProps) {
+  const { activeWorkspace } = useWorkspace();
   const { showToast } = useToast();
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [unlinkingAdId, setUnlinkingAdId] = useState<string | null>(null);
@@ -280,25 +282,35 @@ export function ModalEditForm({
             <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
               Current / Selling Price
             </label>
-            <input
-              type="text"
-              value={editForm.currentPrice}
-              onChange={(e) => setEditForm((prev) => ({ ...prev, currentPrice: e.target.value }))}
-              placeholder="e.g. 89 DT"
-              className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 font-bold"
-            />
+            {(() => {
+              const sym = activeWorkspace?.currencySymbol || "DT";
+              return (
+                <input
+                  type="text"
+                  value={editForm.currentPrice}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, currentPrice: e.target.value }))}
+                  placeholder={`e.g. 89 ${sym}`}
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 font-bold"
+                />
+              );
+            })()}
           </div>
           <div>
             <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
               Original / Regular Price
             </label>
-            <input
-              type="text"
-              value={editForm.originalPrice}
-              onChange={(e) => setEditForm((prev) => ({ ...prev, originalPrice: e.target.value }))}
-              placeholder="e.g. 149 DT"
-              className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
-            />
+            {(() => {
+              const sym = activeWorkspace?.currencySymbol || "DT";
+              return (
+                <input
+                  type="text"
+                  value={editForm.originalPrice}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, originalPrice: e.target.value }))}
+                  placeholder={`e.g. 149 ${sym}`}
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
+                />
+              );
+            })()}
           </div>
           <div>
             <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
@@ -316,13 +328,18 @@ export function ModalEditForm({
             <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
               Delivery Fee / Policy
             </label>
-            <input
-              type="text"
-              value={editForm.deliveryCost}
-              onChange={(e) => setEditForm((prev) => ({ ...prev, deliveryCost: e.target.value }))}
-              placeholder="e.g. Gratuit / 7 DT"
-              className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
-            />
+            {(() => {
+              const sym = activeWorkspace?.currencySymbol || "DT";
+              return (
+                <input
+                  type="text"
+                  value={editForm.deliveryCost}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, deliveryCost: e.target.value }))}
+                  placeholder={`e.g. Gratuit / 7 ${sym}`}
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
+                />
+              );
+            })()}
           </div>
         </div>
       </div>

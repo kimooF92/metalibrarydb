@@ -13,6 +13,7 @@ import {
 import { ThemeToggle } from "./theme-toggle";
 import { SmallPagesScanBadge } from "./small-pages-scan-banner";
 import { NotificationCenter } from "./notification-center";
+import { WorkspaceSwitcher } from "./workspace-switcher";
 
 const ROUTE_INFO: Record<
   string,
@@ -37,8 +38,8 @@ export function TopBar() {
 
   return (
     <header className="hidden md:flex items-center justify-between h-12 px-6 border-b border-slate-200 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-900/30 backdrop-blur-md shrink-0 sticky top-0 z-30 transition-all select-none">
-      {/* Left: Breadcrumb / Active Page */}
-      <div className="flex items-center space-x-2 text-xs">
+      {/* Left: Breadcrumb / Active Page & Workspace Switcher */}
+      <div className="flex items-center space-x-3 text-xs">
         <div className="flex items-center space-x-1.5 text-slate-400 dark:text-slate-500 font-medium">
           <span>Tracker</span>
           <span className="text-slate-300 dark:text-slate-700">/</span>
@@ -47,6 +48,9 @@ export function TopBar() {
           <Icon className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
           <span>{currentRoute.label}</span>
         </div>
+
+        <div className="h-4 w-px bg-slate-200 dark:bg-slate-800" />
+        <WorkspaceSwitcher />
       </div>
 
       {/* Right: Actions (Small Pages Badge, Notification Center & Theme Button) */}

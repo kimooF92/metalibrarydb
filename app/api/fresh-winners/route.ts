@@ -6,6 +6,7 @@ import { validateApiSecret } from "@/lib/api-guard";
 import { calculateWinnerScore } from "@/lib/winner-score";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 import type { FreshWinnerItem, FreshWinnersStats } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -32,11 +33,13 @@ export async function GET(req: NextRequest) {
     const offset = (page - 1) * limit;
 
     const cutoffDate = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+    const activeWorkspace = await getActiveWorkspace(req);
 
     // Build conditions for raw SQL subquery / joins
     const conditions: any[] = [
       sql`(${ads.isArchived} = false OR ${ads.isArchived} IS NULL)`,
       sql`COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) >= ${cutoffDate.toISOString()}::timestamptz`,
+      eq(trackedPages.workspaceId, activeWorkspace.id),
     ];
 
     if (mediaType && mediaType !== "all") {

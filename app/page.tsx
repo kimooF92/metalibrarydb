@@ -8,6 +8,7 @@ import { AddUrlForm } from "@/components/add-url-form";
 import { ImportDropzone } from "@/components/import-dropzone";
 import { PagesTable } from "@/components/pages-table";
 import { RefreshCw, X, Plus, UploadCloud } from "lucide-react";
+import { useWorkspace } from "@/components/workspace-context";
 
 const VALID_STATUSES = ["all", "success", "pending", "scanning", "failed", "unclear"] as const;
 const VALID_SEARCH_TYPES = ["all", "page", "keyword_exact_phrase", "keyword_unordered"] as const;
@@ -148,6 +149,7 @@ function syncDashboardStateToUrl(state: {
 
 function DashboardContent() {
   const searchParams = useSearchParams();
+  const { activeWorkspace } = useWorkspace();
   const [initialLoaded] = useState(() => getInitialDashboardState());
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -343,6 +345,13 @@ function DashboardContent() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Re-fetch dashboard data whenever the active workspace switches
+  useEffect(() => {
+    if (activeWorkspace?.id) {
+      loadData(false, true);
+    }
+  }, [activeWorkspace?.id, loadData]);
 
   // Determine if there are active scans currently running
   const isScanningActive =

@@ -4,6 +4,7 @@ import { ads, scrapedProducts } from "@/db/schema";
 import { sql, desc, count, and, eq, or, isNull, gte } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -14,12 +15,15 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    const activeWorkspace = await getActiveWorkspace(req);
     const range = req.nextUrl.searchParams.get("range") ?? "7d";
     const rangeDays = ({ today: 1, "7d": 7, "15d": 15, "30d": 30 } as Record<string, number>)[range] ?? 7;
     const windowStart = new Date();
     windowStart.setDate(windowStart.getDate() - rangeDays);
     const windowStartIso = windowStart.toISOString();
-    const productWindow = gte(scrapedProducts.createdAt, windowStart);
+
+    const workspaceCondition = eq(scrapedProducts.workspaceId, activeWorkspace.id);
+    const productWindow = and(gte(scrapedProducts.createdAt, windowStart), workspaceCondition);
 
     // 1. Price Extraction Helper in SQL
     // Handles decimal and comma formats (e.g. 49.00, 49,900, DT, TND)
@@ -91,16 +95,17 @@ export async function GET(req: NextRequest) {
       .limit(15);
 
     // 5. Price Band / Tier Distribution
+    const currSym = activeWorkspace.currencySymbol || "DT";
     const priceTierRows = await db
       .select({
         tier: sql<string>`
           CASE 
             WHEN ${priceExpr} <= 0 THEN 'Unknown / Unpriced'
-            WHEN ${priceExpr} < 30 THEN 'Under 30 TND (Micro/Impulse)'
-            WHEN ${priceExpr} >= 30 AND ${priceExpr} < 60 THEN '30 - 60 TND (Sweet Spot)'
-            WHEN ${priceExpr} >= 60 AND ${priceExpr} < 100 THEN '60 - 100 TND (Mid-Ticket)'
-            WHEN ${priceExpr} >= 100 AND ${priceExpr} < 200 THEN '100 - 200 TND (High-Ticket)'
-            ELSE '200+ TND (Premium / Luxury)'
+            WHEN ${priceExpr} < 30 THEN ${sql.raw(`'Under 30 ${currSym} (Micro/Impulse)'`)}
+            WHEN ${priceExpr} >= 30 AND ${priceExpr} < 60 THEN ${sql.raw(`'30 - 60 ${currSym} (Sweet Spot)'`)}
+            WHEN ${priceExpr} >= 60 AND ${priceExpr} < 100 THEN ${sql.raw(`'60 - 100 ${currSym} (Mid-Ticket)'`)}
+            WHEN ${priceExpr} >= 100 AND ${priceExpr} < 200 THEN ${sql.raw(`'100 - 200 ${currSym} (High-Ticket)'`)}
+            ELSE ${sql.raw(`'200+ ${currSym} (Premium / Luxury)'`)}
           END
         `,
         tierKey: sql<string>`

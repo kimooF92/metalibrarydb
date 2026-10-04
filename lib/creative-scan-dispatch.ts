@@ -244,6 +244,7 @@ export async function dispatchCreativeScanForBrand(
     creativeScanId: newScan.id,
     priority,
     status: "pending",
+    workspaceId: page.workspaceId,
   });
 
   await db

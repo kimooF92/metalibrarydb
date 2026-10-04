@@ -331,35 +331,82 @@ export function calculateTunisianSeasonalityContext(referenceDate: Date = new Da
 // DATA EXTRACTION & LIVE TELEMETRY
 // ---------------------------------------------------------------------------
 
-export async function extractMarketOpportunityTelemetry(): Promise<MarketOpportunityTelemetry> {
+export async function extractMarketOpportunityTelemetry(workspaceId?: string): Promise<MarketOpportunityTelemetry> {
   const priceExpr = sql`COALESCE(NULLIF(SUBSTRING(REPLACE(${scrapedProducts.currentPrice}, ',', '.') FROM '([0-9]+(?:\\.[0-9]+)?)'), '')::numeric, 0)`;
 
   // 1. Total Active Ads
-  const [activeAdsResult] = await db
-    .select({ count: count() })
-    .from(ads)
-    .where(eq(ads.isArchived, false));
-  const totalActiveAds = Number(activeAdsResult?.count || 0);
+  let totalActiveAds = 0;
+  if (workspaceId) {
+    const [activeAdsResult] = await db
+      .select({ count: count() })
+      .from(ads)
+      .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+      .where(and(eq(ads.isArchived, false), eq(trackedPages.workspaceId, workspaceId)));
+    totalActiveAds = Number(activeAdsResult?.count || 0);
+  } else {
+    const [activeAdsResult] = await db
+      .select({ count: count() })
+      .from(ads)
+      .where(eq(ads.isArchived, false));
+    totalActiveAds = Number(activeAdsResult?.count || 0);
+  }
 
   // 2. New ads last 7 days
-  const [newAds7dResult] = await db
-    .select({ count: count() })
-    .from(ads)
-    .where(
-      sql`"first_seen_at" >= NOW() - INTERVAL '7 days' OR "last_seen_at" >= NOW() - INTERVAL '7 days'`
-    );
-  const newAdsLast7Days = Number(newAds7dResult?.count || 0);
+  let newAdsLast7Days = 0;
+  if (workspaceId) {
+    const [newAds7dResult] = await db
+      .select({ count: count() })
+      .from(ads)
+      .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+      .where(
+        and(
+          sql`"first_seen_at" >= NOW() - INTERVAL '7 days' OR "last_seen_at" >= NOW() - INTERVAL '7 days'`,
+          eq(trackedPages.workspaceId, workspaceId)
+        )
+      );
+    newAdsLast7Days = Number(newAds7dResult?.count || 0);
+  } else {
+    const [newAds7dResult] = await db
+      .select({ count: count() })
+      .from(ads)
+      .where(
+        sql`"first_seen_at" >= NOW() - INTERVAL '7 days' OR "last_seen_at" >= NOW() - INTERVAL '7 days'`
+      );
+    newAdsLast7Days = Number(newAds7dResult?.count || 0);
+  }
 
   // 3. Format split
-  const [videoAdsResult] = await db
-    .select({ count: count() })
-    .from(ads)
-    .where(sql`"media_type" = 'video' AND "is_archived" = false`);
-  const videoCount = Number(videoAdsResult?.count || 0);
+  let videoCount = 0;
+  if (workspaceId) {
+    const [videoAdsResult] = await db
+      .select({ count: count() })
+      .from(ads)
+      .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+      .where(
+        and(
+          sql`"media_type" = 'video' AND "is_archived" = false`,
+          eq(trackedPages.workspaceId, workspaceId)
+        )
+      );
+    videoCount = Number(videoAdsResult?.count || 0);
+  } else {
+    const [videoAdsResult] = await db
+      .select({ count: count() })
+      .from(ads)
+      .where(sql`"media_type" = 'video' AND "is_archived" = false`);
+    videoCount = Number(videoAdsResult?.count || 0);
+  }
   const videoPercent = totalActiveAds > 0 ? Math.round((videoCount / totalActiveAds) * 100) : 62;
   const imagePercent = Math.max(0, 100 - videoPercent);
 
   // 4. Scaling / Descaling Brands Count
+  const scalingFilterSql = workspaceId
+    ? sql`JOIN tracked_pages tp ON tp.id = sh.tracked_page_id WHERE sh.difference IS NOT NULL AND tp.workspace_id = ${workspaceId}`
+    : sql`WHERE sh.difference IS NOT NULL`;
+
   const scalingStatsRaw = await db.execute(sql`
     WITH latest_scans AS (
       SELECT 
@@ -367,11 +414,11 @@ export async function extractMarketOpportunityTelemetry(): Promise<MarketOpportu
         s.difference
       FROM (
         SELECT 
-          tracked_page_id, 
-          difference,
-          row_number() OVER (PARTITION BY tracked_page_id ORDER BY checked_at DESC) as rn
-        FROM scan_history
-        WHERE difference IS NOT NULL
+          sh.tracked_page_id, 
+          sh.difference,
+          row_number() OVER (PARTITION BY sh.tracked_page_id ORDER BY sh.checked_at DESC) as rn
+        FROM scan_history sh
+        ${scalingFilterSql}
       ) s
       WHERE s.rn = 1
     )
@@ -391,7 +438,10 @@ export async function extractMarketOpportunityTelemetry(): Promise<MarketOpportu
   const netAdDelta = totalAdsScaled - totalAdsDescaled;
 
   // 5. Total Monitored Brands
-  const [monitoredBrandsResult] = await db.select({ count: count() }).from(trackedPages);
+  const [monitoredBrandsResult] = await db
+    .select({ count: count() })
+    .from(trackedPages)
+    .where(workspaceId ? eq(trackedPages.workspaceId, workspaceId) : sql`true`);
   const monitoredBrands = Number(monitoredBrandsResult?.count || 0);
 
   // 6. Category Breakdown with Pricing and Active Ad Counts
@@ -408,6 +458,7 @@ export async function extractMarketOpportunityTelemetry(): Promise<MarketOpportu
     })
     .from(scrapedProducts)
     .leftJoin(ads, eq(scrapedProducts.id, ads.productId))
+    .where(workspaceId ? eq(scrapedProducts.workspaceId, workspaceId) : sql`true`)
     .groupBy(sql`COALESCE(NULLIF(${scrapedProducts.category}, ''), 'General & Other')`)
     .orderBy(desc(count()));
 
@@ -420,22 +471,40 @@ export async function extractMarketOpportunityTelemetry(): Promise<MarketOpportu
       avgPrice: sql<number>`ROUND(AVG(CASE WHEN ${priceExpr} > 0 THEN ${priceExpr} END), 1)`.mapWith(Number),
     })
     .from(scrapedProducts)
-    .where(sql`${scrapedProducts.title} IS NOT NULL AND length(${scrapedProducts.title}) > 5`)
+    .where(and(sql`${scrapedProducts.title} IS NOT NULL AND length(${scrapedProducts.title}) > 5`, workspaceId ? eq(scrapedProducts.workspaceId, workspaceId) : sql`true`))
     .groupBy(scrapedProducts.title)
     .having(sql`COUNT(DISTINCT ${scrapedProducts.domain}) > 1`)
     .orderBy(desc(sql`COUNT(DISTINCT ${scrapedProducts.domain})`))
     .limit(8);
 
   // 8. Copy Psychology Metrics
-  const [copyTriggers] = await db
-    .select({
-      hasArabic: sql<number>`COUNT(CASE WHEN ${ads.caption} ~* '[\u0600-\u06FF]' THEN 1 END)`.mapWith(Number),
-      hasFrench: sql<number>`COUNT(CASE WHEN ${ads.caption} ~* '(livraison|commande|prix|qualité|gratuit|boutique)' THEN 1 END)`.mapWith(Number),
-      hasDiscount: sql<number>`COUNT(CASE WHEN ${ads.caption} ~* '(%|remise|تخفيض|solde|promo|خصم)' THEN 1 END)`.mapWith(Number),
-      hasFreeDeliv: sql<number>`COUNT(CASE WHEN ${ads.caption} ~* '(gratuit|livraison gratuite|مجانا|توصيل مجاني)' THEN 1 END)`.mapWith(Number),
-      totalCount: count(),
-    })
-    .from(ads);
+  let copyTriggers: any;
+  if (workspaceId) {
+    const [res] = await db
+      .select({
+        hasArabic: sql<number>`COUNT(CASE WHEN ${ads.caption} ~* '[\u0600-\u06FF]' THEN 1 END)`.mapWith(Number),
+        hasFrench: sql<number>`COUNT(CASE WHEN ${ads.caption} ~* '(livraison|commande|prix|qualité|gratuit|boutique)' THEN 1 END)`.mapWith(Number),
+        hasDiscount: sql<number>`COUNT(CASE WHEN ${ads.caption} ~* '(%|remise|تخفيض|solde|promo|خصم)' THEN 1 END)`.mapWith(Number),
+        hasFreeDeliv: sql<number>`COUNT(CASE WHEN ${ads.caption} ~* '(gratuit|livraison gratuite|مجانا|توصيل مجاني)' THEN 1 END)`.mapWith(Number),
+        totalCount: count(),
+      })
+      .from(ads)
+      .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+      .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+      .where(eq(trackedPages.workspaceId, workspaceId));
+    copyTriggers = res;
+  } else {
+    const [res] = await db
+      .select({
+        hasArabic: sql<number>`COUNT(CASE WHEN ${ads.caption} ~* '[\u0600-\u06FF]' THEN 1 END)`.mapWith(Number),
+        hasFrench: sql<number>`COUNT(CASE WHEN ${ads.caption} ~* '(livraison|commande|prix|qualité|gratuit|boutique)' THEN 1 END)`.mapWith(Number),
+        hasDiscount: sql<number>`COUNT(CASE WHEN ${ads.caption} ~* '(%|remise|تخفيض|solde|promo|خصم)' THEN 1 END)`.mapWith(Number),
+        hasFreeDeliv: sql<number>`COUNT(CASE WHEN ${ads.caption} ~* '(gratuit|livraison gratuite|مجانا|توصيل مجاني)' THEN 1 END)`.mapWith(Number),
+        totalCount: count(),
+      })
+      .from(ads);
+    copyTriggers = res;
+  }
 
   const totalCopy = Math.max(1, Number(copyTriggers?.totalCount || 1));
   const arabicPercent = Math.round((Number(copyTriggers?.hasArabic || 0) / totalCopy) * 100);
@@ -934,8 +1003,8 @@ Return ONLY a valid JSON object matching this schema:
 // UNIFIED MASTER FUNCTION
 // ---------------------------------------------------------------------------
 
-export async function generateFullOpportunityReport(): Promise<UnifiedOpportunityReport> {
-  const telemetry = await extractMarketOpportunityTelemetry();
+export async function generateFullOpportunityReport(workspaceId?: string): Promise<UnifiedOpportunityReport> {
+  const telemetry = await extractMarketOpportunityTelemetry(workspaceId);
   const seasonalityCtx = calculateTunisianSeasonalityContext();
 
   // Step 1 & Step 2: Run Stage 1 (Niche Velocity) and Stage 2 (Seasonality) IN PARALLEL

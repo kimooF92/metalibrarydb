@@ -27,6 +27,7 @@ import {
   DateRange,
   DateRangeFilter,
 } from "@/components/analytics/date-range-filter";
+import { useWorkspace } from "@/components/workspace-context";
 
 function getInitialTab(): MainAnalyticsTab {
   if (typeof window === "undefined") return "pages";
@@ -95,6 +96,7 @@ function syncStateToUrl(tab: MainAnalyticsTab, range: DateRange, subTab?: BrandS
 }
 
 export default function AnalyticsPage() {
+  const { activeWorkspace } = useWorkspace();
   const [activeTab, setActiveTab] = useState<MainAnalyticsTab>(() => getInitialTab());
   const [dateRange, setDateRange] = useState<DateRange>(() => getInitialDateRange());
   const [pageSubTab, setPageSubTab] = useState<BrandSubTab>(() => getInitialSubTab());
@@ -271,6 +273,21 @@ export default function AnalyticsPage() {
     fetchAdsAnalytics,
     fetchPagesData,
   ]);
+
+  // Invalidate cached ranges and refetch data when active workspace changes
+  useEffect(() => {
+    if (!activeWorkspace?.id) return;
+    setProductsFetchedRange(null);
+    setAdsFetchedRange(null);
+    setPagesFetchedRange(null);
+    if (activeTab === "products") {
+      fetchProductsAnalytics(true);
+    } else if (activeTab === "ads") {
+      fetchAdsAnalytics(true);
+    } else if (activeTab === "pages") {
+      fetchPagesData(true);
+    }
+  }, [activeWorkspace?.id, activeTab, fetchProductsAnalytics, fetchAdsAnalytics, fetchPagesData]);
 
   // Force-refresh all loaded tabs or currently active tab
   const handleRefresh = useCallback(async (forceAll = false) => {

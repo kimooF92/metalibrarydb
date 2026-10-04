@@ -14,6 +14,7 @@ import { ProductsFilterToolbar } from "@/components/products/products-filter-too
 import { ProductsEmptyState } from "@/components/products/products-empty-state";
 import { resolveProductForRefresh } from "@/lib/product-extraction";
 import { useToast } from "@/components/toast-context";
+import { useWorkspace } from "@/components/workspace-context";
 import {
   ShoppingBag,
   RotateCw,
@@ -27,6 +28,7 @@ import {
 export default function ProductsPage() {
   const router = useRouter();
   const { showToast } = useToast();
+  const { activeWorkspace } = useWorkspace();
   const [products, setProducts] = useState<ScrapedProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
@@ -420,6 +422,16 @@ export default function ProductsPage() {
     setAutoLoadCount(0);
     fetchProducts(1, false);
   }, [fetchProducts]);
+
+  // Re-fetch products when workspace switches
+  useEffect(() => {
+    if (activeWorkspace?.id) {
+      setPage(1);
+      setAutoLoadCount(0);
+      fetchProducts(1, false);
+      fetchStats();
+    }
+  }, [activeWorkspace?.id]);
 
   // Load next page function
   const loadNextPage = useCallback(() => {

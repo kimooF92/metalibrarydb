@@ -60,19 +60,23 @@ export async function mergeExactMatchWithPageId(
       try {
         brandDomain = await getOrCreateBrandDomain(
           preservedDomain,
-          resolvedDisplayName || exactMatchPage.displayName
+          resolvedDisplayName || exactMatchPage.displayName,
+          exactMatchPage.workspaceId
         );
       } catch (e) {
         console.warn("[Merge] Could not resolve brand domain for:", preservedDomain, e);
       }
     }
 
-    // 2. Check if a separate target page already exists for this pageId or new URL
+    // 2. Check if a separate target page already exists for this pageId or new URL in the same workspace
     const existingTargetPage = await db.query.trackedPages.findFirst({
-      where: or(
-        eq(trackedPages.pageId, cleanPageId),
-        eq(trackedPages.url, newPageUrl),
-        sql`${trackedPages.url} LIKE ${`%view_all_page_id=${cleanPageId}%`}`
+      where: and(
+        exactMatchPage.workspaceId ? eq(trackedPages.workspaceId, exactMatchPage.workspaceId) : undefined,
+        or(
+          eq(trackedPages.pageId, cleanPageId),
+          eq(trackedPages.url, newPageUrl),
+          sql`${trackedPages.url} LIKE ${`%view_all_page_id=${cleanPageId}%`}`
+        )
       ),
     });
 
@@ -98,7 +102,7 @@ export async function mergeExactMatchWithPageId(
         .where(eq(trackedPages.id, exactMatchTrackedPageId))
         .returning();
 
-      // Backfill products for this domain
+      // Backfill products for this domain in the same workspace
       if (brandDomain) {
         try {
           await db
@@ -107,7 +111,8 @@ export async function mergeExactMatchWithPageId(
             .where(
               and(
                 eq(scrapedProducts.domain, brandDomain.domain),
-                isNull(scrapedProducts.brandDomainId)
+                isNull(scrapedProducts.brandDomainId),
+                exactMatchPage.workspaceId ? eq(scrapedProducts.workspaceId, exactMatchPage.workspaceId) : undefined
               )
             );
         } catch (prodErr) {

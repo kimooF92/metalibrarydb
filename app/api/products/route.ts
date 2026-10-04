@@ -4,6 +4,7 @@ import { ads, adObservations, scrapedProducts, trackedPages } from "@/db/schema"
 import { eq, ilike, and, sql, desc, asc, or, count, inArray, isNull } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { PRIVATE_AUTH_VARY, PRIVATE_DETAIL_CACHE_CONTROL, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -48,6 +49,8 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "24", 10)));
     const offset = (page - 1) * limit;
 
+    const activeWorkspace = await getActiveWorkspace(req);
+
     const conditions: any[] = [
       sql`${scrapedProducts.scrapeStatus} NOT IN ('deleted', 'ignored')`,
     ];
@@ -61,6 +64,8 @@ export async function GET(req: NextRequest) {
       } else {
         conditions.push(eq(scrapedProducts.url, trimmedId));
       }
+    } else {
+      conditions.push(eq(scrapedProducts.workspaceId, activeWorkspace.id));
     }
 
     // Filter by Active / Inactive (Off-Air) Ads status

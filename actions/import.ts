@@ -5,6 +5,7 @@ import { extractUrlMetadata, normalizeAddUrlInput } from "@/lib/url-parser";
 import { parseImportFile } from "@/lib/file-parser";
 import { supabase } from "@/lib/supabase";
 import { inArray } from "drizzle-orm";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 
 export interface ImportResultSummary {
   jobId: string;
@@ -24,12 +25,14 @@ export async function processFileImport(
   // 1. Parse URLs from file
   const rawUrls = parseImportFile(fileBuffer);
   const totalRows = rawUrls.length;
+  const activeWorkspace = await getActiveWorkspace();
 
   if (totalRows === 0) {
     const [job] = await db
       .insert(importJobs)
       .values({
         filename,
+        workspaceId: activeWorkspace.id,
         totalRows: 0,
         successful: 0,
         failed: 0,
@@ -99,6 +102,7 @@ export async function processFileImport(
       .values({
         filename,
         filePath: storagePath,
+        workspaceId: activeWorkspace.id,
         totalRows,
         successful: 0,
         failed: validationFailedCount,
@@ -172,6 +176,8 @@ export async function processFileImport(
         displayName: m.displayName,
         searchType: m.searchType,
         pageId: m.pageId,
+        workspaceId: activeWorkspace.id,
+        country: activeWorkspace.countryCode || "TN",
         status: "pending",
       }))
     )
@@ -181,6 +187,7 @@ export async function processFileImport(
   await db.insert(queue).values(
     insertedPages.map((page) => ({
       trackedPageId: page.id,
+      workspaceId: activeWorkspace.id,
       status: "pending",
     }))
   );
@@ -193,6 +200,7 @@ export async function processFileImport(
     .values({
       filename,
       filePath: storagePath,
+      workspaceId: activeWorkspace.id,
       totalRows,
       successful: successfulCount,
       failed: validationFailedCount,

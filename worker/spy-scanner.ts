@@ -407,7 +407,7 @@ export async function scanAdCreatives(
     // 3. Query tracked page record to get the official numeric pageId if present
     const trackedPageRecord = await db.query.trackedPages.findFirst({
       where: eq(trackedPages.id, trackedPageId),
-      columns: { pageId: true, displayName: true, searchType: true, landingPage: true, country: true },
+      columns: { pageId: true, displayName: true, searchType: true, landingPage: true, country: true, workspaceId: true },
     });
     const fallbackNumericPageId = (trackedPageRecord?.pageId && trackedPageRecord.pageId !== "0" && !trackedPageRecord.pageId.includes("-"))
       ? trackedPageRecord.pageId
@@ -818,7 +818,7 @@ export async function scanAdCreatives(
       if (targetDomain && targetDomain.includes(".")) {
         try {
           const { getOrCreateBrandDomain, linkPageToDomain } = await import("../lib/domain-portfolio");
-          const bDomain = await getOrCreateBrandDomain(targetDomain, trackedPageRecord?.displayName);
+          const bDomain = await getOrCreateBrandDomain(targetDomain, trackedPageRecord?.displayName, trackedPageRecord?.workspaceId);
           pageUpdates.brandDomainId = bDomain.id;
           pageUpdates.canonicalDomain = bDomain.domain;
 
@@ -840,6 +840,7 @@ export async function scanAdCreatives(
                 searchType: "page",
                 country: pageCountry,
                 brandDomainId: bDomain.id,
+                workspaceId: bDomain.workspaceId ?? trackedPageRecord?.workspaceId,
                 pageRole: "primary",
                 canonicalDomain: bDomain.domain,
                 status: "success",

@@ -3,7 +3,9 @@ import { trackedPages, queue } from "@/db/schema";
 import { isValidMetaAdLibraryUrl } from "@/lib/validators";
 import { extractUrlMetadata, normalizeAddUrlInput, parseTrackableUrl } from "@/lib/url-parser";
 import { linkAndAutoScrapeProduct } from "@/lib/product-ingest";
-import { eq, or, sql } from "drizzle-orm";
+import { eq, or, sql, and } from "drizzle-orm";
+
+import { getActiveWorkspace } from "@/lib/workspace-server";
 
 export interface AddUrlResult {
   success: boolean;
@@ -14,10 +16,19 @@ export interface AddUrlResult {
 
 export async function addSingleUrl(
   rawUrl: string,
-  allowDuplicate = false
+  allowDuplicate = false,
+  targetWorkspaceId?: string
 ): Promise<AddUrlResult> {
   const trimmed = rawUrl.trim();
   const normalizedUrl = normalizeAddUrlInput(trimmed);
+
+  // Resolve target workspace
+  let workspace = null;
+  let workspaceId = targetWorkspaceId;
+  if (!workspaceId) {
+    workspace = await getActiveWorkspace();
+    workspaceId = workspace.id;
+  }
 
   // 1. Validation
   if (!normalizedUrl || !isValidMetaAdLibraryUrl(trimmed)) {
@@ -33,22 +44,26 @@ export async function addSingleUrl(
   const parsedTrackable = parseTrackableUrl(trimmed);
   const landingPageDomain = parsedTrackable?.targetDomain || null;
 
-  // 2. Check duplicates by URL, pageId, or case-insensitive displayName (unless allowDuplicate is true)
+  // 2. Check duplicates by URL, pageId, or case-insensitive displayName within this workspace
   if (!allowDuplicate) {
     const nameNorm = meta.displayName ? meta.displayName.trim().toLowerCase() : "";
 
+    const duplicateCondition = meta.pageId
+      ? or(eq(trackedPages.url, meta.url), eq(trackedPages.pageId, meta.pageId))
+      : nameNorm
+      ? or(
+          eq(trackedPages.url, meta.url),
+          sql`lower(trim(${trackedPages.displayName})) = ${nameNorm}`,
+          landingPageDomain
+            ? sql`lower(${trackedPages.landingPage}) = ${landingPageDomain.toLowerCase()}`
+            : sql`FALSE`
+        )
+      : eq(trackedPages.url, meta.url);
+
     const existing = await db.query.trackedPages.findFirst({
-      where: meta.pageId
-        ? or(eq(trackedPages.url, meta.url), eq(trackedPages.pageId, meta.pageId))
-        : nameNorm
-        ? or(
-            eq(trackedPages.url, meta.url),
-            sql`lower(trim(${trackedPages.displayName})) = ${nameNorm}`,
-            landingPageDomain
-              ? sql`lower(${trackedPages.landingPage}) = ${landingPageDomain.toLowerCase()}`
-              : sql`FALSE`
-          )
-        : eq(trackedPages.url, meta.url),
+      where: workspaceId
+        ? and(eq(trackedPages.workspaceId, workspaceId), duplicateCondition)
+        : duplicateCondition,
     });
 
     if (existing) {
@@ -57,13 +72,14 @@ export async function addSingleUrl(
         await linkAndAutoScrapeProduct({
           linkUrl: parsedTrackable.productUrl,
           pageId: existing.pageId || null,
+          workspaceId: existing.workspaceId || workspaceId,
         }).catch(() => {});
       }
 
       return {
         success: false,
         isDuplicate: true,
-        message: `Duplicate page detected: "${existing.displayName || existing.url}" is already being tracked.`,
+        message: `Duplicate page detected: "${existing.displayName || existing.url}" is already being tracked in this workspace.`,
         page: existing,
       };
     }
@@ -78,6 +94,8 @@ export async function addSingleUrl(
       searchType: meta.searchType,
       pageId: meta.pageId,
       landingPage: landingPageDomain,
+      workspaceId: workspaceId,
+      country: workspace?.countryCode || "TN",
       status: "pending",
     })
     .onConflictDoNothing()
@@ -86,7 +104,9 @@ export async function addSingleUrl(
   const effectivePage =
     newPage ??
     (await db.query.trackedPages.findFirst({
-      where: eq(trackedPages.url, meta.url),
+      where: workspaceId
+        ? and(eq(trackedPages.workspaceId, workspaceId), eq(trackedPages.url, meta.url))
+        : eq(trackedPages.url, meta.url),
     }));
 
   if (!effectivePage) {
@@ -100,6 +120,7 @@ export async function addSingleUrl(
   if (newPage) {
     await db.insert(queue).values({
       trackedPageId: effectivePage.id,
+      workspaceId: workspaceId,
       jobType: "count",
       priority: parsedTrackable?.type === "product_url" ? 10 : 1,
       status: "pending",
@@ -111,6 +132,7 @@ export async function addSingleUrl(
     await linkAndAutoScrapeProduct({
       linkUrl: parsedTrackable.productUrl,
       pageId: effectivePage.pageId || null,
+      workspaceId: workspaceId,
     }).catch(() => {});
   }
 

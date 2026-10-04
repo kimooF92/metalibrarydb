@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { discoveredPages, trackedPages, queue } from "@/db/schema";
 import { inArray, eq, and, isNull, ne } from "drizzle-orm";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 
 export async function POST(req: Request) {
   try {
+    const activeWorkspace = await getActiveWorkspace(req);
     const body = await req.json().catch(() => ({}));
     const rawIds: string[] = body.discoveredPageIds || body.ids || [];
     const directPages: Array<{
@@ -90,11 +92,14 @@ export async function POST(req: Request) {
 
       // 2. If not merged via exact match parent, insert or update canonical page
       if (!tpId) {
-        const pageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${discPage.country || "TN"}&view_all_page_id=${discPage.pageId}&search_type=page&media_type=all`;
+        const pageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${discPage.country || activeWorkspace?.countryCode || "TN"}&view_all_page_id=${discPage.pageId}&search_type=page&media_type=all`;
 
-        // Check if page with this pageId already exists
+        // Check if page with this pageId already exists in this workspace
         const existingByPageId = await db.query.trackedPages.findFirst({
-          where: eq(trackedPages.pageId, discPage.pageId),
+          where: and(
+            eq(trackedPages.pageId, discPage.pageId),
+            activeWorkspace?.id ? eq(trackedPages.workspaceId, activeWorkspace.id) : undefined
+          ),
         });
 
         let candidateDomain = "";
@@ -117,7 +122,7 @@ export async function POST(req: Request) {
         if (candidateDomain) {
           try {
             const { getOrCreateBrandDomain } = await import("@/lib/domain-portfolio");
-            const bd = await getOrCreateBrandDomain(candidateDomain, discPage.displayName);
+            const bd = await getOrCreateBrandDomain(candidateDomain, discPage.displayName, activeWorkspace?.id);
             brandDomainId = bd.id;
           } catch (e) {}
         }
@@ -143,11 +148,12 @@ export async function POST(req: Request) {
               displayName: discPage.displayName || `Page ${discPage.pageId}`,
               pageId: discPage.pageId,
               searchType: "page",
-              country: discPage.country || "TN",
+              country: discPage.country || activeWorkspace?.countryCode || "TN",
               adCount: discPage.matchingAdCount,
               currentResults: discPage.verifiedAdCount || discPage.matchingAdCount,
               brandDomainId: brandDomainId || null,
               canonicalDomain: candidateDomain || null,
+              workspaceId: activeWorkspace?.id,
               status: "pending",
             })
             .onConflictDoUpdate({
@@ -179,6 +185,7 @@ export async function POST(req: Request) {
       if (!existingQueueJob) {
         await db.insert(queue).values({
           trackedPageId: tpId!,
+          workspaceId: activeWorkspace?.id,
           jobType: "count",
           status: "pending",
         });
@@ -201,11 +208,14 @@ export async function POST(req: Request) {
       const cleanPageId = directPage.pageId?.trim();
       if (!cleanPageId) continue;
 
-      const pageCountry = directPage.country || "TN";
+      const pageCountry = directPage.country || activeWorkspace?.countryCode || "TN";
       const pageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${pageCountry}&view_all_page_id=${cleanPageId}&search_type=page&media_type=all`;
 
       const existingByPageId = await db.query.trackedPages.findFirst({
-        where: eq(trackedPages.pageId, cleanPageId),
+        where: and(
+          eq(trackedPages.pageId, cleanPageId),
+          activeWorkspace?.id ? eq(trackedPages.workspaceId, activeWorkspace.id) : undefined
+        ),
       });
 
       let tpId: string;
@@ -231,6 +241,7 @@ export async function POST(req: Request) {
             country: pageCountry,
             adCount: directPage.matchingAdCount || 0,
             currentResults: directPage.matchingAdCount || 0,
+            workspaceId: activeWorkspace?.id,
             status: "pending",
           })
           .onConflictDoUpdate({
@@ -259,6 +270,7 @@ export async function POST(req: Request) {
       if (!existingQueueJob) {
         await db.insert(queue).values({
           trackedPageId: tpId,
+          workspaceId: activeWorkspace?.id,
           jobType: "count",
           status: "pending",
         });

@@ -8,6 +8,9 @@ import { TopBar } from "@/components/top-bar";
 import { SmallPagesScanProvider } from "@/components/small-pages-scan-context";
 import { SmallPagesScanBanner } from "@/components/small-pages-scan-banner";
 
+import { WorkspaceProvider } from "@/components/workspace-context";
+import { ManageWorkspaceModal } from "@/components/manage-workspace-modal";
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isLoginPage = pathname === "/login";
@@ -17,18 +20,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <SidebarProvider>
-      <SmallPagesScanProvider>
-        <Navigation />
-        <div className="flex-1 min-w-0 h-full flex flex-col overflow-hidden bg-background">
-          <TopBar />
-          <SmallPagesScanBanner />
-          <main className="flex-1 min-w-0 overflow-y-auto flex flex-col p-4 md:px-6 md:py-5 bg-background">
-            {children}
-          </main>
-        </div>
-      </SmallPagesScanProvider>
-    </SidebarProvider>
+    <WorkspaceProvider>
+      <SidebarProvider>
+        <SmallPagesScanProvider>
+          <Navigation />
+          <div className="flex-1 min-w-0 h-full flex flex-col overflow-hidden bg-background">
+            <TopBar />
+            <SmallPagesScanBanner />
+            <main className="flex-1 min-w-0 overflow-y-auto flex flex-col p-4 md:px-6 md:py-5 bg-background">
+              {children}
+            </main>
+          </div>
+          <ManageWorkspaceModal />
+        </SmallPagesScanProvider>
+      </SidebarProvider>
+    </WorkspaceProvider>
   );
 }
 

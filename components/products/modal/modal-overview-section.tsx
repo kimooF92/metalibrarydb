@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import NextImage from "next/image";
 import { ScrapedProduct } from "@/types";
 import { ShoppingBag, Tag, Truck, Layers } from "lucide-react";
+import { useWorkspace } from "@/components/workspace-context";
 
 interface ModalOverviewSectionProps {
   product: ScrapedProduct;
@@ -11,6 +12,7 @@ interface ModalOverviewSectionProps {
 }
 
 export function ModalOverviewSection({ product, allImages }: ModalOverviewSectionProps) {
+  const { activeWorkspace } = useWorkspace();
   const [selectedImage, setSelectedImage] = useState<string | null>(product.mainImageUrl || null);
 
   useEffect(() => {
@@ -103,12 +105,14 @@ export function ModalOverviewSection({ product, allImages }: ModalOverviewSectio
             {/* Delivery / Tawsil Badge */}
             {(() => {
               const delivery = product.deliveryCost;
+              const sym = activeWorkspace?.currencySymbol || "DT";
               const isFree =
                 delivery?.toLowerCase().includes("gratuit") ||
                 delivery?.toLowerCase().includes("free") ||
                 delivery?.toLowerCase().includes("مجاني") ||
                 delivery?.toLowerCase().includes("0 dt") ||
-                delivery?.toLowerCase().includes("0dt") ||
+                delivery?.toLowerCase().includes(`0 ${sym.toLowerCase()}`) ||
+                delivery?.toLowerCase().includes(`0${sym.toLowerCase()}`) ||
                 product.discountOrOffer?.toLowerCase().includes("livraison gratuite") ||
                 product.discountOrOffer?.toLowerCase().includes("توصيل مجاني");
 
@@ -121,7 +125,7 @@ export function ModalOverviewSection({ product, allImages }: ModalOverviewSectio
                 ? "Livraison Gratuite"
                 : isSpecifiedPaid
                 ? delivery
-                : "Livraison: 7 DT (Standard COD)";
+                : `Livraison: 7 ${sym} (Standard COD)`;
 
               return (
                 <span
@@ -137,7 +141,7 @@ export function ModalOverviewSection({ product, allImages }: ModalOverviewSectio
                       ? "Livraison gratuite / Free Delivery"
                       : isSpecifiedPaid
                       ? `Frais de livraison: ${delivery}`
-                      : "Livraison standard COD en Tunisie (~7 DT)"
+                      : `Livraison standard COD (~7 ${sym})`
                   }
                 >
                   <Truck className="w-3.5 h-3.5" />

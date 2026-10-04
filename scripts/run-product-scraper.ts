@@ -275,6 +275,7 @@ async function runProductScraperBatch() {
           url,
           domain: getCleanDomain(url),
           brandDomainId: null,
+          workspaceId: null,
           pageId: resolvedPageId,
           title: null,
           currentPrice: null,

@@ -18,18 +18,25 @@ import {
   Layers,
 } from "lucide-react";
 import { MarketAnalysisData } from "@/lib/market-forecaster";
+import { useWorkspace } from "@/components/workspace-context";
 
 export function MarketForecastCard() {
+  const { activeWorkspace } = useWorkspace();
   const [research, setResearch] = useState<MarketAnalysisData | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // 1. Initial Load: Load persistent forecast with 0ms localStorage cache
+  const cacheKey = `ai_market_intelligence_data_${activeWorkspace?.id || "default"}`;
+
+  // 1. Initial & Workspace Change Load: Load persistent forecast with 0ms localStorage cache
   useEffect(() => {
+    setLoading(true);
+    setError(null);
+
     try {
-      const cached = localStorage.getItem("ai_market_intelligence_data");
+      const cached = localStorage.getItem(cacheKey);
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
@@ -39,8 +46,10 @@ export function MarketForecastCard() {
             setLoading(false);
           }
         } catch {
-          localStorage.removeItem("ai_market_intelligence_data");
+          localStorage.removeItem(cacheKey);
         }
+      } else {
+        setResearch(null);
       }
     } catch {}
 
@@ -53,8 +62,10 @@ export function MarketForecastCard() {
             setResearch(json.forecast);
             setIsExpanded(true);
             try {
-              localStorage.setItem("ai_market_intelligence_data", JSON.stringify(json.forecast));
+              localStorage.setItem(cacheKey, JSON.stringify(json.forecast));
             } catch {}
+          } else {
+            setResearch(null);
           }
         }
       } catch (err) {
@@ -65,7 +76,7 @@ export function MarketForecastCard() {
     };
 
     fetchPersistedResearch();
-  }, []);
+  }, [activeWorkspace?.id, cacheKey]);
 
   // 2. On-Demand Trigger: Call OpenRouter DeepSeek
   const triggerGenerateResearch = async () => {
@@ -86,7 +97,7 @@ export function MarketForecastCard() {
         setResearch(json.forecast);
         setIsExpanded(true);
         try {
-          localStorage.setItem("ai_market_intelligence_data", JSON.stringify(json.forecast));
+          localStorage.setItem(cacheKey, JSON.stringify(json.forecast));
         } catch {}
       }
     } catch (err: any) {

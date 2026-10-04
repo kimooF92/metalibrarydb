@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { activityNotifications } from "@/db/schema";
+import { activityNotifications, trackedPages } from "@/db/schema";
 import { eq, desc, and, inArray, gte } from "drizzle-orm";
 
 export type NotificationType =
@@ -23,6 +23,7 @@ export interface CreateNotificationParams {
   adArchiveId?: string | null;
   actionUrl?: string | null;
   metadata?: Record<string, any> | null;
+  workspaceId?: string | null;
 }
 
 const isUuid = (str?: string | null) =>
@@ -67,6 +68,19 @@ export async function createNotification(params: CreateNotificationParams) {
       return existing;
     }
 
+    let workspaceId = params.workspaceId || null;
+    if (!workspaceId && params.trackedPageId) {
+      try {
+        const page = await db.query.trackedPages.findFirst({
+          where: eq(trackedPages.id, params.trackedPageId),
+          columns: { workspaceId: true },
+        });
+        if (page?.workspaceId) {
+          workspaceId = page.workspaceId;
+        }
+      } catch (e) {}
+    }
+
     const [record] = await db
       .insert(activityNotifications)
       .values({
@@ -75,6 +89,7 @@ export async function createNotification(params: CreateNotificationParams) {
         message: params.message,
         severity: params.severity || "info",
         trackedPageId: params.trackedPageId || null,
+        workspaceId,
         adArchiveId: params.adArchiveId || null,
         actionUrl: params.actionUrl || null,
         metadata: params.metadata || null,

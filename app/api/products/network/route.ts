@@ -67,7 +67,12 @@ export async function GET(req: NextRequest) {
         .from(scrapedProducts)
         .crossJoin(sql`unnest(${scrapedProducts.phoneNumbers}) as elem`)
         .where(
-          sql`elem = ANY(ARRAY[${sql.raw(validPhones.map((p) => `'${p}'`).join(","))}]::text[])`
+          targetProduct.workspaceId
+            ? and(
+                eq(scrapedProducts.workspaceId, targetProduct.workspaceId),
+                sql`elem = ANY(ARRAY[${sql.raw(validPhones.map((p) => `'${p}'`).join(","))}]::text[])`
+              )
+            : sql`elem = ANY(ARRAY[${sql.raw(validPhones.map((p) => `'${p}'`).join(","))}]::text[])`
         )
         .groupBy(sql`elem`);
 
@@ -115,7 +120,14 @@ export async function GET(req: NextRequest) {
           storePlatform: scrapedProducts.storePlatform,
         })
         .from(scrapedProducts)
-        .where(or(...matchingProductConditions));
+        .where(
+          targetProduct.workspaceId
+            ? and(
+                eq(scrapedProducts.workspaceId, targetProduct.workspaceId),
+                or(...matchingProductConditions)
+              )
+            : or(...matchingProductConditions)
+        );
     }
 
     // Map each product to its matching signals relative to targetProduct

@@ -52,7 +52,8 @@ export async function GET(req: NextRequest) {
         linkedAdsCount: sql<number>`COALESCE(${adCountsSubquery.linkedAdsCount}, 0)`.mapWith(Number),
       })
       .from(scrapedProducts)
-      .leftJoin(adCountsSubquery, eq(scrapedProducts.id, adCountsSubquery.productId));
+      .leftJoin(adCountsSubquery, eq(scrapedProducts.id, adCountsSubquery.productId))
+      .where(targetProduct.workspaceId ? eq(scrapedProducts.workspaceId, targetProduct.workspaceId) : undefined);
 
     // 3. Find algorithmic competitor matches
     const benchmark = findCompetitorMatches(

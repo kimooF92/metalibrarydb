@@ -25,8 +25,9 @@ export interface LinkPageResult {
  */
 export async function getOrCreateBrandDomain(
   rawDomain: string,
-  displayName?: string | null
-): Promise<{ id: string; domain: string; displayName: string }> {
+  displayName?: string | null,
+  workspaceId?: string | null
+): Promise<{ id: string; domain: string; displayName: string; workspaceId?: string | null }> {
   const cleanDomain = resolveTrackableDomain(rawDomain).toLowerCase().trim();
   if (!cleanDomain) {
     throw new Error(`Invalid domain string: "${rawDomain}"`);
@@ -38,13 +39,21 @@ export async function getOrCreateBrandDomain(
   });
 
   if (existing) {
-    // Optionally update display name if previously generic
+    // Optionally update display name or workspaceId if missing
+    const updates: Record<string, any> = {};
     if (displayName && (existing.displayName === existing.domain || existing.displayName.startsWith("http"))) {
+      updates.displayName = displayName.trim();
+    }
+    if (!existing.workspaceId && workspaceId) {
+      updates.workspaceId = workspaceId;
+    }
+    if (Object.keys(updates).length > 0) {
+      updates.updatedAt = new Date();
       await db
         .update(brandDomains)
-        .set({ displayName: displayName.trim(), updatedAt: new Date() })
+        .set(updates)
         .where(eq(brandDomains.id, existing.id));
-      existing.displayName = displayName.trim();
+      Object.assign(existing, updates);
     }
     return existing;
   }
@@ -59,6 +68,7 @@ export async function getOrCreateBrandDomain(
     .values({
       domain: cleanDomain,
       displayName: cleanDisplayName,
+      ...(workspaceId ? { workspaceId } : {}),
     })
     .onConflictDoUpdate({
       target: [brandDomains.domain],
@@ -300,15 +310,19 @@ export async function getDomainPortfolio(domainOrId: string) {
   const primaryPage = linkedPages.find((p) => p.pageRole === "primary") || linkedPages[0] || null;
 
   // Count products for this domain
+  const productConditions = [
+    or(
+      eq(scrapedProducts.brandDomainId, domainRecord.id),
+      eq(scrapedProducts.domain, domainRecord.domain)
+    ),
+  ];
+  if (domainRecord.workspaceId) {
+    productConditions.push(eq(scrapedProducts.workspaceId, domainRecord.workspaceId));
+  }
   const productRows = await db
     .select({ count: sql<number>`count(*)` })
     .from(scrapedProducts)
-    .where(
-      or(
-        eq(scrapedProducts.brandDomainId, domainRecord.id),
-        eq(scrapedProducts.domain, domainRecord.domain)
-      )
-    );
+    .where(and(...productConditions));
   const totalProducts = Number(productRows[0]?.count || 0);
 
   return {
@@ -325,13 +339,16 @@ export async function getDomainPortfolio(domainOrId: string) {
 /**
  * Returns list of all domain portfolios with page counts and combined ads.
  */
-export async function listDomainPortfolios() {
+export async function listDomainPortfolios(workspaceId?: string | null) {
   const domains = await db.query.brandDomains.findMany({
+    where: workspaceId ? eq(brandDomains.workspaceId, workspaceId) : undefined,
     orderBy: [desc(brandDomains.updatedAt)],
   });
 
   const allLinkedPages = await db.query.trackedPages.findMany({
-    where: sql`${trackedPages.brandDomainId} IS NOT NULL`,
+    where: workspaceId
+      ? and(sql`${trackedPages.brandDomainId} IS NOT NULL`, eq(trackedPages.workspaceId, workspaceId))
+      : sql`${trackedPages.brandDomainId} IS NOT NULL`,
   });
 
   const pagesByDomain = new Map<string, typeof allLinkedPages>();

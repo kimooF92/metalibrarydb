@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Share2,
 } from "lucide-react";
+import { useWorkspace } from "@/components/workspace-context";
 
 interface ModalNetworkIntelligenceProps {
   network: any;
@@ -21,13 +22,15 @@ export function ModalNetworkIntelligence({
   network,
   loadingNetwork,
 }: ModalNetworkIntelligenceProps) {
+  const { activeWorkspace } = useWorkspace();
+  const countryName = activeWorkspace?.countryCode === "MA" ? "Morocco" : activeWorkspace?.countryCode === "TN" ? "Tunisia" : activeWorkspace?.name || "Local";
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-2">
           <Building2 className="w-4 h-4 text-purple-500" />
           <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-            Advertiser Network Intelligence (Tunisia COD)
+            Advertiser Network Intelligence ({countryName} COD)
           </h4>
         </div>
 
@@ -220,7 +223,7 @@ export function ModalNetworkIntelligence({
                     <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between">
                       <span className="text-[10px] text-slate-400 font-mono">ID: {pg.pageId}</span>
                       <a
-                        href={`https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=TN&view_all_page_id=${pg.pageId}`}
+                        href={`https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=${activeWorkspace?.countryCode || "TN"}&view_all_page_id=${pg.pageId}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"

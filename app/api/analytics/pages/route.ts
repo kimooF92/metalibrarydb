@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { trackedPages, scanHistory } from "@/db/schema";
-import { asc, desc, inArray, isNotNull, lte, sql, and, gte } from "drizzle-orm";
+import { asc, desc, inArray, isNotNull, lte, sql, and, gte, eq } from "drizzle-orm";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 
 // Analytics needs page-level trends, not the full pages-management payload.
 // Keep this projection deliberately small and never join ads/products here.
 export async function GET(request: Request) {
   try {
+    const activeWorkspace = await getActiveWorkspace(request);
     const { searchParams } = new URL(request.url);
     const range = searchParams.get("range") ?? "7d";
     const rangeDays = ({ today: 1, "7d": 7, "15d": 15, "30d": 30 } as Record<string, number>)[range] ?? 7;
@@ -43,6 +45,7 @@ export async function GET(request: Request) {
         canonicalDomain: trackedPages.canonicalDomain,
       })
       .from(trackedPages)
+      .where(eq(trackedPages.workspaceId, activeWorkspace.id))
       .orderBy(desc(trackedPages.currentResults), desc(trackedPages.createdAt), desc(trackedPages.id));
 
     const pageIds = pages.map((page) => page.id);

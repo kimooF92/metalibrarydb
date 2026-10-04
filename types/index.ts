@@ -1,6 +1,22 @@
 import type { ScalingArchetype, ScalingPatternResult } from "@/lib/scaling-classifier";
 export type { ScalingArchetype, ScalingPatternResult };
 
+export interface Workspace {
+  id: string;
+  name: string;
+  slug: string;
+  countryCode: string;
+  currency: string;
+  currencySymbol: string;
+  flag: string;
+  isDefault: boolean;
+  description?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  pageCount?: number;
+  productCount?: number;
+}
+
 export interface BrandDomain {
   id: string;
   domain: string;
@@ -9,6 +25,7 @@ export interface BrandDomain {
   storePlatform?: string | null;
   notes?: string | null;
   isWatchlisted: boolean;
+  workspaceId?: string | null;
   createdAt: string;
   updatedAt: string;
   // Hydrated aggregation fields
@@ -58,6 +75,7 @@ export interface TrackedPage {
   brandDomainId?: string | null;
   pageRole?: "primary" | "satellite" | "backup" | null;
   canonicalDomain?: string | null;
+  workspaceId?: string | null;
   brandDomain?: {
     id: string;
     domain: string;

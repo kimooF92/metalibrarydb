@@ -4,11 +4,14 @@ import { discoveryRuns } from "@/db/schema";
 import { desc, gte, or, eq, and, sql } from "drizzle-orm";
 import { triggerGitHubWorkflow } from "@/lib/github";
 import { parseMetaAdLibraryDiscoveryUrl } from "@/lib/url-parser";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const activeWorkspace = await getActiveWorkspace(req);
     const runs = await db.query.discoveryRuns.findMany({
       where: and(
+        eq(discoveryRuns.workspaceId, activeWorkspace.id),
         or(
           gte(discoveryRuns.totalPagesDiscovered, 1),
           eq(discoveryRuns.status, "running"),
@@ -29,6 +32,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const activeWorkspace = await getActiveWorkspace(req);
     const body = await req.json().catch(() => ({}));
 
     // Mode 1: Direct Meta Ad Library URL
@@ -48,11 +52,12 @@ export async function POST(req: Request) {
       const [newRun] = await db
         .insert(discoveryRuns)
         .values({
-          country: parsed.country,
+          country: parsed.country || activeWorkspace.countryCode || "TN",
           searchUrl: parsed.cleanUrl,
           query: parsed.query,
           startDateMin,
           startDateMax,
+          workspaceId: activeWorkspace.id,
           status: "pending",
           totalAdsScanned: 0,
           totalPagesDiscovered: 0,
@@ -67,7 +72,7 @@ export async function POST(req: Request) {
     }
 
     // Mode 2: Existing Search Controls (Form Builder)
-    const country = (body.country || "TN").toUpperCase().trim();
+    const country = (body.country || activeWorkspace.countryCode || "TN").toUpperCase().trim();
     const query = body.query || "\u200D";
     const mediaType = body.mediaType || "video";
 
@@ -98,6 +103,7 @@ export async function POST(req: Request) {
         query,
         startDateMin,
         startDateMax,
+        workspaceId: activeWorkspace.id,
         status: "pending",
         totalAdsScanned: 0,
         totalPagesDiscovered: 0,
