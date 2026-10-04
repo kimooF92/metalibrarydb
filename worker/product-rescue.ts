@@ -11,6 +11,7 @@ import {
   detectStorePlatform,
   extractDeliveryInfo,
 } from "../lib/network-extractor";
+import { formatPrice, formatDelivery } from "../lib/format-price";
 
 let isRescueRunning = false;
 let lastRescueAttemptTime = 0;
@@ -53,6 +54,7 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
         deliveryCost: scrapedProducts.deliveryCost,
         failureReason: scrapedProducts.failureReason,
         lastScrapedAt: scrapedProducts.lastScrapedAt,
+        workspaceId: scrapedProducts.workspaceId,
       })
       .from(scrapedProducts)
       .where(
@@ -171,20 +173,28 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
         const pixels = extractMetaPixelIds(rawHtml);
         const delivery = extractDeliveryInfo(rawHtml, extracted.delivery_cost);
 
+        const isMorocco = item.workspaceId === "00000000-0000-0000-0000-000000000002" || /\.ma(\/|$)/i.test(item.domain || item.url);
+        const itemCurrency = isMorocco ? "MAD" : (item.currency || "TND");
+        const itemSym = isMorocco ? "DH" : "DT";
+
         const formattedOffers = (extracted.all_offers || []).map((o: any) => ({
           tierName: o.tier_name,
-          price: o.price,
+          price: o.price ? formatPrice(o.price, itemSym) : o.price,
           savings: o.savings,
         }));
+
+        const finalPrice = formatPrice(extracted.current_price || item.currentPrice || `0 ${itemSym}`, itemSym);
+        const finalOrigPrice = extracted.original_price || item.originalPrice ? formatPrice(extracted.original_price || item.originalPrice, itemSym) : null;
+        const finalDelivery = delivery.label ? formatDelivery(delivery.label, itemSym) : item.deliveryCost;
 
         await db
           .update(scrapedProducts)
           .set({
             domain: resolvedDomain || item.domain,
             title: extracted.title || item.title,
-            currentPrice: extracted.current_price || item.currentPrice || "0 DT",
-            originalPrice: extracted.original_price || item.originalPrice,
-            currency: extracted.currency || item.currency || "TND",
+            currentPrice: finalPrice,
+            originalPrice: finalOrigPrice,
+            currency: extracted.currency || itemCurrency,
             discountOrOffer: extracted.discount_or_offer || item.discountOrOffer,
             mainImageUrl: extracted.main_image_url || item.mainImageUrl,
             galleryImages: extracted.gallery_images || item.galleryImages || [],
@@ -193,7 +203,7 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
             phoneNumbers: phones.length > 0 ? phones : item.phoneNumbers,
             whatsappNumbers: wa.length > 0 ? wa : item.whatsappNumbers,
             metaPixelIds: pixels.length > 0 ? pixels : item.metaPixelIds,
-            deliveryCost: delivery.label || item.deliveryCost,
+            deliveryCost: finalDelivery,
             scrapeStatus: "success",
             failureReason: null,
             lastScrapedAt: new Date(),

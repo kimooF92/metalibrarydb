@@ -11,6 +11,7 @@ import {
   detectStorePlatform,
   extractDeliveryInfo,
 } from "@/lib/network-extractor";
+import { formatPrice, formatDelivery } from "@/lib/format-price";
 
 // In-flight URL scrape deduplication map to prevent redundant concurrent Firecrawl requests
 const inFlightScrapes = new Map<string, Promise<any>>();
@@ -294,7 +295,23 @@ export async function linkAndAutoScrapeProduct({
       const scrapePromise = (async () => {
         try {
           console.log(`[Auto-Scraper] Starting background product extraction: ${normalizedUrl}`);
-          const extractionResult = await extractProductFromUrl(normalizedUrl);
+
+          // Resolve workspace default currency dynamically
+          let fallbackCurrency = "TND";
+          let fallbackCurrencySymbol = "DT";
+          if (resolvedWorkspaceId) {
+            const ws = await db.query.workspaces.findFirst({
+              where: eq(workspaces.id, resolvedWorkspaceId),
+              columns: { currency: true, currencySymbol: true },
+            });
+            if (ws?.currency) fallbackCurrency = ws.currency;
+            if (ws?.currencySymbol) fallbackCurrencySymbol = ws.currencySymbol;
+          }
+
+          const extractionResult = await extractProductFromUrl(normalizedUrl, {
+            defaultCurrency: fallbackCurrency,
+            defaultCurrencySymbol: fallbackCurrencySymbol,
+          });
 
           if (!extractionResult.success || !extractionResult.data) {
             const isDead = extractionResult.error?.includes("[Dead link]") || extractionResult.error?.includes("404");
@@ -324,8 +341,13 @@ export async function linkAndAutoScrapeProduct({
           const whatsappNumbers = extractWhatsAppNumbers(rawHtml);
           const metaPixelIds = extractMetaPixelIds(rawHtml);
           const storePlatform = detectStorePlatform(rawHtml, finalEffectiveUrl);
-          const deliveryInfo = extractDeliveryInfo(rawHtml, extracted.delivery_cost);
-          const deliveryCost = deliveryInfo?.label || null;
+          const deliveryInfo = extractDeliveryInfo(
+            rawHtml,
+            extracted.delivery_cost,
+            extracted.all_offers,
+            fallbackCurrencySymbol
+          );
+          const deliveryCost = deliveryInfo?.label ? formatDelivery(deliveryInfo.label, fallbackCurrencySymbol) : null;
 
           // AI classification bypassed per user instructions to avoid external failures/delays
           const category = null;
@@ -334,19 +356,15 @@ export async function linkAndAutoScrapeProduct({
 
           const formattedOffers = (extracted.all_offers || []).map((offer) => ({
             tierName: offer.tier_name,
-            price: offer.price,
+            price: offer.price ? formatPrice(offer.price, fallbackCurrencySymbol) : offer.price,
             savings: offer.savings,
           }));
 
-          // Resolve workspace default currency dynamically
-          let fallbackCurrency = "TND";
-          if (resolvedWorkspaceId) {
-            const ws = await db.query.workspaces.findFirst({
-              where: eq(workspaces.id, resolvedWorkspaceId),
-              columns: { currency: true },
-            });
-            if (ws?.currency) fallbackCurrency = ws.currency;
-          }
+          const effectiveCurrency = extracted.currency || fallbackCurrency;
+          const effectivePrice = formatPrice(extracted.current_price, fallbackCurrencySymbol);
+          const effectiveOriginalPrice = extracted.original_price
+            ? formatPrice(extracted.original_price, fallbackCurrencySymbol)
+            : null;
 
           const updateTime = new Date();
           await db
@@ -354,9 +372,9 @@ export async function linkAndAutoScrapeProduct({
             .set({
               domain: resolvedDomain || undefined,
               title: extracted.title,
-              currentPrice: extracted.current_price,
-              originalPrice: extracted.original_price || null,
-              currency: extracted.currency || fallbackCurrency,
+              currentPrice: effectivePrice,
+              originalPrice: effectiveOriginalPrice,
+              currency: effectiveCurrency,
               discountOrOffer: extracted.discount_or_offer || null,
               mainImageUrl: extracted.main_image_url || null,
               galleryImages: extracted.gallery_images || [],

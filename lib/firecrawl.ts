@@ -65,7 +65,13 @@ export type { ExtractedProductData };
 /**
  * Scrapes a landing page URL using direct HTML first and Firecrawl rendered content as fallback.
  */
-export async function extractProductFromUrl(url: string): Promise<{
+export async function extractProductFromUrl(
+  url: string,
+  options?: {
+    defaultCurrency?: string;
+    defaultCurrencySymbol?: string;
+  }
+): Promise<{
   success: boolean;
   data?: ExtractedProductData;
   error?: string;
@@ -82,9 +88,9 @@ export async function extractProductFromUrl(url: string): Promise<{
   // 1. Primary: High-speed Direct E-Commerce HTML & JSON-LD Scraper ($0 cost, ~250ms latency)
   let directResult: any = null;
   try {
-    directResult = await scrapeProductDirectHtml(normalized);
+    directResult = await scrapeProductDirectHtml(normalized, 10000, 2, options);
     const priceStr = directResult.data?.current_price?.trim() || "";
-    const isZeroPrice = /^0(\.0+)?\s*(dt|tnd|usd|eur|dinar)?$/i.test(priceStr) || priceStr === "0";
+    const isZeroPrice = /^0(\.0+)?\s*(dt|dh|mad|tnd|usd|eur|dinar)?$/i.test(priceStr) || priceStr === "0";
     const hasValidPrice = Boolean(priceStr && !isZeroPrice);
     const hasValidImage = Boolean(directResult.data?.main_image_url);
 
@@ -133,7 +139,8 @@ export async function extractProductFromUrl(url: string): Promise<{
         const parsed = parseProductHtmlContent(
           renderedHtml,
           normalized,
-          renderedMarkdown
+          renderedMarkdown,
+          options
         );
         if (parsed.success && parsed.data && (parsed.data.title || parsed.data.current_price)) {
           return {

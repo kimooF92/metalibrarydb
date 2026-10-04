@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import type { FreshWinnerItem } from "@/types";
 import { useToast } from "@/components/toast-context";
+import { useWorkspace } from "@/components/workspace-context";
+import { formatPrice } from "@/lib/format-price";
 
 interface FreshWinnerRowProps {
   winner: FreshWinnerItem;
@@ -25,6 +27,8 @@ interface FreshWinnerRowProps {
 
 export function FreshWinnerRow({ winner }: FreshWinnerRowProps) {
   const { showToast } = useToast();
+  const { activeWorkspace } = useWorkspace();
+  const sym = activeWorkspace?.currencySymbol || "DT";
   const [isFavorite, setIsFavorite] = useState(Boolean(winner.product?.isFavorite));
   const product = winner.product;
   const isVideo = winner.mediaType === "video" || Boolean(winner.mediaUrls?.some((u) => u.includes(".mp4")));
@@ -123,7 +127,7 @@ export function FreshWinnerRow({ winner }: FreshWinnerRowProps) {
           <div className="flex items-center gap-2 mt-1 text-[11px]">
             {product?.currentPrice && (
               <span className="font-extrabold text-emerald-600 dark:text-emerald-400">
-                {product.currentPrice}
+                {formatPrice(product.currentPrice, sym)}
               </span>
             )}
             <span className="text-slate-400">•</span>

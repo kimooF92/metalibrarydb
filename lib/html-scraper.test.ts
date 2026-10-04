@@ -119,3 +119,35 @@ test("parseProductHtmlContent preserves standard Shopify / WooCommerce JSON-LD e
   assert.equal(res.data?.current_price, "149 DT");
   assert.equal(res.data?.main_image_url, "https://cdn.shopify.com/products/shoes.jpg");
 });
+
+test("parseProductHtmlContent uses DH for Moroccan .ma domains and MAD options", () => {
+  const moroccoHtml = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta property="og:title" content="Étagère de rangement j70" />
+        <meta property="og:image" content="https://decoria.ma/img/etager.jpg" />
+      </head>
+      <body>
+        <input type="hidden" name="price" value="299" />
+      </body>
+    </html>
+  `;
+
+  // Testing .ma auto-detection
+  const res = parseProductHtmlContent(moroccoHtml, "https://decoria.ma/products/etagere-j70");
+  assert.equal(res.success, true);
+  assert.equal(res.data?.current_price, "299 DH");
+  assert.equal(res.data?.currency, "MAD");
+
+  // Testing explicit Morocco workspace option
+  const resWithOption = parseProductHtmlContent(
+    moroccoHtml,
+    "https://decoria-store.com/products/etagere-j70",
+    undefined,
+    { defaultCurrency: "MAD", defaultCurrencySymbol: "DH" }
+  );
+  assert.equal(resWithOption.success, true);
+  assert.equal(resWithOption.data?.current_price, "299 DH");
+  assert.equal(resWithOption.data?.currency, "MAD");
+});

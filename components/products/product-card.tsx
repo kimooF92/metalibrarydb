@@ -21,6 +21,8 @@ import {
   Pause,
 } from "lucide-react";
 import { formatDiscoveryDate, formatDiscoveryLabel } from "@/lib/format-date";
+import { useWorkspace } from "@/components/workspace-context";
+import { formatPrice } from "@/lib/format-price";
 
 interface ProductCardProps {
   product: ScrapedProduct;
@@ -43,6 +45,8 @@ export const ProductCard = memo(function ProductCard({
   onFilterBrand,
   isRecentlyViewed = false,
 }: ProductCardProps) {
+  const { activeWorkspace } = useWorkspace();
+  const sym = activeWorkspace?.currencySymbol || "DT";
   const [imgError, setImgError] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -471,7 +475,7 @@ export const ProductCard = memo(function ProductCard({
         {/* Primary Indicator: Hero Main Price */}
         <div className="mt-auto pt-2 pb-2">
           {product.currentPrice ? (
-            <div className="flex items-baseline">
+            <div className="flex items-baseline gap-2">
               <span
                 className={`text-lg font-black tracking-tight ${
                   isPageOnHold || isInactive
@@ -479,8 +483,13 @@ export const ProductCard = memo(function ProductCard({
                     : "text-indigo-600 dark:text-indigo-400"
                 }`}
               >
-                {product.currentPrice}
+                {formatPrice(product.currentPrice, sym)}
               </span>
+              {product.originalPrice && (
+                <span className="text-xs text-slate-400 dark:text-slate-500 line-through font-medium">
+                  {formatPrice(product.originalPrice, sym)}
+                </span>
+              )}
             </div>
           ) : isPendingScrape ? (
             <span className="text-xs text-amber-500 font-medium">Scrape to get price</span>

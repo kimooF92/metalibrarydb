@@ -5,6 +5,7 @@ import NextImage from "next/image";
 import { ScrapedProduct, Ad } from "@/types";
 import { useToast } from "@/components/toast-context";
 import { useWorkspace } from "@/components/workspace-context";
+import { formatPrice, formatDelivery } from "@/lib/format-price";
 import {
   Building2,
   ExternalLink,
@@ -39,6 +40,7 @@ export function ModalEditForm({
   const { showToast } = useToast();
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [unlinkingAdId, setUnlinkingAdId] = useState<string | null>(null);
+  const sym = activeWorkspace?.currencySymbol || "DT";
 
   const [editForm, setEditForm] = useState({
     title: product.title || "",
@@ -46,10 +48,10 @@ export function ModalEditForm({
     mainImageUrl: product.mainImageUrl || "",
     pageId: product.pageId || product.brandPageId || "",
     brandName: product.brandName || "",
-    currentPrice: product.currentPrice || "",
-    originalPrice: product.originalPrice || "",
+    currentPrice: product.currentPrice ? formatPrice(product.currentPrice, sym) : "",
+    originalPrice: product.originalPrice ? formatPrice(product.originalPrice, sym) : "",
     discountOrOffer: product.discountOrOffer || "",
-    deliveryCost: product.deliveryCost || "",
+    deliveryCost: product.deliveryCost ? formatDelivery(product.deliveryCost, sym) : "",
     category: product.category || "",
     subCategory: product.subCategory || "",
     storePlatform: product.storePlatform || "",
@@ -62,27 +64,32 @@ export function ModalEditForm({
       mainImageUrl: product.mainImageUrl || "",
       pageId: product.pageId || product.brandPageId || "",
       brandName: product.brandName || "",
-      currentPrice: product.currentPrice || "",
-      originalPrice: product.originalPrice || "",
+      currentPrice: product.currentPrice ? formatPrice(product.currentPrice, sym) : "",
+      originalPrice: product.originalPrice ? formatPrice(product.originalPrice, sym) : "",
       discountOrOffer: product.discountOrOffer || "",
-      deliveryCost: product.deliveryCost || "",
+      deliveryCost: product.deliveryCost ? formatDelivery(product.deliveryCost, sym) : "",
       category: product.category || "",
       subCategory: product.subCategory || "",
       storePlatform: product.storePlatform || "",
     });
-  }, [product]);
+  }, [product, sym]);
 
   const handleSaveEdit = async () => {
     if (!product?.id || isSavingEdit) return;
     setIsSavingEdit(true);
     try {
+      const payload = {
+        id: product.id,
+        ...editForm,
+        currentPrice: editForm.currentPrice ? formatPrice(editForm.currentPrice, sym) : undefined,
+        originalPrice: editForm.originalPrice ? formatPrice(editForm.originalPrice, sym) : undefined,
+        deliveryCost: editForm.deliveryCost ? formatDelivery(editForm.deliveryCost, sym) : undefined,
+      };
+
       const res = await fetch("/api/products", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: product.id,
-          ...editForm,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -93,7 +100,7 @@ export function ModalEditForm({
         });
         const updated = {
           ...product,
-          ...editForm,
+          ...payload,
           ...(data.product || {}),
         };
         onProductUpdate?.(updated);

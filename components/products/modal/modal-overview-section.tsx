@@ -5,6 +5,7 @@ import NextImage from "next/image";
 import { ScrapedProduct } from "@/types";
 import { ShoppingBag, Tag, Truck, Layers } from "lucide-react";
 import { useWorkspace } from "@/components/workspace-context";
+import { formatPrice, formatDelivery } from "@/lib/format-price";
 
 interface ModalOverviewSectionProps {
   product: ScrapedProduct;
@@ -13,6 +14,7 @@ interface ModalOverviewSectionProps {
 
 export function ModalOverviewSection({ product, allImages }: ModalOverviewSectionProps) {
   const { activeWorkspace } = useWorkspace();
+  const sym = activeWorkspace?.currencySymbol || "DT";
   const [selectedImage, setSelectedImage] = useState<string | null>(product.mainImageUrl || null);
 
   useEffect(() => {
@@ -83,7 +85,7 @@ export function ModalOverviewSection({ product, allImages }: ModalOverviewSectio
           <div className="flex items-baseline gap-3 flex-wrap">
             {product.currentPrice ? (
               <span className="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400">
-                {product.currentPrice}
+                {formatPrice(product.currentPrice, sym)}
               </span>
             ) : (
               <span className="text-sm text-slate-400 italic">Price not detected</span>
@@ -91,7 +93,7 @@ export function ModalOverviewSection({ product, allImages }: ModalOverviewSectio
 
             {product.originalPrice && (
               <span className="text-base text-slate-600 dark:text-slate-400 line-through">
-                {product.originalPrice}
+                {formatPrice(product.originalPrice, sym)}
               </span>
             )}
 
@@ -105,47 +107,36 @@ export function ModalOverviewSection({ product, allImages }: ModalOverviewSectio
             {/* Delivery / Tawsil Badge */}
             {(() => {
               const delivery = product.deliveryCost;
-              const sym = activeWorkspace?.currencySymbol || "DT";
+              const formattedLabel = delivery ? formatDelivery(delivery, sym) : `Livraison: 7 ${sym} (Standard COD)`;
               const isFree =
-                delivery?.toLowerCase().includes("gratuit") ||
-                delivery?.toLowerCase().includes("free") ||
-                delivery?.toLowerCase().includes("مجاني") ||
-                delivery?.toLowerCase().includes("0 dt") ||
-                delivery?.toLowerCase().includes(`0 ${sym.toLowerCase()}`) ||
-                delivery?.toLowerCase().includes(`0${sym.toLowerCase()}`) ||
-                product.discountOrOffer?.toLowerCase().includes("livraison gratuite") ||
-                product.discountOrOffer?.toLowerCase().includes("توصيل مجاني");
+                formattedLabel.toLowerCase().includes("gratuit") ||
+                formattedLabel.toLowerCase().includes("free") ||
+                formattedLabel.toLowerCase().includes("مجاني");
 
-              const isSpecifiedPaid =
-                delivery &&
-                delivery !== "Livraison Non Spécifiée" &&
+              const isPaid =
+                formattedLabel &&
+                formattedLabel !== "Livraison Non Spécifiée" &&
                 !isFree;
-
-              const label = isFree
-                ? "Livraison Gratuite"
-                : isSpecifiedPaid
-                ? delivery
-                : `Livraison: 7 ${sym} (Standard COD)`;
 
               return (
                 <span
                   className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
                     isFree
                       ? "bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-                      : isSpecifiedPaid
+                      : isPaid
                       ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
                       : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700"
                   }`}
                   title={
                     isFree
-                      ? "Livraison gratuite / Free Delivery"
-                      : isSpecifiedPaid
-                      ? `Frais de livraison: ${delivery}`
-                      : `Livraison standard COD (~7 ${sym})`
+                      ? "Free shipping detected on page"
+                      : isPaid
+                      ? "Standard shipping fee"
+                      : "Standard COD rate assumed"
                   }
                 >
-                  <Truck className="w-3.5 h-3.5" />
-                  <span>{label}</span>
+                  <Truck className="w-3.5 h-3.5 shrink-0" />
+                  {formattedLabel}
                 </span>
               );
             })()}
@@ -170,7 +161,7 @@ export function ModalOverviewSection({ product, allImages }: ModalOverviewSectio
                   </span>
                   <div className="flex items-baseline justify-between mt-1">
                     <span className="text-sm font-extrabold text-indigo-600 dark:text-indigo-400">
-                      {tier.price}
+                      {formatPrice(tier.price, sym)}
                     </span>
                     {tier.savings && (
                       <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">

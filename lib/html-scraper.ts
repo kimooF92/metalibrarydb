@@ -66,7 +66,7 @@ export function isPriceString(str: string): boolean {
   const s = str.trim();
   // Strip currency tokens, digits, and common pricing punctuation/symbols
   const withoutPrices = s
-    .replace(/(?:TND|DT|dt|د\.ت|دت|دinar|Dinar|USD|EUR|MAD|DZD|dinars?|دنانير|دينار|\$|€|£)/gi, "")
+    .replace(/(?:TND|DT|dt|د\.ت|دت|دinar|Dinar|USD|EUR|MAD|DZD|dinars?|دنانير|دينار|DH|dh|د\.م|درهم|SAR|SR|AED|\$|€|£)/gi, "")
     .replace(/[\d.,\s\r\n\t\-–—+/:%()]/g, "");
   // If after removing numbers, currency tokens, and symbols, there are almost no letters left (less than 3 chars), it's a price string!
   return withoutPrices.length < 3;
@@ -135,7 +135,11 @@ export function extractImageUrl(img: any): string | null {
 export function parseProductHtmlContent(
   html: string,
   url: string,
-  markdown?: string
+  markdown?: string,
+  options?: {
+    defaultCurrency?: string;
+    defaultCurrencySymbol?: string;
+  }
 ): { success: boolean; data?: ExtractedProductData; error?: string } {
   try {
     const baseOrigin = new URL(url).origin;
@@ -398,7 +402,21 @@ export function parseProductHtmlContent(
     // 4. Extract Pricing
     let currentPrice: string | null = null;
     let originalPrice: string | null = null;
-    let currency: string = "TND";
+
+    // Detect currency & symbol from options or domain or page hints
+    const isMoroccoDomain = /\.ma(\/|$)/i.test(url);
+    const hasMoroccanHint =
+      isMoroccoDomain ||
+      /og:price:currency["'][^>]*content=["']MAD/i.test(html) ||
+      /(?:DH|MAD|د\.م|درهم)/i.test(html);
+
+    let currency: string =
+      options?.defaultCurrency ||
+      (hasMoroccanHint && !options?.defaultCurrency ? "MAD" : "TND");
+
+    let currencySymbol: string =
+      options?.defaultCurrencySymbol ||
+      (currency === "MAD" ? "DH" : "DT");
 
     // 4a. Check Converty platform price
     if (convertyProduct) {
@@ -417,10 +435,10 @@ export function parseProductHtmlContent(
         convertyProduct.variants?.[0]?.regularPrice;
 
       if (pVal !== undefined && pVal !== null) {
-        currentPrice = `${pVal} DT`;
+        currentPrice = `${pVal} ${currencySymbol}`;
       }
       if (compVal !== undefined && compVal !== null && Number(compVal) > Number(pVal)) {
-        originalPrice = `${compVal} DT`;
+        originalPrice = `${compVal} ${currencySymbol}`;
       }
     }
 
@@ -429,14 +447,19 @@ export function parseProductHtmlContent(
       const offer = Array.isArray(jsonLdProduct.offers) ? jsonLdProduct.offers[0] : jsonLdProduct.offers;
       if (offer?.price) {
         let priceNum = parseFloat(String(offer.price).replace(",", "."));
-        if (priceNum >= 1000 && (String(offer.price).includes(",000") || String(offer.price).includes(".000"))) {
+        if (currency === "TND" && priceNum >= 1000 && (String(offer.price).includes(",000") || String(offer.price).includes(".000"))) {
           priceNum = Math.round(priceNum / 1000);
         }
-        currentPrice = `${priceNum} DT`;
-        if (offer.priceCurrency) currency = offer.priceCurrency;
+        if (offer.priceCurrency) {
+          currency = offer.priceCurrency;
+          if (currency === "MAD") currencySymbol = "DH";
+          else if (currency === "TND") currencySymbol = "DT";
+          else currencySymbol = currency;
+        }
+        currentPrice = `${priceNum} ${currencySymbol}`;
       }
       if (offer?.highPrice && parseFloat(offer.highPrice) > parseFloat(offer.price || "0")) {
-        originalPrice = `${offer.highPrice} ${currency === "TND" ? "DT" : currency}`;
+        originalPrice = `${offer.highPrice} ${currencySymbol}`;
       }
     }
 
@@ -449,11 +472,10 @@ export function parseProductHtmlContent(
         const cleaned = formPriceMatch[1].replace(/[^0-9.,]/g, "").trim();
         if (cleaned && Number(cleaned.replace(",", ".")) > 0) {
           let num = parseFloat(cleaned.replace(",", "."));
-          if (num >= 1000 && (cleaned.includes(",000") || cleaned.includes(".000"))) {
+          if (currency === "TND" && num >= 1000 && (cleaned.includes(",000") || cleaned.includes(".000"))) {
             num = Math.round(num / 1000);
           }
-          currentPrice = `${num} DT`;
-          currency = "TND";
+          currentPrice = `${num} ${currencySymbol}`;
         }
       }
     }
@@ -468,11 +490,17 @@ export function parseProductHtmlContent(
         const cleanedPrice = metaPrice.replace(/[^0-9.,]/g, "").trim();
         if (cleanedPrice && Number(cleanedPrice.replace(",", ".")) > 0) {
           let num = parseFloat(cleanedPrice.replace(",", "."));
-          if (num >= 1000 && (cleanedPrice.includes(",000") || cleanedPrice.includes(".000"))) {
+          if (currency === "TND" && num >= 1000 && (cleanedPrice.includes(",000") || cleanedPrice.includes(".000"))) {
             num = Math.round(num / 1000);
           }
-          currentPrice = `${num} DT`;
-          currency = extractMeta(html, "product:price:currency") || extractMeta(html, "og:price:currency") || "TND";
+          const detectedCurr = extractMeta(html, "product:price:currency") || extractMeta(html, "og:price:currency");
+          if (detectedCurr) {
+            currency = detectedCurr;
+            if (currency === "MAD") currencySymbol = "DH";
+            else if (currency === "TND") currencySymbol = "DT";
+            else currencySymbol = currency;
+          }
+          currentPrice = `${num} ${currencySymbol}`;
         }
       }
     }
@@ -480,125 +508,145 @@ export function parseProductHtmlContent(
     // 4e. Check OpenGraph Title or Description for price
     if (!currentPrice) {
       const ogDesc = extractMeta(html, "og:description") || extractMeta(html, "description") || "";
-      const descPriceMatch = /(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت|دت)/i.exec(ogDesc);
+      const descPriceMatch = /(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت|دت|MAD|DH|dh|د\.م|درهم)/i.exec(ogDesc);
       if (descPriceMatch && descPriceMatch[1] && Number(descPriceMatch[1].replace(",", ".")) > 0) {
+        if (/MAD|DH|dh|د\.م|درهم/i.test(descPriceMatch[0])) {
+          currency = "MAD";
+          currencySymbol = "DH";
+        }
         let numStr = descPriceMatch[1].replace(",", ".");
         let num = parseFloat(numStr);
-        if (num >= 1000 && (descPriceMatch[1].includes(",000") || descPriceMatch[1].includes(".000"))) {
+        if (currency === "TND" && num >= 1000 && (descPriceMatch[1].includes(",000") || descPriceMatch[1].includes(".000"))) {
           num = Math.round(num / 1000);
         }
-        currentPrice = `${num} DT`;
-        currency = "TND";
+        currentPrice = `${num} ${currencySymbol}`;
       }
     }
 
     // 4f. Try Markdown prices (e.g. from Firecrawl rendered SPA body)
     if (!currentPrice && markdown) {
-      // 1. Check discount pair in markdown: e.g. -38% 89,000 د.ت 55,000 د.ت
-      const discountPairMatch = markdown.match(/-\d{1,2}%\s*(?:‎|\s)*(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:د\.ت|دت|DT|TND|د)\s*(?:‎|\s)*(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:د\.ت|دت|DT|TND|د)/i);
+      // 1. Check discount pair in markdown: e.g. -38% 89,000 د.ت 55,000 د.ت or -20% 300 DH 240 DH
+      const discountPairMatch = markdown.match(/-\d{1,2}%\s*(?:‎|\s)*(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:د\.ت|دت|DT|TND|د|DH|dh|MAD|د\.م|درهم)\s*(?:‎|\s)*(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:د\.ت|دت|DT|TND|د|DH|dh|MAD|د\.م|درهم)/i);
       if (discountPairMatch) {
+        if (/MAD|DH|dh|د\.م|درهم/i.test(discountPairMatch[0])) {
+          currency = "MAD";
+          currencySymbol = "DH";
+        }
         let origNum = parseFloat(discountPairMatch[1].replace(",", "."));
         let currNum = parseFloat(discountPairMatch[2].replace(",", "."));
-        if (origNum >= 1000) origNum = Math.round(origNum / 1000);
-        if (currNum >= 1000) currNum = Math.round(currNum / 1000);
-        originalPrice = `${origNum} DT`;
-        currentPrice = `${currNum} DT`;
+        if (currency === "TND" && origNum >= 1000) origNum = Math.round(origNum / 1000);
+        if (currency === "TND" && currNum >= 1000) currNum = Math.round(currNum / 1000);
+        originalPrice = `${origNum} ${currencySymbol}`;
+        currentPrice = `${currNum} ${currencySymbol}`;
       }
 
       // 2. Check checkout total or final price line
       if (!currentPrice) {
-        const finalTotalMatch = markdown.match(/(?:المجموع\s*النهائي|Total|Prix\s*Total|السعر\s*:?)\s*(?:‎|\s)*(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:د\.ت|دت|DT|TND|د)/i);
+        const finalTotalMatch = markdown.match(/(?:المجموع\s*النهائي|Total|Prix\s*Total|السعر\s*:?)\s*(?:‎|\s)*(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:د\.ت|دت|DT|TND|د|DH|dh|MAD|د\.م|درهم)/i);
         if (finalTotalMatch) {
+          if (/MAD|DH|dh|د\.م|درهم/i.test(finalTotalMatch[0])) {
+            currency = "MAD";
+            currencySymbol = "DH";
+          }
           let numStr = finalTotalMatch[1].replace(",", ".");
           let num = parseFloat(numStr);
-          if (num >= 1000 && (finalTotalMatch[1].includes(",000") || finalTotalMatch[1].includes(".000"))) {
+          if (currency === "TND" && num >= 1000 && (finalTotalMatch[1].includes(",000") || finalTotalMatch[1].includes(".000"))) {
             num = Math.round(num / 1000);
           }
-          currentPrice = `${num} DT`;
+          currentPrice = `${num} ${currencySymbol}`;
         }
       }
     }
 
     // 4g. Try HTML DOM regex patterns (WooCommerce, YouCan, Shopify, Stocki, COD funnels)
     if (!currentPrice) {
-      const tunisianPriceRegex = /(?:class|id|data-[^=]*)?["'][^"']*(?:price|current|sale|amount|total)[^"']*["'][^>]*>[\s\S]*?(?:^|\s|>)(?:‎|\s)*(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت|دت|دinar|Dinar)/i;
-      const tndMatch = tunisianPriceRegex.exec(html);
-      if (tndMatch && tndMatch[1] && Number(tndMatch[1].replace(",", ".")) > 0) {
-        let numStr = tndMatch[1].replace(",", ".");
+      const regionPriceRegex = /(?:class|id|data-[^=]*)?["'][^"']*(?:price|current|sale|amount|total)[^"']*["'][^>]*>[\s\S]*?(?:^|\s|>)(?:‎|\s)*(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت|دت|دinar|Dinar|MAD|DH|dh|د\.م|درهم)/i;
+      const regMatch = regionPriceRegex.exec(html);
+      if (regMatch && regMatch[1] && Number(regMatch[1].replace(",", ".")) > 0) {
+        if (/MAD|DH|dh|د\.م|درهم/i.test(regMatch[0])) {
+          currency = "MAD";
+          currencySymbol = "DH";
+        }
+        let numStr = regMatch[1].replace(",", ".");
         let num = parseFloat(numStr);
-        if (num >= 1000 && (tndMatch[1].includes(",000") || tndMatch[1].includes(".000"))) {
+        if (currency === "TND" && num >= 1000 && (regMatch[1].includes(",000") || regMatch[1].includes(".000"))) {
           num = Math.round(num / 1000);
         }
-        currentPrice = `${num} DT`;
-        currency = "TND";
+        currentPrice = `${num} ${currencySymbol}`;
       }
     }
 
     if (!currentPrice) {
       // General price regex in page body
-      const generalPriceMatch = /(\d{1,4}(?:[.,]\d{2,3})?)\s*(?:TND|DT|dt|د\.ت|دت)/i.exec(html);
+      const generalPriceMatch = /(\d{1,4}(?:[.,]\d{2,3})?)\s*(?:TND|DT|dt|د\.ت|دت|MAD|DH|dh|د\.م|درهم)/i.exec(html);
       if (generalPriceMatch && generalPriceMatch[1] && Number(generalPriceMatch[1].replace(",", ".")) > 0) {
+        if (/MAD|DH|dh|د\.م|درهم/i.test(generalPriceMatch[0])) {
+          currency = "MAD";
+          currencySymbol = "DH";
+        }
         let numStr = generalPriceMatch[1].replace(",", ".");
         let num = parseFloat(numStr);
-        if (num >= 1000 && (generalPriceMatch[1].includes(",000") || generalPriceMatch[1].includes(".000"))) {
+        if (currency === "TND" && num >= 1000 && (generalPriceMatch[1].includes(",000") || generalPriceMatch[1].includes(".000"))) {
           num = Math.round(num / 1000);
         }
-        currentPrice = `${num} DT`;
-        currency = "TND";
+        currentPrice = `${num} ${currencySymbol}`;
       }
     }
 
     // 4h. WooCommerce / Arabic prefix currency e.g. <bdi><span class="woocommerce-Price-currencySymbol">&#x62f;.&#x62a;</span>99.00</bdi>
-    // or (?:&#x62f;\.&#x62a;|د\.ت|دت|DT|TND)\s*(\d{1,4}(?:[.,]\d{1,3})?)
+    // or (?:&#x62f;\.&#x62a;|د\.ت|دت|DT|TND|د\.م|درهم|DH|MAD)\s*(\d{1,4}(?:[.,]\d{1,3})?)
     if (!currentPrice) {
       const bdiMatch =
         /<bdi>[^<]*(?:<span[^>]*>[^<]*<\/span>[^<]*)?(\d{1,4}(?:[.,]\d{1,3})?)\s*<\/bdi>/i.exec(html) ||
-        /(?:&#x62f;\.&#x62a;|د\.ت|دت)\s*(\d{1,4}(?:[.,]\d{1,3})?)/i.exec(html);
+        /(?:&#x62f;\.&#x62a;|د\.ت|دت|د\.م|درهم|DH|MAD)\s*(\d{1,4}(?:[.,]\d{1,3})?)/i.exec(html);
       if (bdiMatch && bdiMatch[1] && Number(bdiMatch[1].replace(",", ".")) > 0) {
+        if (/MAD|DH|dh|د\.م|درهم/i.test(bdiMatch[0])) {
+          currency = "MAD";
+          currencySymbol = "DH";
+        }
         let numStr = bdiMatch[1].replace(",", ".");
         let num = parseFloat(numStr);
-        if (num >= 1000 && (bdiMatch[1].includes(",000") || bdiMatch[1].includes(".000"))) {
+        if (currency === "TND" && num >= 1000 && (bdiMatch[1].includes(",000") || bdiMatch[1].includes(".000"))) {
           num = Math.round(num / 1000);
         }
-        currentPrice = `${num} DT`;
-        currency = "TND";
+        currentPrice = `${num} ${currencySymbol}`;
       }
     }
 
     // Extract Crossed-out / Regular Price if not already extracted
     if (!originalPrice) {
-      const delPriceRegex = /<(?:del|s|span)[^>]*(?:class|id)=["'][^"']*(?:old|regular|compare|original|was)[^"']*["'][^>]*>[\s\S]*?(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت|دت)?/gi;
+      const delPriceRegex = /<(?:del|s|span)[^>]*(?:class|id)=["'][^"']*(?:old|regular|compare|original|was)[^"']*["'][^>]*>[\s\S]*?(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت|دت|MAD|DH|dh|د\.م|درهم)?/gi;
       let delMatch;
       const currNum = currentPrice ? parseFloat(currentPrice.replace(/[^0-9.]/g, "")) : 0;
       while ((delMatch = delPriceRegex.exec(html)) !== null) {
         let numStr = delMatch[1].replace(",", ".");
         let num = parseFloat(numStr);
-        if (num >= 1000 && (delMatch[1].includes(",000") || delMatch[1].includes(".000"))) {
+        if (currency === "TND" && num >= 1000 && (delMatch[1].includes(",000") || delMatch[1].includes(".000"))) {
           num = Math.round(num / 1000);
         }
         if (num > 0 && num > currNum) {
-          originalPrice = `${num} ${currency === "TND" ? "DT" : currency}`;
+          originalPrice = `${num} ${currencySymbol}`;
           break;
         }
       }
     }
 
-    // 4h. Check inline CSS line-through for crossed-out original prices (Shopify, WooCommerce, Stocki, page builders)
+    // 4i. Check inline CSS line-through for crossed-out original prices (Shopify, WooCommerce, Stocki, page builders)
     if (!originalPrice && html) {
       const lineThroughRegex = /<(?:span|p|div|del|s)[^>]*style=["'][^"']*line-through[^"']*["'][^>]*>([\s\S]*?)<\/(?:span|p|div|del|s)>/gi;
       let ltMatch;
       const currNum = currentPrice ? parseFloat(currentPrice.replace(/[^0-9.]/g, "")) : 0;
       while ((ltMatch = lineThroughRegex.exec(html)) !== null) {
         const textContent = ltMatch[1].replace(/<[^>]*>/g, "").trim();
-        const numMatch = /(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت|دت)?/i.exec(textContent);
+        const numMatch = /(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت|دت|MAD|DH|dh|د\.م|درهم)?/i.exec(textContent);
         if (numMatch && numMatch[1]) {
           let numStr = numMatch[1].replace(",", ".");
           let num = parseFloat(numStr);
-          if (num >= 1000 && (numMatch[1].includes(",000") || numMatch[1].includes(".000"))) {
+          if (currency === "TND" && num >= 1000 && (numMatch[1].includes(",000") || numMatch[1].includes(".000"))) {
             num = Math.round(num / 1000);
           }
           if (num > 0 && num > currNum) {
-            originalPrice = `${num} ${currency === "TND" ? "DT" : currency}`;
+            originalPrice = `${num} ${currencySymbol}`;
             break;
           }
         }
@@ -607,13 +655,13 @@ export function parseProductHtmlContent(
 
     // 5. Extract Bundle Offers
     const allOffers: Array<{ tier_name: string; price: string; savings?: string }> = [];
-    const packRegex = /(?:Pack|pack|باقة|عرض|Offre)\s*(?:de\s*)?(\d+|duo|trio|familial)[\s\S]*?(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:DT|TND|dt|د\.ت|دت)/gi;
+    const packRegex = /(?:Pack|pack|باقة|عرض|Offre)\s*(?:de\s*)?(\d+|duo|trio|familial)[\s\S]*?(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:DT|TND|dt|د\.ت|دت|DH|dh|MAD|د\.م|درهم)/gi;
     let packMatch;
     let tierCount = 0;
 
     while ((packMatch = packRegex.exec(html)) !== null && tierCount < 4) {
       const tierName = `Pack ${packMatch[1]}`;
-      const tierPrice = `${packMatch[2]} DT`;
+      const tierPrice = `${packMatch[2]} ${currencySymbol}`;
       if (!allOffers.some((o) => o.tier_name === tierName)) {
         allOffers.push({ tier_name: tierName, price: tierPrice });
         tierCount++;
@@ -622,7 +670,7 @@ export function parseProductHtmlContent(
 
     // Discount or promotional offer summary
     let discountOrOffer: string | null = null;
-    const discountMatch = /(\d{1,2}%\s*(?:de\s*réduction|off|de\s*remise|تخفيض)|Achetez\s*\d+\s*obtenez\s*\d+|Buy\s*\d+\s*Get\s*\d+|-\d{1,2}%|\d{1,3}\s*DT\s*de\s*(?:réduction|remise))/i.exec(html || markdown || "");
+    const discountMatch = /(\d{1,2}%\s*(?:de\s*réduction|off|de\s*remise|تخفيض)|Achetez\s*\d+\s*obtenez\s*\d+|Buy\s*\d+\s*Get\s*\d+|-\d{1,2}%|\d{1,3}\s*(?:DT|DH)\s*de\s*(?:réduction|remise))/i.exec(html || markdown || "");
     if (discountMatch) {
       discountOrOffer = discountMatch[1].trim();
     } else if (originalPrice && currentPrice) {
@@ -658,7 +706,7 @@ export function parseProductHtmlContent(
       success: true,
       data: {
         title: title || "Product Landing Page",
-        current_price: currentPrice || "0 DT",
+        current_price: currentPrice || `0 ${currencySymbol}`,
         original_price: originalPrice || undefined,
         currency: currency || "TND",
         discount_or_offer: discountOrOffer || undefined,
@@ -684,7 +732,8 @@ export function parseProductHtmlContent(
 export async function scrapeProductDirectHtml(
   url: string,
   timeoutMs = 10000,
-  maxRedirects = 2
+  maxRedirects = 2,
+  options?: { defaultCurrency?: string; defaultCurrencySymbol?: string }
 ): Promise<{ success: boolean; data?: ExtractedProductData; error?: string; rawHtml?: string; finalUrl?: string }> {
   try {
     const controller = new AbortController();
@@ -743,7 +792,7 @@ export async function scrapeProductDirectHtml(
           } catch {}
         }
         if (nextUrl.startsWith("http") && nextUrl !== url && nextUrl !== cleanUrl) {
-          return scrapeProductDirectHtml(nextUrl, timeoutMs, maxRedirects - 1);
+          return scrapeProductDirectHtml(nextUrl, timeoutMs, maxRedirects - 1, options);
         }
       }
 
@@ -752,12 +801,12 @@ export async function scrapeProductDirectHtml(
       if (jsRedirectMatch && jsRedirectMatch[1]) {
         const nextUrl = jsRedirectMatch[1].trim();
         if (nextUrl !== url && nextUrl !== cleanUrl && !html.includes("schema.org/Product") && !html.includes("og:price")) {
-          return scrapeProductDirectHtml(nextUrl, timeoutMs, maxRedirects - 1);
+          return scrapeProductDirectHtml(nextUrl, timeoutMs, maxRedirects - 1, options);
         }
       }
     }
 
-    const parsed = parseProductHtmlContent(html, cleanUrl);
+    const parsed = parseProductHtmlContent(html, cleanUrl, undefined, options);
     return {
       ...parsed,
       finalUrl: cleanUrl,

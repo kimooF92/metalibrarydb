@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import type { FreshWinnerItem } from "@/types";
 import { useToast } from "@/components/toast-context";
+import { useWorkspace } from "@/components/workspace-context";
+import { formatPrice } from "@/lib/format-price";
 
 interface FreshWinnerCardProps {
   winner: FreshWinnerItem;
@@ -31,6 +33,8 @@ interface FreshWinnerCardProps {
 
 export function FreshWinnerCard({ winner, isHighlighted = false }: FreshWinnerCardProps) {
   const { showToast } = useToast();
+  const { activeWorkspace } = useWorkspace();
+  const sym = activeWorkspace?.currencySymbol || "DT";
   const [isFavorite, setIsFavorite] = useState(Boolean(winner.product?.isFavorite));
   const [isFavoriting, setIsFavoriting] = useState(false);
 
@@ -212,14 +216,14 @@ export function FreshWinnerCard({ winner, isHighlighted = false }: FreshWinnerCa
             <div className="flex items-baseline gap-1.5">
               {product?.currentPrice ? (
                 <span className="text-base font-black text-emerald-600 dark:text-emerald-400">
-                  {product.currentPrice}
+                  {formatPrice(product.currentPrice, sym)}
                 </span>
               ) : (
                 <span className="text-xs font-bold text-slate-400">Direct Ad Offer</span>
               )}
               {product?.originalPrice && (
                 <span className="text-xs text-slate-400 line-through">
-                  {product.originalPrice}
+                  {formatPrice(product.originalPrice, sym)}
                 </span>
               )}
             </div>

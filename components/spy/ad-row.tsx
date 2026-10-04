@@ -9,6 +9,8 @@ import { ImagePreviewModal } from "./image-preview-modal";
 import { ProductClusterModal } from "./product-cluster-modal";
 import { CreativeClusterModal } from "./creative-cluster-modal";
 import { useToast } from "@/components/toast-context";
+import { useWorkspace } from "@/components/workspace-context";
+import { formatPrice } from "@/lib/format-price";
 import {
   Calendar,
   Layers,
@@ -48,6 +50,8 @@ interface AdRowProps {
 
 export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }: AdRowProps) {
   const { showToast } = useToast();
+  const { activeWorkspace } = useWorkspace();
+  const sym = activeWorkspace?.currencySymbol || "DT";
   const [currentAd, setCurrentAd] = useState<Ad>(ad);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isProxied, setIsProxied] = useState(false);
@@ -469,7 +473,7 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
               <div className="flex items-center gap-1.5 truncate">
                 <ShoppingBag className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
                 <span className="font-bold text-indigo-700 dark:text-indigo-300 truncate">
-                  {extractedProduct.currentPrice || "Product Scraped"}
+                  {extractedProduct.currentPrice ? formatPrice(extractedProduct.currentPrice, sym) : "Product Scraped"}
                 </span>
                 {extractedProduct.discountOrOffer && (
                   <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded truncate">

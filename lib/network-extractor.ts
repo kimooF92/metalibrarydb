@@ -276,8 +276,17 @@ export function formatTunisianPhone(phone: string): {
 export function extractDeliveryInfo(
   htmlOrText?: string | null,
   extractedDelivery?: string | null,
-  allOffers?: Array<{ tier_name?: string; tierName?: string; price?: string }> | null
+  allOffers?: Array<{ tier_name?: string; tierName?: string; price?: string }> | null,
+  defaultCurrencySymbol: string = "DT"
 ): { isFree: boolean; label: string; rawCost?: string; isConditional?: boolean } {
+  let currencySymbol = defaultCurrencySymbol || "DT";
+  const content = (htmlOrText || "").toLowerCase();
+
+  // Auto-detect Moroccan context if not already set
+  if (currencySymbol === "DT" && /(?:dh|mad|د\.م|درهم)/i.test(content)) {
+    currencySymbol = "DH";
+  }
+
   // Check form hidden inputs first (e.g. name="frais" value="7.000")
   if (htmlOrText) {
     const formDeliveryMatch =
@@ -290,19 +299,17 @@ export function extractDeliveryInfo(
         const cost = val >= 1000 ? Math.round(val / 1000) : val;
         return {
           isFree: false,
-          label: `Livraison: ${cost} DT`,
-          rawCost: `${cost} DT`,
+          label: `Livraison: ${cost} ${currencySymbol}`,
+          rawCost: `${cost} ${currencySymbol}`,
         };
       }
     }
   }
 
-  const content = (htmlOrText || "").toLowerCase();
-
-  // 1. Check for explicit checkout paid shipping amounts first (e.g. "Shipping: 7.00 DT", "Frais de livraison: 7 DT")
+  // 1. Check for explicit checkout paid shipping amounts first (e.g. "Shipping: 7.00 DT", "Frais de livraison: 7 DH")
   const paidMatch =
-    content.match(/(?:shipping|frais de livraison|frais livraison|livraison|توصيل|مصاريف الشحن)\s*[:=\s]\s*([1-9][0-9]*(?:\.[0-9]+)?\s*(?:dt|tnd|dinar|dinars|د\.ت|دت|د))/i) ||
-    content.match(/([1-9][0-9]*(?:\.[0-9]{2})?)\s*(?:dt|tnd)\s*(?:de livraison|pour la livraison|frais)/i);
+    content.match(/(?:shipping|frais de livraison|frais livraison|livraison|توصيل|مصاريف الشحن)\s*[:=\s]\s*([1-9][0-9]*(?:\.[0-9]+)?\s*(?:dt|tnd|dinar|dinars|د\.ت|دت|د|dh|mad|د\.م|درهم))/i) ||
+    content.match(/([1-9][0-9]*(?:\.[0-9]{2})?)\s*(?:dt|tnd|dh|mad)\s*(?:de livraison|pour la livraison|frais)/i);
 
   // 2. Check for Conditional Free Delivery (e.g. "Livraison gratuite à partir de 2", "اشتري زوز توصيل مجاني")
   const hasConditionalFree =
@@ -352,8 +359,8 @@ export function extractDeliveryInfo(
     return {
       isFree: false,
       isConditional: true,
-      label: "Livraison: 7 DT (Gratuite dès 2 pcs)",
-      rawCost: "7 DT",
+      label: `Livraison: 7 ${currencySymbol} (Gratuite dès 2 pcs)`,
+      rawCost: `7 ${currencySymbol}`,
     };
   }
 
@@ -370,6 +377,9 @@ export function extractDeliveryInfo(
       lower.includes("free") ||
       lower.includes("مجاني") ||
       lower.includes("0 dt") ||
+      lower.includes("0 dt") ||
+      lower.includes("0 dh") ||
+      lower.includes("0dh") ||
       lower.includes("0dt") ||
       lower.includes("بلاش");
 
@@ -377,7 +387,7 @@ export function extractDeliveryInfo(
       return {
         isFree: true,
         label: "Livraison Gratuite",
-        rawCost: "0 DT",
+        rawCost: `0 ${currencySymbol}`,
       };
     }
 
@@ -401,6 +411,8 @@ export function extractDeliveryInfo(
       content.includes("free shipping") ||
       content.includes("livraison 0 dt") ||
       content.includes("livraison 0dt") ||
+      content.includes("livraison 0 dh") ||
+      content.includes("livraison 0dh") ||
       content.includes("توصيل بلاش")) &&
     !hasConditionalFree;
 
@@ -408,14 +420,14 @@ export function extractDeliveryInfo(
     return {
       isFree: true,
       label: "Livraison Gratuite",
-      rawCost: "0 DT",
+      rawCost: `0 ${currencySymbol}`,
     };
   }
 
-  // 4. Default for Tunisian COD
+  // 4. Default for COD in market
   return {
     isFree: false,
-    label: "Livraison: 7 DT",
-    rawCost: "7 DT",
+    label: `Livraison: 7 ${currencySymbol}`,
+    rawCost: `7 ${currencySymbol}`,
   };
 }

@@ -21,6 +21,8 @@ import {
   Pause,
 } from "lucide-react";
 import { formatDiscoveryDate, formatDiscoveryLabel } from "@/lib/format-date";
+import { useWorkspace } from "@/components/workspace-context";
+import { formatPrice } from "@/lib/format-price";
 
 interface ProductRowProps {
   product: ScrapedProduct;
@@ -43,6 +45,8 @@ export const ProductRow = memo(function ProductRow({
   onFilterBrand,
   isRecentlyViewed = false,
 }: ProductRowProps) {
+  const { activeWorkspace } = useWorkspace();
+  const sym = activeWorkspace?.currencySymbol || "DT";
   const [imgError, setImgError] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -373,11 +377,11 @@ export const ProductRow = memo(function ProductRow({
                 : "text-indigo-600 dark:text-indigo-400"
             }`}
           >
-            {product.currentPrice || (isPendingScrape ? "Pending" : "—")}
+            {formatPrice(product.currentPrice, sym) || (isPendingScrape ? "Pending" : "—")}
           </div>
           {product.originalPrice && (
             <div className="text-[11px] text-slate-400 line-through">
-              {product.originalPrice}
+              {formatPrice(product.originalPrice, sym)}
             </div>
           )}
         </div>

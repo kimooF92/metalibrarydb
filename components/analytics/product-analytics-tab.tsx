@@ -24,6 +24,8 @@ import { KPICard } from "./kpi-card";
 import { ProgressBarRow } from "./progress-bar-row";
 import { LeaderboardRow } from "./leaderboard-row";
 import { ProductDetailsModal } from "@/components/products/product-details-modal";
+import { useWorkspace } from "@/components/workspace-context";
+import { formatPrice } from "@/lib/format-price";
 import {
   ProductsAnalyticsData,
   ProductCategoryStats,
@@ -48,6 +50,8 @@ export function ProductAnalyticsTab({
   onRefresh,
   dateRange = "7d",
 }: ProductAnalyticsTabProps) {
+  const { activeWorkspace } = useWorkspace();
+  const sym = activeWorkspace?.currencySymbol || "DT";
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [productSearch, setProductSearch] = useState<string>("");
   const [selectedProduct, setSelectedProduct] = useState<ScrapedProduct | null>(null);
@@ -493,7 +497,7 @@ export function ProductAnalyticsTab({
                   },
                   {
                     label: "Price",
-                    value: p.currentPrice ? `${p.currentPrice}` : "—",
+                    value: p.currentPrice ? formatPrice(p.currentPrice, sym) : "—",
                   },
                   {
                     label: "Longevity",
