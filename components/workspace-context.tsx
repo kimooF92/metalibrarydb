@@ -5,6 +5,19 @@ import { useRouter } from "next/navigation";
 import { Workspace } from "@/types";
 import { WORKSPACE_COOKIE_NAME } from "@/lib/workspace-constants";
 
+export interface WorkspaceDeletionReview {
+  workspace: Workspace;
+  isDeletable: boolean;
+  blockReason: string | null;
+  stats: {
+    pageCount: number;
+    productCount: number;
+    domainCount: number;
+    discoveryRunsCount: number;
+    notificationsCount: number;
+  };
+}
+
 interface WorkspaceContextType {
   workspaces: Workspace[];
   activeWorkspace: Workspace | null;
@@ -22,7 +35,8 @@ interface WorkspaceContextType {
     id: string,
     data: Partial<Workspace>
   ) => Promise<Workspace>;
-  deleteWorkspace: (id: string) => Promise<void>;
+  deleteWorkspace: (id: string, confirmName: string) => Promise<void>;
+  getWorkspaceDeletionReview: (id: string) => Promise<WorkspaceDeletionReview>;
   refreshWorkspaces: () => Promise<void>;
   isCreateModalOpen: boolean;
   setIsCreateModalOpen: (open: boolean) => void;
@@ -154,11 +168,31 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [refreshWorkspaces, activeWorkspace]
   );
 
-  // Delete workspace
+  // Get strict deletion pre-flight review
+  const getWorkspaceDeletionReview = useCallback(
+    async (id: string): Promise<WorkspaceDeletionReview> => {
+      const res = await fetch(`/api/workspaces?id=${encodeURIComponent(id)}&review=true`, {
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to load deletion review");
+      }
+
+      const data = await res.json();
+      return data.review;
+    },
+    []
+  );
+
+  // Strictly confirmed delete workspace
   const deleteWorkspace = useCallback(
-    async (id: string) => {
+    async (id: string, confirmName: string) => {
       const res = await fetch(`/api/workspaces?id=${encodeURIComponent(id)}`, {
         method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmName }),
       });
 
       if (!res.ok) {
@@ -190,6 +224,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         createWorkspace,
         updateWorkspace,
         deleteWorkspace,
+        getWorkspaceDeletionReview,
         refreshWorkspaces,
         isCreateModalOpen,
         setIsCreateModalOpen,
