@@ -580,7 +580,7 @@ export async function logBreakoutNotification(params: {
     productId,
   } = params;
 
-  const title = `🔥 Breakout Detected: ${brandName} (${prevDuplication} ➔ ${currentDuplication} copies)`;
+  const title = `Breakout Detected: ${brandName} (${prevDuplication} ➔ ${currentDuplication} copies)`;
   const productText = productTitle ? `"${productTitle}"` : "Ad creative";
   const daysText = daysRunning === 0 ? "today" : daysRunning === 1 ? "yesterday" : `${daysRunning}d ago`;
   const message = `${productText} on "${brandName}" jumped to ${currentDuplication} active copies (launched ${daysText})! Winner score: ${winnerScore}/100.`;

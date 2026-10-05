@@ -189,7 +189,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
 
     if (type === "breakout_alert") {
       return (
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-pink-500/20 via-rose-500/20 to-amber-500/20 text-rose-500 border border-rose-500/40 flex items-center justify-center shrink-0 shadow-sm shadow-rose-500/10 animate-pulse">
+        <div className="w-8 h-8 rounded-lg bg-rose-500/15 text-rose-500 border border-rose-500/20 flex items-center justify-center shrink-0 shadow-sm">
           <Rocket className="w-4 h-4 text-rose-500" />
         </div>
       );
@@ -415,19 +415,16 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
           </div>
 
           {/* Filter Tabs */}
-          <div className="flex items-center px-3 py-2 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/30 dark:bg-slate-900/30 overflow-x-auto gap-1 text-[11px] font-semibold">
+          <div className="flex items-center px-3 py-2 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/30 dark:bg-slate-900/30 gap-1.5 text-[11px] font-semibold">
             {[
               { id: "all", label: "All" },
-              { id: "breakout_alert", label: "🔥 Breakouts" },
-              { id: "batch_summary", label: "Summaries" },
-              { id: "count_scan", label: "Surges & Drops" },
-              { id: "ad_spy", label: "Ad Spy" },
-              { id: "page_merged,multi_page_detected,domain_portfolio_linked,system_alert", label: "Alerts & Merges" },
+              { id: "breakout_alert", label: "Breakouts" },
+              { id: "activity", label: "Activity" },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-2.5 py-1 rounded-lg transition-colors shrink-0 ${
+                className={`px-3 py-1 rounded-lg transition-colors shrink-0 ${
                   activeTab === tab.id
                     ? "bg-indigo-600 text-white shadow-sm font-bold"
                     : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-800/50"
@@ -457,7 +454,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                 const newProductsCount = (n.metadata?.newProductsCount as number) || 0;
 
                 const getActionLabel = () => {
-                  if (isBreakout) return "🔥 View in Fresh Winners →";
+                  if (isBreakout) return "View in Fresh Winners →";
                   const runnerType = n.metadata?.runnerType as string | undefined;
                   const newAdsCount = n.metadata?.newAdsCount as number | undefined;
                   const moversCount = movers.length;
@@ -497,7 +494,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                       n.isRead
                         ? "bg-transparent hover:bg-slate-50/50 dark:hover:bg-slate-800/30 opacity-75 hover:opacity-100"
                         : isBreakout
-                        ? "bg-gradient-to-r from-rose-500/[0.08] via-pink-500/[0.06] to-amber-500/[0.08] border-l-2 border-rose-500 hover:from-rose-500/[0.12] hover:to-amber-500/[0.12]"
+                        ? "bg-gradient-to-r from-rose-500/[0.08] via-pink-500/[0.06] to-amber-500/[0.08] hover:from-rose-500/[0.12] hover:to-amber-500/[0.12]"
                         : isWentDark
                         ? "bg-rose-500/[0.06] dark:bg-rose-500/[0.1] hover:bg-rose-500/[0.09]"
                         : isMegaBrand
@@ -519,11 +516,11 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                               n.isRead ? "text-slate-700 dark:text-slate-300" : "text-slate-900 dark:text-white"
                             }`}
                           >
-                            {n.title}
+                            {n.title.replace(/^🔥\s*/, "")}
                           </h4>
                           {isBreakout && (
-                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-gradient-to-r from-pink-500 to-rose-600 text-white shrink-0 shadow-xs shadow-rose-500/20 animate-pulse">
-                              🔥 BREAKOUT
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-gradient-to-r from-pink-500 to-rose-600 text-white shrink-0 shadow-xs shadow-rose-500/20">
+                              BREAKOUT
                             </span>
                           )}
                           {newProductsCount > 0 && (
@@ -565,11 +562,11 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                       {isBreakout && n.metadata && (
                         <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                           <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
-                            🚀 {n.metadata.prevDuplication ?? 1} ➔ {n.metadata.currentDuplication} Copies
+                            {n.metadata.prevDuplication ?? 1} ➔ {n.metadata.currentDuplication} Copies
                           </span>
                           {n.metadata.winnerScore && (
                             <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                              ⚡ Score {n.metadata.winnerScore}/100
+                              Score {n.metadata.winnerScore}/100
                             </span>
                           )}
                           {typeof n.metadata.daysRunning === "number" && (

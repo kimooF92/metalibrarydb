@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { activityNotifications } from "@/db/schema";
-import { desc, eq, and, inArray, sql } from "drizzle-orm";
+import { desc, eq, ne, and, inArray, sql } from "drizzle-orm";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 
 export async function GET(req: NextRequest) {
@@ -18,7 +18,9 @@ export async function GET(req: NextRequest) {
       eq(activityNotifications.workspaceId, activeWorkspace.id),
     ];
     if (type && type !== "all") {
-      if (type.includes(",")) {
+      if (type === "activity") {
+        conditions.push(ne(activityNotifications.type, "breakout_alert"));
+      } else if (type.includes(",")) {
         const types = type.split(",").map((t) => t.trim()).filter(Boolean);
         conditions.push(inArray(activityNotifications.type, types));
       } else {
