@@ -18,8 +18,15 @@ export interface SmallPageNeedingScan {
   isInQueue: boolean;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const { searchParams } = new URL(req.url);
+    const workspaceId = searchParams.get("workspaceId");
+
+    const workspaceFilter = workspaceId
+      ? sql`AND tp.workspace_id = ${workspaceId}::uuid`
+      : sql``;
+
     // Selects small pages (< 20 active ads) that legitimately need a local creative scan:
     // 1. Pages already enqueued with an active 'creative' job in queue (in_queue)
     // 2. Pages that have NEVER had a creative scan (never_scanned)
@@ -61,6 +68,7 @@ export async function GET() {
         AND tp.current_results < 20
         AND (tp.hold_status IS NULL OR (tp.hold_status != 'on_hold' AND tp.hold_status != 'inactive'))
         AND (tp.search_type IS NULL OR tp.search_type != 'keyword_exact_phrase')
+        ${workspaceFilter}
         AND (
           acq.tracked_page_id IS NOT NULL
           OR tp.last_creative_scan IS NULL
@@ -116,8 +124,15 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
+    const body = await req.json().catch(() => ({}));
+    const workspaceId = body?.workspaceId;
+
+    const workspaceFilter = workspaceId
+      ? sql`AND tp.workspace_id = ${workspaceId}::uuid`
+      : sql``;
+
     // Fetch small pages needing creative scan that are not yet in queue:
     // (Never scanned OR verified new ads with delta >= 2 since last creative scan)
     const rawRows: any = await db.execute(sql`
@@ -151,6 +166,7 @@ export async function POST() {
         AND tp.current_results < 20
         AND (tp.hold_status IS NULL OR (tp.hold_status != 'on_hold' AND tp.hold_status != 'inactive'))
         AND (tp.search_type IS NULL OR tp.search_type != 'keyword_exact_phrase')
+        ${workspaceFilter}
         AND (
           tp.last_creative_scan IS NULL
           OR (

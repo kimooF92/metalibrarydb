@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { SmallPageNeedingScan } from "@/app/api/worker/small-pages-scan/route";
+import { useWorkspace } from "@/components/workspace-context";
 
 interface SmallPagesScanContextType {
   count: number;
@@ -25,6 +26,9 @@ const SmallPagesScanContext = createContext<SmallPagesScanContextType | undefine
 const LOCAL_STORAGE_DISMISS_KEY = "small_pages_scan_dismissed_sig";
 
 export function SmallPagesScanProvider({ children }: { children: React.ReactNode }) {
+  const { activeWorkspace } = useWorkspace();
+  const workspaceId = activeWorkspace?.id;
+
   const [pages, setPages] = useState<SmallPageNeedingScan[]>([]);
   const [count, setCount] = useState<number>(0);
   const [inQueueCount, setInQueueCount] = useState<number>(0);
@@ -45,7 +49,10 @@ export function SmallPagesScanProvider({ children }: { children: React.ReactNode
     if (requestInFlightRef.current || document.hidden) return;
     requestInFlightRef.current = true;
     try {
-      const res = await fetch("/api/worker/small-pages-scan", {
+      const url = workspaceId
+        ? `/api/worker/small-pages-scan?workspaceId=${encodeURIComponent(workspaceId)}`
+        : "/api/worker/small-pages-scan";
+      const res = await fetch(url, {
         signal: AbortSignal.timeout(10000),
       });
       if (res.ok) {
@@ -78,7 +85,7 @@ export function SmallPagesScanProvider({ children }: { children: React.ReactNode
       requestInFlightRef.current = false;
       setLoading(false);
     }
-  }, []);
+  }, [workspaceId]);
 
   useEffect(() => {
     fetchData();
@@ -118,6 +125,7 @@ export function SmallPagesScanProvider({ children }: { children: React.ReactNode
       const res = await fetch("/api/worker/small-pages-scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -131,7 +139,7 @@ export function SmallPagesScanProvider({ children }: { children: React.ReactNode
     } finally {
       setEnqueuing(false);
     }
-  }, [fetchData]);
+  }, [fetchData, workspaceId]);
 
   return (
     <SmallPagesScanContext.Provider

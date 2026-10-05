@@ -162,11 +162,12 @@ export async function enqueuePagesForCreativeScan(
       lastCreativeScan: true,
       currentResults: true,
       autoCreativeScan: true,
+      workspaceId: true,
     },
   });
 
-  // --- Option A+B: Collect eligible pages with their ad count for priority sorting ---
-  const eligiblePages: { id: string; currentResults: number }[] = [];
+  // --- Collect eligible pages with their ad count and workspace for fair multi-workspace scheduling ---
+  const eligiblePages: { id: string; currentResults: number; workspaceId: string | null }[] = [];
 
   for (const page of allPages) {
     // 1. MUST be a verified successful count scan (not 'pending', 'scanning', or 'failed')
@@ -199,7 +200,7 @@ export async function enqueuePagesForCreativeScan(
     if (isFirstTimeCreativeScan) {
       // First-time creative scan: requires currentResults >= 1
       if ((page.currentResults || 0) >= 1) {
-        eligiblePages.push({ id: page.id, currentResults: page.currentResults || 0 });
+        eligiblePages.push({ id: page.id, currentResults: page.currentResults || 0, workspaceId: page.workspaceId });
       }
     } else {
       // Subsequent scan: strictly requires latest scanHistory difference >= minDifferenceThreshold (new ads added)
@@ -210,7 +211,7 @@ export async function enqueuePagesForCreativeScan(
       });
 
       if (latestHistory && (latestHistory.difference || 0) >= threshold) {
-        eligiblePages.push({ id: page.id, currentResults: page.currentResults || 0 });
+        eligiblePages.push({ id: page.id, currentResults: page.currentResults || 0, workspaceId: page.workspaceId });
       }
     }
   }
@@ -222,16 +223,44 @@ export async function enqueuePagesForCreativeScan(
     return 0;
   }
 
-  // Option B: Sort by highest active ad count first (most active advertisers get priority)
-  eligiblePages.sort((a, b) => b.currentResults - a.currentResults);
+  // --- Fair Multi-Workspace Scheduling (Round-Robin Partitioning) ---
+  // Guarantees all active workspaces (e.g. Morocco alongside Tunisia) get fair allocation
+  const wsPartitions = new Map<string, typeof eligiblePages>();
+  for (const p of eligiblePages) {
+    const key = p.workspaceId || "unassigned";
+    if (!wsPartitions.has(key)) wsPartitions.set(key, []);
+    wsPartitions.get(key)!.push(p);
+  }
 
-  // Option A: Cap at maxPages to stay within GitHub Actions 60-min timeout
-  const batch = eligiblePages.slice(0, maxPages);
+  for (const [_, list] of wsPartitions) {
+    // Prioritize small pages (< 20 ads) because cloud Apify only scans >= 20 ads;
+    // small pages rely exclusively on the local Playwright worker!
+    list.sort((a, b) => {
+      const aIsSmall = (a.currentResults || 0) < 20;
+      const bIsSmall = (b.currentResults || 0) < 20;
+      if (aIsSmall && !bIsSmall) return -1;
+      if (!aIsSmall && bIsSmall) return 1;
+      return b.currentResults - a.currentResults;
+    });
+  }
+
+  const batch: typeof eligiblePages = [];
+  const wsQueues = Array.from(wsPartitions.values());
+  let addedAny = true;
+  while (batch.length < maxPages && addedAny) {
+    addedAny = false;
+    for (const q of wsQueues) {
+      if (q.length > 0 && batch.length < maxPages) {
+        batch.push(q.shift()!);
+        addedAny = true;
+      }
+    }
+  }
+
   const skipped = eligiblePages.length - batch.length;
 
   console.log(
-    `[Enqueue Spy] ${eligiblePages.length} eligible page(s) found. Enqueuing top ${batch.length} by ad count (cap: ${maxPages}${skipped > 0 ? `, ${skipped} deferred to next round` : ""
-    }).`
+    `[Enqueue Spy] ${eligiblePages.length} eligible page(s) across ${wsPartitions.size} workspace(s). Enqueuing top ${batch.length} (cap: ${maxPages}${skipped > 0 ? `, ${skipped} deferred to next round` : ""}).`
   );
 
   let enqueuedCount = 0;

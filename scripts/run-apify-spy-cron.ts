@@ -2,8 +2,8 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
 import { db } from "../db";
-import { trackedPages, creativeScans, scanHistory, appSettings } from "../db/schema";
-import { eq, sql, desc, asc } from "drizzle-orm";
+import { trackedPages, creativeScans, scanHistory, appSettings, workspaces } from "../db/schema";
+import { eq, sql, desc, asc, or } from "drizzle-orm";
 import {
   getApifyTokens,
   startApifyDeltaScan,
@@ -22,6 +22,7 @@ interface CronOptions {
   maxPages: number;
   forceAll: boolean;
   pageId?: string;
+  workspace?: string;
   includePaused?: boolean;
   maxWaitPerRunSeconds: number;
 }
@@ -32,6 +33,7 @@ function parseCliArgs(): CronOptions {
     maxPages: parseInt(process.env.SPY_MAX_PAGES_PER_RUN || "25", 10),
     forceAll: process.env.SPY_FORCE_ALL === "true",
     includePaused: process.env.SPY_INCLUDE_PAUSED === "true",
+    workspace: process.env.SPY_WORKSPACE || undefined,
     maxWaitPerRunSeconds: parseInt(process.env.APIFY_RUN_TIMEOUT_SECONDS || "300", 10), // 5 min default
   };
 
@@ -47,6 +49,9 @@ function parseCliArgs(): CronOptions {
     } else if (arg === "--page-id" && args[i + 1]) {
       options.pageId = args[i + 1];
       i++;
+    } else if (arg === "--workspace" && args[i + 1]) {
+      options.workspace = args[i + 1];
+      i++;
     } else if (arg === "--help" || arg === "-h") {
       console.log(`
 Meta Ad Tracker — Apify Ad Spy Smart Delta Runner
@@ -59,6 +64,7 @@ Options:
   --force-all           Force-scan all pages with active ads (bypasses +1 diff requirement)
   --include-paused      Include pages where auto-creative scan is paused (default: false)
   --page-id <ID>        Target a specific tracked page ID
+  --workspace <SLUG/ID> Target a specific workspace (e.g. "morocco" or workspace UUID)
   --help, -h            Show this help message
       `);
       process.exit(0);
@@ -183,9 +189,33 @@ async function main() {
       .map((s) => s.trackedPageId)
   );
 
-  // 3. Query All Tracked Pages and evaluate exact +1 difference eligibility
+  // 3. Resolve Workspace filter if specified
+  let targetWorkspaceId: string | null = null;
+  if (options.workspace) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(options.workspace);
+    const ws = await db.query.workspaces.findFirst({
+      where: isUuid
+        ? eq(workspaces.id, options.workspace)
+        : or(
+            eq(workspaces.slug, options.workspace.toLowerCase()),
+            eq(workspaces.countryCode, options.workspace.toUpperCase())
+          ),
+    });
+    if (ws) {
+      targetWorkspaceId = ws.id;
+      console.log(`🎯 Workspace Filter Active: "${ws.name}" (${ws.countryCode}) [${ws.id}]`);
+    } else {
+      console.warn(`⚠️ Specified workspace "${options.workspace}" not found. Scanning across all workspaces.`);
+    }
+  }
+
+  // Query Tracked Pages and evaluate difference eligibility
   let candidatePages = await db.query.trackedPages.findMany({
-    where: options.pageId ? eq(trackedPages.id, options.pageId) : undefined,
+    where: options.pageId
+      ? eq(trackedPages.id, options.pageId)
+      : targetWorkspaceId
+      ? eq(trackedPages.workspaceId, targetWorkspaceId)
+      : undefined,
     orderBy: [asc(trackedPages.createdAt)],
   });
 
@@ -228,15 +258,14 @@ async function main() {
       continue;
     }
 
-    // Standard Smart Delta Rule:
-    // Strict guard: Apify never scans micro-pages (< 20 active ads)
+    // Strict guard: Small pages (< 20 active ads) MUST be scanned by local worker (not Apify)
     if (!options.forceAll && !options.pageId && (page.currentResults || 0) < 20) {
       continue;
     }
 
     const isFirstTime = !page.lastCreativeScan;
 
-    // Rule 1: Brand new page (never scanned before) with active ads
+    // Rule 1: Brand new page (never scanned before) with active ads (>= 20 ads for Apify)
     if (isFirstTime) {
       if ((page.currentResults || 0) >= 1 || isPageTarget) {
         const delta = Math.max(15, Math.min(100, page.currentResults || 30));
@@ -250,7 +279,7 @@ async function main() {
       continue;
     }
 
-    // Rule 2: Check latest count scan history for difference >= autoSpyThreshold OR cloud eligible (>= 20 ads)
+    // Rule 2: Recurring Delta Scan
     const latestHistory = await db.query.scanHistory.findFirst({
       where: eq(scanHistory.trackedPageId, page.id),
       orderBy: [desc(scanHistory.checkedAt)],
@@ -259,12 +288,13 @@ async function main() {
     const diff = latestHistory?.difference || 0;
     const isCloudEligible = (page.currentResults || 0) >= 20 && diff >= 1;
 
-    if (!latestHistory || (!isCloudEligible && diff < autoSpyThreshold)) {
+    // Micro-pages (< 20 ads) with small delta (< autoSpyThreshold) are handled by free local worker
+    if (!isCloudEligible && diff < autoSpyThreshold) {
       skippedNoDiffCount++;
       continue;
     }
 
-    const checkedAt = latestHistory.checkedAt ? new Date(latestHistory.checkedAt) : new Date();
+    const checkedAt = latestHistory?.checkedAt ? new Date(latestHistory.checkedAt) : new Date();
 
     // Check if we ALREADY scanned this difference
     if (page.lastCreativeScan && page.lastCreativeScan >= checkedAt) {
@@ -288,23 +318,50 @@ async function main() {
     process.exit(0);
   }
 
-  // Sort eligible plans: Highest delta first, then oldest lastCreativeScan
-  eligiblePlans.sort((a, b) => {
-    if (b.delta !== a.delta) return b.delta - a.delta;
-    const aTime = a.page.lastCreativeScan ? a.page.lastCreativeScan.getTime() : 0;
-    const bTime = b.page.lastCreativeScan ? b.page.lastCreativeScan.getTime() : 0;
-    return aTime - bTime;
-  });
+  // --- Multi-Workspace Fair Scheduling (Round-Robin Partitioning) ---
+  // Prevents high-volume workspaces (e.g. Tunisia) from starving emerging workspaces (e.g. Morocco)
+  const workspacePlanMap = new Map<string, TargetScanPlan[]>();
+  for (const plan of eligiblePlans) {
+    const wsKey = plan.page.workspaceId || "unassigned";
+    if (!workspacePlanMap.has(wsKey)) {
+      workspacePlanMap.set(wsKey, []);
+    }
+    workspacePlanMap.get(wsKey)!.push(plan);
+  }
 
-  const selectedPlans = eligiblePlans.slice(0, options.maxPages);
+  // Sort each workspace partition: highest delta first, then oldest last scan
+  for (const [_, plans] of workspacePlanMap) {
+    plans.sort((a, b) => {
+      if (b.delta !== a.delta) return b.delta - a.delta;
+      const aTime = a.page.lastCreativeScan ? a.page.lastCreativeScan.getTime() : 0;
+      const bTime = b.page.lastCreativeScan ? b.page.lastCreativeScan.getTime() : 0;
+      return aTime - bTime;
+    });
+  }
+
+  // Select in round-robin fashion across active workspace queues until maxPages is reached
+  const selectedPlans: TargetScanPlan[] = [];
+  const workspaceQueues = Array.from(workspacePlanMap.values());
+  let addedAny = true;
+
+  while (selectedPlans.length < options.maxPages && addedAny) {
+    addedAny = false;
+    for (const queue of workspaceQueues) {
+      if (queue.length > 0 && selectedPlans.length < options.maxPages) {
+        selectedPlans.push(queue.shift()!);
+        addedAny = true;
+      }
+    }
+  }
+
   const deferredCount = eligiblePlans.length - selectedPlans.length;
 
-  console.log(`\n📋 Found ${eligiblePlans.length} page(s) needing Apify Ad Spy creative sync:`);
+  console.log(`\n📋 Found ${eligiblePlans.length} page(s) across ${workspacePlanMap.size} workspace(s) needing Apify Ad Spy creative sync:`);
   console.log(`Processing top ${selectedPlans.length} pages (Cap: ${options.maxPages}${deferredCount > 0 ? `, ${deferredCount} deferred` : ""}):\n`);
 
   selectedPlans.forEach((plan, idx) => {
     const p = plan.page;
-    console.log(`  ${idx + 1}. "${p.displayName || p.pageId || p.id}"`);
+    console.log(`  ${idx + 1}. "${p.displayName || p.pageId || p.id}" [Workspace: ${p.workspaceId || "N/A"}]`);
     console.log(`     ↳ Action: ${plan.isFullScan ? "Full Catalog Scan" : `Delta Scan (+${plan.delta} ads)`}`);
     console.log(`     ↳ Trigger: ${plan.reason}`);
   });

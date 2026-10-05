@@ -33,6 +33,8 @@ export function ScanRunnerModal({
       });
       setLocalAutoScanState(initial);
       setFeedback(null);
+      const allSmall = trackedPages.every((p) => (p.currentResults || 0) < 20);
+      setSelectedRunner(allSmall ? "local" : "apify");
     }
   }, [isOpen, trackedPages]);
 

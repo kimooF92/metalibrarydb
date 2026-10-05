@@ -18,6 +18,10 @@ on:
         description: 'Target specific Tracked Page UUID (optional)'
         required: false
         default: ''
+      workspace:
+        description: 'Target specific Workspace Slug or UUID (optional, e.g. morocco)'
+        required: false
+        default: ''
 
 # Dedicated concurrency group with cancel-in-progress to avoid blocking count workers
 concurrency:
@@ -71,8 +75,11 @@ jobs:
           if [ -n "${{ inputs.page_id }}" ]; then
             echo "Running targeted Apify scan for page ID: ${{ inputs.page_id }}"
             npx tsx scripts/run-apify-spy-cron.ts --page-id "${{ inputs.page_id }}"
+          elif [ -n "${{ inputs.workspace }}" ]; then
+            echo "Running targeted Apify scan for workspace: ${{ inputs.workspace }}"
+            npx tsx scripts/run-apify-spy-cron.ts --workspace "${{ inputs.workspace }}"
           else
-            echo "Running batch Apify scan for eligible pages..."
+            echo "Running batch Apify scan for eligible pages across all workspaces..."
             npm run spy:apify
           fi
 
