@@ -95,16 +95,18 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
   // Adaptive polling: notifications are secondary UI state, so avoid frequent
   // database reads and pause entirely while the tab is hidden.
   useEffect(() => {
-    const refresh = () => fetchNotifications();
-    refresh();
-    const pollIntervalMs = isOpen ? 30000 : 60000;
-    const interval = setInterval(refresh, pollIntervalMs);
-    document.addEventListener("visibilitychange", refresh);
+    fetchNotifications();
+    const pollIntervalMs = isOpen ? 30000 : 180000;
+    const interval = setInterval(fetchNotifications, pollIntervalMs);
+    const handleVisibility = () => {
+      if (!document.hidden) fetchNotifications();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       clearInterval(interval);
-      document.removeEventListener("visibilitychange", refresh);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [activeTab, isOpen, fetchNotifications]);
+  }, [isOpen, fetchNotifications]);
 
   // Close on outside click and reset confirmation state
   useEffect(() => {

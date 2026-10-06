@@ -18,10 +18,30 @@ export interface SmallPageNeedingScan {
   isInQueue: boolean;
 }
 
+interface CachedSmallPages {
+  data: any;
+  timestamp: number;
+}
+const smallPagesCache = new Map<string, CachedSmallPages>();
+const SMALL_PAGES_CACHE_TTL_MS = 45 * 1000;
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const workspaceId = searchParams.get("workspaceId");
+    const forceRefresh = searchParams.get("refresh") === "true";
+
+    const cacheKey = workspaceId || "all";
+    const now = Date.now();
+    const cached = smallPagesCache.get(cacheKey);
+    if (!forceRefresh && cached && now - cached.timestamp < SMALL_PAGES_CACHE_TTL_MS) {
+      return NextResponse.json(cached.data, {
+        headers: {
+          "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
+          Vary: PRIVATE_AUTH_VARY,
+        },
+      });
+    }
 
     const workspaceFilter = workspaceId
       ? sql`AND tp.workspace_id = ${workspaceId}::uuid`
@@ -100,14 +120,17 @@ export async function GET(req: Request) {
     const inQueueCount = pages.filter((p) => p.isInQueue).length;
     const pendingEnqueueCount = pages.length - inQueueCount;
 
+    const payload = {
+      success: true,
+      count: pages.length,
+      inQueueCount,
+      pendingEnqueueCount,
+      pages,
+    };
+    smallPagesCache.set(cacheKey, { data: payload, timestamp: now });
+
     return NextResponse.json(
-      {
-        success: true,
-        count: pages.length,
-        inQueueCount,
-        pendingEnqueueCount,
-        pages,
-      },
+      payload,
       {
         headers: {
           "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
@@ -126,6 +149,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    smallPagesCache.clear();
     const body = await req.json().catch(() => ({}));
     const workspaceId = body?.workspaceId;
 

@@ -89,14 +89,18 @@ export function SmallPagesScanProvider({ children }: { children: React.ReactNode
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 60000);
-    document.addEventListener("visibilitychange", fetchData);
+    const pollIntervalMs = isModalOpen ? 30000 : isDismissed ? 300000 : 180000;
+    const interval = setInterval(fetchData, pollIntervalMs);
+    const handleVisibility = () => {
+      if (!document.hidden) fetchData();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
       clearInterval(interval);
-      document.removeEventListener("visibilitychange", fetchData);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [fetchData]);
+  }, [fetchData, isModalOpen, isDismissed]);
 
   const dismiss = useCallback(() => {
     setIsDismissed(true);

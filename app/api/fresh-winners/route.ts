@@ -13,13 +13,16 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const maxDuration = 60;
 
-interface CachedFreshWinners {
+interface CachedFreshWinnersPage {
   items: FreshWinnerItem[];
   stats: FreshWinnersStats;
+  total: number;
+  totalPages: number;
   timestamp: number;
 }
 
-const freshWinnersCache = new Map<string, CachedFreshWinners>();
+const freshWinnersCache = new Map<string, CachedFreshWinnersPage>();
+const freshWinnersStatsCache = new Map<string, { stats: FreshWinnersStats; total: number; timestamp: number }>();
 const FRESH_WINNERS_CACHE_TTL_MS = 60 * 1000; // 60 seconds
 
 export async function GET(req: NextRequest) {
@@ -45,22 +48,22 @@ export async function GET(req: NextRequest) {
     const cutoffDate = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
     const activeWorkspace = await getActiveWorkspace(req);
 
-    const cacheKey = `${activeWorkspace.id}:${windowDays}:${minCopies}:${mediaType || 'all'}:${category || 'all'}:${hasProduct}:${search || ''}:${sortBy}`;
+    const baseCacheKey = `${activeWorkspace.id}:${windowDays}:${minCopies}:${mediaType || 'all'}:${category || 'all'}:${hasProduct}:${search || ''}:${sortBy}`;
+    const pageCacheKey = `${baseCacheKey}:p${page}:l${limit}`;
     const now = Date.now();
-    const cached = freshWinnersCache.get(cacheKey);
+    const cachedPage = freshWinnersCache.get(pageCacheKey);
 
-    if (!forceRefresh && cached && now - cached.timestamp < FRESH_WINNERS_CACHE_TTL_MS) {
-      const paginatedItems = cached.items.slice(offset, offset + limit);
+    if (!forceRefresh && cachedPage && now - cachedPage.timestamp < FRESH_WINNERS_CACHE_TTL_MS) {
       return NextResponse.json(
         {
           success: true,
-          winners: paginatedItems,
-          stats: cached.stats,
+          winners: cachedPage.items,
+          stats: cachedPage.stats,
           pagination: {
             page,
             limit,
-            total: cached.items.length,
-            totalPages: Math.ceil(cached.items.length / limit),
+            total: cachedPage.total,
+            totalPages: cachedPage.totalPages,
           },
         },
         {
@@ -105,8 +108,170 @@ export async function GET(req: NextRequest) {
 
     const whereSql = and(...conditions);
 
-    // Lean indexed select: Omit huge columns like rawExtract and full payloads
-    const query = db
+    // 1. Resolve aggregate market stats efficiently (cached per base filter key or queried via lean SQL)
+    let stats: FreshWinnersStats;
+    let totalBreakouts = 0;
+    const cachedStats = freshWinnersStatsCache.get(baseCacheKey);
+
+    if (!forceRefresh && cachedStats && now - cachedStats.timestamp < FRESH_WINNERS_CACHE_TTL_MS) {
+      stats = cachedStats.stats;
+      totalBreakouts = cachedStats.total;
+    } else {
+      const [statsRow] = await db
+        .select({
+          totalBreakouts: sql<number>`count(*)`.mapWith(Number),
+          activeBrandsCount: sql<number>`count(distinct latest_obs.tracked_page_id)`.mapWith(Number),
+          videoCount: sql<number>`count(case when ${ads.mediaType} = 'video' then 1 end)`.mapWith(Number),
+        })
+        .from(ads)
+        .innerJoin(
+          sql`(
+            SELECT DISTINCT ON (ad_id)
+              id AS obs_id,
+              ad_id,
+              tracked_page_id,
+              duplication_count,
+              observed_at
+            FROM ${adObservations}
+            WHERE ${adObservations.isActive} = true
+              AND ${adObservations.duplicationCount} >= ${minCopies}
+            ORDER BY ad_id, observed_at DESC
+          ) AS latest_obs`,
+          sql`latest_obs.ad_id = ${ads.id}`
+        )
+        .leftJoin(scrapedProducts, eq(ads.productId, scrapedProducts.id))
+        .leftJoin(trackedPages, sql`tracked_pages.id = latest_obs.tracked_page_id`)
+        .where(whereSql);
+
+      totalBreakouts = Number(statsRow?.totalBreakouts || 0);
+      const videoCount = Number(statsRow?.videoCount || 0);
+      const videoRatePercent = totalBreakouts > 0 ? Math.round((videoCount / totalBreakouts) * 100) : 0;
+
+      let topCategory: string | null = null;
+      let medianPrice: string | null = null;
+
+      if (totalBreakouts > 0) {
+        const [topCatRow, priceRow] = await Promise.all([
+          db
+            .select({
+              category: scrapedProducts.category,
+            })
+            .from(ads)
+            .innerJoin(
+              sql`(
+                SELECT DISTINCT ON (ad_id)
+                  id AS obs_id,
+                  ad_id,
+                  tracked_page_id,
+                  duplication_count,
+                  observed_at
+                FROM ${adObservations}
+                WHERE ${adObservations.isActive} = true
+                  AND ${adObservations.duplicationCount} >= ${minCopies}
+                ORDER BY ad_id, observed_at DESC
+              ) AS latest_obs`,
+              sql`latest_obs.ad_id = ${ads.id}`
+            )
+            .leftJoin(scrapedProducts, eq(ads.productId, scrapedProducts.id))
+            .leftJoin(trackedPages, sql`tracked_pages.id = latest_obs.tracked_page_id`)
+            .where(and(whereSql, sql`${scrapedProducts.category} IS NOT NULL`))
+            .groupBy(scrapedProducts.category)
+            .orderBy(desc(sql`count(*)`))
+            .limit(1),
+
+          db
+            .select({
+              avgPrice: sql<number>`ROUND(AVG(NULLIF(regexp_replace(${scrapedProducts.currentPrice}, '[^0-9.]', '', 'g'), '')::numeric), 0)`.mapWith(Number),
+            })
+            .from(ads)
+            .innerJoin(
+              sql`(
+                SELECT DISTINCT ON (ad_id)
+                  id AS obs_id,
+                  ad_id,
+                  tracked_page_id,
+                  duplication_count,
+                  observed_at
+                FROM ${adObservations}
+                WHERE ${adObservations.isActive} = true
+                  AND ${adObservations.duplicationCount} >= ${minCopies}
+                ORDER BY ad_id, observed_at DESC
+              ) AS latest_obs`,
+              sql`latest_obs.ad_id = ${ads.id}`
+            )
+            .leftJoin(scrapedProducts, eq(ads.productId, scrapedProducts.id))
+            .leftJoin(trackedPages, sql`tracked_pages.id = latest_obs.tracked_page_id`)
+            .where(and(whereSql, sql`${scrapedProducts.currentPrice} IS NOT NULL`)),
+        ]);
+
+        topCategory = topCatRow?.[0]?.category || null;
+        if (priceRow?.[0]?.avgPrice) {
+          const sym = activeWorkspace.currencySymbol || "TND";
+          medianPrice = `${priceRow[0].avgPrice} ${sym}`;
+        }
+      }
+
+      const sym = activeWorkspace.currencySymbol || "TND";
+      stats = {
+        totalBreakouts,
+        videoRatePercent,
+        topCategory: topCategory || "Multi-Niche",
+        medianPrice: medianPrice || `49 ${sym}`,
+        activeBrandsCount: Number(statsRow?.activeBrandsCount || 0),
+      };
+
+      freshWinnersStatsCache.set(baseCacheKey, { stats, total: totalBreakouts, timestamp: now });
+    }
+
+    if (totalBreakouts === 0) {
+      return NextResponse.json(
+        {
+          success: true,
+          winners: [],
+          stats,
+          pagination: {
+            page,
+            limit,
+            total: 0,
+            totalPages: 1,
+          },
+        },
+        {
+          headers: {
+            "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
+            Vary: PRIVATE_AUTH_VARY,
+          },
+        }
+      );
+    }
+
+    // 2. Sort directly in SQL to paginate at the database level (returns only ~24 rows max, NOT 12,000+)
+    let sqlOrderBy;
+    if (sortBy === "duplication_count") {
+      sqlOrderBy = [
+        desc(sql`latest_obs.duplication_count`),
+        desc(sql`COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt})`),
+      ];
+    } else if (sortBy === "newest") {
+      sqlOrderBy = [
+        desc(sql`COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt})`),
+        desc(sql`latest_obs.duplication_count`),
+      ];
+    } else if (sortBy === "winner_score") {
+      sqlOrderBy = [
+        desc(sql`latest_obs.duplication_count`),
+        desc(sql`COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt})`),
+      ];
+    } else {
+      // Default: velocity (copies scaled relative to campaign launch age)
+      sqlOrderBy = [
+        desc(sql`(latest_obs.duplication_count::numeric / GREATEST(1, EXTRACT(DAY FROM NOW() - COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}))))`),
+        desc(sql`latest_obs.duplication_count`),
+      ];
+    }
+
+    // Lean indexed select: Omit massive raw extracts, strictly bounded by LIMIT & OFFSET
+    const pageRows = await db
       .select({
         adId: ads.id,
         adArchiveId: ads.adArchiveId,
@@ -162,12 +327,13 @@ export async function GET(req: NextRequest) {
       )
       .leftJoin(scrapedProducts, eq(ads.productId, scrapedProducts.id))
       .leftJoin(trackedPages, sql`tracked_pages.id = latest_obs.tracked_page_id`)
-      .where(whereSql);
+      .where(whereSql)
+      .orderBy(...sqlOrderBy)
+      .limit(limit)
+      .offset(offset);
 
-    const allMatching = await query;
-
-    // Enrich all matching records with algorithmic winner score & velocity score
-    const enrichedList: FreshWinnerItem[] = allMatching.map((row) => {
+    // Enrich only the paginated slice
+    const paginatedItems: FreshWinnerItem[] = pageRows.map((row) => {
       const dup = row.duplicationCount || 1;
       const metrics = calculateWinnerScore({
         startedRunningOn: row.startedRunningOn,
@@ -180,13 +346,8 @@ export async function GET(req: NextRequest) {
       });
 
       const days = metrics.daysRunning;
-      // Velocity Score: Copies per day weight + winner score weight
       const velocityScore = Math.round((dup / Math.max(1, days)) * 15 + metrics.winnerScore * 0.5);
-
-      const scalingPattern = classifyScalingPattern(
-        null,
-        row.pageCurrentResults
-      );
+      const scalingPattern = classifyScalingPattern(null, row.pageCurrentResults);
 
       return {
         id: row.adId,
@@ -237,80 +398,16 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // Sorting
-    enrichedList.sort((a, b) => {
-      if (sortBy === "winner_score") {
-        return b.winnerScore - a.winnerScore || b.duplicationCount - a.duplicationCount;
-      }
-      if (sortBy === "duplication_count") {
-        return b.duplicationCount - a.duplicationCount || b.winnerScore - a.winnerScore;
-      }
-      if (sortBy === "newest") {
-        const dateA = a.startedRunningOn ? new Date(a.startedRunningOn).getTime() : new Date(a.firstSeenAt).getTime();
-        const dateB = b.startedRunningOn ? new Date(b.startedRunningOn).getTime() : new Date(b.firstSeenAt).getTime();
-        return dateB - dateA;
-      }
-      // Default: velocity
-      return b.velocityScore - a.velocityScore || b.winnerScore - a.winnerScore;
-    });
+    const totalPages = Math.ceil(totalBreakouts / limit);
 
-    // Compute aggregate market stats over the entire matching set
-    const totalBreakouts = enrichedList.length;
-    let videoCount = 0;
-    const categoryCounts: Record<string, number> = {};
-    const prices: number[] = [];
-    const brandSet = new Set<string>();
-
-    for (const item of enrichedList) {
-      if (item.mediaType === "video") videoCount++;
-      if (item.brand?.displayName) brandSet.add(item.brand.displayName);
-      if (item.product?.category) {
-        categoryCounts[item.product.category] = (categoryCounts[item.product.category] || 0) + 1;
-      }
-      if (item.product?.currentPrice) {
-        const num = parseFloat(item.product.currentPrice.replace(/[^0-9.]/g, ""));
-        if (!isNaN(num) && num > 0 && num < 2000) prices.push(num);
-      }
-    }
-
-    const videoRatePercent = totalBreakouts > 0 ? Math.round((videoCount / totalBreakouts) * 100) : 0;
-    
-    // Top category
-    let topCategory: string | null = null;
-    let topCategoryCount = 0;
-    for (const [cat, count] of Object.entries(categoryCounts)) {
-      if (count > topCategoryCount) {
-        topCategory = cat;
-        topCategoryCount = count;
-      }
-    }
-
-    // Median price
-    let medianPrice: string | null = null;
-    if (prices.length > 0) {
-      prices.sort((a, b) => a - b);
-      const mid = Math.floor(prices.length / 2);
-      const med = prices.length % 2 !== 0 ? prices[mid] : (prices[mid - 1] + prices[mid]) / 2;
-      medianPrice = `${med.toFixed(0)} TND`;
-    }
-
-    const stats: FreshWinnersStats = {
-      totalBreakouts,
-      videoRatePercent,
-      topCategory: topCategory || "Multi-Niche",
-      medianPrice: medianPrice || "49 TND",
-      activeBrandsCount: brandSet.size,
-    };
-
-    // Store in-memory cache for fast repeated reads & pagination
-    freshWinnersCache.set(cacheKey, {
-      items: enrichedList,
+    // Save page in cache
+    freshWinnersCache.set(pageCacheKey, {
+      items: paginatedItems,
       stats,
-      timestamp: Date.now(),
+      total: totalBreakouts,
+      totalPages,
+      timestamp: now,
     });
-
-    // Apply pagination slice
-    const paginatedItems = enrichedList.slice(offset, offset + limit);
 
     return NextResponse.json(
       {
@@ -321,7 +418,7 @@ export async function GET(req: NextRequest) {
           page,
           limit,
           total: totalBreakouts,
-          totalPages: Math.ceil(totalBreakouts / limit),
+          totalPages,
         },
       },
       {

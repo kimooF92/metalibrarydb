@@ -338,7 +338,7 @@ export async function GET(request: Request) {
             )
             .groupBy(ads.pageId, ads.productId),
 
-          // 4. For unlinked ads only, fetch lean linkUrl & title for clustering (zero captions!)
+          // 4. For unlinked ads only, fetch lean linkUrl & title for clustering (zero captions, deduplicated in SQL!)
           db
             .select({
               pageId: ads.pageId,
@@ -352,7 +352,9 @@ export async function GET(request: Request) {
                 eq(ads.isArchived, false),
                 isNull(ads.productId)
               )
-            ),
+            )
+            .groupBy(ads.pageId, ads.linkUrl, ads.title)
+            .limit(300),
         ]);
 
         // Group ads and count unique exact products per brand
