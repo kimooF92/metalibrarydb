@@ -188,6 +188,42 @@ export function PagesTable({
     Object.fromEntries(pages.map((p) => [p.id, p.isWatchlisted ?? false]))
   );
 
+  const [localSearch, setLocalSearch] = useState(search);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Sync external search updates (e.g. from filter reset or browser navigation)
+  useEffect(() => {
+    setLocalSearch(search);
+  }, [search]);
+
+  // Debounce search input by 300ms before triggering data fetch
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localSearch !== search) {
+        onSearchChange(localSearch);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [localSearch, search, onSearchChange]);
+
+  // Keyboard shortcut to jump to search: '/' or 'Cmd+K' / 'Ctrl+K'
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (
+        (e.key === "/" &&
+          document.activeElement?.tagName !== "INPUT" &&
+          document.activeElement?.tagName !== "TEXTAREA") ||
+        ((e.metaKey || e.ctrlKey) && e.key === "k")
+      ) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const [toast, setToast] = useState<{
     type: "success" | "error" | "info" | "warning";
     title: string;
@@ -478,24 +514,46 @@ export function PagesTable({
       <div className={`${showMobileFilters ? "flex" : "hidden lg:flex"} flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800/40`}>
         {/* Left Side: Global Search Bar */}
         <div className="relative w-full sm:w-64 md:w-72">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500 dark:text-slate-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search brand, page ID, or keyword..."
-            className="w-full bg-white dark:bg-slate-950/80 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-lg pl-8 pr-8 py-2 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 transition-all font-medium"
-          />
-          {search && (
-            <button
-              type="button"
-              onClick={() => onSearchChange("")}
-              className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded-full cursor-pointer transition-colors"
-              title="Clear search"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
+          {loading && localSearch ? (
+            <Loader2 className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-indigo-500 animate-spin" />
+          ) : (
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500 dark:text-slate-400" />
           )}
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={localSearch}
+            onChange={(e) => setLocalSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setLocalSearch("");
+                onSearchChange("");
+                searchInputRef.current?.blur();
+              }
+            }}
+            placeholder="Search brand, page ID, or domain..."
+            className="w-full bg-white dark:bg-slate-950/80 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-lg pl-8 pr-12 py-2 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 transition-all font-medium"
+          />
+          <div className="absolute right-2.5 top-2 flex items-center space-x-1">
+            {localSearch ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setLocalSearch("");
+                  onSearchChange("");
+                  searchInputRef.current?.focus();
+                }}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded-full cursor-pointer transition-colors"
+                title="Clear search (Esc)"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800/80 rounded border border-slate-200 dark:border-slate-700/60 select-none pointer-events-none">
+                /
+              </kbd>
+            )}
+          </div>
         </div>
 
         {/* Right Side: 1-Click Smart Tabs & Filter Controls */}

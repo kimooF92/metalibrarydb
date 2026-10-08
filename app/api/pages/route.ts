@@ -56,13 +56,43 @@ export async function GET(request: Request) {
     ];
 
     if (search) {
-      conditions.push(
-        or(
-          ilike(trackedPages.displayName, `%${search}%`),
-          ilike(trackedPages.pageId, `%${search}%`),
-          ilike(trackedPages.url, `%${search}%`)
-        )
-      );
+      const term = search.trim();
+      const isNumericId = /^\d{4,25}$/.test(term);
+
+      if (isNumericId) {
+        // Fast-path: exact pageId (uses B-Tree index instantly) or display name match
+        conditions.push(
+          or(
+            eq(trackedPages.pageId, term),
+            ilike(trackedPages.displayName, `%${term}%`)
+          )
+        );
+      } else {
+        // Clean domain in case user pasted a URL or domain query (e.g. "https://brand.com/" -> "brand.com")
+        const cleanDomain = term
+          .replace(/^https?:\/\//i, "")
+          .replace(/^www\./i, "")
+          .replace(/\/.*$/, "")
+          .toLowerCase();
+
+        const searchClauses: any[] = [
+          ilike(trackedPages.displayName, `%${term}%`),
+          ilike(trackedPages.url, `%${term}%`),
+        ];
+
+        if (cleanDomain && cleanDomain.length > 2) {
+          searchClauses.push(
+            ilike(trackedPages.canonicalDomain, `%${cleanDomain}%`),
+            ilike(trackedPages.landingPage, `%${cleanDomain}%`)
+          );
+        }
+
+        if (/\d+/.test(term)) {
+          searchClauses.push(ilike(trackedPages.pageId, `%${term}%`));
+        }
+
+        conditions.push(or(...searchClauses));
+      }
     }
 
     const VALID_STATUSES = ["success", "pending", "scanning", "failed", "unclear"];
@@ -140,13 +170,16 @@ export async function GET(request: Request) {
     const effectivePage = page > totalPages ? 1 : page;
     const effectiveOffset = (effectivePage - 1) * limit;
 
-    // Fetch pages
-    const pages = await db.query.trackedPages.findMany({
-      ...(whereClause ? { where: whereClause } : {}),
-      orderBy: orderClauses,
-      limit,
-      offset: effectiveOffset,
-    });
+    // Fetch pages (skip execution if totalCount is 0)
+    const pages =
+      totalCount > 0
+        ? await db.query.trackedPages.findMany({
+            ...(whereClause ? { where: whereClause } : {}),
+            orderBy: orderClauses,
+            limit,
+            offset: effectiveOffset,
+          })
+        : [];
 
     // Fetch previous scan results & recent history points for these pages
     const pageIds = pages.map((p) => p.id);

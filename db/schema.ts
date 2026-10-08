@@ -108,6 +108,9 @@ export const trackedPages = pgTable(
     index("idx_tracked_pages_brand_domain_id").on(table.brandDomainId),
     index("idx_tracked_pages_canonical_domain").on(table.canonicalDomain),
     index("idx_tracked_pages_workspace_id").on(table.workspaceId),
+    index("idx_tracked_pages_display_name_trgm").using("gin", sql`${table.displayName} extensions.gin_trgm_ops`),
+    index("idx_tracked_pages_canonical_domain_trgm").using("gin", sql`${table.canonicalDomain} extensions.gin_trgm_ops`),
+    index("idx_tracked_pages_landing_page_trgm").using("gin", sql`${table.landingPage} extensions.gin_trgm_ops`),
     uniqueIndex("idx_tracked_pages_unique_primary")
       .on(table.brandDomainId)
       .where(sql`page_role = 'primary'`),

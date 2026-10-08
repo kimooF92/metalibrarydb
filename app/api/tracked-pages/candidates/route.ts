@@ -7,7 +7,7 @@ import {
   ads,
   activityNotifications,
 } from "@/db/schema";
-import { eq, desc, and, inArray } from "drizzle-orm";
+import { eq, desc, and, inArray, sql, count } from "drizzle-orm";
 import { isValidPageId } from "@/lib/utils";
 
 export async function GET(req: NextRequest) {
@@ -49,45 +49,58 @@ export async function GET(req: NextRequest) {
       }
     >();
 
-    // 1. Source A: Extract candidates from observed ads for this tracked page
-    const adRows = await db
-      .select({
-        pageId: ads.pageId,
-        pageName: ads.pageName,
-        ctaText: ads.ctaText,
-        linkUrl: ads.linkUrl,
-        adArchiveId: ads.adArchiveId,
-        firstSeenAt: ads.firstSeenAt,
-      })
-      .from(adObservations)
-      .innerJoin(ads, eq(adObservations.adId, ads.id))
-      .where(eq(adObservations.trackedPageId, trackedPageId));
+    // 1. Source A: Extract candidates aggregated in SQL for this tracked page (fast & low egress)
+    const [candidateAggregates, sampleRows] = await Promise.all([
+      db
+        .select({
+          pageId: ads.pageId,
+          pageName: sql<string>`MAX(${ads.pageName})`,
+          adCount: count(ads.id),
+          earliestSeenAt: sql<Date>`MIN(${ads.firstSeenAt})`,
+        })
+        .from(adObservations)
+        .innerJoin(ads, eq(adObservations.adId, ads.id))
+        .where(eq(adObservations.trackedPageId, trackedPageId))
+        .groupBy(ads.pageId),
 
-    for (const row of adRows) {
+      // Fetch a bounded sample of up to 60 recent ads to populate sample CTAs, URLs, and archive IDs
+      db
+        .select({
+          pageId: ads.pageId,
+          ctaText: ads.ctaText,
+          linkUrl: ads.linkUrl,
+          adArchiveId: ads.adArchiveId,
+        })
+        .from(adObservations)
+        .innerJoin(ads, eq(adObservations.adId, ads.id))
+        .where(eq(adObservations.trackedPageId, trackedPageId))
+        .limit(60),
+    ]);
+
+    for (const row of candidateAggregates) {
       if (!isValidPageId(row.pageId)) continue;
       const pid = row.pageId.trim();
-      let cand = candidateMap.get(pid);
-      if (!cand) {
-        cand = {
-          id: `cand_${pid}`,
-          pageId: pid,
-          displayName: row.pageName?.trim() || null,
-          matchingAdCount: 0,
-          sampleCtas: new Set<string>(),
-          sampleUrls: new Set<string>(),
-          sampleAdArchiveIds: new Set<string>(),
-          createdAt: row.firstSeenAt || new Date(),
-          status: "discovered",
-        };
-        candidateMap.set(pid, cand);
+      candidateMap.set(pid, {
+        id: `cand_${pid}`,
+        pageId: pid,
+        displayName: row.pageName?.trim() || null,
+        matchingAdCount: Number(row.adCount) || 0,
+        sampleCtas: new Set<string>(),
+        sampleUrls: new Set<string>(),
+        sampleAdArchiveIds: new Set<string>(),
+        createdAt: row.earliestSeenAt || new Date(),
+        status: "discovered",
+      });
+    }
+
+    for (const sample of sampleRows) {
+      if (!sample.pageId) continue;
+      const cand = candidateMap.get(sample.pageId.trim());
+      if (cand) {
+        if (sample.ctaText?.trim() && cand.sampleCtas.size < 5) cand.sampleCtas.add(sample.ctaText.trim());
+        if (sample.linkUrl?.trim() && cand.sampleUrls.size < 5) cand.sampleUrls.add(sample.linkUrl.trim());
+        if (sample.adArchiveId?.trim() && cand.sampleAdArchiveIds.size < 5) cand.sampleAdArchiveIds.add(sample.adArchiveId.trim());
       }
-      cand.matchingAdCount++;
-      if (row.pageName && (!cand.displayName || cand.displayName.startsWith("Page "))) {
-        cand.displayName = row.pageName.trim();
-      }
-      if (row.ctaText?.trim()) cand.sampleCtas.add(row.ctaText.trim());
-      if (row.linkUrl?.trim()) cand.sampleUrls.add(row.linkUrl.trim());
-      if (row.adArchiveId?.trim()) cand.sampleAdArchiveIds.add(row.adArchiveId.trim());
     }
 
     // 2. Source B: Extract candidates from activity notifications (multi_page_detected)

@@ -159,7 +159,7 @@ function DashboardContent() {
 
   const [pages, setPages] = useState<TrackedPage[]>([]);
   const [pagesLoading, setPagesLoading] = useState(true);
-  const isFetchingRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const [search, setSearch] = useState(initialLoaded.search);
   const [statusFilter, setStatusFilter] = useState(initialLoaded.statusFilter);
@@ -270,8 +270,13 @@ function DashboardContent() {
   }, []);
 
   const fetchPages = useCallback(async (silent = false, forceRefresh = false) => {
-    if (isFetchingRef.current) return;
-    isFetchingRef.current = true;
+    // Abort previous in-flight request so stale search/filter responses never overwrite latest state
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     if (!silent) setPagesLoading(true);
     try {
       const params = new URLSearchParams();
@@ -286,6 +291,7 @@ function DashboardContent() {
       if (forceRefresh) params.set("_t", String(Date.now()));
 
       const res = await fetch(`/api/pages?${params.toString()}`, {
+        signal: controller.signal,
         cache: forceRefresh ? "no-store" : "default",
         headers: forceRefresh ? { "Cache-Control": "no-cache" } : undefined,
       });
@@ -298,12 +304,18 @@ function DashboardContent() {
         const errData = await res.json().catch(() => ({}));
         showToast("error", errData.error || "Failed to load table pages.");
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err.name === "AbortError" || err.name === "DOMException") {
+        // Request was cancelled by a newer search/filter action — silently ignore
+        return;
+      }
       console.error("Failed to fetch pages", err);
       showToast("error", "Network error loading table pages.");
     } finally {
-      isFetchingRef.current = false;
-      if (!silent) setPagesLoading(false);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+        if (!silent) setPagesLoading(false);
+      }
     }
   }, [page, pageSize, search, statusFilter, searchTypeFilter, activeTab, sortBy, sortOrder, showToast]);
 
