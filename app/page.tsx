@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { TrackedPage, DashboardStats } from "@/types";
+import { TrackedPage, DashboardStats, SearchTabCounts } from "@/types";
 import { StatsCards } from "@/components/stats-cards";
 import { AddUrlForm } from "@/components/add-url-form";
 import { ImportDropzone } from "@/components/import-dropzone";
@@ -172,6 +172,7 @@ function DashboardContent() {
   const [pageSize, setPageSize] = useState(initialLoaded.pageSize);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [searchTabCounts, setSearchTabCounts] = useState<SearchTabCounts | null>(null);
 
   // Sync state when URL query params change (e.g. from internal router navigation or notification click)
   useEffect(() => {
@@ -300,6 +301,7 @@ function DashboardContent() {
         setPages(data.data || []);
         setTotalPages(data.pagination?.totalPages || 1);
         setTotalCount(data.pagination?.total || 0);
+        setSearchTabCounts(data.searchTabCounts || null);
       } else {
         const errData = await res.json().catch(() => ({}));
         showToast("error", errData.error || "Failed to load table pages.");
@@ -336,6 +338,7 @@ function DashboardContent() {
 
   const handleResetFilters = useCallback(() => {
     setSearch("");
+    setSearchTabCounts(null);
     setStatusFilter("all");
     setSearchTypeFilter("all");
     setActiveTab("active");
@@ -530,6 +533,7 @@ function DashboardContent() {
         onDelete={handleDelete}
         onBulkDelete={handleBulkDelete}
         search={search}
+        searchTabCounts={searchTabCounts}
         onSearchChange={(val) => {
           setSearch(val);
           setPage(1);

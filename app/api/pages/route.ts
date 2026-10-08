@@ -50,8 +50,8 @@ export async function GET(request: Request) {
       });
     }
 
-    // Build conditions array
-    const conditions: any[] = [
+    // Build base conditions array (workspace + search + filters, before tab scoping)
+    const baseConditions: any[] = [
       eq(trackedPages.workspaceId, activeWorkspace.id),
     ];
 
@@ -61,7 +61,7 @@ export async function GET(request: Request) {
 
       if (isNumericId) {
         // Fast-path: exact pageId (uses B-Tree index instantly) or display name match
-        conditions.push(
+        baseConditions.push(
           or(
             eq(trackedPages.pageId, term),
             ilike(trackedPages.displayName, `%${term}%`)
@@ -91,21 +91,54 @@ export async function GET(request: Request) {
           searchClauses.push(ilike(trackedPages.pageId, `%${term}%`));
         }
 
-        conditions.push(or(...searchClauses));
+        baseConditions.push(or(...searchClauses));
       }
     }
 
     const VALID_STATUSES = ["success", "pending", "scanning", "failed", "unclear"];
     if (statusFilter && statusFilter !== "all" && VALID_STATUSES.includes(statusFilter)) {
-      conditions.push(eq(trackedPages.status, statusFilter));
+      baseConditions.push(eq(trackedPages.status, statusFilter));
     }
 
     const VALID_SEARCH_TYPES = ["page", "keyword_exact_phrase", "keyword_unordered"];
     if (searchTypeFilter && searchTypeFilter !== "all" && VALID_SEARCH_TYPES.includes(searchTypeFilter)) {
-      conditions.push(eq(trackedPages.searchType, searchTypeFilter));
+      baseConditions.push(eq(trackedPages.searchType, searchTypeFilter));
     }
 
-    // Smart Tabs Filters
+    // Compute cross-tab counts in a single fast SQL pass when searching
+    let searchTabCounts: {
+      all: number;
+      active: number;
+      watchlist: number;
+      high_volume: number;
+      attention: number;
+    } | null = null;
+
+    if (search) {
+      const tabCountsResult = await db
+        .select({
+          all: sql<number>`count(*)`,
+          active: sql<number>`count(*) FILTER (WHERE ${trackedPages.currentResults} >= 1)`,
+          watchlist: sql<number>`count(*) FILTER (WHERE ${trackedPages.isWatchlisted} = true)`,
+          high_volume: sql<number>`count(*) FILTER (WHERE ${trackedPages.currentResults} >= 50)`,
+          attention: sql<number>`count(*) FILTER (WHERE ${trackedPages.currentResults} = 0 OR ${trackedPages.status} IN ('unclear', 'failed'))`,
+        })
+        .from(trackedPages)
+        .where(and(...baseConditions));
+
+      if (tabCountsResult[0]) {
+        searchTabCounts = {
+          all: Number(tabCountsResult[0].all || 0),
+          active: Number(tabCountsResult[0].active || 0),
+          watchlist: Number(tabCountsResult[0].watchlist || 0),
+          high_volume: Number(tabCountsResult[0].high_volume || 0),
+          attention: Number(tabCountsResult[0].attention || 0),
+        };
+      }
+    }
+
+    // Smart Tabs Filters applied on top of base conditions
+    const conditions = [...baseConditions];
     if (tab === "active") {
       conditions.push(gte(trackedPages.currentResults, 1));
     } else if (tab === "watchlist") {
@@ -159,13 +192,30 @@ export async function GET(request: Request) {
       orderClauses.push(desc(trackedPages.id));
     }
 
-    // Total count query
-    let countQuery = db.select({ count: sql<number>`count(*)` }).from(trackedPages);
-    if (whereClause) {
-      countQuery = countQuery.where(whereClause) as typeof countQuery;
+    // Total count calculation (derived directly from searchTabCounts when available, skipping extra query)
+    let totalCount = 0;
+    if (searchTabCounts) {
+      if (tab === "all") totalCount = searchTabCounts.all;
+      else if (tab === "active") totalCount = searchTabCounts.active;
+      else if (tab === "watchlist") totalCount = searchTabCounts.watchlist;
+      else if (tab === "high_volume") totalCount = searchTabCounts.high_volume;
+      else if (tab === "attention") totalCount = searchTabCounts.attention;
+      else {
+        let countQuery = db.select({ count: sql<number>`count(*)` }).from(trackedPages);
+        if (whereClause) {
+          countQuery = countQuery.where(whereClause) as typeof countQuery;
+        }
+        const countResult = await countQuery;
+        totalCount = Number(countResult[0]?.count ?? 0);
+      }
+    } else {
+      let countQuery = db.select({ count: sql<number>`count(*)` }).from(trackedPages);
+      if (whereClause) {
+        countQuery = countQuery.where(whereClause) as typeof countQuery;
+      }
+      const countResult = await countQuery;
+      totalCount = Number(countResult[0]?.count ?? 0);
     }
-    const countResult = await countQuery;
-    const totalCount = Number(countResult[0]?.count ?? 0);
     const totalPages = Math.max(1, Math.ceil(totalCount / limit));
     const effectivePage = page > totalPages ? 1 : page;
     const effectiveOffset = (effectivePage - 1) * limit;
@@ -554,6 +604,7 @@ export async function GET(request: Request) {
         total: totalCount,
         totalPages,
       },
+      searchTabCounts,
     };
 
     pagesCacheMap.set(cacheKey, {

@@ -37,6 +37,14 @@ export interface BrandDomain {
   sisterPages?: TrackedPage[];
 }
 
+export interface SearchTabCounts {
+  all: number;
+  active: number;
+  watchlist: number;
+  high_volume: number;
+  attention: number;
+}
+
 export interface TrackedPage {
   id: string;
   url: string;
