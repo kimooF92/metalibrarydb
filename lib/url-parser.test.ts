@@ -5,6 +5,8 @@ import {
   resolveTrackableDomain,
   normalizeAddUrlInput,
   buildMetaAdLibrarySearchUrl,
+  isSocialDomain,
+  extractStoreDomain,
 } from "./url-parser";
 import { isValidMetaAdLibraryUrl, addProductUrlSchema } from "./validators";
 
@@ -101,3 +103,31 @@ test("normalizeAddUrlInput and validators support product URLs seamlessly", () =
   });
   assert.equal(validationInvalidRunner.success, false);
 });
+
+test("isSocialDomain identifies social media hosts and ignores others", () => {
+  assert.equal(isSocialDomain("facebook.com"), true);
+  assert.equal(isSocialDomain("www.facebook.com"), true);
+  assert.equal(isSocialDomain("https://facebook.com/ads/library/"), true);
+  assert.equal(isSocialDomain("instagram.com"), true);
+  assert.equal(isSocialDomain("tiktok.com"), true);
+  assert.equal(isSocialDomain("local-store.converty.shop"), false);
+  assert.equal(isSocialDomain("nike.com"), false);
+});
+
+test("extractStoreDomain unwraps Meta Ad Library search URLs and rejects bare Facebook links", () => {
+  // Meta ad search with keyword domain
+  const adSearchUrl = 'https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&is_targeted_country=false&media_type=all&q=%22local-store.converty.shop%22&search_type=keyword_exact_phrase';
+  assert.equal(extractStoreDomain(adSearchUrl), "local-store.converty.shop");
+
+  // Meta ad search without domain query
+  const pageSearchUrl = 'https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&view_all_page_id=103262046190718&search_type=page&media_type=all';
+  assert.equal(extractStoreDomain(pageSearchUrl), null);
+
+  // Social profile link
+  assert.equal(extractStoreDomain("https://www.facebook.com/zoomshop"), null);
+
+  // Normal store landing page
+  assert.equal(extractStoreDomain("https://boutique.youcan.shop/products/dress"), "boutique.youcan.shop");
+  assert.equal(extractStoreDomain("tuni-go.com"), "tuni-go.com");
+});
+

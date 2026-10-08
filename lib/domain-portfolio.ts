@@ -7,7 +7,7 @@ import {
   adObservations,
   queue,
 } from "@/db/schema";
-import { resolveTrackableDomain } from "@/lib/url-parser";
+import { resolveTrackableDomain, isSocialDomain, extractStoreDomain } from "@/lib/url-parser";
 import { eq, and, sql, desc, or, inArray, isNull } from "drizzle-orm";
 import type { BrandDomain, TrackedPage } from "@/types";
 
@@ -28,9 +28,11 @@ export async function getOrCreateBrandDomain(
   displayName?: string | null,
   workspaceId?: string | null
 ): Promise<{ id: string; domain: string; displayName: string; workspaceId?: string | null }> {
-  const cleanDomain = resolveTrackableDomain(rawDomain).toLowerCase().trim();
-  if (!cleanDomain) {
-    throw new Error(`Invalid domain string: "${rawDomain}"`);
+  // Extract clean store domain if candidate contains URL/Meta Ad Library wrappers
+  const extracted = extractStoreDomain(rawDomain);
+  const cleanDomain = (extracted || resolveTrackableDomain(rawDomain)).toLowerCase().trim();
+  if (!cleanDomain || isSocialDomain(cleanDomain)) {
+    throw new Error(`Invalid brand store domain: "${rawDomain}". Social platform domains and ad search URLs cannot be registered as brand store portfolios.`);
   }
 
   // Check if domain already exists

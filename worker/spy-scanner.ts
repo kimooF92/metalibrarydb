@@ -810,18 +810,32 @@ export async function scanAdCreatives(
     };
 
     if (resolvedPageId && resolvedPageId !== "0") {
-      const targetDomain = (trackedPageRecord as any)?.landingPage || trackedPageRecord?.displayName || (trackedPageRecord as any)?.url;
+      let targetDomain: string | null = null;
+      const rawCandidates = [
+        (trackedPageRecord as any)?.landingPage,
+        trackedPageRecord?.displayName,
+        (trackedPageRecord as any)?.url,
+      ].filter(Boolean);
 
-      if (targetDomain && targetDomain.includes(".")) {
+      const { extractStoreDomain } = await import("../lib/url-parser");
+      for (const candidate of rawCandidates) {
+        const extracted = extractStoreDomain(candidate);
+        if (extracted) {
+          targetDomain = extracted;
+          break;
+        }
+      }
+
+      if (targetDomain) {
         try {
           const { getOrCreateBrandDomain, linkPageToDomain } = await import("../lib/domain-portfolio");
           const bDomain = await getOrCreateBrandDomain(targetDomain, trackedPageRecord?.displayName, trackedPageRecord?.workspaceId);
-          pageUpdates.brandDomainId = bDomain.id;
-          pageUpdates.canonicalDomain = bDomain.domain;
 
           // If current tracked page was an exact match/domain search, keep its searchType intact!
           if (trackedPageRecord?.searchType !== "page") {
             pageUpdates.pageRole = "satellite";
+            pageUpdates.brandDomainId = bDomain.id;
+            pageUpdates.canonicalDomain = bDomain.domain;
 
             // Register or link the resolved Page ID as primary page under this domain
             const existingSister = await db.query.trackedPages.findFirst({
@@ -850,9 +864,8 @@ export async function scanAdCreatives(
               await linkPageToDomain(existingSister.id, bDomain.id, "primary", { forceReassign: false });
             }
           } else {
-            // Already a page search type
-            pageUpdates.brandDomainId = bDomain.id;
-            pageUpdates.canonicalDomain = bDomain.domain;
+            // Already a page search type: safely link via linkPageToDomain so we don't violate idx_tracked_pages_unique_primary
+            await linkPageToDomain(trackedPageId, bDomain.id, "primary", { forceReassign: false });
           }
         } catch (domainErr) {
           console.warn("[Spy Scanner] Non-fatal error managing brand domain portfolio:", domainErr);
@@ -930,11 +943,16 @@ export async function scanAdCreatives(
       outcomeDetails: `Successfully extracted and normalized ${savedCount} ad creatives${newProductsCount > 0 ? ` and ${newProductsCount} new product(s)` : ""}.`,
     };
   } catch (err: any) {
+    const isTimeout =
+      err?.name === "TimeoutError" ||
+      /timeout|timed\s*out/i.test(err?.message || "");
+    const failureReason = isTimeout ? "timeout" : "parse_error";
+
     return {
       status: "failed",
       extractedCount: collectedAds.size,
       newProductsCount: 0,
-      failureReason: "timeout",
+      failureReason,
       outcomeDetails: err.message || "Creative scan failed",
     };
   } finally {

@@ -34,12 +34,16 @@ function AdSpyContent() {
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // Re-fetch ad feed & stats when workspace switches
+  // Re-fetch ad feed & stats only when switching from one workspace to a different workspace
+  const prevWorkspaceIdRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (activeWorkspace?.id) {
+    if (!activeWorkspace?.id) return;
+    if (prevWorkspaceIdRef.current && prevWorkspaceIdRef.current !== activeWorkspace.id) {
       refetch();
       refetchStats();
     }
+    prevWorkspaceIdRef.current = activeWorkspace.id;
   }, [activeWorkspace?.id, refetch, refetchStats]);
 
   // Scroll listener for back to top button
@@ -142,7 +146,7 @@ function AdSpyContent() {
     };
   }, [isLoading, isFetchingMore, manualRefreshing, pagination.page, pagination.totalPages, updateFilters]);
 
-  const isSpinning = manualRefreshing || isRefreshing || isLoading || isFetchingMore;
+  const isSpinning = manualRefreshing || isRefreshing;
 
   return (
     <div className="h-full overflow-y-auto overflow-x-hidden bg-background text-foreground space-y-4">
@@ -243,13 +247,29 @@ function AdSpyContent() {
         onReset={handleResetFilters}
       />
 
+      {/* Non-destructive error notice if background refetch fails but ads are already displayed */}
+      {error && ads.length > 0 && (
+        <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="font-bold">Error updating ad feed:</span>
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={() => refetch()}
+            className="px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-bold text-xs cursor-pointer transition-colors shrink-0"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Main Feed Content */}
       {isLoading && ads.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 text-slate-500 dark:text-slate-400 gap-2.5">
           <RefreshCw className="w-7 h-7 animate-spin text-indigo-500" />
           <span className="text-xs font-semibold">Loading ad creatives feed...</span>
         </div>
-      ) : error ? (
+      ) : error && ads.length === 0 ? (
         <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="font-bold">Error loading ad feed:</span>

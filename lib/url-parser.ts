@@ -153,7 +153,7 @@ const COMMON_STORE_PREFIXES = new Set([
 ]);
 
 // Non-store social media domains to reject
-const SOCIAL_DOMAINS = [
+export const SOCIAL_DOMAINS = [
   "facebook.com",
   "instagram.com",
   "tiktok.com",
@@ -166,7 +166,24 @@ const SOCIAL_DOMAINS = [
   "telegram.org",
   "linkedin.com",
   "pinterest.com",
+  "meta.com",
+  "fb.me",
 ];
+
+export function isSocialDomain(hostnameOrUrl: string): boolean {
+  if (!hostnameOrUrl) return false;
+  let host = hostnameOrUrl.trim().toLowerCase();
+  try {
+    if (host.startsWith("http://") || host.startsWith("https://")) {
+      host = new URL(host).hostname.toLowerCase();
+    }
+  } catch {
+    host = host.replace(/^https?:\/\//i, "").split("/")[0].split("?")[0].split(":")[0];
+  }
+  const cleanHost = host.replace(/^\.+|\.+$/g, "");
+  return SOCIAL_DOMAINS.some((d) => cleanHost === d || cleanHost.endsWith(`.${d}`));
+}
+
 
 // Two-part top level domains (ccTLD second-level domains)
 const MULTI_PART_TLDS = new Set([
@@ -253,6 +270,48 @@ export function isMetaAdLibraryUrl(url: string): boolean {
     return false;
   }
 }
+
+/**
+ * Safely extracts an external e-commerce brand store domain from a candidate string
+ * (landing page URL, Meta Ad Library search URL, apex domain, etc.).
+ * Strips out Facebook/Meta Ad Library wrappers and rejects pure social media domains.
+ */
+export function extractStoreDomain(rawInput: string | null | undefined): string | null {
+  if (!rawInput || typeof rawInput !== "string") return null;
+  const trimmed = rawInput.trim();
+  if (!trimmed) return null;
+
+  // Check if it's a Meta Ad Library URL:
+  if (isMetaAdLibraryUrl(trimmed) || trimmed.includes("facebook.com/ads/library")) {
+    try {
+      const parsed = new URL(trimmed.startsWith("http") ? trimmed : `https://${trimmed}`);
+      const q = parsed.searchParams.get("q")?.trim();
+      if (q) {
+        const decoded = decodeURIComponent(q).replace(/^"|"$/g, "").trim();
+        if (decoded && decoded.includes(".") && !isSocialDomain(decoded)) {
+          const dom = resolveTrackableDomain(decoded);
+          if (dom && dom.includes(".") && !isSocialDomain(dom)) return dom;
+        }
+      }
+    } catch {}
+    // If it's a Meta Ad Library URL without a domain search query, it's NOT a brand store domain
+    return null;
+  }
+
+  // Reject pure social media profiles/links
+  if (isSocialDomain(trimmed)) {
+    return null;
+  }
+
+  // General URL or domain resolution
+  const resolved = resolveTrackableDomain(trimmed);
+  if (!resolved || !resolved.includes(".") || isSocialDomain(resolved)) {
+    return null;
+  }
+
+  return resolved;
+}
+
 
 export interface ParsedMetaAdUrl {
   isValid: boolean;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Ad, AdSpyStats, AdFilterParams, PaginationMeta, BrandOption } from "@/types";
 
@@ -378,6 +378,8 @@ export function useSpy(initialParams?: AdFilterParams) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const fetchFeed = useCallback(async (isManualRefresh = false) => {
     if (params.enabled === false) {
       setIsLoading(false);
@@ -385,6 +387,12 @@ export function useSpy(initialParams?: AdFilterParams) {
       setIsRefreshing(false);
       return;
     }
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     const currentPage = isManualRefresh ? 1 : (params.page || 1);
     if (isManualRefresh) {
@@ -442,6 +450,7 @@ export function useSpy(initialParams?: AdFilterParams) {
 
       const res = await fetch(`/api/spy/ads?${query.toString()}`, {
         cache: isManualRefresh ? "no-store" : "default",
+        signal: controller.signal,
         headers: isManualRefresh
           ? { "Cache-Control": "no-cache", Accept: "application/json" }
           : { Accept: "application/json" },
@@ -460,17 +469,30 @@ export function useSpy(initialParams?: AdFilterParams) {
       }
       setPagination(data.pagination || { page: 1, limit: 24, total: 0, totalPages: 0 });
     } catch (err: any) {
+      if (err.name === "AbortError" || controller.signal.aborted) {
+        return;
+      }
       setError(err.message || "Failed to fetch ad feed");
     } finally {
-      setIsLoading(false);
-      setIsFetchingMore(false);
-      setIsRefreshing(false);
+      if (!controller.signal.aborted) {
+        setIsLoading(false);
+        setIsFetchingMore(false);
+        setIsRefreshing(false);
+      }
     }
   }, [params]);
 
   useEffect(() => {
     fetchFeed(false);
   }, [fetchFeed]);
+
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const updateFilters = useCallback((newParams: Partial<AdFilterParams>) => {
     setParams((prev) => {
@@ -584,9 +606,12 @@ export function useSpy(initialParams?: AdFilterParams) {
     setAds((prev) => prev.map((item) => (item.id === updatedAd.id ? { ...item, ...updatedAd } : item)));
   }, []);
 
+  const fetchFeedRef = useRef(fetchFeed);
+  fetchFeedRef.current = fetchFeed;
+
   const refetch = useCallback(() => {
-    return fetchFeed(true);
-  }, [fetchFeed]);
+    return fetchFeedRef.current(true);
+  }, []);
 
   return {
     ads,
@@ -612,14 +637,22 @@ export function useAdStats() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchStats = useCallback(async (forceRefresh = false) => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setIsLoading(true);
     setError(null);
     try {
       const cacheBust = forceRefresh ? `?_t=${Date.now()}` : "";
       const res = await fetch(`/api/spy/stats${cacheBust}`, {
         cache: forceRefresh ? "no-store" : "default",
+        signal: controller.signal,
         headers: forceRefresh
           ? { "Cache-Control": "no-cache", Accept: "application/json" }
           : { Accept: "application/json" },
@@ -627,17 +660,29 @@ export function useAdStats() {
       const data = await parseJsonResponse(res, "Failed to fetch ad stats");
       setStats(data);
     } catch (err: any) {
+      if (err.name === "AbortError" || controller.signal.aborted) return;
       setError(err.message || "Failed to fetch ad stats");
     } finally {
-      setIsLoading(false);
+      if (!controller.signal.aborted) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     fetchStats();
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [fetchStats]);
 
-  return { stats, isLoading, error, refetch: () => fetchStats(true) };
+  const refetch = useCallback(() => {
+    return fetchStats(true);
+  }, [fetchStats]);
+
+  return { stats, isLoading, error, refetch };
 }
 
 export function useEnqueueScan() {
