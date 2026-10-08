@@ -444,13 +444,13 @@ export async function GET(req: NextRequest) {
             id: ads.id,
             pageId: ads.pageId,
             linkUrl: ads.linkUrl,
-            caption: ads.caption,
+            caption: sql<string>`LEFT(${ads.caption}, 120)`.as("caption"),
             title: ads.title,
             mediaType: ads.mediaType,
           })
           .from(ads)
           .where(inArray(ads.pageId, pageIds))
-          .limit(300);
+          .limit(120);
       } catch (brandErr) {
         console.warn("[Ad Feed] brandAds query warning:", brandErr);
       }

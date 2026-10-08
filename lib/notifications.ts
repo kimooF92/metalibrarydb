@@ -61,6 +61,7 @@ export async function createNotification(params: CreateNotificationParams) {
 
     const existing = await db.query.activityNotifications.findFirst({
       where: and(...conditions),
+      columns: { id: true },
       orderBy: [desc(activityNotifications.createdAt)],
     });
 
@@ -96,7 +97,7 @@ export async function createNotification(params: CreateNotificationParams) {
         isRead: false,
         createdAt: new Date(),
       })
-      .returning();
+      .returning({ id: activityNotifications.id });
 
     // Auto-prune old notifications in background to keep table lightweight
     pruneOldNotifications(120).catch(() => {});

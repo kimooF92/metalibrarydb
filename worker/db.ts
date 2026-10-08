@@ -391,16 +391,13 @@ export async function getWorkerState() {
 export async function updateWorkerState(
   updates: Partial<typeof workerState.$inferInsert>
 ) {
-  const [updated] = await db
+  await db
     .update(workerState)
     .set({
       ...updates,
       updatedAt: new Date(),
     })
-    .where(eq(workerState.id, 1))
-    .returning();
-
-  return updated;
+    .where(eq(workerState.id, 1));
 }
 
 /**

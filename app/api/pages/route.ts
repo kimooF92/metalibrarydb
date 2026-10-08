@@ -34,6 +34,7 @@ export async function GET(request: Request) {
 
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.min(5000, Math.max(1, parseInt(searchParams.get("limit") || "25", 10)));
+    const isLean = searchParams.get("lean") === "true" || limit > 100;
     const offset = (page - 1) * limit;
 
     // Resolve active workspace
@@ -238,7 +239,7 @@ export async function GET(request: Request) {
     let windowDeltaMap: Record<string, number> = {};
     let recentScans: Array<{ trackedPageId: string; results: number | null; rank: number }> = [];
 
-    if (pageIds.length > 0) {
+    if (!isLean && pageIds.length > 0) {
       const rankedScans = db
         .select({
           trackedPageId: scanHistory.trackedPageId,
@@ -246,7 +247,13 @@ export async function GET(request: Request) {
           rank: sql<number>`row_number() over (partition by ${scanHistory.trackedPageId} order by ${scanHistory.checkedAt} desc)`.as("rank"),
         })
         .from(scanHistory)
-        .where(and(inArray(scanHistory.trackedPageId, pageIds), isNotNull(scanHistory.results)))
+        .where(
+          and(
+            inArray(scanHistory.trackedPageId, pageIds),
+            gte(scanHistory.checkedAt, sql`NOW() - INTERVAL '30 days'`),
+            isNotNull(scanHistory.results)
+          )
+        )
         .as("ranked_scans");
 
       recentScans = await db
@@ -327,7 +334,7 @@ export async function GET(request: Request) {
 
     // Fetch latest queue entry per page for failureReason + attempts
     let queueMap: Record<string, { failureReason?: string | null; attempts?: number }> = {};
-    if (pageIds.length > 0) {
+    if (!isLean && pageIds.length > 0) {
       // Apply the visible-page filter inside the window query for the same reason
       // as scan history: do not rank every queue row on each table request.
       const rankedQueue = db
@@ -356,7 +363,7 @@ export async function GET(request: Request) {
 
     // Fetch active creative queue entries
     let activeCreativeJobMap: Record<string, boolean> = {};
-    if (pageIds.length > 0) {
+    if (!isLean && pageIds.length > 0) {
       const activeCreativeJobs = await db
         .select({ trackedPageId: queue.trackedPageId })
         .from(queue)
@@ -374,7 +381,7 @@ export async function GET(request: Request) {
     // to calculate the exact distinct product catalog count per brand
     let approxProductCountMap: Record<string, number> = {};
     let extractedAdCountMap: Record<string, number> = {};
-    if (pageIds.length > 0) {
+    if (!isLean && pageIds.length > 0) {
       const pageIdValues = pages
         .map((p) => p.pageId)
         .filter(Boolean) as string[];
@@ -511,7 +518,7 @@ export async function GET(request: Request) {
       }
     > = {};
 
-    if (domainIds.length > 0) {
+    if (!isLean && domainIds.length > 0) {
       try {
         const domains = await db.query.brandDomains.findMany({
           where: inArray(brandDomains.id, domainIds),

@@ -169,6 +169,7 @@ export async function checkAndRecordBreakout(
         eq(activityNotifications.adArchiveId, adArchiveId),
         gte(activityNotifications.createdAt, dedupWindowStart)
       ),
+      columns: { id: true, metadata: true },
       orderBy: [desc(activityNotifications.createdAt)],
     });
 

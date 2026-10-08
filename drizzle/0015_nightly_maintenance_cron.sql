@@ -63,13 +63,15 @@ BEGIN
 
   -- -------------------------------------------------------
   -- STEP 5: Strip raw_extract JSON blobs from processed products
-  -- Only for successful scrapes older than 3 days.
+  -- Immediately for deleted/ignored/failed, and older than 2 days for all others.
   -- -------------------------------------------------------
   UPDATE scraped_products
   SET raw_extract = NULL
   WHERE raw_extract IS NOT NULL
-    AND scrape_status = 'success'
-    AND created_at < NOW() - INTERVAL '3 days';
+    AND (
+      scrape_status IN ('deleted', 'ignored', 'failed')
+      OR created_at < NOW() - INTERVAL '2 days'
+    );
 
   -- -------------------------------------------------------
   -- STEP 6: Strip storyboard_urls from old archived ads (> 30 days)

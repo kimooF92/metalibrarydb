@@ -254,10 +254,15 @@ async function runWorker() {
     }
   };
 
+  let lastHeartbeatAt = 0;
+
   try {
     while (true) {
-      // Heartbeat update
-      await updateWorkerState({ updatedAt: new Date() }).catch(() => {});
+      // Heartbeat update (throttled to once every 30 seconds to reduce Supabase query frequency)
+      if (Date.now() - lastHeartbeatAt >= 30_000) {
+        lastHeartbeatAt = Date.now();
+        await updateWorkerState({ updatedAt: new Date() }).catch(() => {});
+      }
 
       // 0. Check for pending country discovery runs first (claimed atomically with FOR UPDATE SKIP LOCKED)
       const pendingDiscoveryRun = await claimNextPendingDiscoveryRun();

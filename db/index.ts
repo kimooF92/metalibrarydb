@@ -20,9 +20,10 @@ export const client =
   globalForDb.conn ??
   postgres(connectionString || "postgres://localhost:5432/postgres", {
     prepare: false,
+    fetch_types: false,
     max: process.env.VERCEL ? 2 : 10,
-    idle_timeout: 20,
-    connect_timeout: 10,
+    idle_timeout: 60,
+    connect_timeout: 15,
     ssl: isLocal ? false : "require",
   });
 

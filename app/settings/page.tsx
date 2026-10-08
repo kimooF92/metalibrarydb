@@ -288,7 +288,7 @@ function SettingsContent() {
   const handleExportCsv = async () => {
     try {
       showToast({ type: "info", title: "Preparing CSV export...", message: "Fetching competitor records..." });
-      const res = await fetch("/api/pages?limit=5000&tab=all");
+      const res = await fetch("/api/pages?limit=5000&tab=all&lean=true");
       if (!res.ok) throw new Error("Failed to fetch pages data");
 
       const data = await res.json();
