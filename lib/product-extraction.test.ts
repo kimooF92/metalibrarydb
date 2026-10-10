@@ -68,3 +68,36 @@ test("builds success and failure notification payloads", () => {
   assert.equal(refresh.title, "Product Re-extracted: Example Product (store.example/product)");
   assert.equal(refresh.metadata.event, "product_re_extracted");
 });
+
+test("validateProductWithGatekeeper rejects obvious junk pages at Layer 1 ($0 tokens)", async () => {
+  const { validateProductWithGatekeeper } = await import("./typesafe-jev");
+
+  const policyCheck = await validateProductWithGatekeeper(
+    "Politique de confidentialité",
+    "https://store.tn/policies/privacy"
+  );
+  assert.equal(policyCheck.isProduct, false);
+  assert.match(policyCheck.reason || "", /deterministic regex/i);
+
+  const cartCheck = await validateProductWithGatekeeper(
+    "Panier d'achat - Finaliser la commande",
+    "https://store.tn/cart"
+  );
+  assert.equal(cartCheck.isProduct, false);
+
+  const emptyCheck = await validateProductWithGatekeeper("", "https://store.tn");
+  assert.equal(emptyCheck.isProduct, false);
+});
+
+test("validateProductWithGatekeeper passes genuine products at Layer 2 ($0 tokens)", async () => {
+  const { validateProductWithGatekeeper } = await import("./typesafe-jev");
+
+  const genuineCheck = await validateProductWithGatekeeper(
+    "Montre Connectée Ultra Series 9 Smartwatch",
+    "https://store.tn/products/montre-ultra-series-9",
+    "89 DT"
+  );
+  assert.equal(genuineCheck.isProduct, true);
+  assert.match(genuineCheck.reason || "", /price and product URL slug/i);
+});
+

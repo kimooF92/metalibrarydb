@@ -325,3 +325,76 @@ export async function filterJunkWithJev(
   };
 }
 
+/**
+ * Hybrid 0-Credit Noise Gatekeeper:
+ * Evaluates whether an extracted scraped page is a genuine e-commerce product or non-product junk.
+ * - Layer 1 ($0): Deterministic regex on title and URL for obvious junk (policies, FAQ, cart, account).
+ * - Layer 2 ($0): Deterministic regex for obvious products (has price > 0, product URL slug, title > 12 chars).
+ * - Layer 3 (Ultra-lean tokens): Jev Noul gatekeeper only for ambiguous edge cases.
+ */
+export async function validateProductWithGatekeeper(
+  title?: string | null,
+  url?: string | null,
+  currentPrice?: string | null
+): Promise<{ isProduct: boolean; reason?: string; probability?: number }> {
+  const cleanTitle = (title || "").trim();
+  if (!cleanTitle || cleanTitle.length < 2) {
+    return { isProduct: false, reason: "Title is missing or empty" };
+  }
+
+  const titleLower = cleanTitle.toLowerCase();
+  const urlLower = (url || "").toLowerCase();
+
+  // Layer 1 ($0 cost): Deterministic junk patterns
+  const isObviousJunk =
+    /(?:politique|mentions l[eé]gales|conditions g[eé]n[eé]rales|cgv|cgu|confidentialit[eé]|privacy policy|terms of (?:service|use)|termes et conditions|faq|support client|contactez-nous|contact us|panier d'achat|mon panier|checkout|cart|mon compte|my account|connexion|login|shipping policy|livraison et retours|politique de retour|avis clients|qui sommes-nous|about us)/i.test(
+      titleLower
+    ) ||
+    /\/(?:policies|pages\/(?:contact|faq|terms|privacy|cgv|about|shipping|retours)|cart|checkout|account)\b/i.test(
+      urlLower
+    );
+
+  if (isObviousJunk) {
+    return {
+      isProduct: false,
+      reason: "Matched non-product legal/navigation pattern (deterministic regex)",
+    };
+  }
+
+  // Layer 2 ($0 cost): Clear product indicators
+  const hasValidPrice = Boolean(currentPrice && /[1-9]/.test(currentPrice));
+  const hasProductSlug = /\/(?:products?|items?|item|p|dp)\//i.test(urlLower);
+
+  if (hasValidPrice && hasProductSlug && cleanTitle.length >= 10) {
+    return {
+      isProduct: true,
+      reason: "Confirmed product from price and product URL slug",
+    };
+  }
+
+  // Layer 3 (Micro-tokens): Ambiguous edge-case (e.g. root domain, 0 price, or short title) -> Call Jev Noul
+  const jevCheck = await filterJunkWithJev(cleanTitle);
+  if (!jevCheck) {
+    // If Jev is offline or OpenRouter key missing, fallback safely
+    return {
+      isProduct: true,
+      reason: "Gatekeeper fallback pass (AI check unavailable)",
+    };
+  }
+
+  if (!jevCheck.isProduct || jevCheck.probability < 0.35) {
+    return {
+      isProduct: false,
+      reason: `AI gatekeeper identified non-product (${Math.round((1 - jevCheck.probability) * 100)}% confidence)`,
+      probability: jevCheck.probability,
+    };
+  }
+
+  return {
+    isProduct: true,
+    reason: "Passed AI gatekeeper check",
+    probability: jevCheck.probability,
+  };
+}
+
+

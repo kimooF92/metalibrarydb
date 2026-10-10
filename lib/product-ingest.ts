@@ -12,6 +12,7 @@ import {
   extractDeliveryInfo,
 } from "@/lib/network-extractor";
 import { formatPrice, formatDelivery } from "@/lib/format-price";
+import { validateProductWithGatekeeper } from "@/lib/typesafe-jev";
 
 // In-flight URL scrape deduplication map to prevent redundant concurrent Firecrawl requests
 const inFlightScrapes = new Map<string, Promise<any>>();
@@ -336,6 +337,31 @@ export async function linkAndAutoScrapeProduct({
 
           const finalEffectiveUrl = extracted.resolved_url || normalizedUrl;
           const resolvedDomain = getCleanDomain(finalEffectiveUrl);
+
+          // Hybrid 0-Credit Noise Gatekeeper: drop policy, cart, legal, or non-product pages
+          const gateCheck = await validateProductWithGatekeeper(
+            extracted.title,
+            finalEffectiveUrl,
+            extracted.current_price
+          );
+
+          if (!gateCheck.isProduct) {
+            console.log(
+              `[Auto-Scraper Gatekeeper] Dropped non-product page: "${extracted.title || finalEffectiveUrl}" (${gateCheck.reason})`
+            );
+            await db
+              .update(scrapedProducts)
+              .set({
+                domain: resolvedDomain || undefined,
+                title: extracted.title || normalizedUrl,
+                scrapeStatus: "ignored",
+                failureReason: gateCheck.reason || "Non-product item filtered by gatekeeper",
+                lastScrapedAt: new Date(),
+                updatedAt: new Date(),
+              })
+              .where(eq(scrapedProducts.id, targetProductId));
+            return;
+          }
 
           const phoneNumbers = extractTunisianPhoneNumbers(rawHtml);
           const whatsappNumbers = extractWhatsAppNumbers(rawHtml);
