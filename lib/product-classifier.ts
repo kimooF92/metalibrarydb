@@ -9,6 +9,8 @@
  * Includes an Offline Deterministic Rule-Based Fallback Engine ($0 cost, 0 network failure).
  */
 
+import { classifyProductWithJev } from "./typesafe-jev";
+
 export const PRODUCT_CATEGORIES = [
   "Electronics & Tech",
   "Beauty, Health & Care",
@@ -27,6 +29,7 @@ export interface ProductClassificationResult {
   subCategory: string;
   targetAudience: "unisex" | "men" | "women" | "kids";
   modelUsed: string;
+  confidence?: number;
 }
 
 // In-memory cache for categorized titles (avoids redundant API requests)
@@ -334,8 +337,19 @@ You must respond ONLY with raw, valid JSON in this exact structure:
     extraContext?.domain ? ` | Store: ${extraContext.domain}` : ""
   }${extraContext?.adText ? ` | Ad Context: ${extraContext.adText.slice(0, 150)}` : ""}`;
 
-  // 1. If OpenRouter Key is provided (Dual-Layer Fallback across 3 free models)
+  // 1. Primary: TypeSafe / Jev Decision Engine (Non-autoregressive, ~300ms, calibrated choices)
   if (openRouterKey && openRouterKey.trim() !== "") {
+    try {
+      const jevResult = await classifyProductWithJev(cleanTitle, extraContext);
+      if (jevResult && jevResult.category) {
+        categoryCache.set(cacheKey, jevResult);
+        return jevResult;
+      }
+    } catch (e: any) {
+      console.warn(`[Jev Classifier Fallback] ${e?.message || "error"}, cascading to chat models`);
+    }
+
+    // Secondary: OpenRouter Free Chat Models Cascade
     for (const currentModel of AI_MODELS) {
       try {
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
