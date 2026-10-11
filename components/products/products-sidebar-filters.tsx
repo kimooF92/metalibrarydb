@@ -317,7 +317,7 @@ export function ProductsSidebarFilters({
                   ) : (
                     <Eye className="w-3.5 h-3.5 text-muted-foreground" />
                   )}
-                  <span>Active Ads Only</span>
+                  <span>Show Active Only (Live Ads)</span>
                 </div>
                 <div
                   className={`w-7 h-4 rounded-full transition-colors relative ${

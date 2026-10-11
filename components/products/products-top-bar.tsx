@@ -16,6 +16,7 @@ import {
   Building2,
   Globe2,
   Calendar,
+  Eye,
   EyeOff,
   Layers,
 } from "lucide-react";
@@ -191,6 +192,29 @@ export function ProductsTopBar({
               )}
             </button>
           )}
+
+          {/* Quick Active Only Toggle */}
+          <button
+            type="button"
+            onClick={onToggleHideInactive}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer select-none ${
+              hideInactive
+                ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 font-bold shadow-2xs"
+                : "bg-background text-muted-foreground border-border hover:bg-accent hover:text-foreground"
+            }`}
+            title={
+              hideInactive
+                ? "Currently showing only active products (off-air products hidden). Click to show all."
+                : "Filter to only products with active ads currently running."
+            }
+          >
+            {hideInactive ? (
+              <EyeOff className="w-3.5 h-3.5 text-emerald-500" />
+            ) : (
+              <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+            )}
+            <span>Active Only</span>
+          </button>
 
           {/* Quick Sort Dropdown */}
           <select
