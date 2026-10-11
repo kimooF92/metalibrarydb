@@ -177,6 +177,26 @@ export function ModalOverviewSection({ product, allImages }: ModalOverviewSectio
 
         {/* Metadata details */}
         <div className="space-y-2 text-xs text-slate-600 dark:text-slate-400">
+          {product.category && (
+            <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+              <span className="font-medium">Category:</span>
+              <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                  {product.category}
+                </span>
+                {product.subCategory && (
+                  <span className="text-slate-500 dark:text-slate-400 font-normal">
+                    › {product.subCategory}
+                  </span>
+                )}
+                {product.targetAudience && (
+                  <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 capitalize border border-slate-200 dark:border-slate-700">
+                    {product.targetAudience}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800">
             <span className="font-medium">Destination URL:</span>
             <a

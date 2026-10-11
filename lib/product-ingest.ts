@@ -12,7 +12,8 @@ import {
   extractDeliveryInfo,
 } from "@/lib/network-extractor";
 import { formatPrice, formatDelivery } from "@/lib/format-price";
-import { validateProductWithGatekeeper } from "@/lib/typesafe-jev";
+import { validateProductWithGatekeeper, classifyProductWithJev } from "@/lib/typesafe-jev";
+import { classifyProductOffline } from "@/lib/product-classifier";
 import { detectExtractionDoubt, resolvePriceDoubtWithJev } from "@/lib/doubt-detector";
 
 // In-flight URL scrape deduplication map to prevent redundant concurrent Firecrawl requests
@@ -376,10 +377,36 @@ export async function linkAndAutoScrapeProduct({
           );
           const deliveryCost = deliveryInfo?.label ? formatDelivery(deliveryInfo.label, fallbackCurrencySymbol) : null;
 
-          // AI classification bypassed per user instructions to avoid external failures/delays
-          const category = null;
-          const subCategory = null;
-          const targetAudience = null;
+          // High-speed TypeSafe Jev classification (~300ms) with deterministic offline fallback
+          let category: string | null = null;
+          let subCategory: string | null = null;
+          let targetAudience: string | null = null;
+
+          if (extracted.title) {
+            try {
+              const jevClassification = await classifyProductWithJev(extracted.title, {
+                domain: resolvedDomain,
+                adText: adCopy,
+              });
+
+              if (jevClassification?.category) {
+                category = jevClassification.category;
+                subCategory = jevClassification.subCategory;
+                targetAudience = jevClassification.targetAudience;
+              } else {
+                const fallback = classifyProductOffline(extracted.title);
+                category = fallback.category;
+                subCategory = fallback.subCategory;
+                targetAudience = fallback.targetAudience;
+              }
+            } catch (err: any) {
+              console.warn(`[Auto-Scraper] Jev classification error for "${extracted.title}":`, err?.message || err);
+              const fallback = classifyProductOffline(extracted.title);
+              category = fallback.category;
+              subCategory = fallback.subCategory;
+              targetAudience = fallback.targetAudience;
+            }
+          }
 
           const formattedOffers = (extracted.all_offers || []).map((offer) => ({
             tierName: offer.tier_name,

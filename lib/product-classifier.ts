@@ -53,7 +53,7 @@ export function classifyProductOffline(title: string): ProductClassificationResu
 
   // 1. Electronics & Tech
   if (
-    /(tablette|phone|ecouteur|écouteur|casque|montre connect|smartwatch|airpod|bluetooth|chargeur|cable|powerbank|camera|caméra|souris|clavier|laptop|pc|projecteur|speaker|baffle|tv|ring light|support telephone|micro|usb|wifi|led rgb|smart watch|rechargeable|haut-parleur|سماعات|ساعة ذكية|هاتف|شاحن|كاميرا|طابليت)/i.test(
+    /(tablette|phone|ecouteur|écouteur|casque|montre connect|smartwatch|airpod|bluetooth|chargeur|cable|powerbank|camera|caméra|souris|clavier|laptop|pc|projecteur|speaker|baffle|tv|ring light|support telephone|micro|usb|wifi|led rgb|smart watch|rechargeable|haut-parleur|سماعات|ساعة ذكية|هاتف|شاحن|كاميرا|طابليت|لوحة مضيئة|لوح ذكي)/i.test(
       text
     )
   ) {
@@ -145,7 +145,7 @@ export function classifyProductOffline(title: string): ProductClassificationResu
 
   // 6. Kids, Baby & Toys
   if (
-    /(bebe|bébé|enfant|jouet|jeu|peluche|poussette|biberon|doudou|trottinette|scooter enfant|educatif|éducatif|dessin|magic board|puzzle|montessori|أطفال|ألعاب|رضيع)/i.test(
+    /(bebe|bébé|enfant|jouet|jeu|peluche|poussette|biberon|doudou|trottinette|scooter enfant|educatif|éducatif|dessin|magic board|puzzle|montessori|أطفال|ألعاب|رضيع|لوحة كتابة|لوحة رسم|لوحة تعليمية)/i.test(
       text
     )
   ) {

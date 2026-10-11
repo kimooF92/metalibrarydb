@@ -265,17 +265,7 @@ export const ProductRow = memo(function ProductRow({
             ) : null;
           })()}
 
-            {product.category && (
-              <span
-                className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
-                  isInactive
-                    ? "bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
-                    : "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
-                }`}
-              >
-                🏷️ {product.category}
-              </span>
-            )}
+
 
             {isPageOnHold && (
               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-500 text-slate-950 shadow-xs border border-amber-400">
