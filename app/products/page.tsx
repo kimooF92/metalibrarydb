@@ -10,7 +10,9 @@ import { ProductDetailsModal } from "@/components/products/product-details-modal
 import { AddProductModal } from "@/components/products/add-product-modal";
 import { ProductsKpiBar } from "@/components/products/products-kpi-bar";
 import type { SmartPreset } from "@/components/products/products-kpi-bar";
-import { ProductsFilterToolbar } from "@/components/products/products-filter-toolbar";
+import { ProductsSidebarFilters } from "@/components/products/products-sidebar-filters";
+import { ProductsTopBar } from "@/components/products/products-top-bar";
+import { MobileFilterDrawer } from "@/components/products/mobile-filter-drawer";
 import { ProductsEmptyState } from "@/components/products/products-empty-state";
 import { resolveProductForRefresh } from "@/lib/product-extraction";
 import { useToast } from "@/components/toast-context";
@@ -37,7 +39,8 @@ export default function ProductsPage() {
   // Smart preset tab & view mode
   const [smartPreset, setSmartPreset] = useState<SmartPreset>("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
 
   // Filters & Pagination
@@ -48,6 +51,8 @@ export default function ProductsPage() {
 
   const [platform, setPlatform] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [selectedNiches, setSelectedNiches] = useState<string[]>([]);
+  const [selectedSubNiches, setSelectedSubNiches] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState("all");
   const [hideInactive, setHideInactive] = useState(false);
   const [discoveryFilter, setDiscoveryFilter] = useState("all");
@@ -73,7 +78,23 @@ export default function ProductsPage() {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const [statsLoading, setStatsLoading] = useState(true);
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<{
+    totalProducts: number;
+    successfulProducts: number;
+    pendingProducts: number;
+    withOffersCount: number;
+    favoritesCount: number;
+    newThisWeekCount: number;
+    evergreenCount: number;
+    activeCount: number;
+    inactiveCount: number;
+    platforms: {
+      shopify: number;
+      youcan: number;
+      woocommerce: number;
+    };
+    nicheCounts?: { category: string; subCategory: string | null; count: number }[];
+  }>({
     totalProducts: 0,
     successfulProducts: 0,
     pendingProducts: 0,
@@ -88,6 +109,7 @@ export default function ProductsPage() {
       youcan: 0,
       woocommerce: 0,
     },
+    nicheCounts: [],
   });
 
   // Modal state
@@ -173,6 +195,18 @@ export default function ProductsPage() {
       if (platformParam) setPlatform(platformParam);
       const categoryParam = params.get("category");
       if (categoryParam) setCategoryFilter(categoryParam);
+      const nicheParam = params.get("niche") || categoryParam;
+      if (nicheParam && nicheParam !== "all") {
+        setSelectedNiches(nicheParam.split(",").map((n) => n.trim()).filter(Boolean));
+      }
+      const subNicheParam = params.get("subNiche") || params.get("subCategory");
+      if (subNicheParam && subNicheParam !== "all") {
+        setSelectedSubNiches(subNicheParam.split(",").map((s) => s.trim()).filter(Boolean));
+      }
+      try {
+        const storedCollapse = localStorage.getItem("products_sidebar_collapsed");
+        if (storedCollapse === "true") setIsSidebarCollapsed(true);
+      } catch {}
       const statusParam = params.get("status");
       if (statusParam) setStatusFilter(statusParam);
       const sortByParam = params.get("sortBy");
@@ -279,7 +313,14 @@ export default function ProductsPage() {
     if (debouncedBrand.trim()) newParams.set("brand", debouncedBrand.trim());
     if (smartPreset !== "all") newParams.set("preset", smartPreset);
     if (platform !== "all") newParams.set("platform", platform);
-    if (categoryFilter !== "all") newParams.set("category", categoryFilter);
+    if (selectedNiches.length > 0) {
+      newParams.set("niche", selectedNiches.join(","));
+    } else if (categoryFilter !== "all") {
+      newParams.set("category", categoryFilter);
+    }
+    if (selectedSubNiches.length > 0) {
+      newParams.set("subNiche", selectedSubNiches.join(","));
+    }
     if (statusFilter !== "all") newParams.set("status", statusFilter);
     if (sortBy !== "latest") newParams.set("sortBy", sortBy);
     if (hideInactive) newParams.set("hideInactive", "true");
@@ -304,6 +345,8 @@ export default function ProductsPage() {
     smartPreset,
     platform,
     categoryFilter,
+    selectedNiches,
+    selectedSubNiches,
     statusFilter,
     sortBy,
     hideInactive,
@@ -348,7 +391,14 @@ export default function ProductsPage() {
         if (debouncedSearch.trim()) query.set("search", debouncedSearch.trim());
         if (debouncedBrand.trim()) query.set("brand", debouncedBrand.trim());
         if (platform !== "all") query.set("platform", platform);
-        if (categoryFilter !== "all") query.set("category", categoryFilter);
+        if (selectedNiches.length > 0) {
+          query.set("niche", selectedNiches.join(","));
+        } else if (categoryFilter !== "all") {
+          query.set("category", categoryFilter);
+        }
+        if (selectedSubNiches.length > 0) {
+          query.set("subNiche", selectedSubNiches.join(","));
+        }
         if (statusFilter !== "all") query.set("status", statusFilter);
         if (hideInactive) query.set("hideInactive", "true");
         if (discoveryFilter !== "all") query.set("discovery", discoveryFilter);
@@ -409,6 +459,8 @@ export default function ProductsPage() {
       debouncedBrand,
       platform,
       categoryFilter,
+      selectedNiches,
+      selectedSubNiches,
       statusFilter,
       hideInactive,
       discoveryFilter,
@@ -782,6 +834,8 @@ export default function ProductsPage() {
     setBrandInput("");
     setDebouncedBrand("");
     setPlatform("all");
+    setSelectedNiches([]);
+    setSelectedSubNiches([]);
     setCategoryFilter("all");
     setStatusFilter("all");
     setSmartPreset("all");
@@ -813,12 +867,15 @@ export default function ProductsPage() {
   // Active secondary filters count
   const activeFilterCount =
     (debouncedBrand.trim() ? 1 : 0) +
-    (categoryFilter !== "all" ? 1 : 0) +
+    (selectedNiches.length > 0 ? selectedNiches.length : 0) +
+    (selectedSubNiches.length > 0 ? selectedSubNiches.length : 0) +
+    (categoryFilter !== "all" && selectedNiches.length === 0 ? 1 : 0) +
     (platform !== "all" ? 1 : 0) +
     (statusFilter !== "all" ? 1 : 0) +
     (discoveryFilter !== "all" ? 1 : 0) +
     (adLaunchFilter !== "all" ? 1 : 0) +
-    (hideInactive ? 1 : 0);
+    (hideInactive ? 1 : 0) +
+    (!stillRunningOnly ? 1 : 0);
 
   const discoveryLabels: Record<string, string> = {
     today: "Today",
@@ -905,66 +962,184 @@ export default function ProductsPage() {
         onSelectPreset={handleSelectPreset}
       />
 
-      {/* 2. Filter Toolbar (preset pills + primary toolbar + drawer + chips) */}
-      <ProductsFilterToolbar
-        smartPreset={smartPreset}
-        onSelectPreset={handleSelectPreset}
-        searchInput={searchInput}
-        onChangeSearch={(v) => { setSearchInput(v); setPage(1); }}
-        onClearSearch={() => { setSearchInput(""); setDebouncedSearch(""); setPage(1); }}
-        sortBy={sortBy}
-        onChangeSortBy={(v) => { setSortBy(v); setPage(1); }}
-        hideInactive={hideInactive}
-        onToggleHideInactive={() => { setHideInactive((prev) => !prev); setPage(1); }}
-        viewMode={viewMode}
-        onChangeViewMode={setViewMode}
-        isFiltersOpen={isFiltersOpen}
-        onToggleFilters={() => setIsFiltersOpen((prev) => !prev)}
-        brandInput={brandInput}
-        onChangeBrand={(v) => { setBrandInput(v); setPage(1); }}
-        onClearBrand={() => { setBrandInput(""); setDebouncedBrand(""); setPage(1); }}
-        debouncedBrand={debouncedBrand}
-        categoryFilter={categoryFilter}
-        onChangeCategoryFilter={(v) => { setCategoryFilter(v); setPage(1); }}
-        platform={platform}
-        onChangePlatform={(v) => { setPlatform(v); setPage(1); }}
-        statusFilter={statusFilter}
-        onChangeStatusFilter={(v) => { setStatusFilter(v); setPage(1); }}
-        discoveryFilter={discoveryFilter}
-        onChangeDiscoveryFilter={(v) => { setDiscoveryFilter(v); setPage(1); }}
-        discoveryFrom={discoveryFrom}
-        onChangeDiscoveryFrom={(v) => { setDiscoveryFrom(v); setPage(1); }}
-        discoveryTo={discoveryTo}
-        onChangeDiscoveryTo={(v) => { setDiscoveryTo(v); setPage(1); }}
-        adLaunchFilter={adLaunchFilter}
-        onChangeAdLaunchFilter={(v) => { setAdLaunchFilter(v); setPage(1); }}
-        adLaunchFrom={adLaunchFrom}
-        onChangeAdLaunchFrom={(v) => { setAdLaunchFrom(v); setPage(1); }}
-        adLaunchTo={adLaunchTo}
-        onChangeAdLaunchTo={(v) => { setAdLaunchTo(v); setPage(1); }}
-        stillRunningOnly={stillRunningOnly}
-        onToggleStillRunningOnly={() => { setStillRunningOnly((prev) => !prev); setPage(1); }}
-        adLaunchLabels={adLaunchLabels}
-        onResetFilters={handleResetFilters}
-        onOpenAddProduct={() => setIsAddProductModalOpen(true)}
-        activeFilterCount={activeFilterCount}
-        discoveryLabels={discoveryLabels}
-        stats={stats}
-      />
+      {/* 2. Main Two-Column Layout (Sidebar + Canvas) */}
+      <div className="flex items-start gap-4">
+        {/* Desktop Sticky Faceted Sidebar */}
+        <div className="hidden lg:block shrink-0">
+          <ProductsSidebarFilters
+            selectedNiches={selectedNiches}
+            onChangeNiches={(niches) => {
+              setSelectedNiches(niches);
+              setPage(1);
+            }}
+            selectedSubNiches={selectedSubNiches}
+            onChangeSubNiches={(subs) => {
+              setSelectedSubNiches(subs);
+              setPage(1);
+            }}
+            nicheCounts={stats.nicheCounts}
+            hideInactive={hideInactive}
+            onToggleHideInactive={() => {
+              setHideInactive((prev) => !prev);
+              setPage(1);
+            }}
+            smartPreset={smartPreset}
+            onSelectPreset={handleSelectPreset}
+            adLaunchFilter={adLaunchFilter}
+            onChangeAdLaunchFilter={(v) => {
+              setAdLaunchFilter(v);
+              setPage(1);
+            }}
+            adLaunchFrom={adLaunchFrom}
+            onChangeAdLaunchFrom={(v) => {
+              setAdLaunchFrom(v);
+              setPage(1);
+            }}
+            adLaunchTo={adLaunchTo}
+            onChangeAdLaunchTo={(v) => {
+              setAdLaunchTo(v);
+              setPage(1);
+            }}
+            stillRunningOnly={stillRunningOnly}
+            onToggleStillRunningOnly={() => {
+              setStillRunningOnly((prev) => !prev);
+              setPage(1);
+            }}
+            adLaunchLabels={adLaunchLabels}
+            discoveryFilter={discoveryFilter}
+            onChangeDiscoveryFilter={(v) => {
+              setDiscoveryFilter(v);
+              setPage(1);
+            }}
+            discoveryFrom={discoveryFrom}
+            onChangeDiscoveryFrom={(v) => {
+              setDiscoveryFrom(v);
+              setPage(1);
+            }}
+            discoveryTo={discoveryTo}
+            onChangeDiscoveryTo={(v) => {
+              setDiscoveryTo(v);
+              setPage(1);
+            }}
+            discoveryLabels={discoveryLabels}
+            platform={platform}
+            onChangePlatform={(v) => {
+              setPlatform(v);
+              setPage(1);
+            }}
+            platformCounts={stats.platforms}
+            brandInput={brandInput}
+            onChangeBrand={(v) => {
+              setBrandInput(v);
+              setPage(1);
+            }}
+            onClearBrand={() => {
+              setBrandInput("");
+              setDebouncedBrand("");
+              setPage(1);
+            }}
+            activeFilterCount={activeFilterCount}
+            onResetFilters={handleResetFilters}
+            isCollapsed={isSidebarCollapsed}
+            onToggleCollapse={() => {
+              setIsSidebarCollapsed((prev) => {
+                const next = !prev;
+                try {
+                  localStorage.setItem("products_sidebar_collapsed", String(next));
+                } catch {}
+                return next;
+              });
+            }}
+          />
+        </div>
+
+        {/* Main Content Canvas */}
+        <div className="flex-1 min-w-0 space-y-3">
+          {/* Top Bar (Search, Sort, View mode, Preset pills, Active chips) */}
+          <ProductsTopBar
+            searchInput={searchInput}
+            onChangeSearch={(v) => {
+              setSearchInput(v);
+              setPage(1);
+            }}
+            onClearSearch={() => {
+              setSearchInput("");
+              setDebouncedSearch("");
+              setPage(1);
+            }}
+            smartPreset={smartPreset}
+            onSelectPreset={handleSelectPreset}
+            sortBy={sortBy}
+            onChangeSortBy={(v) => {
+              setSortBy(v);
+              setPage(1);
+            }}
+            viewMode={viewMode}
+            onChangeViewMode={setViewMode}
+            onOpenMobileDrawer={() => setIsMobileDrawerOpen(true)}
+            activeFilterCount={activeFilterCount}
+            onOpenAddProduct={() => setIsAddProductModalOpen(true)}
+            selectedNiches={selectedNiches}
+            onRemoveNiche={(niche) => {
+              setSelectedNiches((prev) => prev.filter((x) => x !== niche));
+              setPage(1);
+            }}
+            selectedSubNiches={selectedSubNiches}
+            onRemoveSubNiche={(sub) => {
+              setSelectedSubNiches((prev) => prev.filter((x) => x !== sub));
+              setPage(1);
+            }}
+            brandInput={debouncedBrand}
+            onClearBrand={() => {
+              setBrandInput("");
+              setDebouncedBrand("");
+              setPage(1);
+            }}
+            platform={platform}
+            onChangePlatform={(v) => {
+              setPlatform(v);
+              setPage(1);
+            }}
+            hideInactive={hideInactive}
+            onToggleHideInactive={() => {
+              setHideInactive((prev) => !prev);
+              setPage(1);
+            }}
+            discoveryFilter={discoveryFilter}
+            onChangeDiscoveryFilter={(v) => {
+              setDiscoveryFilter(v);
+              setPage(1);
+            }}
+            discoveryLabels={discoveryLabels}
+            adLaunchFilter={adLaunchFilter}
+            onChangeAdLaunchFilter={(v) => {
+              setAdLaunchFilter(v);
+              setPage(1);
+            }}
+            adLaunchLabels={adLaunchLabels}
+            stillRunningOnly={stillRunningOnly}
+            onResetFilters={handleResetFilters}
+          />
 
       {/* 3. Products Display Area */}
       {loading && products.length === 0 ? (
         viewMode === "grid" ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div
+            className={`grid ${
+              isSidebarCollapsed
+                ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+                : "grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+            } gap-4`}
+          >
             {[...Array(8)].map((_, i) => (
               <div
                 key={i}
-                className="aspect-[3/4] bg-white dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-800 animate-pulse p-4 flex flex-col justify-between"
+                className="aspect-[3/4] bg-card rounded-xl border border-border animate-pulse p-4 flex flex-col justify-between"
               >
-                <div className="aspect-square bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                <div className="aspect-square bg-muted rounded-lg" />
                 <div className="space-y-2 mt-4">
-                  <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-3/4" />
-                  <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-1/2" />
+                  <div className="h-4 bg-muted rounded w-3/4" />
+                  <div className="h-3 bg-muted rounded w-1/2" />
                 </div>
               </div>
             ))}
@@ -974,23 +1149,23 @@ export default function ProductsPage() {
             {[...Array(6)].map((_, i) => (
               <div
                 key={i}
-                className="flex items-center gap-4 p-3.5 bg-white dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-800 animate-pulse"
+                className="flex items-center gap-4 p-3.5 bg-card rounded-xl border border-border animate-pulse"
               >
-                <div className="w-16 h-16 bg-slate-200 dark:bg-slate-800 rounded-lg shrink-0" />
+                <div className="w-16 h-16 bg-muted rounded-lg shrink-0" />
                 <div className="flex-1 space-y-2 min-w-0">
-                  <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-2/3" />
-                  <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-1/3" />
+                  <div className="h-4 bg-muted rounded w-2/3" />
+                  <div className="h-3 bg-muted rounded w-1/3" />
                 </div>
                 <div className="hidden sm:flex items-center gap-3 shrink-0">
-                  <div className="h-5 w-16 bg-slate-200 dark:bg-slate-800 rounded" />
-                  <div className="h-8 w-24 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                  <div className="h-5 w-16 bg-muted rounded" />
+                  <div className="h-8 w-24 bg-muted rounded-lg" />
                 </div>
               </div>
             ))}
           </div>
         )
       ) : error ? (
-        <div className="py-16 text-center bg-white dark:bg-slate-900/40 rounded-xl border border-red-500/20 p-6">
+        <div className="py-16 text-center bg-card rounded-xl border border-red-500/20 p-6">
           <p className="text-sm font-semibold text-red-500 mb-3">{error}</p>
           <button
             onClick={() => fetchProducts(1, false)}
@@ -1005,14 +1180,14 @@ export default function ProductsPage() {
           debouncedSearch={debouncedSearch}
           debouncedBrand={debouncedBrand}
           platform={platform}
-          categoryFilter={categoryFilter}
+          categoryFilter={selectedNiches.join(", ") || categoryFilter}
           statusFilter={statusFilter}
           hideInactive={hideInactive}
           discoveryFilter={discoveryFilter}
           onClearSearch={() => { setSearchInput(""); setDebouncedSearch(""); setPage(1); }}
           onClearBrand={() => { setBrandInput(""); setDebouncedBrand(""); setPage(1); }}
           onClearPlatform={() => { setPlatform("all"); setPage(1); }}
-          onClearCategory={() => { setCategoryFilter("all"); setPage(1); }}
+          onClearCategory={() => { setSelectedNiches([]); setSelectedSubNiches([]); setCategoryFilter("all"); setPage(1); }}
           onClearStatus={() => { setStatusFilter("all"); setPage(1); }}
           onClearDiscovery={() => { setDiscoveryFilter("all"); setDiscoveryFrom(""); setDiscoveryTo(""); setPage(1); }}
           onClearHideInactive={() => { setHideInactive(false); setPage(1); }}
@@ -1022,7 +1197,13 @@ export default function ProductsPage() {
       ) : (
         <>
           {viewMode === "grid" ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div
+              className={`grid ${
+                isSidebarCollapsed
+                  ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+                  : "grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+              } gap-4`}
+            >
               {products.map((product) => (
                 <ProductCard
                   key={product.id}
@@ -1061,7 +1242,13 @@ export default function ProductsPage() {
           {/* Skeletons while fetching more items */}
           {isFetchingMore && (
             viewMode === "grid" ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 pt-2">
+              <div
+                className={`grid ${
+                  isSidebarCollapsed
+                    ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+                    : "grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                } gap-4 pt-2`}
+              >
                 {[...Array(4)].map((_, i) => (
                   <div
                     key={`skeleton-${i}`}
@@ -1145,6 +1332,87 @@ export default function ProductsPage() {
           </div>
         </>
       )}
+        </div>
+      </div>
+
+      {/* Mobile Slide-Over Filter Drawer */}
+      <MobileFilterDrawer
+        isOpen={isMobileDrawerOpen}
+        onClose={() => setIsMobileDrawerOpen(false)}
+        selectedNiches={selectedNiches}
+        onChangeNiches={(niches) => {
+          setSelectedNiches(niches);
+          setPage(1);
+        }}
+        selectedSubNiches={selectedSubNiches}
+        onChangeSubNiches={(subs) => {
+          setSelectedSubNiches(subs);
+          setPage(1);
+        }}
+        nicheCounts={stats.nicheCounts}
+        hideInactive={hideInactive}
+        onToggleHideInactive={() => {
+          setHideInactive((prev) => !prev);
+          setPage(1);
+        }}
+        smartPreset={smartPreset}
+        onSelectPreset={handleSelectPreset}
+        adLaunchFilter={adLaunchFilter}
+        onChangeAdLaunchFilter={(v) => {
+          setAdLaunchFilter(v);
+          setPage(1);
+        }}
+        adLaunchFrom={adLaunchFrom}
+        onChangeAdLaunchFrom={(v) => {
+          setAdLaunchFrom(v);
+          setPage(1);
+        }}
+        adLaunchTo={adLaunchTo}
+        onChangeAdLaunchTo={(v) => {
+          setAdLaunchTo(v);
+          setPage(1);
+        }}
+        stillRunningOnly={stillRunningOnly}
+        onToggleStillRunningOnly={() => {
+          setStillRunningOnly((prev) => !prev);
+          setPage(1);
+        }}
+        adLaunchLabels={adLaunchLabels}
+        discoveryFilter={discoveryFilter}
+        onChangeDiscoveryFilter={(v) => {
+          setDiscoveryFilter(v);
+          setPage(1);
+        }}
+        discoveryFrom={discoveryFrom}
+        onChangeDiscoveryFrom={(v) => {
+          setDiscoveryFrom(v);
+          setPage(1);
+        }}
+        discoveryTo={discoveryTo}
+        onChangeDiscoveryTo={(v) => {
+          setDiscoveryTo(v);
+          setPage(1);
+        }}
+        discoveryLabels={discoveryLabels}
+        platform={platform}
+        onChangePlatform={(v) => {
+          setPlatform(v);
+          setPage(1);
+        }}
+        platformCounts={stats.platforms}
+        brandInput={brandInput}
+        onChangeBrand={(v) => {
+          setBrandInput(v);
+          setPage(1);
+        }}
+        onClearBrand={() => {
+          setBrandInput("");
+          setDebouncedBrand("");
+          setPage(1);
+        }}
+        activeFilterCount={activeFilterCount}
+        onResetFilters={handleResetFilters}
+      />
 
       {/* Floating Back to Top Button */}
       {showBackToTop && (
