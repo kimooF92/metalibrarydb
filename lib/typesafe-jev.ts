@@ -139,6 +139,7 @@ function deriveSubCategory(title: string, category: ProductCategory): string {
       if (/chargeur|cable|câble|powerbank|شاحن/i.test(text)) return "Chargers & Power";
       if (/tablette|tablet|ipad|laptop|pc|طابليت/i.test(text)) return "Tablets & Computers";
       if (/camera|caméra|كاميرا|dashcam/i.test(text)) return "Cameras & Security";
+      if (/mizan|balance|ميزان/i.test(text)) return "Smart Scales & Gadgets";
       return "Gadgets & Accessories";
 
     case "Beauty, Health & Care":
@@ -147,22 +148,23 @@ function deriveSubCategory(title: string, category: ProductCategory): string {
       if (/cheveux|shampoing|lissante|sechoir|sèche-cheveux|شعر/i.test(text)) return "Hair Care & Styling";
       if (/creme|crème|serum|sérum|visage|peau|anti-rides|glow|بشرة|كريم/i.test(text)) return "Skincare & Face";
       if (/dent|dents|dentaire|blanchiment|hismile|أسنان/i.test(text)) return "Dental & Oral Care";
-      if (/pied|diabétique|diabete|diabex|douleur|مرهم|مرهم/i.test(text)) return "Health & Pain Relief";
+      if (/ongle|champignon|fongique|pied|diabétique|diabete|diabex|douleur|مرهم/i.test(text)) return "Foot & Nail Care";
       if (/massage|minceur|santé|مساج/i.test(text)) return "Health & Wellness";
       return "Personal Care & Beauty";
 
     case "Home, Kitchen & Living":
-      if (/air fryer|friteuse|mixeur|blender|hachoir|poele|poêle|marmite|مطبخ|خلاط/i.test(text))
+      if (/air fryer|friteuse|mixeur|blender|hachoir|poele|poêle|marmite|مطبخ|خلاط|رحاية/i.test(text))
         return "Kitchen & Cookware";
       if (/moustique|insecte|cafard|piège|piége|مصيدة|حشرات|ناموس/i.test(text)) return "Pest Control & Garden";
       if (/adhésif|adhesif|ruban|عازل|scellant|papier peint/i.test(text)) return "Home Repair & Improvement";
-      if (/nettoyeur|aspirateur|balai|mop|تنظيف/i.test(text)) return "Cleaning & Maintenance";
-      if (/lampe|led|coussin|tapis|drap|lit|déco|منزل/i.test(text)) return "Home Decor & Lighting";
+      if (/nettoyeur|aspirateur|balai|mop|تنظيف|plumeau|غبرة/i.test(text)) return "Cleaning & Maintenance";
+      if (/lampe|led|coussin|tapis|drap|lit|déco|منزل|mushaf|مصحف|حامل/i.test(text)) return "Home Decor & Lighting";
+      if (/olive|زيتون|مفارش/i.test(text)) return "Garden & Outdoor Living";
       return "Kitchen & Home Living";
 
     case "Fashion & Jewelry":
       if (/bague|collier|bracelet|bijoux|مجوهرات/i.test(text)) return "Jewelry & Accessories";
-      if (/chaussure|sneaker|basket|sandale|talons|حذاء/i.test(text)) return "Footwear & Shoes";
+      if (/chaussure|sneaker|basket|sandale|talons|حذاء|crocos/i.test(text)) return "Footwear & Shoes";
       if (/sac|sacoche|portefeuille|حقيبة/i.test(text)) return "Bags & Wallets";
       if (/gaine|waist trainer|corset|lingerie/i.test(text)) return "Shapewear & Underwear";
       return "Apparel & Fashion";
@@ -174,17 +176,21 @@ function deriveSubCategory(title: string, category: ProductCategory): string {
       return "Sports & Training";
 
     case "Kids, Baby & Toys":
+      if (/livre|livres|كتب|كتاب|تعليم|stylo|قلم|قراءة|scolaire|math|sciences/i.test(text)) return "Books & Learning Toys";
       if (/jouet|jeu|peluche|puzzle|ألعاب/i.test(text)) return "Toys & Games";
       if (/bebe|bébé|poussette|biberon|رضيع|أطفال/i.test(text)) return "Baby Essentials";
       return "Baby & Children";
 
     case "Automotive & Tools":
+      if (/volant|antivol|bloque/i.test(text)) return "Car Security & Protection";
+      if (/scratch|efface|خبوش|rayure/i.test(text)) return "Car Care & Maintenance";
+      if (/torche|كشاف|lampe torche/i.test(text)) return "Flashlights & Worklights";
+      if (/outils|cle|clé|tournevis|perceuse|visseuse|coffret|أدوات/i.test(text)) return "Tools & Hardware";
       if (/voiture|auto|moto|pneu|dashcam|سيارة/i.test(text)) return "Car Accessories";
-      if (/outils|cle|clé|tournevis|perceuse|visseuse|أدوات/i.test(text)) return "Tools & Hardware";
       return "Automotive & Tools";
 
     default:
-      return "General Merchandise";
+      return "General & Essentials";
   }
 }
 
@@ -194,7 +200,13 @@ function deriveSubCategory(title: string, category: ProductCategory): string {
  */
 export async function classifyProductWithJev(
   productTitle: string,
-  extraContext?: { domain?: string | null; brandName?: string | null; adText?: string | null }
+  extraContext?: {
+    domain?: string | null;
+    brandName?: string | null;
+    adText?: string | null;
+    url?: string | null;
+    allowGeneral?: boolean;
+  }
 ): Promise<JevProductResult | null> {
   const cleanTitle = (productTitle || "").trim();
   if (!cleanTitle || cleanTitle.length < 2) {
@@ -205,32 +217,62 @@ export async function classifyProductWithJev(
   const statePayload: Record<string, string> = {
     title: cleanTitle.slice(0, 90),
   };
+
+  // URL path slug inference for products with vague store/promo titles
+  let slugHint = "";
+  if (extraContext?.url) {
+    try {
+      const parsedUrl = new URL(
+        extraContext.url.startsWith("http") ? extraContext.url : `https://${extraContext.url}`
+      );
+      const rawPath = parsedUrl.pathname
+        .replace(/^\/(?:products?|product|p|detail|items?)\//i, "")
+        .replace(/[-_/]/g, " ")
+        .trim();
+      if (rawPath && rawPath.length > 2 && !/^\d+$/.test(rawPath)) {
+        slugHint = decodeURIComponent(rawPath).slice(0, 70);
+        statePayload.slug = slugHint;
+      }
+    } catch {
+      // ignore url parse error
+    }
+  }
+
+  if (extraContext?.adText) {
+    statePayload.adSnippet = extraContext.adText.slice(0, 90);
+  }
   if (extraContext?.domain) {
     statePayload.domain = extraContext.domain.slice(0, 30);
   }
 
   // 2. Fast offline audience inference to save input tokens if unambiguous
   let resolvedAudience: "unisex" | "men" | "women" | "kids" | null = null;
-  const lower = cleanTitle.toLowerCase();
-  if (/(?:homme|men|beard|barbe|rasoir)/i.test(lower)) resolvedAudience = "men";
-  else if (/(?:femme|women|robe|jupe|dentelle|maquillage|lingerie)/i.test(lower)) resolvedAudience = "women";
-  else if (/(?:bebe|bébé|enfant|enfants|kids|baby|jouet)/i.test(lower)) resolvedAudience = "kids";
+  const combinedText = `${cleanTitle} ${slugHint}`.toLowerCase();
+  if (/(?:homme|men|beard|barbe|rasoir)/i.test(combinedText)) resolvedAudience = "men";
+  else if (/(?:femme|women|robe|jupe|dentelle|maquillage|lingerie)/i.test(combinedText)) resolvedAudience = "women";
+  else if (/(?:bebe|bébé|enfant|enfants|kids|baby|jouet|livre|livres|كتب|طفل|أطفال)/i.test(combinedText)) resolvedAudience = "kids";
 
   // 3. Compact criteria definitions to minimize input token billing
+  const criteria: Record<string, string> = {
+    "Electronics & Tech": "Gadgets, audio, phones, electronics, chargers, smartwatches, scales",
+    "Beauty, Health & Care": "Cosmetics, skincare, hair, wellness, pain relief, health, medical, dental, nails, feet, fungus, champignons",
+    "Home, Kitchen & Living": "Kitchen, appliances, decor, pest control, cleaning, household, furniture, garden, duster, Quran stand, tarps",
+    "Fashion & Jewelry": "Clothing, shoes, crocos, clogs, bags, jewelry, accessories, apparel, watches",
+    "Sports, Fitness & Outdoor": "Fitness, gym, workout, knee brace, outdoor, sports",
+    "Kids, Baby & Toys": "Toys, baby items, games, educational books, magic pen, stylo, kids clothing, children",
+    "Automotive & Tools": "Car accessories, tools, hardware, DIY repair, scratch remover, steering lock, flashlights, safe box",
+  };
+
+  // Only allow General & Other if explicitly requested
+  if (extraContext?.allowGeneral === true) {
+    criteria["General & Other"] = "General miscellaneous";
+  }
+
   const questions: Record<string, JevQuestion> = {
     category: {
       type: "choice",
-      instructions: "Product category",
-      criteria: {
-        "Electronics & Tech": "Gadgets, audio, phones, electronics, chargers",
-        "Beauty, Health & Care": "Cosmetics, skincare, hair, wellness, pain relief, health, medical, dental",
-        "Home, Kitchen & Living": "Kitchen, appliances, decor, pest control, cleaning, household, adhesive",
-        "Fashion & Jewelry": "Clothing, shoes, bags, jewelry, accessories, apparel",
-        "Sports, Fitness & Outdoor": "Fitness, gym, workout, knee brace, outdoor, sports",
-        "Kids, Baby & Toys": "Toys, baby items, games",
-        "Automotive & Tools": "Car accessories, tools, hardware, DIY repair",
-        "General & Other": "General merchandise, miscellaneous",
-      },
+      instructions: "Assign the product to exactly one valid niche",
+      criteria,
     },
   };
 
@@ -283,7 +325,8 @@ export async function classifyProductWithJev(
       ? (audienceAnswer!.choice.toLowerCase() as "unisex" | "men" | "women" | "kids")
       : "unisex");
 
-  const subCategory = deriveSubCategory(cleanTitle, matchedCategory);
+  const contextForSubCategory = `${cleanTitle} ${slugHint} ${extraContext?.adText ? extraContext.adText.slice(0, 50) : ""}`.trim();
+  const subCategory = deriveSubCategory(contextForSubCategory, matchedCategory);
 
   return {
     category: matchedCategory,

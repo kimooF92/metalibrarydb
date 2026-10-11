@@ -2,13 +2,16 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
 import { db, client } from "../db";
-import { scrapedProducts } from "../db/schema";
-import { isNull, desc, eq, or, sql } from "drizzle-orm";
+import { scrapedProducts, ads } from "../db/schema";
+import { isNull, desc, eq, or, sql, and } from "drizzle-orm";
 import { classifyProductWithAI } from "../lib/product-classifier";
+import { classifyProductWithJev } from "../lib/typesafe-jev";
 
 interface BackfillOptions {
   forceAll: boolean;
   generalOnly: boolean;
+  activeOnly: boolean;
+  useJev: boolean;
   limit?: number;
   concurrency: number;
 }
@@ -18,6 +21,8 @@ function parseArgs(): BackfillOptions {
   const options: BackfillOptions = {
     forceAll: false,
     generalOnly: false,
+    activeOnly: false,
+    useJev: false,
     concurrency: 4,
   };
 
@@ -27,6 +32,10 @@ function parseArgs(): BackfillOptions {
       options.forceAll = true;
     } else if (arg === "--general" || arg === "-g") {
       options.generalOnly = true;
+    } else if (arg === "--active" || arg === "-a") {
+      options.activeOnly = true;
+    } else if (arg === "--jev" || arg === "-j") {
+      options.useJev = true;
     } else if (arg === "--limit" || arg === "-l") {
       const val = parseInt(args[i + 1], 10);
       if (!isNaN(val)) {
@@ -63,23 +72,42 @@ async function backfillCategories() {
     })
     .from(scrapedProducts);
 
+  const conditions: any[] = [];
+
+  // Scraped products must have a title
+  conditions.push(sql`${scrapedProducts.title} IS NOT NULL AND ${scrapedProducts.title} != ''`);
+
+  if (options.activeOnly) {
+    conditions.push(sql`${scrapedProducts.scrapeStatus} NOT IN ('failed', 'deleted', 'ignored')`);
+    conditions.push(
+      sql`EXISTS (
+        SELECT 1 FROM ${ads}
+        WHERE ${ads.productId} = ${scrapedProducts.id}
+        AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
+      )`
+    );
+  }
+
   if (options.forceAll) {
-    // Re-classify all products with titles
-    query = query.where(sql`${scrapedProducts.title} IS NOT NULL AND ${scrapedProducts.title} != ''`) as any;
+    // Re-classify all
   } else if (options.generalOnly) {
-    // Re-classify items that are uncategorized or marked as General & Other
-    query = query.where(
+    conditions.push(
       or(
         isNull(scrapedProducts.category),
         eq(scrapedProducts.category, ""),
-        eq(scrapedProducts.category, "General & Other")
+        eq(scrapedProducts.category, "General & Other"),
+        sql`LOWER(${scrapedProducts.category}) LIKE '%general%'`,
+        sql`LOWER(${scrapedProducts.category}) = 'uncategorized'`
       )
-    ) as any;
+    );
   } else {
-    query = query.where(or(isNull(scrapedProducts.category), eq(scrapedProducts.category, ""))) as any;
+    conditions.push(or(isNull(scrapedProducts.category), eq(scrapedProducts.category, "")));
   }
 
-  const items = await query.orderBy(desc(scrapedProducts.createdAt)).limit(options.limit || 5000);
+  const items = await query
+    .where(and(...conditions))
+    .orderBy(desc(scrapedProducts.createdAt))
+    .limit(options.limit || 5000);
 
   console.log(`Found ${items.length} products to process.\n`);
 
@@ -102,9 +130,14 @@ async function backfillCategories() {
 
       const idx = ++completed;
       try {
-        const result = await classifyProductWithAI(item.title, {
-          domain: item.domain,
-        });
+        const result = options.useJev
+          ? await classifyProductWithJev(item.title, { domain: item.domain })
+          : await classifyProductWithAI(item.title, { domain: item.domain });
+
+        if (!result || !result.category) {
+          console.warn(`[${idx}/${items.length}] ⚠️ No classification returned for "${item.title.slice(0, 40)}"`);
+          continue;
+        }
 
         await db
           .update(scrapedProducts)
