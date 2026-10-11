@@ -391,36 +391,80 @@ export function ProductsSidebarFilters({
           {openSections.longevity && (
             <div className="p-2.5 pt-1 border-t border-border/40 space-y-3">
               {/* Ad Launch Date Filter */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                  Ad Launch Window
-                </label>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Ad Launch Window
+                  </label>
+                  {adLaunchFilter !== "all" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onChangeAdLaunchFilter("all");
+                        onChangeAdLaunchFrom("");
+                        onChangeAdLaunchTo("");
+                      }}
+                      className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+
                 <div className="space-y-1">
                   {[
-                    { id: "all", label: "All Time" },
-                    { id: "last_7d", label: "Last 7 Days" },
-                    { id: "last_14d", label: "Last 14 Days" },
-                    { id: "last_30d", label: "Last 30 Days" },
-                    { id: "last_60d", label: "Last 60 Days" },
-                    { id: "last_90d", label: "90+ Days (Evergreen)" },
+                    { id: "all", label: "All Launches" },
+                    { id: "7d", label: "🚀 7+ Days Running" },
+                    { id: "15d", label: "🔥 15+ Days Running" },
+                    { id: "21d", label: "⭐ 21+ Days Running" },
+                    { id: "30d", label: "🏆 1 Month+ (Evergreen)" },
+                    { id: "custom", label: "📅 Custom Date Range..." },
                   ].map((opt) => (
                     <button
                       key={opt.id}
                       type="button"
                       onClick={() => onChangeAdLaunchFilter(opt.id)}
-                      className={`w-full flex items-center justify-between px-2 py-1 rounded-md text-[11px] font-medium cursor-pointer transition-colors ${
+                      className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
                         adLaunchFilter === opt.id
-                          ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold"
+                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold"
                           : "hover:bg-accent text-muted-foreground hover:text-foreground"
                       }`}
                     >
                       <span>{opt.label}</span>
                       {adLaunchFilter === opt.id && (
-                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                       )}
                     </button>
                   ))}
                 </div>
+
+                {/* Custom Date Range Picker for Ad Launch */}
+                {adLaunchFilter === "custom" && (
+                  <div className="p-2.5 rounded-lg bg-card border border-amber-500/30 space-y-2 mt-1.5 shadow-2xs animate-in fade-in duration-150">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                        Launched From
+                      </span>
+                      <input
+                        type="date"
+                        value={adLaunchFrom}
+                        onChange={(e) => onChangeAdLaunchFrom(e.target.value)}
+                        className="w-full bg-background text-foreground text-xs rounded-md px-2.5 py-1.5 border border-border focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer font-medium"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                        Launched To
+                      </span>
+                      <input
+                        type="date"
+                        value={adLaunchTo}
+                        onChange={(e) => onChangeAdLaunchTo(e.target.value)}
+                        className="w-full bg-background text-foreground text-xs rounded-md px-2.5 py-1.5 border border-border focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer font-medium"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Still Running Switch */}
@@ -437,31 +481,76 @@ export function ProductsSidebarFilters({
               </div>
 
               {/* Discovery Date Range */}
-              <div className="space-y-1 pt-1 border-t border-border/40">
-                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                  First Seen Discovery
-                </label>
+              <div className="space-y-1.5 pt-1.5 border-t border-border/40">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                    First Seen Discovery
+                  </label>
+                  {discoveryFilter !== "all" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onChangeDiscoveryFilter("all");
+                        onChangeDiscoveryFrom("");
+                        onChangeDiscoveryTo("");
+                      }}
+                      className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-2 gap-1">
                   {[
                     { id: "all", label: "Any Time" },
                     { id: "today", label: "Today" },
                     { id: "last_7d", label: "7 Days" },
                     { id: "last_30d", label: "30 Days" },
+                    { id: "custom", label: "Custom Range..." },
                   ].map((opt) => (
                     <button
                       key={opt.id}
                       type="button"
                       onClick={() => onChangeDiscoveryFilter(opt.id)}
-                      className={`p-1 rounded-md text-[10px] font-medium text-center border cursor-pointer transition-colors ${
+                      className={`p-1.5 rounded-md text-[11px] font-medium text-center border cursor-pointer transition-colors ${
                         discoveryFilter === opt.id
-                          ? "bg-indigo-600 text-white border-indigo-600"
-                          : "border-border hover:bg-accent text-muted-foreground"
-                      }`}
+                          ? "bg-indigo-600 text-white border-indigo-600 font-bold"
+                          : "border-border hover:bg-accent text-muted-foreground hover:text-foreground"
+                      } ${opt.id === "custom" ? "col-span-2" : ""}`}
                     >
                       {opt.label}
                     </button>
                   ))}
                 </div>
+
+                {/* Custom Date Range Picker for Discovery */}
+                {discoveryFilter === "custom" && (
+                  <div className="p-2.5 rounded-lg bg-card border border-indigo-500/30 space-y-2 mt-1.5 shadow-2xs animate-in fade-in duration-150">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                        Discovered From
+                      </span>
+                      <input
+                        type="date"
+                        value={discoveryFrom}
+                        onChange={(e) => onChangeDiscoveryFrom(e.target.value)}
+                        className="w-full bg-background text-foreground text-xs rounded-md px-2.5 py-1.5 border border-border focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer font-medium"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                        Discovered To
+                      </span>
+                      <input
+                        type="date"
+                        value={discoveryTo}
+                        onChange={(e) => onChangeDiscoveryTo(e.target.value)}
+                        className="w-full bg-background text-foreground text-xs rounded-md px-2.5 py-1.5 border border-border focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer font-medium"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

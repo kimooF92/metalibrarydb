@@ -997,6 +997,10 @@ export default function ProductsPage() {
           adLaunchFilter={adLaunchFilter}
           onChangeAdLaunchFilter={(v) => {
             setAdLaunchFilter(v);
+            if (v === "all") {
+              setAdLaunchFrom("");
+              setAdLaunchTo("");
+            }
             setPage(1);
           }}
           adLaunchFrom={adLaunchFrom}
@@ -1018,6 +1022,10 @@ export default function ProductsPage() {
           discoveryFilter={discoveryFilter}
           onChangeDiscoveryFilter={(v) => {
             setDiscoveryFilter(v);
+            if (v === "all") {
+              setDiscoveryFrom("");
+              setDiscoveryTo("");
+            }
             setPage(1);
           }}
           discoveryFrom={discoveryFrom}
@@ -1171,12 +1179,20 @@ export default function ProductsPage() {
           discoveryFilter={discoveryFilter}
           onChangeDiscoveryFilter={(v) => {
             setDiscoveryFilter(v);
+            if (v === "all") {
+              setDiscoveryFrom("");
+              setDiscoveryTo("");
+            }
             setPage(1);
           }}
           discoveryLabels={discoveryLabels}
           adLaunchFilter={adLaunchFilter}
           onChangeAdLaunchFilter={(v) => {
             setAdLaunchFilter(v);
+            if (v === "all") {
+              setAdLaunchFrom("");
+              setAdLaunchTo("");
+            }
             setPage(1);
           }}
           adLaunchLabels={adLaunchLabels}
