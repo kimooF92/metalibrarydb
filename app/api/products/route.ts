@@ -223,36 +223,42 @@ export async function GET(req: NextRequest) {
     }
 
     // Ad Launch Date / Winner Longevity Filters (7d+, 15d+, 21d+, 30d+, custom)
-    if (adLaunch === "7d") {
+    const stillRunningClause = stillRunning ? sql` AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)` : sql``;
+
+    if (adLaunch === "7d" || adLaunch === "last_7d") {
       conditions.push(
         sql`EXISTS (
           SELECT 1 FROM ${ads}
           WHERE ${ads.productId} = ${scrapedProducts.id}
           AND COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) <= NOW() - INTERVAL '7 days'
+          ${stillRunningClause}
         )`
       );
-    } else if (adLaunch === "15d") {
+    } else if (adLaunch === "15d" || adLaunch === "14d" || adLaunch === "last_15d" || adLaunch === "last_14d") {
       conditions.push(
         sql`EXISTS (
           SELECT 1 FROM ${ads}
           WHERE ${ads.productId} = ${scrapedProducts.id}
-          AND COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) <= NOW() - INTERVAL '15 days'
+          AND COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) <= NOW() - INTERVAL '14 days'
+          ${stillRunningClause}
         )`
       );
-    } else if (adLaunch === "21d") {
+    } else if (adLaunch === "21d" || adLaunch === "last_21d") {
       conditions.push(
         sql`EXISTS (
           SELECT 1 FROM ${ads}
           WHERE ${ads.productId} = ${scrapedProducts.id}
           AND COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) <= NOW() - INTERVAL '21 days'
+          ${stillRunningClause}
         )`
       );
-    } else if (adLaunch === "30d" || adLaunch === "month" || adLaunch === "1m") {
+    } else if (adLaunch === "30d" || adLaunch === "last_30d" || adLaunch === "month" || adLaunch === "1m") {
       conditions.push(
         sql`EXISTS (
           SELECT 1 FROM ${ads}
           WHERE ${ads.productId} = ${scrapedProducts.id}
           AND COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) <= NOW() - INTERVAL '30 days'
+          ${stillRunningClause}
         )`
       );
     } else if (adLaunch === "custom" || (!adLaunch && (adLaunchFrom || adLaunchTo))) {
@@ -266,6 +272,9 @@ export async function GET(req: NextRequest) {
         launchConditions.push(
           sql`COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) < (${adLaunchTo.trim() + " 00:00:00"}::timestamptz + INTERVAL '1 day')`
         );
+      }
+      if (stillRunning) {
+        launchConditions.push(sql`(${ads.isArchived} = false OR ${ads.isArchived} IS NULL)`);
       }
       if (launchConditions.length > 0) {
         conditions.push(

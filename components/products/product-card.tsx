@@ -383,13 +383,26 @@ export const ProductCard = memo(function ProductCard({
             })()}
           </div>
 
-          {product.createdAt && (
+          {/* Date Badge: Prioritize actual Ad Launch Date if available, fallback to Discovery Date */}
+          {(product.earliestAdDate || product.createdAt) && (
             <span
               className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/80 px-2 py-0.5 rounded-md inline-flex items-center gap-1 shrink-0 select-none border border-slate-200/60 dark:border-slate-700/60"
-              title={formatDiscoveryLabel(product.createdAt)}
+              title={
+                product.earliestAdDate
+                  ? `First Ad Launched: ${formatDate(product.earliestAdDate)} (${product.daysRunning || 1}d running) • Discovered: ${formatDate(product.createdAt)}`
+                  : formatDiscoveryLabel(product.createdAt)
+              }
             >
-              <Calendar className="w-3 h-3 text-slate-400" />
-              <span>{formatDiscoveryDate(product.createdAt)}</span>
+              {product.earliestAdDate ? (
+                <Rocket className="w-3 h-3 text-amber-500" />
+              ) : (
+                <Calendar className="w-3 h-3 text-slate-400" />
+              )}
+              <span>
+                {product.earliestAdDate
+                  ? `Launched ${formatDiscoveryDate(product.earliestAdDate)}`
+                  : formatDiscoveryDate(product.createdAt)}
+              </span>
             </span>
           )}
         </div>
