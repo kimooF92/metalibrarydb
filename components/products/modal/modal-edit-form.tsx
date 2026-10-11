@@ -179,14 +179,7 @@ export const ModalEditForm = forwardRef<ModalEditFormHandle, ModalEditFormProps>
   };
 
   return (
-    <form
-      id="product-edit-form"
-      onSubmit={(e) => {
-        e.preventDefault();
-        handleSaveEdit();
-      }}
-      className="space-y-5"
-    >
+    <div className="space-y-5">
       {/* Section 1: Brand & Meta Ad Library Tracking */}
       <div className="p-4 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-800/80 space-y-3">
         <div className="flex items-center justify-between">
@@ -546,6 +539,6 @@ export const ModalEditForm = forwardRef<ModalEditFormHandle, ModalEditFormProps>
           <span>{isSavingEdit ? "Saving Changes..." : "Save Product Details"}</span>
         </button>
       </div>
-    </form>
+    </div>
   );
 });

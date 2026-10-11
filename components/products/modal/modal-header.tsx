@@ -248,8 +248,13 @@ export function ModalHeader({
         {isEditMode ? (
           <>
             <button
+              key="modal-header-cancel-btn"
               type="button"
-              onClick={onCancelEdit}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onCancelEdit?.();
+              }}
               disabled={isSavingEdit}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
             >
@@ -257,13 +262,12 @@ export function ModalHeader({
               <span>Cancel</span>
             </button>
             <button
-              type="submit"
-              form="product-edit-form"
+              key="modal-header-save-btn"
+              type="button"
               onClick={(e) => {
-                if (onSaveEdit) {
-                  e.preventDefault();
-                  onSaveEdit();
-                }
+                e.preventDefault();
+                e.stopPropagation();
+                onSaveEdit?.();
               }}
               disabled={isSavingEdit}
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-sm transition-all cursor-pointer disabled:opacity-50"
@@ -280,7 +284,7 @@ export function ModalHeader({
           <>
             {/* Sequential Product Navigation Indicator & Controls */}
             {totalCount > 1 && currentIndex >= 0 && (
-              <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800/90 rounded-lg p-0.5 border border-slate-200 dark:border-slate-700/80 shrink-0 mr-1">
+              <div key="modal-header-nav-group" className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800/90 rounded-lg p-0.5 border border-slate-200 dark:border-slate-700/80 shrink-0 mr-1">
                 <button
                   type="button"
                   onClick={onNavigatePrev}
@@ -310,8 +314,13 @@ export function ModalHeader({
 
             {/* Edit Icon-only Button */}
             <button
+              key="modal-header-edit-btn"
               type="button"
-              onClick={onStartEdit}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onStartEdit();
+              }}
               className="p-1.5 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xs transition-all cursor-pointer"
               title="Edit Product Details, Prices, Links & Taxonomy"
             >
