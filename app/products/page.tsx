@@ -1149,7 +1149,6 @@ export default function ProductsPage() {
           activeFilterCount={activeFilterCount}
           isSidebarCollapsed={isSidebarCollapsed}
           onToggleSidebar={handleToggleSecondSidebar}
-          onOpenAddProduct={() => setIsAddProductModalOpen(true)}
           selectedNiches={selectedNiches}
           onRemoveNiche={(niche) => {
             setSelectedNiches((prev) => prev.filter((x) => x !== niche));

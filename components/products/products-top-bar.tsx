@@ -7,7 +7,6 @@ import {
   SlidersHorizontal,
   LayoutGrid,
   LayoutList,
-  PlusCircle,
   Sparkles,
   Flame,
   TrendingUp,
@@ -44,9 +43,6 @@ export interface ProductsTopBarProps {
   activeFilterCount: number;
   isSidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
-
-  // Add Product CTA
-  onOpenAddProduct?: () => void;
 
   // Filter values for Chips Row
   selectedNiches: string[];
@@ -85,7 +81,6 @@ export function ProductsTopBar({
   activeFilterCount,
   isSidebarCollapsed,
   onToggleSidebar,
-  onOpenAddProduct,
   selectedNiches,
   onRemoveNiche,
   selectedSubNiches,
@@ -258,19 +253,6 @@ export function ProductsTopBar({
               <LayoutList className="w-3.5 h-3.5" />
             </button>
           </div>
-
-          {/* Add Product CTA */}
-          {onOpenAddProduct && (
-            <button
-              type="button"
-              onClick={onOpenAddProduct}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-              title="Add a new product"
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              <span>Add Product</span>
-            </button>
-          )}
         </div>
       </div>
 
