@@ -13,6 +13,7 @@ import {
 } from "@/lib/network-extractor";
 import { formatPrice, formatDelivery } from "@/lib/format-price";
 import { validateProductWithGatekeeper } from "@/lib/typesafe-jev";
+import { detectExtractionDoubt, resolvePriceDoubtWithJev } from "@/lib/doubt-detector";
 
 // In-flight URL scrape deduplication map to prevent redundant concurrent Firecrawl requests
 const inFlightScrapes = new Map<string, Promise<any>>();
@@ -387,6 +388,36 @@ export async function linkAndAutoScrapeProduct({
           }));
 
           const effectiveCurrency = extracted.currency || fallbackCurrency;
+
+          // 0-Cost Anomaly / Doubt Detector: triggers Jev referee ONLY on suspicious prices
+          const doubt = detectExtractionDoubt({
+            title: extracted.title,
+            currentPrice: extracted.current_price,
+            url: finalEffectiveUrl,
+          });
+
+          if (doubt.hasDoubt && doubt.needsPriceReferee) {
+            console.log(`[Auto-Scraper] Doubt flagged on "${extracted.title}": ${doubt.reasons.join(", ")}`);
+            try {
+              const resolved = await resolvePriceDoubtWithJev({
+                productTitle: extracted.title,
+                extractedPrice: extracted.current_price,
+                html: rawHtml,
+                markdown: extractionResult.raw?.markdown,
+                fallbackCurrencySymbol,
+              });
+
+              if (resolved?.resolvedPrice) {
+                console.log(
+                  `[Auto-Scraper Jev Referee] Corrected price from "${extracted.current_price}" -> "${resolved.resolvedPrice}" (${(resolved.confidence * 100).toFixed(0)}% conf)`
+                );
+                extracted.current_price = resolved.resolvedPrice;
+              }
+            } catch (err: any) {
+              console.warn("[Auto-Scraper Jev Referee] Price resolution skipped:", err?.message || err);
+            }
+          }
+
           const effectivePrice = formatPrice(extracted.current_price, fallbackCurrencySymbol);
           const effectiveOriginalPrice = extracted.original_price
             ? formatPrice(extracted.original_price, fallbackCurrencySymbol)
