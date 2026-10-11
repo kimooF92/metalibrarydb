@@ -27,6 +27,11 @@ interface CachedStats {
       youcan: number;
       woocommerce: number;
     };
+    nicheCounts: {
+      category: string;
+      subCategory: string | null;
+      count: number;
+    }[];
   };
   timestamp: number;
 }
@@ -61,8 +66,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Execute the two summary queries in parallel scoped to active workspace
-    const [productStatsRows, activeAdsStatsRows] = await Promise.all([
+    // Execute summary queries in parallel scoped to active workspace
+    const [productStatsRows, activeAdsStatsRows, nicheCountRows] = await Promise.all([
       db
         .select({
           total: count(),
@@ -100,6 +105,22 @@ export async function GET(req: NextRequest) {
             eq(scrapedProducts.workspaceId, activeWorkspace.id)
           )
         ),
+
+      db
+        .select({
+          category: scrapedProducts.category,
+          subCategory: scrapedProducts.subCategory,
+          count: count(),
+        })
+        .from(scrapedProducts)
+        .where(
+          and(
+            sql`${scrapedProducts.scrapeStatus} NOT IN ('deleted', 'ignored')`,
+            eq(scrapedProducts.workspaceId, activeWorkspace.id),
+            sql`${scrapedProducts.category} IS NOT NULL AND ${scrapedProducts.category} != ''`
+          )
+        )
+        .groupBy(scrapedProducts.category, scrapedProducts.subCategory),
     ]);
 
     const baseStats = productStatsRows[0] || ({} as any);
@@ -122,6 +143,11 @@ export async function GET(req: NextRequest) {
         youcan: Number(baseStats.youcanCount) || 0,
         woocommerce: Number(baseStats.woocommerceCount) || 0,
       },
+      nicheCounts: (nicheCountRows || []).map((r) => ({
+        category: r.category || "General & Other",
+        subCategory: r.subCategory || null,
+        count: Number(r.count) || 0,
+      })),
     };
 
     cachedStatsMap.set(activeWorkspace.id, {

@@ -5,6 +5,7 @@ import { eq, ilike, and, sql, desc, asc, or, count, inArray, isNull } from "driz
 import { validateApiSecret } from "@/lib/api-guard";
 import { PRIVATE_AUTH_VARY, PRIVATE_DETAIL_CACHE_CONTROL, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
+import { NICHE_TAXONOMY, resolveSubNicheDbValues } from "@/lib/niches-taxonomy";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -103,18 +104,57 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Filter by category
-    if (category && category !== "all") {
-      if (category === "General & Other" || category === "other") {
-        conditions.push(
+    // Filter by category / niche (supports single or comma-separated multi-select)
+    const categoryParam = searchParams.get("category") || searchParams.get("niche");
+    if (categoryParam && categoryParam !== "all") {
+      const rawCategories = categoryParam.split(",").map((c) => c.trim()).filter(Boolean);
+      const mappedCategories = rawCategories.map((raw) => {
+        const found = NICHE_TAXONOMY.find((n) => n.id === raw || n.dbCategory.toLowerCase() === raw.toLowerCase());
+        return found ? found.dbCategory : raw;
+      });
+
+      const includesGeneral = mappedCategories.some(
+        (c) => c === "General & Other" || c.toLowerCase() === "other" || c === "general-seasonal"
+      );
+      const standardCategories = mappedCategories.filter(
+        (c) => c !== "General & Other" && c.toLowerCase() !== "other" && c !== "general-seasonal"
+      );
+
+      const categoryConditions: any[] = [];
+      if (standardCategories.length === 1) {
+        categoryConditions.push(eq(scrapedProducts.category, standardCategories[0]));
+      } else if (standardCategories.length > 1) {
+        categoryConditions.push(inArray(scrapedProducts.category, standardCategories));
+      }
+
+      if (includesGeneral) {
+        categoryConditions.push(
           or(
             eq(scrapedProducts.category, "General & Other"),
             isNull(scrapedProducts.category),
             eq(scrapedProducts.category, "")
           )
         );
-      } else {
-        conditions.push(eq(scrapedProducts.category, category));
+      }
+
+      if (categoryConditions.length === 1) {
+        conditions.push(categoryConditions[0]);
+      } else if (categoryConditions.length > 1) {
+        conditions.push(or(...categoryConditions));
+      }
+    }
+
+    // Filter by sub-category / sub-niche (supports single or comma-separated multi-select)
+    const subCategoryParam = searchParams.get("subCategory") || searchParams.get("subNiche");
+    if (subCategoryParam && subCategoryParam !== "all") {
+      const rawSubCategories = subCategoryParam.split(",").map((s) => s.trim()).filter(Boolean);
+      const resolvedDbValues = Array.from(
+        new Set(rawSubCategories.flatMap((raw) => resolveSubNicheDbValues(raw)))
+      );
+      if (resolvedDbValues.length === 1) {
+        conditions.push(eq(scrapedProducts.subCategory, resolvedDbValues[0]));
+      } else if (resolvedDbValues.length > 1) {
+        conditions.push(inArray(scrapedProducts.subCategory, resolvedDbValues));
       }
     }
 
