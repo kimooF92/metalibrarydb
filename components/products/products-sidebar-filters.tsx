@@ -156,7 +156,7 @@ export function ProductsSidebarFilters({
   if (isCollapsed) {
     return (
       <aside
-        className={`w-12 bg-card border border-border rounded-xl p-2 flex flex-col items-center gap-3 shadow-xs shrink-0 select-none ${className}`}
+        className={`w-14 h-full bg-card border-r border-border p-2 flex flex-col items-center gap-3 shrink-0 select-none z-10 ${className}`}
       >
         <button
           type="button"
@@ -192,10 +192,10 @@ export function ProductsSidebarFilters({
 
   return (
     <aside
-      className={`w-72 bg-card border border-border rounded-xl shadow-xs shrink-0 flex flex-col max-h-[calc(100vh-2rem)] sticky top-4 select-none ${className}`}
+      className={`w-72 h-full bg-card border-r border-border shrink-0 flex flex-col select-none z-10 ${className}`}
     >
       {/* Sidebar Header */}
-      <div className="p-3.5 border-b border-border flex items-center justify-between shrink-0 bg-card/60 backdrop-blur-xs rounded-t-xl">
+      <div className="p-3.5 border-b border-border flex items-center justify-between shrink-0 bg-card">
         <div className="flex items-center gap-2">
           <div className="p-1.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
             <Filter className="w-3.5 h-3.5" />

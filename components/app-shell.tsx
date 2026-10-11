@@ -19,6 +19,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return <div className="h-full w-full bg-background overflow-y-auto flex flex-col">{children}</div>;
   }
 
+  const isProductsPage = pathname.startsWith("/products");
+
   return (
     <WorkspaceProvider>
       <SidebarProvider>
@@ -27,7 +29,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex-1 min-w-0 h-full flex flex-col overflow-hidden bg-background">
             <TopBar />
             <SmallPagesScanBanner />
-            <main className="flex-1 min-w-0 overflow-y-auto flex flex-col p-4 md:px-6 md:py-5 bg-background">
+            <main
+              className={`flex-1 min-w-0 flex flex-col bg-background ${
+                isProductsPage ? "h-full overflow-hidden p-0" : "overflow-y-auto p-4 md:px-6 md:py-5"
+              }`}
+            >
               {children}
             </main>
           </div>

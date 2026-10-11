@@ -17,6 +17,7 @@ import { ProductsEmptyState } from "@/components/products/products-empty-state";
 import { resolveProductForRefresh } from "@/lib/product-extraction";
 import { useToast } from "@/components/toast-context";
 import { useWorkspace } from "@/components/workspace-context";
+import { useSidebar } from "@/components/sidebar-context";
 import {
   ShoppingBag,
   RotateCw,
@@ -42,6 +43,12 @@ export default function ProductsPage() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
+
+  // Dual-sidebar coordination (Main navigation sidebar <-> Second filters sidebar)
+  const { isCollapsed: isMainSidebarCollapsed, setCollapsed: setMainSidebarCollapsed } = useSidebar();
+  const initialMainCollapsedRef = useRef<boolean | null>(null);
+  const prevMainCollapsedRef = useRef<boolean>(isMainSidebarCollapsed);
+  const contentScrollRef = useRef<HTMLDivElement | null>(null);
 
   // Filters & Pagination
   const [searchInput, setSearchInput] = useState("");
@@ -244,6 +251,63 @@ export default function ProductsPage() {
       }
     }
   }, []);
+
+  // Coordinate main navigation sidebar collapse with the second filters sidebar
+  useEffect(() => {
+    if (initialMainCollapsedRef.current === null) {
+      initialMainCollapsedRef.current = isMainSidebarCollapsed;
+    }
+
+    let secondIsCollapsed = false;
+    try {
+      secondIsCollapsed = localStorage.getItem("products_sidebar_collapsed") === "true";
+    } catch {}
+
+    // When second sidebar is open on /products, collapse the main navigation sidebar
+    if (!secondIsCollapsed) {
+      setMainSidebarCollapsed(true);
+    }
+
+    return () => {
+      // When leaving /products, restore main navigation sidebar preference
+      if (initialMainCollapsedRef.current !== null) {
+        setMainSidebarCollapsed(initialMainCollapsedRef.current);
+      }
+    };
+  }, [setMainSidebarCollapsed]);
+
+  // Handler to toggle the second sidebar (filters sidebar)
+  const handleToggleSecondSidebar = useCallback(() => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("products_sidebar_collapsed", String(next));
+      } catch {}
+
+      if (!next) {
+        // Second sidebar opened -> collapse main sidebar
+        setMainSidebarCollapsed(true);
+      } else {
+        // Second sidebar collapsed -> expand main sidebar
+        setMainSidebarCollapsed(false);
+      }
+
+      return next;
+    });
+  }, [setMainSidebarCollapsed]);
+
+  // If user explicitly expands main sidebar while second sidebar is open, auto-collapse second sidebar
+  useEffect(() => {
+    if (prevMainCollapsedRef.current === true && isMainSidebarCollapsed === false) {
+      if (!isSidebarCollapsed) {
+        setIsSidebarCollapsed(true);
+        try {
+          localStorage.setItem("products_sidebar_collapsed", "true");
+        } catch {}
+      }
+    }
+    prevMainCollapsedRef.current = isMainSidebarCollapsed;
+  }, [isMainSidebarCollapsed, isSidebarCollapsed]);
 
   // Listen to browser Back / Forward history events to keep URL bar & modal state in sync
   useEffect(() => {
@@ -508,14 +572,14 @@ export default function ProductsPage() {
     fetchProducts(nextPage, true);
   };
 
-  // Scroll listener on main container for back-to-top button & auto-scroll fallback
+  // Scroll listener on content canvas for back-to-top button & auto-scroll fallback
   useEffect(() => {
-    const mainContainer = document.querySelector("main") || window;
+    const scrollContainer = contentScrollRef.current || document.querySelector("main") || window;
 
     const handleScroll = () => {
       const scrollPos =
-        mainContainer instanceof HTMLElement
-          ? mainContainer.scrollTop
+        scrollContainer instanceof HTMLElement
+          ? scrollContainer.scrollTop
           : window.scrollY || document.documentElement.scrollTop;
 
       setShowBackToTop(scrollPos > 350);
@@ -528,12 +592,12 @@ export default function ProductsPage() {
         autoLoadCount < 3
       ) {
         const scrollHeight =
-          mainContainer instanceof HTMLElement
-            ? mainContainer.scrollHeight
+          scrollContainer instanceof HTMLElement
+            ? scrollContainer.scrollHeight
             : document.documentElement.scrollHeight;
         const clientHeight =
-          mainContainer instanceof HTMLElement
-            ? mainContainer.clientHeight
+          scrollContainer instanceof HTMLElement
+            ? scrollContainer.clientHeight
             : window.innerHeight;
 
         if (scrollPos + clientHeight >= scrollHeight - 350) {
@@ -542,8 +606,8 @@ export default function ProductsPage() {
       }
     };
 
-    mainContainer.addEventListener("scroll", handleScroll, { passive: true });
-    return () => mainContainer.removeEventListener("scroll", handleScroll);
+    scrollContainer.addEventListener("scroll", handleScroll, { passive: true });
+    return () => scrollContainer.removeEventListener("scroll", handleScroll);
   }, [loading, isFetchingMore, page, pagination.totalPages, autoLoadCount, loadNextPage]);
 
   // IntersectionObserver for sentinel element
@@ -552,7 +616,7 @@ export default function ProductsPage() {
       return;
     }
 
-    const mainContainer = document.querySelector("main");
+    const scrollContainer = contentScrollRef.current || document.querySelector("main");
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -562,7 +626,7 @@ export default function ProductsPage() {
         }
       },
       {
-        root: mainContainer || null,
+        root: scrollContainer || null,
         rootMargin: "300px",
         threshold: 0.1,
       }
@@ -582,11 +646,15 @@ export default function ProductsPage() {
   }, [loading, isFetchingMore, page, pagination.totalPages, autoLoadCount, loadNextPage]);
 
   const scrollToTop = () => {
-    const mainContainer = document.querySelector("main");
-    if (mainContainer) {
-      mainContainer.scrollTo({ top: 0, behavior: "smooth" });
+    if (contentScrollRef.current) {
+      contentScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
     } else {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      const mainContainer = document.querySelector("main");
+      if (mainContainer) {
+        mainContainer.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     }
   };
 
@@ -904,222 +972,217 @@ export default function ProductsPage() {
   };
 
   return (
-    <div className="space-y-3 pb-12">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-200 dark:border-slate-800/60">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-              <ShoppingBag className="w-4 h-4" />
-            </div>
-            <h1 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
-              Product Intelligence &amp; Catalog Hub
-            </h1>
-          </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Discover winning products, star favorites, track active brand campaigns, and benchmark competitor pricing.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => setIsAddProductModalOpen(true)}
-            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-sm shadow-indigo-600/30 transition-all cursor-pointer"
-            title="Add product page link or store website"
-          >
-            <PlusCircle className="w-3.5 h-3.5" />
-            <span>Add Product Link</span>
-          </button>
-
-          <Link
-            href="/spy"
-            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white border border-slate-700/50 shadow-xs transition-all cursor-pointer"
-          >
-            <Eye className="w-3.5 h-3.5" />
-            <span>Ad Spy Feed</span>
-          </Link>
-
-          <button
-            onClick={() => {
-              fetchProducts(1, false, true);
-              fetchStats(true);
-            }}
-            disabled={loading && statsLoading}
-            title="Refresh product intelligence catalog"
-            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 transition-all cursor-pointer shadow-xs"
-          >
-            <RotateCw className={`w-3.5 h-3.5 ${(loading || statsLoading) ? "animate-spin text-indigo-500" : ""}`} />
-            <span>Refresh</span>
-          </button>
-        </div>
+    <div className="flex-1 h-full w-full flex flex-row overflow-hidden bg-background">
+      {/* Desktop Docked Second Sidebar */}
+      <div className="hidden lg:flex flex-col h-full shrink-0">
+        <ProductsSidebarFilters
+          selectedNiches={selectedNiches}
+          onChangeNiches={(niches) => {
+            setSelectedNiches(niches);
+            setPage(1);
+          }}
+          selectedSubNiches={selectedSubNiches}
+          onChangeSubNiches={(subs) => {
+            setSelectedSubNiches(subs);
+            setPage(1);
+          }}
+          nicheCounts={stats.nicheCounts}
+          hideInactive={hideInactive}
+          onToggleHideInactive={() => {
+            setHideInactive((prev) => !prev);
+            setPage(1);
+          }}
+          smartPreset={smartPreset}
+          onSelectPreset={handleSelectPreset}
+          adLaunchFilter={adLaunchFilter}
+          onChangeAdLaunchFilter={(v) => {
+            setAdLaunchFilter(v);
+            setPage(1);
+          }}
+          adLaunchFrom={adLaunchFrom}
+          onChangeAdLaunchFrom={(v) => {
+            setAdLaunchFrom(v);
+            setPage(1);
+          }}
+          adLaunchTo={adLaunchTo}
+          onChangeAdLaunchTo={(v) => {
+            setAdLaunchTo(v);
+            setPage(1);
+          }}
+          stillRunningOnly={stillRunningOnly}
+          onToggleStillRunningOnly={() => {
+            setStillRunningOnly((prev) => !prev);
+            setPage(1);
+          }}
+          adLaunchLabels={adLaunchLabels}
+          discoveryFilter={discoveryFilter}
+          onChangeDiscoveryFilter={(v) => {
+            setDiscoveryFilter(v);
+            setPage(1);
+          }}
+          discoveryFrom={discoveryFrom}
+          onChangeDiscoveryFrom={(v) => {
+            setDiscoveryFrom(v);
+            setPage(1);
+          }}
+          discoveryTo={discoveryTo}
+          onChangeDiscoveryTo={(v) => {
+            setDiscoveryTo(v);
+            setPage(1);
+          }}
+          discoveryLabels={discoveryLabels}
+          platform={platform}
+          onChangePlatform={(v) => {
+            setPlatform(v);
+            setPage(1);
+          }}
+          platformCounts={stats.platforms}
+          brandInput={brandInput}
+          onChangeBrand={(v) => {
+            setBrandInput(v);
+            setPage(1);
+          }}
+          onClearBrand={() => {
+            setBrandInput("");
+            setDebouncedBrand("");
+            setPage(1);
+          }}
+          activeFilterCount={activeFilterCount}
+          onResetFilters={handleResetFilters}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={handleToggleSecondSidebar}
+        />
       </div>
 
-      {/* 1. KPI Bar */}
-      <ProductsKpiBar
-        stats={stats}
-        statsLoading={statsLoading}
-        smartPreset={smartPreset}
-        onSelectPreset={handleSelectPreset}
-      />
+      {/* Main Content Area (Independent Scrollable Canvas) */}
+      <div
+        ref={contentScrollRef}
+        className="flex-1 min-w-0 h-full overflow-y-auto p-4 md:px-6 md:py-5 flex flex-col space-y-4"
+      >
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-border">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-indigo-600/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                <ShoppingBag className="w-4 h-4" />
+              </div>
+              <h1 className="text-lg font-black text-foreground tracking-tight">
+                Product Intelligence &amp; Catalog Hub
+              </h1>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Discover winning products, star favorites, track active brand campaigns, and benchmark competitor pricing.
+            </p>
+          </div>
 
-      {/* 2. Main Two-Column Layout (Sidebar + Canvas) */}
-      <div className="flex items-start gap-4">
-        {/* Desktop Sticky Faceted Sidebar */}
-        <div className="hidden lg:block shrink-0">
-          <ProductsSidebarFilters
-            selectedNiches={selectedNiches}
-            onChangeNiches={(niches) => {
-              setSelectedNiches(niches);
-              setPage(1);
-            }}
-            selectedSubNiches={selectedSubNiches}
-            onChangeSubNiches={(subs) => {
-              setSelectedSubNiches(subs);
-              setPage(1);
-            }}
-            nicheCounts={stats.nicheCounts}
-            hideInactive={hideInactive}
-            onToggleHideInactive={() => {
-              setHideInactive((prev) => !prev);
-              setPage(1);
-            }}
-            smartPreset={smartPreset}
-            onSelectPreset={handleSelectPreset}
-            adLaunchFilter={adLaunchFilter}
-            onChangeAdLaunchFilter={(v) => {
-              setAdLaunchFilter(v);
-              setPage(1);
-            }}
-            adLaunchFrom={adLaunchFrom}
-            onChangeAdLaunchFrom={(v) => {
-              setAdLaunchFrom(v);
-              setPage(1);
-            }}
-            adLaunchTo={adLaunchTo}
-            onChangeAdLaunchTo={(v) => {
-              setAdLaunchTo(v);
-              setPage(1);
-            }}
-            stillRunningOnly={stillRunningOnly}
-            onToggleStillRunningOnly={() => {
-              setStillRunningOnly((prev) => !prev);
-              setPage(1);
-            }}
-            adLaunchLabels={adLaunchLabels}
-            discoveryFilter={discoveryFilter}
-            onChangeDiscoveryFilter={(v) => {
-              setDiscoveryFilter(v);
-              setPage(1);
-            }}
-            discoveryFrom={discoveryFrom}
-            onChangeDiscoveryFrom={(v) => {
-              setDiscoveryFrom(v);
-              setPage(1);
-            }}
-            discoveryTo={discoveryTo}
-            onChangeDiscoveryTo={(v) => {
-              setDiscoveryTo(v);
-              setPage(1);
-            }}
-            discoveryLabels={discoveryLabels}
-            platform={platform}
-            onChangePlatform={(v) => {
-              setPlatform(v);
-              setPage(1);
-            }}
-            platformCounts={stats.platforms}
-            brandInput={brandInput}
-            onChangeBrand={(v) => {
-              setBrandInput(v);
-              setPage(1);
-            }}
-            onClearBrand={() => {
-              setBrandInput("");
-              setDebouncedBrand("");
-              setPage(1);
-            }}
-            activeFilterCount={activeFilterCount}
-            onResetFilters={handleResetFilters}
-            isCollapsed={isSidebarCollapsed}
-            onToggleCollapse={() => {
-              setIsSidebarCollapsed((prev) => {
-                const next = !prev;
-                try {
-                  localStorage.setItem("products_sidebar_collapsed", String(next));
-                } catch {}
-                return next;
-              });
-            }}
-          />
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setIsAddProductModalOpen(true)}
+              className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-sm shadow-indigo-600/30 transition-all cursor-pointer"
+              title="Add product page link or store website"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>Add Product Link</span>
+            </button>
+
+            <Link
+              href="/spy"
+              className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground border border-border shadow-xs transition-all cursor-pointer"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>Ad Spy Feed</span>
+            </Link>
+
+            <button
+              onClick={() => {
+                fetchProducts(1, false, true);
+                fetchStats(true);
+              }}
+              disabled={loading && statsLoading}
+              title="Refresh product intelligence catalog"
+              className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-card hover:bg-accent text-foreground border border-border transition-all cursor-pointer shadow-xs"
+            >
+              <RotateCw className={`w-3.5 h-3.5 ${(loading || statsLoading) ? "animate-spin text-indigo-500" : ""}`} />
+              <span>Refresh</span>
+            </button>
+          </div>
         </div>
 
-        {/* Main Content Canvas */}
-        <div className="flex-1 min-w-0 space-y-3">
-          {/* Top Bar (Search, Sort, View mode, Preset pills, Active chips) */}
-          <ProductsTopBar
-            searchInput={searchInput}
-            onChangeSearch={(v) => {
-              setSearchInput(v);
-              setPage(1);
-            }}
-            onClearSearch={() => {
-              setSearchInput("");
-              setDebouncedSearch("");
-              setPage(1);
-            }}
-            smartPreset={smartPreset}
-            onSelectPreset={handleSelectPreset}
-            sortBy={sortBy}
-            onChangeSortBy={(v) => {
-              setSortBy(v);
-              setPage(1);
-            }}
-            viewMode={viewMode}
-            onChangeViewMode={setViewMode}
-            onOpenMobileDrawer={() => setIsMobileDrawerOpen(true)}
-            activeFilterCount={activeFilterCount}
-            onOpenAddProduct={() => setIsAddProductModalOpen(true)}
-            selectedNiches={selectedNiches}
-            onRemoveNiche={(niche) => {
-              setSelectedNiches((prev) => prev.filter((x) => x !== niche));
-              setPage(1);
-            }}
-            selectedSubNiches={selectedSubNiches}
-            onRemoveSubNiche={(sub) => {
-              setSelectedSubNiches((prev) => prev.filter((x) => x !== sub));
-              setPage(1);
-            }}
-            brandInput={debouncedBrand}
-            onClearBrand={() => {
-              setBrandInput("");
-              setDebouncedBrand("");
-              setPage(1);
-            }}
-            platform={platform}
-            onChangePlatform={(v) => {
-              setPlatform(v);
-              setPage(1);
-            }}
-            hideInactive={hideInactive}
-            onToggleHideInactive={() => {
-              setHideInactive((prev) => !prev);
-              setPage(1);
-            }}
-            discoveryFilter={discoveryFilter}
-            onChangeDiscoveryFilter={(v) => {
-              setDiscoveryFilter(v);
-              setPage(1);
-            }}
-            discoveryLabels={discoveryLabels}
-            adLaunchFilter={adLaunchFilter}
-            onChangeAdLaunchFilter={(v) => {
-              setAdLaunchFilter(v);
-              setPage(1);
-            }}
-            adLaunchLabels={adLaunchLabels}
-            stillRunningOnly={stillRunningOnly}
-            onResetFilters={handleResetFilters}
-          />
+        {/* 1. KPI Bar */}
+        <ProductsKpiBar
+          stats={stats}
+          statsLoading={statsLoading}
+          smartPreset={smartPreset}
+          onSelectPreset={handleSelectPreset}
+        />
+
+        {/* Top Bar (Search, Presets, Active filters, View Mode) */}
+        <ProductsTopBar
+          searchInput={searchInput}
+          onChangeSearch={(v) => {
+            setSearchInput(v);
+            setPage(1);
+          }}
+          onClearSearch={() => {
+            setSearchInput("");
+            setDebouncedSearch("");
+            setPage(1);
+          }}
+          smartPreset={smartPreset}
+          onSelectPreset={handleSelectPreset}
+          sortBy={sortBy}
+          onChangeSortBy={(v) => {
+            setSortBy(v);
+            setPage(1);
+          }}
+          viewMode={viewMode}
+          onChangeViewMode={setViewMode}
+          onOpenMobileDrawer={() => setIsMobileDrawerOpen(true)}
+          activeFilterCount={activeFilterCount}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onToggleSidebar={handleToggleSecondSidebar}
+          onOpenAddProduct={() => setIsAddProductModalOpen(true)}
+          selectedNiches={selectedNiches}
+          onRemoveNiche={(niche) => {
+            setSelectedNiches((prev) => prev.filter((x) => x !== niche));
+            setPage(1);
+          }}
+          selectedSubNiches={selectedSubNiches}
+          onRemoveSubNiche={(sub) => {
+            setSelectedSubNiches((prev) => prev.filter((x) => x !== sub));
+            setPage(1);
+          }}
+          brandInput={debouncedBrand}
+          onClearBrand={() => {
+            setBrandInput("");
+            setDebouncedBrand("");
+            setPage(1);
+          }}
+          platform={platform}
+          onChangePlatform={(v) => {
+            setPlatform(v);
+            setPage(1);
+          }}
+          hideInactive={hideInactive}
+          onToggleHideInactive={() => {
+            setHideInactive((prev) => !prev);
+            setPage(1);
+          }}
+          discoveryFilter={discoveryFilter}
+          onChangeDiscoveryFilter={(v) => {
+            setDiscoveryFilter(v);
+            setPage(1);
+          }}
+          discoveryLabels={discoveryLabels}
+          adLaunchFilter={adLaunchFilter}
+          onChangeAdLaunchFilter={(v) => {
+            setAdLaunchFilter(v);
+            setPage(1);
+          }}
+          adLaunchLabels={adLaunchLabels}
+          stillRunningOnly={stillRunningOnly}
+          onResetFilters={handleResetFilters}
+        />
 
       {/* 3. Products Display Area */}
       {loading && products.length === 0 ? (
@@ -1332,7 +1395,6 @@ export default function ProductsPage() {
           </div>
         </>
       )}
-        </div>
       </div>
 
       {/* Mobile Slide-Over Filter Drawer */}

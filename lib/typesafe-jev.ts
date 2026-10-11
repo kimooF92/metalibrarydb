@@ -146,12 +146,16 @@ function deriveSubCategory(title: string, category: ProductCategory): string {
       if (/parfum|fragrance|عطر/i.test(text)) return "Fragrances & Perfumes";
       if (/cheveux|shampoing|lissante|sechoir|sèche-cheveux|شعر/i.test(text)) return "Hair Care & Styling";
       if (/creme|crème|serum|sérum|visage|peau|anti-rides|glow|بشرة|كريم/i.test(text)) return "Skincare & Face";
-      if (/massage|dent|minceur|santé|مساج/i.test(text)) return "Health & Wellness";
+      if (/dent|dents|dentaire|blanchiment|hismile|أسنان/i.test(text)) return "Dental & Oral Care";
+      if (/pied|diabétique|diabete|diabex|douleur|مرهم|مرهم/i.test(text)) return "Health & Pain Relief";
+      if (/massage|minceur|santé|مساج/i.test(text)) return "Health & Wellness";
       return "Personal Care & Beauty";
 
     case "Home, Kitchen & Living":
       if (/air fryer|friteuse|mixeur|blender|hachoir|poele|poêle|marmite|مطبخ|خلاط/i.test(text))
         return "Kitchen & Cookware";
+      if (/moustique|insecte|cafard|piège|piége|مصيدة|حشرات|ناموس/i.test(text)) return "Pest Control & Garden";
+      if (/adhésif|adhesif|ruban|عازل|scellant|papier peint/i.test(text)) return "Home Repair & Improvement";
       if (/nettoyeur|aspirateur|balai|mop|تنظيف/i.test(text)) return "Cleaning & Maintenance";
       if (/lampe|led|coussin|tapis|drap|lit|déco|منزل/i.test(text)) return "Home Decor & Lighting";
       return "Kitchen & Home Living";
@@ -164,6 +168,7 @@ function deriveSubCategory(title: string, category: ProductCategory): string {
       return "Apparel & Fashion";
 
     case "Sports, Fitness & Outdoor":
+      if (/مشد|genouillere|genouillère|ceinture|posture|support|brace|ركبة/i.test(text)) return "Supports & Braces";
       if (/fitness|gym|musculation|haltere|haltère|رياضة/i.test(text)) return "Fitness & Workout";
       if (/camping|randonnee|randonnée|outdoor|تخييم/i.test(text)) return "Outdoor & Camping";
       return "Sports & Training";
@@ -175,7 +180,7 @@ function deriveSubCategory(title: string, category: ProductCategory): string {
 
     case "Automotive & Tools":
       if (/voiture|auto|moto|pneu|dashcam|سيارة/i.test(text)) return "Car Accessories";
-      if (/outils|cle|clé|tournevis|perceuse|أدوات/i.test(text)) return "Tools & Hardware";
+      if (/outils|cle|clé|tournevis|perceuse|visseuse|أدوات/i.test(text)) return "Tools & Hardware";
       return "Automotive & Tools";
 
     default:
@@ -217,14 +222,14 @@ export async function classifyProductWithJev(
       type: "choice",
       instructions: "Product category",
       criteria: {
-        "Electronics & Tech": "Gadgets, audio, phones, tech",
-        "Beauty, Health & Care": "Cosmetics, skincare, hair, care",
-        "Home, Kitchen & Living": "Kitchen, appliances, decor",
-        "Fashion & Jewelry": "Clothing, shoes, bags, jewelry",
-        "Sports, Fitness & Outdoor": "Fitness, gym, outdoor",
-        "Kids, Baby & Toys": "Toys, baby items",
-        "Automotive & Tools": "Car gear, tools, hardware",
-        "General & Other": "General merchandise",
+        "Electronics & Tech": "Gadgets, audio, phones, electronics, chargers",
+        "Beauty, Health & Care": "Cosmetics, skincare, hair, wellness, pain relief, health, medical, dental",
+        "Home, Kitchen & Living": "Kitchen, appliances, decor, pest control, cleaning, household, adhesive",
+        "Fashion & Jewelry": "Clothing, shoes, bags, jewelry, accessories, apparel",
+        "Sports, Fitness & Outdoor": "Fitness, gym, workout, knee brace, outdoor, sports",
+        "Kids, Baby & Toys": "Toys, baby items, games",
+        "Automotive & Tools": "Car accessories, tools, hardware, DIY repair",
+        "General & Other": "General merchandise, miscellaneous",
       },
     },
   };

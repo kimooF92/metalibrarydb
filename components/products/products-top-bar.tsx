@@ -38,9 +38,11 @@ export interface ProductsTopBarProps {
   viewMode: "grid" | "list";
   onChangeViewMode: (mode: "grid" | "list") => void;
 
-  // Mobile drawer trigger
+  // Mobile drawer trigger & Desktop sidebar toggle
   onOpenMobileDrawer: () => void;
   activeFilterCount: number;
+  isSidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
 
   // Add Product CTA
   onOpenAddProduct?: () => void;
@@ -80,6 +82,8 @@ export function ProductsTopBar({
   onChangeViewMode,
   onOpenMobileDrawer,
   activeFilterCount,
+  isSidebarCollapsed,
+  onToggleSidebar,
   onOpenAddProduct,
   selectedNiches,
   onRemoveNiche,
@@ -165,6 +169,28 @@ export function ProductsTopBar({
               </span>
             )}
           </button>
+
+          {/* Desktop Filter Sidebar Expand Button (when collapsed) */}
+          {onToggleSidebar && isSidebarCollapsed && (
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              className={`hidden lg:inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-colors cursor-pointer select-none ${
+                hasAnyFilterActive
+                  ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800"
+                  : "bg-background text-foreground border-border hover:bg-accent"
+              }`}
+              title="Expand Filters Sidebar"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-indigo-600 text-white">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+          )}
 
           {/* Quick Sort Dropdown */}
           <select
