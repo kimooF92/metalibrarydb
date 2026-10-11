@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
 import NextImage from "next/image";
 import { ScrapedProduct, Ad } from "@/types";
 import { useToast } from "@/components/toast-context";
@@ -19,6 +19,10 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 
+export interface ModalEditFormHandle {
+  save: () => Promise<void>;
+}
+
 interface ModalEditFormProps {
   product: ScrapedProduct;
   linkedAds: Ad[];
@@ -26,21 +30,30 @@ interface ModalEditFormProps {
   onProductUpdate?: (updatedProduct: ScrapedProduct) => void;
   onRefreshAds: () => Promise<void>;
   onRefreshProduct?: (productId: string) => Promise<void>;
+  isSaving?: boolean;
+  onSavingChange?: (saving: boolean) => void;
 }
 
-export function ModalEditForm({
-  product,
-  linkedAds,
-  onCancelEdit,
-  onProductUpdate,
-  onRefreshAds,
-  onRefreshProduct,
-}: ModalEditFormProps) {
-  const { activeWorkspace } = useWorkspace();
-  const { showToast } = useToast();
-  const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [unlinkingAdId, setUnlinkingAdId] = useState<string | null>(null);
-  const sym = activeWorkspace?.currencySymbol || "DT";
+export const ModalEditForm = forwardRef<ModalEditFormHandle, ModalEditFormProps>(
+  function ModalEditForm(
+    {
+      product,
+      linkedAds,
+      onCancelEdit,
+      onProductUpdate,
+      onRefreshAds,
+      onRefreshProduct,
+      isSaving,
+      onSavingChange,
+    },
+    ref
+  ) {
+    const { activeWorkspace } = useWorkspace();
+    const { showToast } = useToast();
+    const [localSaving, setLocalSaving] = useState(false);
+    const isSavingEdit = isSaving ?? localSaving;
+    const [unlinkingAdId, setUnlinkingAdId] = useState<string | null>(null);
+    const sym = activeWorkspace?.currencySymbol || "DT";
 
   const [editForm, setEditForm] = useState({
     title: product.title || "",
@@ -76,7 +89,8 @@ export function ModalEditForm({
 
   const handleSaveEdit = async () => {
     if (!product?.id || isSavingEdit) return;
-    setIsSavingEdit(true);
+    setLocalSaving(true);
+    onSavingChange?.(true);
     try {
       const payload = {
         id: product.id,
@@ -119,9 +133,14 @@ export function ModalEditForm({
         message: err.message || "Failed to update product",
       });
     } finally {
-      setIsSavingEdit(false);
+      setLocalSaving(false);
+      onSavingChange?.(false);
     }
   };
+
+  useImperativeHandle(ref, () => ({
+    save: handleSaveEdit,
+  }));
 
   const handleUnlinkAd = async (adId: string, adArchiveId: string) => {
     if (!product?.id || unlinkingAdId) return;
@@ -160,7 +179,14 @@ export function ModalEditForm({
   };
 
   return (
-    <div className="space-y-5">
+    <form
+      id="product-edit-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        handleSaveEdit();
+      }}
+      className="space-y-5"
+    >
       {/* Section 1: Brand & Meta Ad Library Tracking */}
       <div className="p-4 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-800/80 space-y-3">
         <div className="flex items-center justify-between">
@@ -520,6 +546,6 @@ export function ModalEditForm({
           <span>{isSavingEdit ? "Saving Changes..." : "Save Product Details"}</span>
         </button>
       </div>
-    </div>
+    </form>
   );
-}
+});

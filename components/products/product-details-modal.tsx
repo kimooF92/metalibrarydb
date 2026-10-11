@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { ScrapedProduct, Ad } from "@/types";
 import { useToast } from "@/components/toast-context";
 import {
@@ -21,7 +21,7 @@ import { ModalOverviewSection } from "./modal/modal-overview-section";
 import { ModalSourcingSection } from "./modal/modal-sourcing-section";
 import { ModalNetworkIntelligence } from "./modal/modal-network-intelligence";
 import { ModalAdGallery } from "./modal/modal-ad-gallery";
-import { ModalEditForm } from "./modal/modal-edit-form";
+import { ModalEditForm, ModalEditFormHandle } from "./modal/modal-edit-form";
 import { ModalAdLightbox } from "./modal/modal-ad-lightbox";
 
 // Re-export getSupplierPlatformInfo for backward compatibility
@@ -62,6 +62,8 @@ export function ProductDetailsModal({
   const [currentProduct, setCurrentProduct] = useState<ScrapedProduct | null>(product);
   const [activeTab, setActiveTab] = useState<ModalTab>("all");
   const [isEditMode, setIsEditMode] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const editFormRef = useRef<ModalEditFormHandle>(null);
   const [linkedAds, setLinkedAds] = useState<Ad[]>([]);
   const [loadingAds, setLoadingAds] = useState(false);
   const [network, setNetwork] = useState<any>(null);
@@ -266,6 +268,8 @@ export function ProductDetailsModal({
           supplierUrls={supplierUrls}
           allImages={allImages}
           isEditMode={isEditMode}
+          isSavingEdit={isSavingEdit}
+          onSaveEdit={() => editFormRef.current?.save()}
           onCancelEdit={() => setIsEditMode(false)}
           onStartEdit={() => setIsEditMode(true)}
           onSwitchTab={(tab) => setActiveTab(tab)}
@@ -391,8 +395,11 @@ export function ProductDetailsModal({
         <div className="p-6 overflow-y-auto space-y-6">
           {isEditMode ? (
             <ModalEditForm
+              ref={editFormRef}
               product={currentProduct}
               linkedAds={linkedAds}
+              isSaving={isSavingEdit}
+              onSavingChange={setIsSavingEdit}
               onCancelEdit={() => setIsEditMode(false)}
               onProductUpdate={handleProductUpdateInternal}
               onRefreshAds={() => fetchLinkedAds(currentProduct.id)}

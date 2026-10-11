@@ -257,8 +257,14 @@ export function ModalHeader({
               <span>Cancel</span>
             </button>
             <button
-              type="button"
-              onClick={onSaveEdit}
+              type="submit"
+              form="product-edit-form"
+              onClick={(e) => {
+                if (onSaveEdit) {
+                  e.preventDefault();
+                  onSaveEdit();
+                }
+              }}
               disabled={isSavingEdit}
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-sm transition-all cursor-pointer disabled:opacity-50"
             >
