@@ -73,7 +73,7 @@ export function ProductsEmptyState({
   const isFavoriteMode = smartPreset === "favorites";
 
   return (
-    <div className="py-16 text-center bg-white dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-800/80 p-8 flex flex-col items-center justify-center space-y-4">
+    <div className="py-16 text-center bg-card rounded-xl border border-border p-8 flex flex-col items-center justify-center space-y-4">
       <div className="w-16 h-16 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
         {isFavoriteMode ? (
           <Star className="w-8 h-8 text-amber-500" />
@@ -83,10 +83,10 @@ export function ProductsEmptyState({
       </div>
 
       <div>
-        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+        <h3 className="text-base font-bold text-foreground">
           {isFavoriteMode ? "No Starred Favorite Products Yet" : "No Matching Products Found"}
         </h3>
-        <p className="text-xs text-slate-600 dark:text-slate-400 max-w-sm mt-1">
+        <p className="text-xs text-muted-foreground max-w-sm mt-1">
           {isFavoriteMode
             ? "Click the star (⭐) button on any product card to add it to your starred favorites watchlist."
             : hasActiveFilters
@@ -98,7 +98,7 @@ export function ProductsEmptyState({
       {/* Contextual 1-Click Targeted Filter Recovery Chips */}
       {hasActiveFilters && (
         <div className="flex flex-col items-center gap-2 max-w-md w-full pt-1">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
             1-Click Recovery Options:
           </span>
           <div className="flex flex-wrap items-center justify-center gap-2">
@@ -142,7 +142,7 @@ export function ProductsEmptyState({
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 font-semibold text-xs hover:bg-amber-100 dark:hover:bg-amber-900/60 cursor-pointer transition-colors"
               >
                 <Tag className="w-3 h-3 text-amber-500" />
-                <span>Clear Category ({categoryFilter})</span>
+                <span>Clear Niche ({categoryFilter})</span>
               </button>
             )}
 

@@ -26,6 +26,7 @@ import {
   Save,
 } from "lucide-react";
 import { ModalTab, generateAIProductPrompt, generateCleanMarkdown } from "./modal-types";
+import { getNicheDisplayLabel, getSubNicheDisplayLabel } from "@/lib/niches-taxonomy";
 
 interface ModalHeaderProps {
   product: ScrapedProduct;
@@ -216,11 +217,11 @@ export function ModalHeader({
                 {product.category && (
                   <span
                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
-                    title={`Category: ${product.category}${product.subCategory ? ` > ${product.subCategory}` : ""}${product.targetAudience ? ` (${product.targetAudience})` : ""}`}
+                    title={`Niche: ${getNicheDisplayLabel(product.category)}${product.subCategory ? ` > ${getSubNicheDisplayLabel(product.subCategory)}` : ""}${product.targetAudience ? ` (${product.targetAudience})` : ""}`}
                   >
-                    🏷️ {product.category}
+                    🏷️ {getNicheDisplayLabel(product.category)}
                     {product.subCategory && (
-                      <span className="text-amber-600/70 dark:text-amber-400/70 font-medium">› {product.subCategory}</span>
+                      <span className="text-amber-600/70 dark:text-amber-400/70 font-medium">› {getSubNicheDisplayLabel(product.subCategory)}</span>
                     )}
                   </span>
                 )}
