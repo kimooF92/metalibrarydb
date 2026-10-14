@@ -7,6 +7,7 @@ import {
   checkLoginRateLimit,
   recordFailedLogin,
   resetLoginRateLimit,
+  UserRole,
 } from "@/lib/auth";
 
 export async function POST(request: Request) {
@@ -34,22 +35,25 @@ export async function POST(request: Request) {
     const rememberMe = body.rememberMe !== false; // Default true
 
     const appPassword = process.env.APP_PASSWORD;
+    const staffPassword = process.env.STAFF_PASSWORD;
 
-    // If no password is set on the server, reject or advise configuration
-    if (!appPassword || appPassword.trim() === "") {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Server configuration missing: APP_PASSWORD is not set in environment variables.",
-        },
-        { status: 500 }
-      );
-    }
+    // Check credentials against both configured passwords
+    const isAdmin = appPassword && appPassword.trim() !== "" ? timingSafeEqual(password, appPassword) : false;
+    const isStaff = staffPassword && staffPassword.trim() !== "" ? timingSafeEqual(password, staffPassword) : false;
 
-    // Verify password with timing-safe comparison
-    const isMatch = timingSafeEqual(password, appPassword);
+    // If neither password matched (or neither is configured)
+    if (!isAdmin && !isStaff) {
+      // If no password at all is configured in the environment
+      if ((!appPassword || appPassword.trim() === "") && (!staffPassword || staffPassword.trim() === "")) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Server configuration missing: Neither APP_PASSWORD nor STAFF_PASSWORD is set in environment variables.",
+          },
+          { status: 500 }
+        );
+      }
 
-    if (!isMatch) {
       const { attemptsLeft, blockedSeconds } = recordFailedLogin(clientIp);
       if (blockedSeconds) {
         return NextResponse.json(
@@ -75,12 +79,15 @@ export async function POST(request: Request) {
     // Reset rate limiter on successful authentication
     resetLoginRateLimit(clientIp);
 
+    const role: UserRole = isAdmin ? "admin" : "staff";
+
     // Duration: 30 days if rememberMe, otherwise 1 day
     const durationSeconds = rememberMe ? SESSION_DURATION_SECONDS : 24 * 60 * 60;
-    const token = await createSessionToken(durationSeconds);
+    const token = await createSessionToken(durationSeconds, role);
 
     const response = NextResponse.json({
       success: true,
+      role,
       message: "Authentication successful",
     });
 
@@ -91,6 +98,17 @@ export async function POST(request: Request) {
       name: SESSION_COOKIE_NAME,
       value: token,
       httpOnly: true,
+      secure: isProduction,
+      sameSite: "lax",
+      path: "/",
+      maxAge: durationSeconds,
+    });
+
+    // Also set client-accessible role cookie to eliminate SSR/hydration flash
+    response.cookies.set({
+      name: "ad_tracker_role",
+      value: role,
+      httpOnly: false,
       secure: isProduction,
       sameSite: "lax",
       path: "/",

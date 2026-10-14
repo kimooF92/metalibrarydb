@@ -17,6 +17,8 @@ export function useLogout() {
     } finally {
       try {
         localStorage.removeItem("app_user_settings");
+        localStorage.removeItem("ad_tracker_role");
+        document.cookie = "ad_tracker_role=; path=/; max-age=0; SameSite=Lax";
       } catch {}
       router.push("/login");
       router.refresh();

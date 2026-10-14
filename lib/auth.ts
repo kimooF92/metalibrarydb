@@ -12,11 +12,27 @@ export function getAuthSecret(): string {
   );
 }
 
+export type UserRole = "admin" | "staff";
+
+export interface SessionPayload {
+  iat: number;
+  exp: number;
+  nonce?: string;
+  role: UserRole;
+}
+
 /**
  * Returns the configured master password.
  */
 export function getAppPassword(): string | null {
   return process.env.APP_PASSWORD || null;
+}
+
+/**
+ * Returns the configured staff password (custom privilege).
+ */
+export function getStaffPassword(): string | null {
+  return process.env.STAFF_PASSWORD || null;
 }
 
 /**
@@ -62,13 +78,17 @@ async function createHmacSignature(data: string, secret: string): Promise<string
 /**
  * Signs a session payload and returns a compact token.
  */
-export async function createSessionToken(expiresInSeconds: number = SESSION_DURATION_SECONDS): Promise<string> {
+export async function createSessionToken(
+  expiresInSeconds: number = SESSION_DURATION_SECONDS,
+  role: UserRole = "admin"
+): Promise<string> {
   const secret = getAuthSecret();
   const now = Math.floor(Date.now() / 1000);
-  const payload = {
+  const payload: SessionPayload = {
     iat: now,
     exp: now + expiresInSeconds,
     nonce: Math.random().toString(36).substring(2, 15),
+    role,
   };
 
   const encodedPayload = btoa(JSON.stringify(payload))
@@ -83,7 +103,7 @@ export async function createSessionToken(expiresInSeconds: number = SESSION_DURA
 /**
  * Verifies a session token string. Returns payload if valid, or null if invalid or expired.
  */
-export async function verifySessionToken(token: string | undefined | null): Promise<{ iat: number; exp: number } | null> {
+export async function verifySessionToken(token: string | undefined | null): Promise<SessionPayload | null> {
   if (!token || typeof token !== "string") return null;
 
   const parts = token.split(".");
@@ -111,7 +131,10 @@ export async function verifySessionToken(token: string | undefined | null): Prom
       return null; // Expired
     }
 
-    return payload;
+    return {
+      ...payload,
+      role: (payload.role as UserRole) || "admin",
+    };
   } catch {
     return null;
   }

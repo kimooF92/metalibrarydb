@@ -5,6 +5,7 @@ import { trackedPages, importJobs } from "@/db/schema";
 import { sql, desc, eq } from "drizzle-orm";
 import { cleanOrphanedScans } from "@/lib/clean-scans";
 import { getActiveWorkspace } from "@/lib/workspace-server";
+import { validateAdminRole } from "@/lib/api-guard";
 
 interface CachedDashboardStats {
   data: any;
@@ -18,6 +19,9 @@ let lastCleanupTimestamp = 0;
 const CLEANUP_THROTTLE_MS = 15 * 60 * 1000; // 15 minutes
 
 export async function GET(request: Request) {
+  const authError = await validateAdminRole(request);
+  if (authError) return authError;
+
   try {
     const activeWorkspace = await getActiveWorkspace(request);
     const { searchParams } = new URL(request.url);

@@ -16,8 +16,10 @@ import {
 } from "lucide-react";
 import { useSmallPagesScan } from "./small-pages-scan-context";
 import { useToast } from "./toast-context";
+import { useAuth } from "./auth-context";
 
 export function SmallPagesScanBanner() {
+  const { isStaff } = useAuth();
   const {
     count,
     inQueueCount,
@@ -32,8 +34,8 @@ export function SmallPagesScanBanner() {
   const { showToast } = useToast();
   const [copiedBatch, setCopiedBatch] = useState(false);
 
-  // If there are no small pages needing scan, or if the user explicitly clicked "Dismiss", hide the banner
-  if (count === 0 || isDismissed) {
+  // If staff user, no small pages needing scan, or if the user clicked "Dismiss", hide the banner
+  if (isStaff || count === 0 || isDismissed) {
     return null;
   }
 
@@ -169,9 +171,10 @@ export function SmallPagesScanBanner() {
  * If the user dismissed the banner, clicking this badge immediately un-dismisses it!
  */
 export function SmallPagesScanBadge() {
+  const { isStaff } = useAuth();
   const { count, isDismissed, unDismiss, openModal } = useSmallPagesScan();
 
-  if (count === 0) return null;
+  if (isStaff || count === 0) return null;
 
   return (
     <button

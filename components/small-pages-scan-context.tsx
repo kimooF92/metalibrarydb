@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { SmallPageNeedingScan } from "@/app/api/worker/small-pages-scan/route";
 import { useWorkspace } from "@/components/workspace-context";
+import { useAuth } from "@/components/auth-context";
 
 interface SmallPagesScanContextType {
   count: number;
@@ -26,6 +27,7 @@ const SmallPagesScanContext = createContext<SmallPagesScanContextType | undefine
 const LOCAL_STORAGE_DISMISS_KEY = "small_pages_scan_dismissed_sig";
 
 export function SmallPagesScanProvider({ children }: { children: React.ReactNode }) {
+  const { isStaff } = useAuth();
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id;
 
@@ -46,7 +48,7 @@ export function SmallPagesScanProvider({ children }: { children: React.ReactNode
   };
 
   const fetchData = useCallback(async () => {
-    if (requestInFlightRef.current || document.hidden) return;
+    if (isStaff || requestInFlightRef.current || document.hidden) return;
     requestInFlightRef.current = true;
     try {
       const url = workspaceId
@@ -85,9 +87,14 @@ export function SmallPagesScanProvider({ children }: { children: React.ReactNode
       requestInFlightRef.current = false;
       setLoading(false);
     }
-  }, [workspaceId]);
+  }, [workspaceId, isStaff]);
 
   useEffect(() => {
+    if (isStaff) {
+      setLoading(false);
+      return;
+    }
+
     fetchData();
     const pollIntervalMs = isModalOpen ? 30000 : isDismissed ? 300000 : 180000;
     const interval = setInterval(fetchData, pollIntervalMs);
@@ -100,7 +107,7 @@ export function SmallPagesScanProvider({ children }: { children: React.ReactNode
       clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [fetchData, isModalOpen, isDismissed]);
+  }, [fetchData, isModalOpen, isDismissed, isStaff]);
 
   const dismiss = useCallback(() => {
     setIsDismissed(true);

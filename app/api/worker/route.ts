@@ -5,6 +5,7 @@ import { eq, desc, and, lt, gte } from "drizzle-orm";
 
 import { cleanOrphanedScans } from "@/lib/clean-scans";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
+import { validateAdminRole } from "@/lib/api-guard";
 
 async function getOrCreateWorkerState() {
   let state = await db.query.workerState.findFirst({
@@ -22,7 +23,10 @@ async function getOrCreateWorkerState() {
   return state;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const authError = await validateAdminRole(request);
+  if (authError) return authError;
+
   try {
     const state = await getOrCreateWorkerState();
 
@@ -70,6 +74,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const authError = await validateAdminRole(request);
+  if (authError) return authError;
+
   try {
     const body = await request.json().catch(() => ({}));
     const currentState = await getOrCreateWorkerState();

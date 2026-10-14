@@ -296,6 +296,7 @@ async function runProductScraperBatch() {
           targetAudience: null,
           supplierUrls: [],
           isFavorite: false,
+          isFavoriteStaff: false,
           scrapeStatus: "pending",
           failureReason: null,
           lastScrapedAt: null,

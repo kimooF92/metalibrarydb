@@ -168,6 +168,10 @@ export function ModalAdGallery({
     }
   };
 
+  const firstValidPageId = linkedAds.find(
+    (a: any) => a.pageId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(a.pageId)
+  )?.pageId;
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between mb-1">
@@ -183,6 +187,18 @@ export function ModalAdGallery({
           )}
         </div>
         <div className="flex items-center gap-2">
+          {firstValidPageId && (
+            <a
+              href={`https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&view_all_page_id=${encodeURIComponent(firstValidPageId)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 transition-all cursor-pointer"
+              title="Open advertiser in Meta Ad Library"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Brand in Meta Library</span>
+            </a>
+          )}
           <button
             type="button"
             onClick={onQueueVerify}

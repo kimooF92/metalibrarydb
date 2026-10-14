@@ -27,12 +27,19 @@ export const metadata: Metadata = {
 import { ToastProvider } from "@/components/toast-context";
 import { AppShell } from "@/components/app-shell";
 import { Analytics } from "@vercel/analytics/react";
+import { cookies } from "next/headers";
+import { SESSION_COOKIE_NAME, verifySessionToken, UserRole } from "@/lib/auth";
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const session = await verifySessionToken(sessionCookie);
+  const initialRole: UserRole = session?.role || "admin";
+
   return (
     <html lang="en" className={cn("font-sans", ibmPlexSans.variable, manropeHeading.variable)}>
       <head>
@@ -55,7 +62,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} bg-background text-foreground h-screen w-screen flex flex-col md:flex-row antialiased overflow-hidden`}>
         <ToastProvider>
-          <AppShell>
+          <AppShell initialRole={initialRole}>
             {children}
           </AppShell>
         </ToastProvider>

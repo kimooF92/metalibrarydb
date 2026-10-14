@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ads, adObservations, trackedPages, scrapedProducts } from "@/db/schema";
 import { eq, and, sql, desc, asc, or, ilike } from "drizzle-orm";
-import { validateApiSecret } from "@/lib/api-guard";
+import { validateApiSecret, getRoleFromRequest } from "@/lib/api-guard";
 import { calculateWinnerScore } from "@/lib/winner-score";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
@@ -47,8 +47,10 @@ export async function GET(req: NextRequest) {
 
     const cutoffDate = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
     const activeWorkspace = await getActiveWorkspace(req);
+    const role = (await getRoleFromRequest(req)) || "admin";
+    const favColumn = role === "staff" ? scrapedProducts.isFavoriteStaff : scrapedProducts.isFavorite;
 
-    const baseCacheKey = `${activeWorkspace.id}:${windowDays}:${minCopies}:${mediaType || 'all'}:${category || 'all'}:${hasProduct}:${search || ''}:${sortBy}`;
+    const baseCacheKey = `${activeWorkspace.id}:${role}:${windowDays}:${minCopies}:${mediaType || 'all'}:${category || 'all'}:${hasProduct}:${search || ''}:${sortBy}`;
     const pageCacheKey = `${baseCacheKey}:p${page}:l${limit}`;
     const now = Date.now();
     const cachedPage = freshWinnersCache.get(pageCacheKey);
@@ -303,7 +305,7 @@ export async function GET(req: NextRequest) {
         productMainImageUrl: scrapedProducts.mainImageUrl,
         productCategory: scrapedProducts.category,
         productStorePlatform: scrapedProducts.storePlatform,
-        productIsFavorite: scrapedProducts.isFavorite,
+        productIsFavorite: favColumn,
         productSupplierUrls: scrapedProducts.supplierUrls,
         pageDisplayName: trackedPages.displayName,
         pageCurrentResults: trackedPages.currentResults,

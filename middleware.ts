@@ -15,6 +15,40 @@ const PUBLIC_PATHS = [
   "/apple-icon.png",
 ];
 
+// Pages staff are fully redirected away from (sent to /products)
+const STAFF_BLOCKED_PAGES = [
+  "/",
+  "/settings",
+  "/discovery",
+  "/spy",
+  "/fresh-winners",
+  "/opportunities",
+  "/import",
+  "/analytics",
+];
+
+// API namespaces staff are fully blocked from (403)
+const STAFF_BLOCKED_API_PREFIXES = [
+  "/api/pages",       // GET tracked pages list
+  "/api/page",        // GET/PATCH/DELETE individual page records (/api/page/...)
+  "/api/stats",       // Dashboard stats — admin only
+  "/api/analytics",   // Analytics data — admin only
+  "/api/settings",
+  "/api/worker",      // Worker pause/resume/reset controls
+  "/api/queue",       // Queue management
+  "/api/refresh",     // Trigger scan refresh
+  "/api/retry",
+  "/api/discovery",
+  "/api/spy",
+  "/api/import",
+  "/api/apify",
+  "/api/history",
+  "/api/tracked-pages",
+  "/api/webhooks",
+  "/api/products/extract",
+  "/api/products/add-url",
+];
+
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
@@ -31,9 +65,10 @@ export async function middleware(request: NextRequest) {
   }
 
   const appPassword = process.env.APP_PASSWORD;
+  const staffPassword = process.env.STAFF_PASSWORD;
 
-  // 2. If no APP_PASSWORD is configured, allow requests (local unconfigured dev mode)
-  if (!appPassword || appPassword.trim() === "") {
+  // 2. If no passwords at all are configured, allow requests (local unconfigured dev mode)
+  if ((!appPassword || appPassword.trim() === "") && (!staffPassword || staffPassword.trim() === "")) {
     return NextResponse.next();
   }
 
@@ -43,23 +78,77 @@ export async function middleware(request: NextRequest) {
   const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : null;
   const configuredApiSecret = process.env.API_SECRET || appPassword;
 
-  if (apiSecretHeader && timingSafeEqual(apiSecretHeader, configuredApiSecret)) {
+  // Admin secret match
+  if (
+    (apiSecretHeader && ((configuredApiSecret && timingSafeEqual(apiSecretHeader, configuredApiSecret)) || (appPassword && timingSafeEqual(apiSecretHeader, appPassword)))) ||
+    (bearerToken && ((configuredApiSecret && timingSafeEqual(bearerToken, configuredApiSecret)) || (appPassword && timingSafeEqual(bearerToken, appPassword))))
+  ) {
     return NextResponse.next();
   }
 
-  if (bearerToken && (timingSafeEqual(bearerToken, configuredApiSecret) || timingSafeEqual(bearerToken, appPassword))) {
-    return NextResponse.next();
+  // Staff secret match
+  let requestRole: "admin" | "staff" | null = null;
+  if (staffPassword && staffPassword.trim() !== "") {
+    if (
+      (apiSecretHeader && timingSafeEqual(apiSecretHeader, staffPassword)) ||
+      (bearerToken && timingSafeEqual(bearerToken, staffPassword))
+    ) {
+      requestRole = "staff";
+    }
   }
 
   // 4. Verify browser session cookie
   const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   const session = await verifySessionToken(sessionCookie);
 
-  if (session) {
-    // If authenticated user visits /login, redirect them to dashboard
+  if (session || requestRole) {
+    const role = requestRole || session?.role || "admin";
+
+    // If authenticated user visits /login, redirect to their home
     if (pathname === "/login") {
-      return NextResponse.redirect(new URL("/", request.url));
+      const redirectUrl = role === "staff" ? "/products" : "/";
+      return NextResponse.redirect(new URL(redirectUrl, request.url));
     }
+
+    // Role-based restrictions for staff
+    if (role === "staff") {
+      // A. UI Route Gate: redirect blocked pages to /products
+      const isBlockedPage =
+        pathname === "/" ||
+        STAFF_BLOCKED_PAGES.some(
+          (p) => p !== "/" && (pathname === p || pathname.startsWith(p + "/"))
+        );
+
+      if (isBlockedPage) {
+        return NextResponse.redirect(new URL("/products", request.url));
+      }
+
+      // B. API Route Gate: check blocked API endpoints
+      if (pathname.startsWith("/api/")) {
+        // Explicit carve-outs:
+        // 1. Staff can add new tracked pages (POST /api/pages)
+        const isAddPageAction = request.method === "POST" && pathname === "/api/pages";
+        // 2. Staff can query linked ads for products (/api/spy/ads)
+        const isProductAdsAction = pathname === "/api/spy/ads";
+
+        if (!isAddPageAction && !isProductAdsAction) {
+          const isBlockedApi = STAFF_BLOCKED_API_PREFIXES.some(
+            (prefix) => pathname === prefix || pathname.startsWith(prefix + "/")
+          );
+
+          if (isBlockedApi) {
+            return NextResponse.json(
+              {
+                error: "Forbidden",
+                message: "Staff role is restricted from accessing this endpoint.",
+              },
+              { status: 403 }
+            );
+          }
+        }
+      }
+    }
+
     return NextResponse.next();
   }
 

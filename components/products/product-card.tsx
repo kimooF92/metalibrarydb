@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { formatDiscoveryDate, formatDiscoveryLabel } from "@/lib/format-date";
 import { useWorkspace } from "@/components/workspace-context";
+import { useAuth } from "@/components/auth-context";
 import { formatPrice } from "@/lib/format-price";
 
 interface ProductCardProps {
@@ -46,6 +47,7 @@ export const ProductCard = memo(function ProductCard({
   isRecentlyViewed = false,
 }: ProductCardProps) {
   const { activeWorkspace } = useWorkspace();
+  const { isStaff } = useAuth();
   const sym = activeWorkspace?.currencySymbol || "DT";
   const [imgError, setImgError] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -296,8 +298,8 @@ export const ProductCard = memo(function ProductCard({
           </div>
         )}
 
-        {/* Top Ad Creative Mini Preview */}
-        {product.topCreativeThumbnail && (
+        {/* Top Ad Creative Mini Preview (Admin Only) */}
+        {!isStaff && product.topCreativeThumbnail && (
           <div
             onClick={(e) => {
               e.stopPropagation();
@@ -339,6 +341,26 @@ export const ProductCard = memo(function ProductCard({
                 : (product.domain || (product.brandName && !isUuid(product.brandName) ? product.brandName : null));
 
               if (brandTarget) {
+                if (isStaff) {
+                  return (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onFilterBrand?.(product.brandName || product.domain || brandTarget);
+                      }}
+                      className={`text-xs font-bold uppercase tracking-wider truncate block hover:underline text-left cursor-pointer ${
+                        isInactive
+                          ? "text-slate-500 dark:text-slate-400"
+                          : "text-indigo-600 dark:text-indigo-400"
+                      }`}
+                      title={`Filter by ${product.brandName || "Brand"}`}
+                    >
+                      {product.brandName || product.domain || "View Brand"}
+                    </button>
+                  );
+                }
+
                 return (
                   <Link
                     href={`/spy/brand/${encodeURIComponent(brandTarget)}?tab=products`}
@@ -513,7 +535,7 @@ export const ProductCard = memo(function ProductCard({
 
         {/* Footer info & action buttons (clean action bar, no duplicate delete) */}
         <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2 text-xs">
-          {onViewCreatives && (product.linkedAdsCount || 0) > 0 ? (
+          {!isStaff && onViewCreatives && (product.linkedAdsCount || 0) > 0 ? (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -536,7 +558,7 @@ export const ProductCard = memo(function ProductCard({
           )}
 
           <div className="flex items-center gap-1">
-            {(product.linkedAdsCount || 0) > 0 && (
+            {!isStaff && (product.linkedAdsCount || 0) > 0 && (
               <button
                 onClick={handleQueueVerify}
                 disabled={isQueueingVerify}
@@ -547,7 +569,7 @@ export const ProductCard = memo(function ProductCard({
               </button>
             )}
 
-            {onRefresh && (
+            {!isStaff && onRefresh && (
               <button
                 type="button"
                 onClick={handleRefresh}

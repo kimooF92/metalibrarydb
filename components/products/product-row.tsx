@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { formatDiscoveryDate, formatDiscoveryLabel } from "@/lib/format-date";
 import { useWorkspace } from "@/components/workspace-context";
+import { useAuth } from "@/components/auth-context";
 import { formatPrice } from "@/lib/format-price";
 
 interface ProductRowProps {
@@ -46,6 +47,7 @@ export const ProductRow = memo(function ProductRow({
   isRecentlyViewed = false,
 }: ProductRowProps) {
   const { activeWorkspace } = useWorkspace();
+  const { isStaff } = useAuth();
   const sym = activeWorkspace?.currencySymbol || "DT";
   const [imgError, setImgError] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -188,7 +190,7 @@ export const ProductRow = memo(function ProductRow({
             )}
           </div>
 
-          {product.topCreativeThumbnail && (
+          {!isStaff && product.topCreativeThumbnail && (
             <div
               onClick={(e) => {
                 e.stopPropagation();
@@ -228,6 +230,25 @@ export const ProductRow = memo(function ProductRow({
                 : (product.domain || (product.brandName && !isUuid(product.brandName) ? product.brandName : null));
 
               if (brandTarget) {
+                if (isStaff) {
+                  return (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onFilterBrand?.(product.brandName || product.domain || brandTarget);
+                      }}
+                      className={`text-[10px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded border hover:underline cursor-pointer ${
+                        isInactive
+                          ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                          : "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800/60"
+                      }`}
+                    >
+                      {product.brandName || "Brand"}
+                    </button>
+                  );
+                }
+
                 return (
                   <Link
                     href={`/spy/brand/${encodeURIComponent(brandTarget)}?tab=products`}
@@ -434,7 +455,7 @@ export const ProductRow = memo(function ProductRow({
           </span>
         )}
 
-        {onViewCreatives && (product.linkedAdsCount || 0) > 0 && (
+        {!isStaff && onViewCreatives && (product.linkedAdsCount || 0) > 0 && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -451,7 +472,7 @@ export const ProductRow = memo(function ProductRow({
           </button>
         )}
 
-        {(product.linkedAdsCount || 0) > 0 && (
+        {!isStaff && (product.linkedAdsCount || 0) > 0 && (
           <button
             onClick={handleQueueVerify}
             disabled={isQueueingVerify}
@@ -462,7 +483,7 @@ export const ProductRow = memo(function ProductRow({
           </button>
         )}
 
-        {onRefresh && (
+        {!isStaff && onRefresh && (
           <button
             type="button"
             onClick={handleRefresh}
@@ -485,7 +506,7 @@ export const ProductRow = memo(function ProductRow({
           <ExternalLink className="w-3.5 h-3.5" />
         </a>
 
-        {onDelete && (
+        {!isStaff && onDelete && (
           <button
             onClick={handleDelete}
             disabled={isDeleting}

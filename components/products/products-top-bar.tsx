@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import type { SmartPreset } from "./products-kpi-bar";
 import { getNicheDisplayLabel } from "@/lib/niches-taxonomy";
+import { useAuth } from "@/components/auth-context";
 
 export interface ProductsTopBarProps {
   // Search
@@ -100,7 +101,9 @@ export function ProductsTopBar({
   stillRunningOnly,
   onResetFilters,
 }: ProductsTopBarProps) {
-  const PRESET_TABS = [
+  const { isStaff } = useAuth();
+
+  const allPresetTabs = [
     { id: "all" as SmartPreset, label: "All Products", icon: null },
     { id: "favorites" as SmartPreset, label: "Favorites", icon: Sparkles, color: "text-amber-400" },
     { id: "breakout" as SmartPreset, label: "Breakout", icon: Flame, color: "text-amber-500", sort: "most_scaled" },
@@ -109,6 +112,10 @@ export function ProductsTopBar({
     { id: "evergreen" as SmartPreset, label: "Evergreen", icon: Clock, color: "text-purple-500", sort: "top_lasting" },
     { id: "with_offers" as SmartPreset, label: "Offers", icon: Tag, color: "text-rose-500" },
   ];
+
+  const PRESET_TABS = isStaff
+    ? allPresetTabs.filter((t) => t.id === "all" || t.id === "favorites")
+    : allPresetTabs;
 
   const hasAnyFilterActive =
     activeFilterCount > 0 ||

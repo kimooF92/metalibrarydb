@@ -25,3 +25,9 @@ You MUST check and strictly adhere to these rules before implementing any featur
 - **Prune & Compress Storage**: Ephemeral scrape payloads (`raw_extract`) must be set to `NULL` for deleted/failed records immediately, and purged within 2 days for successful scrapes.
 <!-- END:egress-and-performance-rules -->
 
+<!-- BEGIN:context7-mcp-rules -->
+# Context7 MCP Usage for Technical Best Practices & Documentation
+- Whenever researching technical implementations, architectural patterns, library APIs, or technical best practices, use the `context7` MCP tools (`resolve-library-id` and `query-docs`) to query accurate, up-to-date documentation and best-practice patterns.
+<!-- END:context7-mcp-rules -->
+
+

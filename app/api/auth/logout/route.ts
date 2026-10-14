@@ -18,5 +18,16 @@ export async function POST() {
     maxAge: 0,
   });
 
+  // Clear role hint cookie
+  response.cookies.set({
+    name: "ad_tracker_role",
+    value: "",
+    httpOnly: false,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+  });
+
   return response;
 }

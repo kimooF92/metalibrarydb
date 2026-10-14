@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { db } from "@/db";
 import { workspaces } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, or } from "drizzle-orm";
 
 import { WORKSPACE_COOKIE_NAME, WORKSPACE_HEADER_NAME } from "./workspace-constants";
 export { WORKSPACE_COOKIE_NAME, WORKSPACE_HEADER_NAME };
@@ -23,7 +23,30 @@ export interface WorkspaceRecord {
 // In-memory cache for fast default workspace fallback
 let cachedDefaultWorkspace: WorkspaceRecord | null = null;
 let lastCacheTime = 0;
+let cachedTunisiaWorkspace: WorkspaceRecord | null = null;
+let lastTunisiaCacheTime = 0;
 const CACHE_TTL_MS = 60 * 1000; // 1 minute
+
+export async function getTunisianWorkspace(): Promise<WorkspaceRecord> {
+  const now = Date.now();
+  if (cachedTunisiaWorkspace && now - lastTunisiaCacheTime < CACHE_TTL_MS) {
+    return cachedTunisiaWorkspace;
+  }
+
+  const rows = await db
+    .select()
+    .from(workspaces)
+    .where(or(eq(workspaces.countryCode, "TN"), eq(workspaces.slug, "tunisia")))
+    .limit(1);
+
+  if (rows.length > 0) {
+    cachedTunisiaWorkspace = rows[0];
+    lastTunisiaCacheTime = now;
+    return rows[0];
+  }
+
+  return await getDefaultWorkspace();
+}
 
 export async function getDefaultWorkspace(): Promise<WorkspaceRecord> {
   const now = Date.now();
@@ -74,6 +97,17 @@ export async function getDefaultWorkspace(): Promise<WorkspaceRecord> {
 }
 
 export async function getActiveWorkspace(req?: Request): Promise<WorkspaceRecord> {
+  // Staff users are strictly scoped to the Tunisian workspace
+  if (req) {
+    try {
+      const { getRoleFromRequest } = await import("./api-guard");
+      const role = await getRoleFromRequest(req);
+      if (role === "staff") {
+        return await getTunisianWorkspace();
+      }
+    } catch {}
+  }
+
   let targetId: string | null = null;
 
   // 1. Check custom request header

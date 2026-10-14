@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ads, scrapedProducts } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { validateApiSecret } from "@/lib/api-guard";
+import { validateAdminRole } from "@/lib/api-guard";
 
 export async function POST(req: NextRequest) {
-  const authError = await validateApiSecret(req);
+  const authError = await validateAdminRole(req);
   if (authError) return authError;
 
   try {
@@ -26,8 +26,10 @@ export async function POST(req: NextRequest) {
         scrapeStatus: "success",
         updatedAt: new Date(),
       })
-      .where(eq(scrapedProducts.id, id))
-      .returning();
+      .returning({
+        id: scrapedProducts.id,
+        url: scrapedProducts.url,
+      });
 
     if (!restored) {
       return NextResponse.json(

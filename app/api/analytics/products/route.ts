@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ads, scrapedProducts } from "@/db/schema";
 import { sql, desc, count, and, eq, or, isNull, gte } from "drizzle-orm";
-import { validateApiSecret } from "@/lib/api-guard";
+import { validateApiSecret, getRoleFromRequest } from "@/lib/api-guard";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 
@@ -15,6 +15,8 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    const role = (await getRoleFromRequest(req)) || "admin";
+    const favColumn = role === "staff" ? scrapedProducts.isFavoriteStaff : scrapedProducts.isFavorite;
     const activeWorkspace = await getActiveWorkspace(req);
     const range = req.nextUrl.searchParams.get("range") ?? "7d";
     const rangeDays = ({ today: 1, "7d": 7, "15d": 15, "30d": 30 } as Record<string, number>)[range] ?? 7;
@@ -37,7 +39,7 @@ export async function GET(req: NextRequest) {
         classifiedCount: sql<number>`COUNT(CASE WHEN ${scrapedProducts.category} IS NOT NULL AND ${scrapedProducts.category} != '' AND ${scrapedProducts.category} != 'General & Other' THEN 1 END)`.mapWith(Number),
         parsedPriceCount: sql<number>`COUNT(CASE WHEN ${priceExpr} > 0 THEN 1 END)`.mapWith(Number),
         withOffersCount: sql<number>`COUNT(CASE WHEN ${scrapedProducts.discountOrOffer} IS NOT NULL AND ${scrapedProducts.discountOrOffer} != '' THEN 1 END)`.mapWith(Number),
-        favoritesCount: sql<number>`COUNT(CASE WHEN ${scrapedProducts.isFavorite} = true THEN 1 END)`.mapWith(Number),
+        favoritesCount: sql<number>`COUNT(CASE WHEN ${favColumn} = true THEN 1 END)`.mapWith(Number),
         newInWindow: sql<number>`COUNT(CASE WHEN ${scrapedProducts.createdAt} >= ${windowStartIso} THEN 1 END)`.mapWith(Number),
         hasMetaPixel: sql<number>`COUNT(CASE WHEN ${scrapedProducts.metaPixelIds} IS NOT NULL AND array_length(${scrapedProducts.metaPixelIds}, 1) > 0 THEN 1 END)`.mapWith(Number),
         hasWhatsApp: sql<number>`COUNT(CASE WHEN ${scrapedProducts.whatsappNumbers} IS NOT NULL AND array_length(${scrapedProducts.whatsappNumbers}, 1) > 0 THEN 1 END)`.mapWith(Number),
@@ -160,7 +162,7 @@ export async function GET(req: NextRequest) {
         subCategory: scrapedProducts.subCategory,
         storePlatform: scrapedProducts.storePlatform,
         deliveryCost: scrapedProducts.deliveryCost,
-        isFavorite: scrapedProducts.isFavorite,
+        isFavorite: favColumn,
         createdAt: scrapedProducts.createdAt,
         linkedAdsCount: sql<number>`COUNT(${ads.id})`.mapWith(Number),
         activeAdsCount: sql<number>`COUNT(CASE WHEN ${ads.isArchived} = false OR ${ads.isArchived} IS NULL THEN ${ads.id} END)`.mapWith(Number),

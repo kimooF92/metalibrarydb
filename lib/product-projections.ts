@@ -102,6 +102,13 @@ export const PRODUCT_RESPONSE_PROJECTION = {
   updatedAt: scrapedProducts.updatedAt,
 } as const;
 
+export function getProductResponseProjection(role: "admin" | "staff" = "admin") {
+  return {
+    ...PRODUCT_RESPONSE_PROJECTION,
+    isFavorite: role === "staff" ? scrapedProducts.isFavoriteStaff : scrapedProducts.isFavorite,
+  };
+}
+
 // Drizzle's relational `columns` option uses booleans, unlike `.select()`.
 export const AD_STATUS_PRODUCT_COLUMNS = {
   id: true,

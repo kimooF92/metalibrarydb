@@ -1,6 +1,7 @@
 "use client";
 
 import { ShoppingBag, Star, Zap, Clock, Tag } from "lucide-react";
+import { useAuth } from "@/components/auth-context";
 
 export type SmartPreset =
   | "all"
@@ -41,6 +42,71 @@ export function ProductsKpiBar({
   smartPreset,
   onSelectPreset,
 }: ProductsKpiBarProps) {
+  const { isStaff } = useAuth();
+
+  // For staff: show a clean, focused 2-metric KPI bar (Total Products & Starred Favorites)
+  if (isStaff) {
+    return (
+      <div className="grid grid-cols-2 gap-2 max-w-md">
+        {/* Total Products */}
+        <div
+          onClick={() => onSelectPreset("all")}
+          title={`View All Products (${stats.successfulProducts} fully scraped, ${stats.pendingProducts} pending)`}
+          className={`px-3 py-2 rounded-lg bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-150 select-none ${
+            smartPreset === "all"
+              ? "border-indigo-500/60 ring-1 ring-indigo-500/25 bg-indigo-50/25 dark:bg-indigo-950/20"
+              : "border-slate-200 dark:border-slate-800/80 hover:border-indigo-500/35"
+          }`}
+        >
+          <div className="flex items-center justify-between text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+            <span className="truncate">Total Products</span>
+            <ShoppingBag className="w-3.5 h-3.5 text-indigo-500 shrink-0 ml-1" />
+          </div>
+          <div className="flex items-baseline justify-between gap-1.5 mt-0.5">
+            <span
+              className={`text-base sm:text-lg font-black text-slate-900 dark:text-white leading-tight ${
+                statsLoading ? "animate-pulse opacity-60" : ""
+              }`}
+            >
+              {stats.totalProducts}
+            </span>
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium truncate">
+              {stats.successfulProducts} scraped
+            </span>
+          </div>
+        </div>
+
+        {/* Starred Favorites */}
+        <div
+          onClick={() => onSelectPreset("favorites")}
+          title="Filter by Starred Favorites"
+          className={`px-3 py-2 rounded-lg bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-150 select-none ${
+            smartPreset === "favorites"
+              ? "border-amber-500/60 ring-1 ring-amber-500/25 bg-amber-50/25 dark:bg-amber-950/20"
+              : "border-slate-200 dark:border-slate-800/80 hover:border-amber-500/35"
+          }`}
+        >
+          <div className="flex items-center justify-between text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+            <span className="truncate">Favorites</span>
+            <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500/20 shrink-0 ml-1" />
+          </div>
+          <div className="flex items-baseline justify-between gap-1.5 mt-0.5">
+            <span
+              className={`text-base sm:text-lg font-black text-amber-600 dark:text-amber-400 leading-tight ${
+                statsLoading ? "animate-pulse opacity-60" : ""
+              }`}
+            >
+              {stats.favoritesCount}
+            </span>
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium truncate">
+              watchlist
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
       {/* Total Products */}

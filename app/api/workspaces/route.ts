@@ -10,7 +10,7 @@ import {
 } from "@/db/schema";
 import { eq, desc, asc, sql, not, and } from "drizzle-orm";
 import { getActiveWorkspace } from "@/lib/workspace-server";
-import { validateApiSecret } from "@/lib/api-guard";
+import { validateApiSecret, validateAdminRole, getRoleFromRequest } from "@/lib/api-guard";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -115,8 +115,19 @@ export async function GET(req: NextRequest) {
       .groupBy(workspaces.id)
       .orderBy(desc(workspaces.isDefault), asc(workspaces.name));
 
+    const role = await getRoleFromRequest(req);
+    const visibleWorkspaces =
+      role === "staff"
+        ? rows.filter(
+            (w) =>
+              w.countryCode === "TN" ||
+              w.slug?.toLowerCase().includes("tunisia") ||
+              w.name?.toLowerCase().includes("tunisia")
+          )
+        : rows;
+
     return NextResponse.json({
-      workspaces: rows,
+      workspaces: visibleWorkspaces,
       activeWorkspace: active,
     });
   } catch (error: any) {
@@ -130,7 +141,7 @@ export async function GET(req: NextRequest) {
 
 // POST /api/workspaces - Create a new market workspace
 export async function POST(req: NextRequest) {
-  const authError = await validateApiSecret(req);
+  const authError = await validateAdminRole(req);
   if (authError) return authError;
 
   try {
@@ -198,7 +209,7 @@ export async function POST(req: NextRequest) {
 
 // PATCH /api/workspaces - Update an existing workspace
 export async function PATCH(req: NextRequest) {
-  const authError = await validateApiSecret(req);
+  const authError = await validateAdminRole(req);
   if (authError) return authError;
 
   try {
@@ -254,7 +265,7 @@ export async function PATCH(req: NextRequest) {
 
 // DELETE /api/workspaces - Strictly verified workspace deletion
 export async function DELETE(req: NextRequest) {
-  const authError = await validateApiSecret(req);
+  const authError = await validateAdminRole(req);
   if (authError) return authError;
 
   try {

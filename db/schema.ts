@@ -214,6 +214,7 @@ export const scrapedProducts = pgTable(
     targetAudience: text("target_audience"), // unisex | men | women | kids
     supplierUrls: text("supplier_urls").array(), // Array of supplier sourcing URLs (AliExpress, 1688, Alibaba, CJ, etc.)
     isFavorite: boolean("is_favorite").default(false),
+    isFavoriteStaff: boolean("is_favorite_staff").default(false),
     scrapeStatus: text("scrape_status").default("pending").notNull(), // pending | scraping | success | failed
     failureReason: text("failure_reason"),
     lastScrapedAt: timestamp("last_scraped_at", { withTimezone: true }),
@@ -230,6 +231,7 @@ export const scrapedProducts = pgTable(
     index("idx_scraped_products_workspace_id").on(table.workspaceId),
     index("idx_scraped_products_category").on(table.category),
     index("idx_scraped_products_is_favorite").on(table.isFavorite),
+    index("idx_scraped_products_is_favorite_staff").on(table.isFavoriteStaff),
     index("idx_scraped_products_status").on(table.scrapeStatus),
     index("idx_scraped_products_store_platform").on(table.storePlatform),
     index("idx_scraped_products_created_at").on(table.createdAt.desc()),

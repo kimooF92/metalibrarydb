@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { useWorkspace } from "@/components/workspace-context";
+import { useAuth } from "@/components/auth-context";
 import {
   ChevronDown,
   Check,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 
 export function WorkspaceSwitcher() {
+  const { isStaff } = useAuth();
   const {
     workspaces,
     activeWorkspace,
@@ -72,6 +74,27 @@ export function WorkspaceSwitcher() {
   if (isLoading || !activeWorkspace) {
     return (
       <div className="h-8 w-28 rounded-xl bg-slate-200/70 dark:bg-slate-800/60 animate-pulse" />
+    );
+  }
+
+  // Staff role is locked strictly to Tunisian workspace (no switcher / no foreign markets)
+  if (isStaff) {
+    const tunisiaWs =
+      workspaces.find(
+        (w) =>
+          w.countryCode === "TN" ||
+          w.slug?.toLowerCase().includes("tunisia") ||
+          w.name?.toLowerCase().includes("tunisia")
+      ) || activeWorkspace;
+
+    return (
+      <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 shadow-xs text-xs font-semibold text-slate-800 dark:text-slate-200 select-none">
+        <span className="text-sm leading-none">{tunisiaWs.flag || "🇹🇳"}</span>
+        <span className="font-bold tracking-tight">{tunisiaWs.name || "Tunisia"}</span>
+        <span className="px-1 py-0.2 text-[9px] font-mono rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+          {tunisiaWs.countryCode || "TN"}
+        </span>
+      </div>
     );
   }
 
@@ -154,14 +177,16 @@ export function WorkspaceSwitcher() {
                   </div>
 
                   <div className="flex items-center space-x-1 ml-2 shrink-0">
-                    <button
-                      type="button"
-                      title="Edit Workspace"
-                      onClick={(e) => handleEdit(e, w)}
-                      className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition"
-                    >
-                      <Settings2 className="w-3.5 h-3.5" />
-                    </button>
+                    {!isStaff && (
+                      <button
+                        type="button"
+                        title="Edit Workspace"
+                        onClick={(e) => handleEdit(e, w)}
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition"
+                      >
+                        <Settings2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
 
                     {isSwitching ? (
                       <Loader2 className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
@@ -174,20 +199,22 @@ export function WorkspaceSwitcher() {
             })}
           </div>
 
-          {/* Divider */}
-          <div className="my-1.5 border-t border-slate-100 dark:border-slate-800" />
-
-          {/* Create New Workspace Action */}
-          <div className="px-1.5">
-            <button
-              type="button"
-              onClick={handleCreate}
-              className="w-full flex items-center space-x-2 px-2.5 py-1.5 text-xs font-semibold rounded-xl text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Create New Workspace</span>
-            </button>
-          </div>
+          {/* Create New Workspace Action (Admin Only) */}
+          {!isStaff && (
+            <>
+              <div className="my-1.5 border-t border-slate-100 dark:border-slate-800" />
+              <div className="px-1.5">
+                <button
+                  type="button"
+                  onClick={handleCreate}
+                  className="w-full flex items-center space-x-2 px-2.5 py-1.5 text-xs font-semibold rounded-xl text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Create New Workspace</span>
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

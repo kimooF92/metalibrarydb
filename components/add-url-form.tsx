@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { PlusCircle, Loader2, Link2, AlertCircle, CheckCircle2, X } from "lucide-react";
+import { useAuth } from "./auth-context";
 
 interface AddUrlFormProps {
   onSuccess?: () => void;
 }
 
 export function AddUrlForm({ onSuccess }: AddUrlFormProps) {
+  const { isStaff } = useAuth();
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [duplicatePage, setDuplicatePage] = useState<any | null>(null);
@@ -151,18 +153,24 @@ export function AddUrlForm({ onSuccess }: AddUrlFormProps) {
               {duplicatePage.currentResults !== null && duplicatePage.currentResults !== undefined && (
                 <span className="text-amber-600 dark:text-amber-300 font-medium"> ({duplicatePage.currentResults} active ads)</span>
               )}.
-              <p className="text-slate-500 dark:text-slate-400 text-[11px] mt-0.5">Would you like to refresh the existing page or force add a separate entry?</p>
+              <p className="text-slate-500 dark:text-slate-400 text-[11px] mt-0.5">
+                {isStaff
+                  ? "This page is already monitored in this workspace. You may add it anyway as a separate entry if needed."
+                  : "Would you like to refresh the existing page or force add a separate entry?"}
+              </p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-amber-200 dark:border-amber-500/20">
-            <button
-              onClick={handleRefreshExisting}
-              disabled={loading}
-              className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all cursor-pointer shadow-sm"
-            >
-              Refresh Existing Page
-            </button>
+            {!isStaff && (
+              <button
+                onClick={handleRefreshExisting}
+                disabled={loading}
+                className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all cursor-pointer shadow-sm"
+              >
+                Refresh Existing Page
+              </button>
+            )}
             <button
               onClick={() => handleSubmit(null as any, true)}
               disabled={loading}

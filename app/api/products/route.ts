@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ads, adObservations, scrapedProducts, trackedPages } from "@/db/schema";
 import { eq, ilike, and, sql, desc, asc, or, count, inArray, isNull } from "drizzle-orm";
-import { validateApiSecret } from "@/lib/api-guard";
+import { validateApiSecret, validateAdminRole, getRoleFromRequest } from "@/lib/api-guard";
 import { PRIVATE_AUTH_VARY, PRIVATE_DETAIL_CACHE_CONTROL, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 import { NICHE_TAXONOMY, resolveSubNicheDbValues } from "@/lib/niches-taxonomy";
@@ -16,6 +16,8 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    const role = (await getRoleFromRequest(req)) || "admin";
+    const favColumn = role === "staff" ? scrapedProducts.isFavoriteStaff : scrapedProducts.isFavorite;
     const { searchParams } = new URL(req.url);
 
     const id = searchParams.get("id") || searchParams.get("productId");
@@ -188,7 +190,7 @@ export async function GET(req: NextRequest) {
 
     // Filter by Favorite / Starred status
     if (isFavoriteOnly || smartPreset === "favorites") {
-      conditions.push(eq(scrapedProducts.isFavorite, true));
+      conditions.push(eq(favColumn, true));
     }
 
     // Smart Preset: Newly Discovered (last 7 days)
@@ -366,7 +368,7 @@ export async function GET(req: NextRequest) {
       category: scrapedProducts.category,
       subCategory: scrapedProducts.subCategory,
       targetAudience: scrapedProducts.targetAudience,
-      isFavorite: scrapedProducts.isFavorite,
+      isFavorite: favColumn,
       scrapeStatus: scrapedProducts.scrapeStatus,
       failureReason: scrapedProducts.failureReason,
       lastScrapedAt: scrapedProducts.lastScrapedAt,
@@ -577,6 +579,7 @@ export async function PATCH(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    const role = (await getRoleFromRequest(req)) || "admin";
     const body = await req.json();
     const {
       id,
@@ -608,7 +611,11 @@ export async function PATCH(req: NextRequest) {
     };
 
     if (isFavorite !== undefined) {
-      updateData.isFavorite = Boolean(isFavorite);
+      if (role === "staff") {
+        updateData.isFavoriteStaff = Boolean(isFavorite);
+      } else {
+        updateData.isFavorite = Boolean(isFavorite);
+      }
     }
 
     if (title !== undefined) {
@@ -675,11 +682,29 @@ export async function PATCH(req: NextRequest) {
         : [];
     }
 
+    const favColumn = role === "staff" ? scrapedProducts.isFavoriteStaff : scrapedProducts.isFavorite;
+
     const [updatedProduct] = await db
       .update(scrapedProducts)
       .set(updateData)
       .where(eq(scrapedProducts.id, id))
-      .returning();
+      .returning({
+        id: scrapedProducts.id,
+        title: scrapedProducts.title,
+        currentPrice: scrapedProducts.currentPrice,
+        originalPrice: scrapedProducts.originalPrice,
+        discountOrOffer: scrapedProducts.discountOrOffer,
+        deliveryCost: scrapedProducts.deliveryCost,
+        category: scrapedProducts.category,
+        subCategory: scrapedProducts.subCategory,
+        storePlatform: scrapedProducts.storePlatform,
+        url: scrapedProducts.url,
+        domain: scrapedProducts.domain,
+        mainImageUrl: scrapedProducts.mainImageUrl,
+        supplierUrls: scrapedProducts.supplierUrls,
+        isFavorite: favColumn,
+        updatedAt: scrapedProducts.updatedAt,
+      });
 
     return NextResponse.json({
       success: true,
@@ -697,7 +722,7 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const authError = await validateApiSecret(req);
+  const authError = await validateAdminRole(req);
   if (authError) return authError;
 
   try {
@@ -723,6 +748,7 @@ export async function DELETE(req: NextRequest) {
       .set({
         scrapeStatus: "deleted",
         isFavorite: false,
+        isFavoriteStaff: false,
         updatedAt: new Date(),
       })
       .where(eq(scrapedProducts.id, id));

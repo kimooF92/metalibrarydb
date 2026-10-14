@@ -8,6 +8,7 @@ import { extractProductClusterKey } from "@/lib/product-clustering";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
+import { validateAdminRole, validateApiSecret } from "@/lib/api-guard";
 
 interface CachedPagesResponse {
   data: any;
@@ -18,6 +19,9 @@ const pagesCacheMap = new Map<string, CachedPagesResponse>();
 const PAGES_CACHE_TTL_MS = 15 * 1000; // 15 seconds
 
 export async function GET(request: Request) {
+  const authError = await validateAdminRole(request);
+  if (authError) return authError;
+
   try {
     const { searchParams } = new URL(request.url);
 
@@ -632,6 +636,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const authError = await validateApiSecret(request);
+  if (authError) return authError;
+
   try {
     const body = await request.json();
     const validated = singleUrlSchema.parse(body);

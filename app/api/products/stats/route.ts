@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ads, scrapedProducts } from "@/db/schema";
 import { count, sql, and, eq } from "drizzle-orm";
-import { validateApiSecret } from "@/lib/api-guard";
+import { validateApiSecret, getRoleFromRequest } from "@/lib/api-guard";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 
@@ -48,8 +48,10 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const forceRefresh = searchParams.get("refresh") === "true";
 
+    const role = (await getRoleFromRequest(req)) || "admin";
+    const cacheKey = `${activeWorkspace.id}:${role}`;
     const now = Date.now();
-    const cachedStats = cachedStatsMap.get(activeWorkspace.id);
+    const cachedStats = cachedStatsMap.get(cacheKey);
     if (!forceRefresh && cachedStats && now - cachedStats.timestamp < CACHE_TTL_MS) {
       return NextResponse.json(
         {
@@ -66,13 +68,15 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    const favColumn = role === "staff" ? scrapedProducts.isFavoriteStaff : scrapedProducts.isFavorite;
+
     // Execute summary queries in parallel scoped to active workspace
     const [productStatsRows, activeAdsStatsRows, nicheCountRows] = await Promise.all([
       db
         .select({
           total: count(),
           withOffers: sql<number>`COUNT(CASE WHEN ${scrapedProducts.discountOrOffer} IS NOT NULL AND ${scrapedProducts.discountOrOffer} != '' THEN 1 END)`.mapWith(Number),
-          favoritesCount: sql<number>`COUNT(CASE WHEN ${scrapedProducts.isFavorite} = true THEN 1 END)`.mapWith(Number),
+          favoritesCount: sql<number>`COUNT(CASE WHEN ${favColumn} = true THEN 1 END)`.mapWith(Number),
           successful: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} = 'success' THEN 1 END)`.mapWith(Number),
           pending: sql<number>`COUNT(CASE WHEN ${scrapedProducts.scrapeStatus} NOT IN ('success', 'deleted', 'ignored') OR ${scrapedProducts.currentPrice} IS NULL THEN 1 END)`.mapWith(Number),
           newThisWeek: sql<number>`COUNT(CASE WHEN ${scrapedProducts.createdAt} >= NOW() - INTERVAL '7 days' THEN 1 END)`.mapWith(Number),
@@ -150,7 +154,7 @@ export async function GET(req: NextRequest) {
       })),
     };
 
-    cachedStatsMap.set(activeWorkspace.id, {
+    cachedStatsMap.set(cacheKey, {
       data: statsData,
       timestamp: now,
     });

@@ -24,14 +24,19 @@ import { SmallPagesScanBadge } from "./small-pages-scan-banner";
 import { NotificationCenter } from "./notification-center";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 import { useLogout } from "@/hooks/use-logout";
+import { useAuth } from "@/components/auth-context";
+import { useAddUrlModal } from "@/components/add-url-modal";
+import { Plus, PlusCircle, ShieldCheck } from "lucide-react";
 
 export function Navigation() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const { isCollapsed, toggleSidebar } = useSidebar();
   const { logout, isLoggingOut } = useLogout();
+  const { isStaff } = useAuth();
+  const { openAddUrlModal } = useAddUrlModal();
 
-  const navItems = [
+  const allNavItems = [
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
     { href: "/fresh-winners", label: "Fresh Winners", icon: Flame, isFlame: true },
     { href: "/opportunities", label: "Opportunity Seeker", icon: Sparkles, isAi: true },
@@ -41,16 +46,22 @@ export function Navigation() {
     { href: "/analytics", label: "Analytics", icon: BarChart3 },
   ];
 
+  // Staff role only sees Products
+  const navItems = isStaff
+    ? allNavItems.filter((item) => item.href === "/products")
+    : allNavItems;
+
   const isSettingsActive = pathname === "/settings";
 
   return (
     <>
-      {/* Desktop Left Sidebar */}
-      <header
-        className={`hidden md:flex flex-col ${
-          isCollapsed ? "w-16 p-3" : "w-64 p-5"
-        } h-screen border-r border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900/20 backdrop-blur-md shrink-0 sticky top-0 left-0 z-40 justify-between transition-all duration-300 relative`}
-      >
+      {/* Desktop Left Sidebar (Admin Only - Staff has clean full-width workspace) */}
+      {!isStaff && (
+        <header
+          className={`hidden md:flex flex-col ${
+            isCollapsed ? "w-16 p-3" : "w-64 p-5"
+          } h-screen border-r border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900/20 backdrop-blur-md shrink-0 sticky top-0 left-0 z-40 justify-between transition-all duration-300 relative`}
+        >
         {/* Floating Border Toggle Button (Shadcn Style) */}
         <button
           onClick={toggleSidebar}
@@ -85,6 +96,12 @@ export function Navigation() {
                 <span className="text-[9px] text-slate-600 dark:text-slate-400 font-medium block">
                   Competitor Intelligence
                 </span>
+                {isStaff && (
+                  <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 mt-1">
+                    <ShieldCheck className="w-2.5 h-2.5" />
+                    <span>Staff Access</span>
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -150,41 +167,62 @@ export function Navigation() {
           </nav>
         </div>
 
-        {/* Sidebar Bottom Footer — Settings & Lock / Sign Out */}
+        {/* Sidebar Bottom Footer — Add Page CTA, Settings & Lock / Sign Out */}
         <div className="pt-3 border-t border-slate-200 dark:border-slate-800/80 space-y-1">
-          {/* Settings Button */}
+          {/* Add Page CTA Button */}
           {isCollapsed ? (
-            <Link
-              href="/settings"
-              title="Settings"
-              className={`flex items-center justify-center w-10 h-10 mx-auto rounded-lg transition-all border ${
-                isSettingsActive
-                  ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-300 shadow-md shadow-indigo-600/[0.03]"
-                  : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
-              }`}
+            <button
+              onClick={openAddUrlModal}
+              title="Add Tracked Page"
+              className="flex items-center justify-center w-10 h-10 mx-auto rounded-lg text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 transition-all border border-indigo-500/20 cursor-pointer mb-2"
             >
-              <Settings
-                className={`w-4 h-4 ${
-                  isSettingsActive ? "text-indigo-650 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
-                }`}
-              />
-            </Link>
+              <Plus className="w-4 h-4" />
+            </button>
           ) : (
-            <Link
-              href="/settings"
-              className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all border ${
-                isSettingsActive
-                  ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-650 dark:text-indigo-300 shadow-md shadow-indigo-600/[0.03]"
-                  : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
-              }`}
+            <button
+              onClick={openAddUrlModal}
+              className="w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-lg text-xs font-semibold bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-sm shadow-indigo-500/20 transition-all cursor-pointer mb-2"
             >
-              <Settings
-                className={`w-4 h-4 ${
-                  isSettingsActive ? "text-indigo-650 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
+              <PlusCircle className="w-4 h-4" />
+              <span>Add Tracked Page</span>
+            </button>
+          )}
+
+          {/* Settings Button (Admin Only) */}
+          {!isStaff && (
+            isCollapsed ? (
+              <Link
+                href="/settings"
+                title="Settings"
+                className={`flex items-center justify-center w-10 h-10 mx-auto rounded-lg transition-all border ${
+                  isSettingsActive
+                    ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-300 shadow-md shadow-indigo-600/[0.03]"
+                    : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
                 }`}
-              />
-              <span className="truncate">Settings</span>
-            </Link>
+              >
+                <Settings
+                  className={`w-4 h-4 ${
+                    isSettingsActive ? "text-indigo-650 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
+                  }`}
+                />
+              </Link>
+            ) : (
+              <Link
+                href="/settings"
+                className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all border ${
+                  isSettingsActive
+                    ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-650 dark:text-indigo-300 shadow-md shadow-indigo-600/[0.03]"
+                    : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
+                }`}
+              >
+                <Settings
+                  className={`w-4 h-4 ${
+                    isSettingsActive ? "text-indigo-650 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
+                  }`}
+                />
+                <span className="truncate">Settings</span>
+              </Link>
+            )
           )}
 
           {/* Logout / Lock Session */}
@@ -209,6 +247,7 @@ export function Navigation() {
           )}
         </div>
       </header>
+      )}
 
       {/* Mobile Top Bar */}
       <header className="flex md:hidden items-center justify-between h-14 w-full px-4 border-b border-slate-200 dark:border-slate-800/80 bg-slate-50/80 dark:bg-slate-900/60 backdrop-blur-md sticky top-0 z-40">
@@ -221,24 +260,42 @@ export function Navigation() {
           <span className="font-extrabold text-sm text-slate-900 dark:text-white tracking-tight">
             Meta Ad Tracker
           </span>
+          {isStaff && (
+            <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+              <ShieldCheck className="w-2.5 h-2.5" />
+              <span>Staff</span>
+            </span>
+          )}
         </div>
 
         <div className="flex items-center space-x-2">
-          <SmallPagesScanBadge />
+          {!isStaff && <SmallPagesScanBadge />}
           <NotificationCenter layout="navbar" />
           <ThemeToggle size="sm" />
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            aria-label={isOpen ? "Close menu" : "Open menu"}
-            className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 transition-all cursor-pointer"
-          >
-            {isOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-          </button>
+          {isStaff ? (
+            <button
+              onClick={logout}
+              disabled={isLoggingOut}
+              className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/40 transition-colors cursor-pointer disabled:opacity-50"
+              title="Sign Out"
+            >
+              <LogOut className={`w-3.5 h-3.5 ${isLoggingOut ? "animate-spin" : ""}`} />
+              <span>Exit</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsOpen(!isOpen)}
+              aria-label={isOpen ? "Close menu" : "Open menu"}
+              className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 transition-all cursor-pointer"
+            >
+              {isOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+            </button>
+          )}
         </div>
       </header>
 
-      {/* Mobile Drawer Menu Overlay */}
-      {isOpen && (
+      {/* Mobile Drawer Menu Overlay (Admin Only) */}
+      {!isStaff && isOpen && (
         <div className="fixed inset-x-0 bottom-0 top-14 z-40 bg-white/98 dark:bg-[#0b0f19]/98 backdrop-blur-md md:hidden flex flex-col p-6 space-y-6 animate-in slide-in-from-top-5 duration-200 justify-between">
           <div className="flex flex-col space-y-4">
             <div className="pb-3 border-b border-slate-200 dark:border-slate-800">
@@ -284,18 +341,31 @@ export function Navigation() {
         </div>
 
         <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-2">
-            <Link
-              href="/settings"
-              onClick={() => setIsOpen(false)}
-              className={`flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all border ${
-                isSettingsActive
-                  ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-650 dark:text-indigo-300"
-                  : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/40"
-              }`}
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                openAddUrlModal();
+              }}
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition-all cursor-pointer"
             >
-              <Settings className="w-4 h-4" />
-              <span>Settings</span>
-            </Link>
+              <PlusCircle className="w-4 h-4" />
+              <span>Add Tracked Page</span>
+            </button>
+
+            {!isStaff && (
+              <Link
+                href="/settings"
+                onClick={() => setIsOpen(false)}
+                className={`flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all border ${
+                  isSettingsActive
+                    ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-650 dark:text-indigo-300"
+                    : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/40"
+                }`}
+              >
+                <Settings className="w-4 h-4" />
+                <span>Settings</span>
+              </Link>
+            )}
 
             <button
               onClick={logout}

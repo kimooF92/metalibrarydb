@@ -56,8 +56,8 @@ export async function GET(req: NextRequest) {
     // Build conditions array
     const conditions = [];
 
-    // Scope to active workspace unless deep-linking to a specific brand/page ID
-    if (!trackedPageId && !sisterPageId && !brandDomainId) {
+    // Scope to active workspace unless deep-linking to a specific brand/page ID or product
+    if (!trackedPageId && !sisterPageId && !brandDomainId && !productId) {
       conditions.push(eq(trackedPages.workspaceId, activeWorkspace.id));
     }
 
@@ -279,7 +279,7 @@ export async function GET(req: NextRequest) {
       conditions.push(eq(ads.isArchived, true));
     } else if (includeArchived) {
       if (status === "active") {
-        conditions.push(and(eq(adObservations.isActive, true), eq(ads.isArchived, false)));
+        conditions.push(and(sql`COALESCE(${adObservations.isActive}, true) = true`, or(eq(ads.isArchived, false), sql`${ads.isArchived} IS NULL`)));
       } else if (status === "inactive") {
         conditions.push(or(eq(adObservations.isActive, false), eq(ads.isArchived, true)));
       }
@@ -287,7 +287,7 @@ export async function GET(req: NextRequest) {
       // Hide archived ads from main feed states (all, active, inactive)
       conditions.push(or(eq(ads.isArchived, false), sql`${ads.isArchived} IS NULL`));
       if (status === "active") {
-        conditions.push(eq(adObservations.isActive, true));
+        conditions.push(or(eq(adObservations.isActive, true), sql`${adObservations.isActive} IS NULL`));
       } else if (status === "inactive") {
         conditions.push(eq(adObservations.isActive, false));
       }
@@ -326,14 +326,14 @@ export async function GET(req: NextRequest) {
         archivedAt: ads.archivedAt,
         createdAt: ads.createdAt,
         updatedAt: ads.updatedAt,
-        duplicationCount: adObservations.duplicationCount,
-        isActive: adObservations.isActive,
-        trackedPageId: adObservations.trackedPageId,
-        pageDisplayName: trackedPages.displayName,
+        duplicationCount: sql<number>`COALESCE(${adObservations.duplicationCount}, 1)`.as("duplication_count"),
+        isActive: sql<boolean>`COALESCE(${adObservations.isActive}, CASE WHEN ${ads.isArchived} = true THEN false ELSE true END)`.as("is_active"),
+        trackedPageId: sql<string>`COALESCE(${adObservations.trackedPageId}, ${trackedPages.id})`.as("tracked_page_id"),
+        pageDisplayName: sql<string>`COALESCE(${trackedPages.displayName}, ${ads.pageName})`.as("page_display_name"),
       })
       .from(ads)
-      .innerJoin(adObservations, eq(ads.id, adObservations.adId))
-      .leftJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+      .leftJoin(adObservations, eq(ads.id, adObservations.adId))
+      .leftJoin(trackedPages, or(eq(adObservations.trackedPageId, trackedPages.id), eq(ads.pageId, trackedPages.pageId)))
       .where(whereClause)
       .orderBy(ads.id, desc(adObservations.observedAt))
       .as("distinct_ads");
@@ -425,8 +425,8 @@ export async function GET(req: NextRequest) {
       const [countResult] = await db
         .select({ count: sql<number>`count(distinct ${ads.id})` })
         .from(ads)
-        .innerJoin(adObservations, eq(ads.id, adObservations.adId))
-        .leftJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+        .leftJoin(adObservations, eq(ads.id, adObservations.adId))
+        .leftJoin(trackedPages, or(eq(adObservations.trackedPageId, trackedPages.id), eq(ads.pageId, trackedPages.pageId)))
         .where(whereClause);
       total = Number(countResult?.count || 0);
     } catch (countErr) {

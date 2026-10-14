@@ -10,8 +10,17 @@ import { SmallPagesScanBanner } from "@/components/small-pages-scan-banner";
 
 import { WorkspaceProvider } from "@/components/workspace-context";
 import { ManageWorkspaceModal } from "@/components/manage-workspace-modal";
+import { AuthProvider } from "@/components/auth-context";
+import { AddUrlModalProvider } from "@/components/add-url-modal";
+import { UserRole } from "@/lib/auth";
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  initialRole = "admin",
+}: {
+  children: React.ReactNode;
+  initialRole?: UserRole;
+}) {
   const pathname = usePathname();
   const isLoginPage = pathname === "/login";
 
@@ -22,25 +31,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isProductsPage = pathname.startsWith("/products");
 
   return (
-    <WorkspaceProvider>
-      <SidebarProvider>
-        <SmallPagesScanProvider>
-          <Navigation />
-          <div className="flex-1 min-w-0 h-full flex flex-col overflow-hidden bg-background">
-            <TopBar />
-            <SmallPagesScanBanner />
-            <main
-              className={`flex-1 min-w-0 flex flex-col bg-background ${
-                isProductsPage ? "h-full overflow-hidden p-0" : "overflow-y-auto p-4 md:px-6 md:py-5"
-              }`}
-            >
-              {children}
-            </main>
-          </div>
-          <ManageWorkspaceModal />
-        </SmallPagesScanProvider>
-      </SidebarProvider>
-    </WorkspaceProvider>
+    <AuthProvider initialRole={initialRole}>
+      <WorkspaceProvider>
+        <SidebarProvider>
+          <SmallPagesScanProvider>
+            <AddUrlModalProvider>
+              <Navigation />
+              <div className="flex-1 min-w-0 h-full flex flex-col overflow-hidden bg-background">
+                <TopBar />
+                <SmallPagesScanBanner />
+                <main
+                  className={`flex-1 min-w-0 flex flex-col bg-background ${
+                    isProductsPage ? "h-full overflow-hidden p-0" : "overflow-y-auto p-4 md:px-6 md:py-5"
+                  }`}
+                >
+                  {children}
+                </main>
+              </div>
+              <ManageWorkspaceModal />
+            </AddUrlModalProvider>
+          </SmallPagesScanProvider>
+        </SidebarProvider>
+      </WorkspaceProvider>
+    </AuthProvider>
   );
 }
 

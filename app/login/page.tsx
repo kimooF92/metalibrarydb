@@ -45,8 +45,16 @@ function LoginForm() {
 
       if (res.ok && data.success) {
         setSuccess(true);
+        if (data.role) {
+          try {
+            localStorage.setItem("ad_tracker_role", data.role);
+            document.cookie = `ad_tracker_role=${data.role}; path=/; max-age=2592000; SameSite=Lax`;
+          } catch {}
+        }
+        // If logged in as staff, redirect directly to /products (overriding any default from="/")
+        const destination = data.role === "staff" ? "/products" : (from === "/login" ? "/" : from);
         setTimeout(() => {
-          router.push(from);
+          router.push(destination);
           router.refresh();
         }, 500);
       } else {
@@ -89,7 +97,7 @@ function LoginForm() {
             <span>Secured Session Gate</span>
           </div>
           <p className="text-xs text-muted-foreground">
-            Enter your Master Password to access your competitor dashboards and worker queues.
+            Enter your Master or Staff Password to access your competitor dashboards and product catalogs.
           </p>
         </div>
 
@@ -110,7 +118,7 @@ function LoginForm() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <label className="block text-xs font-medium text-foreground">
-              Master Password
+              Master or Staff Password
             </label>
             <div className="relative">
               <input

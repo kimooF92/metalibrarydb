@@ -18,6 +18,7 @@ import { resolveProductForRefresh } from "@/lib/product-extraction";
 import { useToast } from "@/components/toast-context";
 import { useWorkspace } from "@/components/workspace-context";
 import { useSidebar } from "@/components/sidebar-context";
+import { useAuth } from "@/components/auth-context";
 import {
   ShoppingBag,
   RotateCw,
@@ -32,6 +33,7 @@ export default function ProductsPage() {
   const router = useRouter();
   const { showToast } = useToast();
   const { activeWorkspace } = useWorkspace();
+  const { isStaff } = useAuth();
   const [products, setProducts] = useState<ScrapedProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
@@ -1084,22 +1086,26 @@ export default function ProductsPage() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => setIsAddProductModalOpen(true)}
-              className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-sm shadow-indigo-600/30 transition-all cursor-pointer"
-              title="Add product page link or store website"
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              <span>Add Product Link</span>
-            </button>
+            {!isStaff && (
+              <button
+                onClick={() => setIsAddProductModalOpen(true)}
+                className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-sm shadow-indigo-600/30 transition-all cursor-pointer"
+                title="Add product page link or store website"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>Add Product Link</span>
+              </button>
+            )}
 
-            <Link
-              href="/spy"
-              className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground border border-border shadow-xs transition-all cursor-pointer"
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <span>Ad Spy Feed</span>
-            </Link>
+            {!isStaff && (
+              <Link
+                href="/spy"
+                className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground border border-border shadow-xs transition-all cursor-pointer"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>Ad Spy Feed</span>
+              </Link>
+            )}
 
             <button
               onClick={() => {
@@ -1509,7 +1515,7 @@ export default function ProductsPage() {
         onClose={handleCloseDetailsModal}
         product={selectedProduct}
         onRefresh={handleRefresh}
-        onDelete={handleDelete}
+        onDelete={isStaff ? undefined : handleDelete}
         onProductUpdate={handleProductUpdate}
         currentIndex={currentProductIndex}
         totalCount={products.length}

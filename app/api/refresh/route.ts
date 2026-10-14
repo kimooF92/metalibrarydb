@@ -4,8 +4,12 @@ import { trackedPages, queue } from "@/db/schema";
 import { inArray, eq } from "drizzle-orm";
 import { refreshSchema } from "@/lib/validators";
 import { triggerGitHubWorkflow } from "@/lib/github";
+import { validateAdminRole } from "@/lib/api-guard";
 
 export async function POST(request: Request) {
+  const authError = await validateAdminRole(request);
+  if (authError) return authError;
+
   try {
     const body = await request.json();
     const validated = refreshSchema.parse(body);

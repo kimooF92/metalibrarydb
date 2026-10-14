@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import type { SmartPreset } from "./products-kpi-bar";
+import { useAuth } from "@/components/auth-context";
 
 interface ProductsEmptyStateProps {
   smartPreset: SmartPreset;
@@ -60,6 +61,7 @@ export function ProductsEmptyState({
   onClearPreset,
   onResetAll,
 }: ProductsEmptyStateProps) {
+  const { isStaff } = useAuth();
   const hasActiveFilters =
     debouncedSearch.trim() ||
     debouncedBrand.trim() ||
@@ -201,13 +203,15 @@ export function ProductsEmptyState({
           <X className="w-3.5 h-3.5" />
           Reset All Filters
         </button>
-        <Link
-          href="/spy"
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-sm cursor-pointer transition-colors"
-        >
-          <Eye className="w-3.5 h-3.5" />
-          <span>Explore Ad Spy Feed</span>
-        </Link>
+        {!isStaff && (
+          <Link
+            href="/spy"
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-sm cursor-pointer transition-colors"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            <span>Explore Ad Spy Feed</span>
+          </Link>
+        )}
       </div>
     </div>
   );

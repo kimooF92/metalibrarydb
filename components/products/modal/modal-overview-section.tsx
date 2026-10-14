@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import NextImage from "next/image";
 import { ScrapedProduct } from "@/types";
-import { ShoppingBag, Tag, Truck, Layers } from "lucide-react";
+import { ShoppingBag, Tag, Truck, Layers, ExternalLink } from "lucide-react";
 import { useWorkspace } from "@/components/workspace-context";
 import { formatPrice, formatDelivery } from "@/lib/format-price";
 
@@ -16,6 +16,16 @@ export function ModalOverviewSection({ product, allImages }: ModalOverviewSectio
   const { activeWorkspace } = useWorkspace();
   const sym = activeWorkspace?.currencySymbol || "DT";
   const [selectedImage, setSelectedImage] = useState<string | null>(product.mainImageUrl || null);
+
+  const isUuid = (s?: string | null) => Boolean(s && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s));
+  const rawPageId = (product.pageId && !isUuid(product.pageId) ? product.pageId : null) ||
+    (product.brandPageId && !isUuid(product.brandPageId) && product.brandPageId !== "0" ? product.brandPageId : null);
+
+  const metaAdLibraryUrl = rawPageId
+    ? `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&view_all_page_id=${encodeURIComponent(rawPageId)}`
+    : (product.brandName && !isUuid(product.brandName)
+      ? `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&search_type=page&q=${encodeURIComponent(product.brandName)}`
+      : null);
 
   useEffect(() => {
     setSelectedImage(product.mainImageUrl || null);
@@ -208,6 +218,20 @@ export function ModalOverviewSection({ product, allImages }: ModalOverviewSectio
               {product.url}
             </a>
           </div>
+          {metaAdLibraryUrl && (
+            <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+              <span className="font-medium">Meta Ad Library:</span>
+              <a
+                href={metaAdLibraryUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                <span>View Brand on Meta Ad Library</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          )}
           <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800">
             <span className="font-medium">Discovery Date:</span>
             <span>{new Date(product.createdAt).toLocaleString()}</span>

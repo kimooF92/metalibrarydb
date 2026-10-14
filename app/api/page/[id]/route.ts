@@ -2,11 +2,15 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { trackedPages, ads, scrapedProducts } from "@/db/schema";
 import { eq, or, and, ne, desc } from "drizzle-orm";
+import { validateAdminRole } from "@/lib/api-guard";
 
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authError = await validateAdminRole(request);
+  if (authError) return authError;
+
   try {
     const { id } = await params;
 
@@ -108,6 +112,9 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authError = await validateAdminRole(request);
+  if (authError) return authError;
+
   try {
     const { id } = await params;
     const body = await request.json();

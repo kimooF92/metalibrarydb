@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { ModalTab, generateAIProductPrompt, generateCleanMarkdown } from "./modal-types";
 import { getNicheDisplayLabel, getSubNicheDisplayLabel } from "@/lib/niches-taxonomy";
+import { useAuth } from "@/components/auth-context";
 
 interface ModalHeaderProps {
   product: ScrapedProduct;
@@ -79,12 +80,24 @@ export function ModalHeader({
   onNavigatePrev,
   onNavigateNext,
 }: ModalHeaderProps) {
+  const { isStaff } = useAuth();
   const { showToast } = useToast();
   const [copiedType, setCopiedType] = useState<string | null>(null);
   const [showCopyMenu, setShowCopyMenu] = useState(false);
   const copyMenuRef = useRef<HTMLDivElement>(null);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
+
+  const isUuid = (s?: string | null) => Boolean(s && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s));
+  const rawPageId = (product.pageId && !isUuid(product.pageId) ? product.pageId : null) ||
+    (product.brandPageId && !isUuid(product.brandPageId) && product.brandPageId !== "0" ? product.brandPageId : null) ||
+    (linkedAds[0]?.pageId && !isUuid(linkedAds[0].pageId) ? linkedAds[0].pageId : null);
+
+  const metaAdLibraryUrl = rawPageId
+    ? `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&view_all_page_id=${encodeURIComponent(rawPageId)}`
+    : (product.brandName && !isUuid(product.brandName)
+      ? `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&search_type=page&q=${encodeURIComponent(product.brandName)}`
+      : null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -155,12 +168,30 @@ export function ModalHeader({
               </h2>
               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                 {(() => {
-                  const isUuid = (s?: string | null) => Boolean(s && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s));
                   const brandTarget = (product.brandPageId && !isUuid(product.brandPageId) && product.brandPageId !== "0")
                     ? product.brandPageId
                     : (product.domain || (product.brandName && !isUuid(product.brandName) ? product.brandName : null));
 
                   if (brandTarget) {
+                    if (isStaff) {
+                      return metaAdLibraryUrl ? (
+                        <a
+                          href={metaAdLibraryUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline uppercase tracking-wider inline-flex items-center gap-1"
+                          title="Open brand in Meta Ad Library"
+                        >
+                          <span>{product.brandName || product.domain || "Brand"}</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      ) : (
+                        <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                          {product.brandName || product.domain || "Brand"}
+                        </span>
+                      );
+                    }
+
                     return (
                       <a
                         href={`/spy/brand/${encodeURIComponent(brandTarget)}?tab=products`}
@@ -172,7 +203,18 @@ export function ModalHeader({
                   }
 
                   if (product.brandName) {
-                    return (
+                    return metaAdLibraryUrl ? (
+                      <a
+                        href={metaAdLibraryUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline uppercase tracking-wider inline-flex items-center gap-1"
+                        title="Open brand in Meta Ad Library"
+                      >
+                        <span>{product.brandName}</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    ) : (
                       <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
                         {product.brandName}
                       </span>
@@ -226,18 +268,20 @@ export function ModalHeader({
                   </span>
                 )}
 
-                {linkedAds.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => onSwitchTab("ads")}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/80 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 cursor-pointer transition-colors"
-                    title="Switch directly to Linked Ad Creatives"
-                  >
-                    <Sparkles className="w-2.5 h-2.5" />
-                    <span>{linkedAds.length} Ad {linkedAds.length === 1 ? "Creative" : "Creatives"}</span>
-                    <ChevronDown className="w-2.5 h-2.5" />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => onSwitchTab("ads")}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-colors ${
+                    linkedAds.length > 0
+                      ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/80 hover:bg-indigo-100 dark:hover:bg-indigo-900/60"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:text-slate-700"
+                  }`}
+                  title="Switch directly to Linked Ad Creatives"
+                >
+                  <Sparkles className="w-2.5 h-2.5" />
+                  <span>{linkedAds.length} Ad {linkedAds.length === 1 ? "Creative" : "Creatives"}</span>
+                  <ChevronDown className="w-2.5 h-2.5" />
+                </button>
               </div>
             </>
           )}
@@ -422,6 +466,20 @@ export function ModalHeader({
               )}
             </div>
 
+            {/* Meta Ad Library Button */}
+            {metaAdLibraryUrl && (
+              <a
+                href={metaAdLibraryUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 rounded-lg shadow-xs transition-all"
+                title="Open brand in Meta Ad Library"
+              >
+                <span>Meta Ads</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
+
             {/* Visit Store Button */}
             {product.url && (
               <a
@@ -436,82 +494,84 @@ export function ModalHeader({
               </a>
             )}
 
-            {/* More Actions Dropdown */}
-            <div className="relative" ref={actionsMenuRef}>
-              <button
-                type="button"
-                onClick={() => setShowActionsMenu(!showActionsMenu)}
-                className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
-                title="More actions (Recheck Ads, Re-scrape, Delete)"
-              >
-                <MoreHorizontal className="w-4 h-4" />
-              </button>
+            {/* More Actions Dropdown (Admin Only) */}
+            {!isStaff && (
+              <div className="relative" ref={actionsMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowActionsMenu(!showActionsMenu)}
+                  className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
+                  title="More actions (Recheck Ads, Re-scrape, Delete)"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </button>
 
-              {showActionsMenu && (
-                <div className="absolute right-0 mt-1.5 w-60 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl py-1.5 z-50 animate-in fade-in slide-in-from-top-2">
-                  <div className="px-3 py-1.5 border-b border-slate-100 dark:border-slate-800 text-[10px] uppercase font-bold text-slate-400">
-                    Product Operations
-                  </div>
-
-                  {/* Recheck Ads */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowActionsMenu(false);
-                      onQueueVerify();
-                    }}
-                    disabled={isQueueingVerify}
-                    className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    <RotateCw className={`w-3.5 h-3.5 text-indigo-500 ${isQueueingVerify ? "animate-spin" : ""}`} />
-                    <div>
-                      <div className="font-semibold text-slate-900 dark:text-slate-100">Recheck Linked Ads</div>
-                      <div className="text-[10px] text-slate-400">Queue for verifier status check</div>
+                {showActionsMenu && (
+                  <div className="absolute right-0 mt-1.5 w-60 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl py-1.5 z-50 animate-in fade-in slide-in-from-top-2">
+                    <div className="px-3 py-1.5 border-b border-slate-100 dark:border-slate-800 text-[10px] uppercase font-bold text-slate-400">
+                      Product Operations
                     </div>
-                  </button>
 
-                  {/* Re-scrape Store Data */}
-                  {onRefresh && (
+                    {/* Recheck Ads */}
                     <button
                       type="button"
                       onClick={() => {
                         setShowActionsMenu(false);
-                        onRefresh();
+                        onQueueVerify();
                       }}
-                      disabled={isRefreshing}
+                      disabled={isQueueingVerify}
                       className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
                     >
-                      <RotateCw className={`w-3.5 h-3.5 text-purple-500 ${isRefreshing ? "animate-spin" : ""}`} />
+                      <RotateCw className={`w-3.5 h-3.5 text-indigo-500 ${isQueueingVerify ? "animate-spin" : ""}`} />
                       <div>
-                        <div className="font-semibold text-slate-900 dark:text-slate-100">Re-scrape Store Page</div>
-                        <div className="text-[10px] text-slate-400">Re-fetches price, offers, and images</div>
+                        <div className="font-semibold text-slate-900 dark:text-slate-100">Recheck Linked Ads</div>
+                        <div className="text-[10px] text-slate-400">Queue for verifier status check</div>
                       </div>
                     </button>
-                  )}
 
-                  {/* Delete Product */}
-                  {onDelete && (
-                    <div className="border-t border-slate-100 dark:border-slate-800 mt-1 pt-1">
+                    {/* Re-scrape Store Data */}
+                    {onRefresh && (
                       <button
                         type="button"
                         onClick={() => {
                           setShowActionsMenu(false);
-                          onClose();
-                          onDelete(product.id);
+                          onRefresh();
                         }}
-                        className="w-full px-3 py-2 text-left text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 flex items-center gap-2 transition-colors cursor-pointer"
+                        disabled={isRefreshing}
+                        className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
                       >
-                        <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                        <RotateCw className={`w-3.5 h-3.5 text-purple-500 ${isRefreshing ? "animate-spin" : ""}`} />
                         <div>
-                          <div className="font-semibold">Delete Product</div>
-                          <div className="text-[10px] text-rose-400/80">Permanently removes from catalog</div>
+                          <div className="font-semibold text-slate-900 dark:text-slate-100">Re-scrape Store Page</div>
+                          <div className="text-[10px] text-slate-400">Re-fetches price, offers, and images</div>
                         </div>
                       </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+                    )}
+
+                    {/* Delete Product */}
+                    {onDelete && (
+                      <div className="border-t border-slate-100 dark:border-slate-800 mt-1 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowActionsMenu(false);
+                            onClose();
+                            onDelete(product.id);
+                          }}
+                          className="w-full px-3 py-2 text-left text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 flex items-center gap-2 transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                          <div>
+                            <div className="font-semibold">Delete Product</div>
+                            <div className="text-[10px] text-rose-400/80">Permanently removes from catalog</div>
+                          </div>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
 

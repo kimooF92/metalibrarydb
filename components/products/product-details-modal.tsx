@@ -75,7 +75,7 @@ export function ProductDetailsModal({
   const fetchLinkedAds = useCallback(async (productId: string) => {
     setLoadingAds(true);
     try {
-      const res = await fetch(`/api/spy/ads?productId=${productId}&limit=20`);
+      const res = await fetch(`/api/spy/ads?productId=${encodeURIComponent(productId)}&limit=50&includeMedia=true`);
       if (res.ok) {
         const data = await res.json();
         setLinkedAds(data.ads || data.items || []);
