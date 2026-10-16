@@ -476,46 +476,6 @@ export const ProductCard = memo(function ProductCard({
             </span>
           )}
 
-          {/* Ad Status / Scale */}
-          {isPageOnHold ? (
-            <span
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-extrabold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/80"
-              title="Brand account is on pause / hold (under grace period recheck)"
-            >
-              ⏸️ Ads Paused
-            </span>
-          ) : isPageInactive ? (
-            <span
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
-              title="Brand has shut down advertising (confirmed inactive)"
-            >
-              ⚫ Inactive (Off-Air)
-            </span>
-          ) : typeof product.activeAdsCount === "number" && product.activeAdsCount > 0 ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-              🔥 {product.activeAdsCount} active {product.activeAdsCount === 1 ? "ad" : "ads"}
-            </span>
-          ) : isInactive ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-              ⚫ 0 active ads
-            </span>
-          ) : typeof product.linkedAdsCount === "number" && product.linkedAdsCount > 0 ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-              🎬 {product.linkedAdsCount} {product.linkedAdsCount === 1 ? "ad" : "ads"}
-            </span>
-          ) : null}
-
-          {/* Classified Niche Pill */}
-          {product.category && product.category !== "General & Other" && (
-            <span
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
-              title={`${product.category}${product.subCategory ? ` > ${product.subCategory}` : ""}`}
-            >
-              <Tag className="w-2.5 h-2.5" />
-              <span className="truncate max-w-[130px]">{product.subCategory || product.category}</span>
-            </span>
-          )}
-
           {isRecentlyViewed && (
             <span
               className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800/60"
@@ -567,27 +527,150 @@ export const ProductCard = memo(function ProductCard({
 
         {/* Footer info & action buttons (clean action bar, no duplicate delete) */}
         <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2 text-xs">
-          {!isStaff && onViewCreatives && (product.linkedAdsCount || 0) > 0 ? (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onViewCreatives(product);
-              }}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                isInactive
-                  ? "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
-                  : "bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-800/50"
-              }`}
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <span>View Ads ({product.linkedAdsCount})</span>
-            </button>
-          ) : (
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-              <Clock className="w-3 h-3 shrink-0" />
-              <span>{formatDate(product.lastScrapedAt || product.createdAt) || "Scraped"}</span>
-            </div>
-          )}
+          {(() => {
+            const hasLinkedAds = typeof product.linkedAdsCount === "number" && product.linkedAdsCount > 0;
+            const hasActiveAds = typeof product.activeAdsCount === "number" && product.activeAdsCount > 0;
+            const activeCount = product.activeAdsCount || 0;
+            const canViewAds = !isStaff && Boolean(onViewCreatives) && hasLinkedAds;
+
+            if (isPageOnHold) {
+              const content = (
+                <>
+                  <span>⏸️</span>
+                  <span>Ads Paused</span>
+                </>
+              );
+              const className = "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-extrabold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/80 transition-all";
+              return canViewAds ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onViewCreatives?.(product);
+                  }}
+                  className={`${className} hover:bg-amber-200 dark:hover:bg-amber-900/90 cursor-pointer`}
+                  title="Brand account is on pause / hold — click to view ads"
+                >
+                  {content}
+                </button>
+              ) : (
+                <span className={className} title="Brand account is on pause / hold (under grace period recheck)">
+                  {content}
+                </span>
+              );
+            }
+
+            if (isPageInactive) {
+              const content = (
+                <>
+                  <span>⚫</span>
+                  <span>Inactive (Off-Air)</span>
+                </>
+              );
+              const className = "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 transition-all";
+              return canViewAds ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onViewCreatives?.(product);
+                  }}
+                  className={`${className} hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer`}
+                  title="Brand has shut down advertising — click to view ads"
+                >
+                  {content}
+                </button>
+              ) : (
+                <span className={className} title="Brand has shut down advertising (confirmed inactive)">
+                  {content}
+                </span>
+              );
+            }
+
+            if (hasActiveAds) {
+              const hasFire = activeCount >= 5;
+              const content = (
+                <>
+                  {hasFire && <span>🔥</span>}
+                  <span>{activeCount} active {activeCount === 1 ? "ad" : "ads"}</span>
+                </>
+              );
+              const className = "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-all";
+              return canViewAds ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onViewCreatives?.(product);
+                  }}
+                  className={`${className} hover:bg-emerald-100 dark:hover:bg-emerald-900/80 cursor-pointer shadow-2xs`}
+                  title={`${activeCount} active ads running — click to view creatives`}
+                >
+                  {content}
+                </button>
+              ) : (
+                <span className={className}>
+                  {content}
+                </span>
+              );
+            }
+
+            if (isInactive) {
+              const content = <span>⚫ 0 active ads</span>;
+              const className = "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 transition-all";
+              return canViewAds ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onViewCreatives?.(product);
+                  }}
+                  className={`${className} hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer`}
+                  title="0 active ads — click to view archive"
+                >
+                  {content}
+                </button>
+              ) : (
+                <span className={className}>
+                  {content}
+                </span>
+              );
+            }
+
+            if (hasLinkedAds) {
+              const content = (
+                <>
+                  <span>🎬</span>
+                  <span>{product.linkedAdsCount} {product.linkedAdsCount === 1 ? "ad" : "ads"}</span>
+                </>
+              );
+              const className = "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all";
+              return canViewAds ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onViewCreatives?.(product);
+                  }}
+                  className={`${className} hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer`}
+                  title={`${product.linkedAdsCount} linked ads — click to view creatives`}
+                >
+                  {content}
+                </button>
+              ) : (
+                <span className={className}>
+                  {content}
+                </span>
+              );
+            }
+
+            return (
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                <Clock className="w-3 h-3 shrink-0" />
+                <span>{formatDate(product.lastScrapedAt || product.createdAt) || "Scraped"}</span>
+              </div>
+            );
+          })()}
 
           <div className="flex items-center gap-1">
             {!isStaff && (product.linkedAdsCount || 0) > 0 && (
