@@ -232,9 +232,17 @@ export function ModalOverviewSection({ product, allImages }: ModalOverviewSectio
               </a>
             </div>
           )}
+          {product.earliestAdDate && (
+            <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+              <span className="font-medium">First Ad Launched:</span>
+              <span className="font-semibold text-amber-600 dark:text-amber-400">
+                {new Date(product.earliestAdDate).toLocaleDateString()} {product.daysRunning ? `(${product.daysRunning}d running)` : ""}
+              </span>
+            </div>
+          )}
           <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800">
             <span className="font-medium">Discovery Date:</span>
-            <span>{new Date(product.createdAt).toLocaleString()}</span>
+            <span>{product.createdAt ? new Date(product.createdAt).toLocaleString() : "Unknown"}</span>
           </div>
           {product.lastScrapedAt && (
             <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800">

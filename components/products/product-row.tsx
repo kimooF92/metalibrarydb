@@ -433,25 +433,23 @@ export const ProductRow = memo(function ProductRow({
 
       {/* Right: Action Buttons */}
       <div className="flex items-center gap-1 shrink-0 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800/80">
-        {(product.earliestAdDate || product.createdAt) && (
+        {product.earliestAdDate && (
+          <span
+            className="text-[10px] font-medium text-amber-600 dark:text-amber-400 inline-flex items-center gap-1 shrink-0 select-none mr-1.5"
+            title={`First Ad Launched: ${new Date(product.earliestAdDate).toLocaleDateString()} (${product.daysRunning || 1}d running)`}
+          >
+            <Rocket className="w-3 h-3 text-amber-500" />
+            <span>Launched {formatDiscoveryDate(product.earliestAdDate)}</span>
+          </span>
+        )}
+
+        {product.createdAt && (
           <span
             className="text-[10px] font-medium text-slate-400 dark:text-slate-500 inline-flex items-center gap-1 shrink-0 select-none mr-1.5"
-            title={
-              product.earliestAdDate
-                ? `First Ad Launched: ${new Date(product.earliestAdDate).toLocaleDateString()} (${product.daysRunning || 1}d running)`
-                : formatDiscoveryLabel(product.createdAt)
-            }
+            title={formatDiscoveryLabel(product.createdAt)}
           >
-            {product.earliestAdDate ? (
-              <Rocket className="w-3 h-3 text-amber-500" />
-            ) : (
-              <Calendar className="w-3 h-3 text-slate-400" />
-            )}
-            <span>
-              {product.earliestAdDate
-                ? `Launched ${formatDiscoveryDate(product.earliestAdDate)}`
-                : formatDiscoveryDate(product.createdAt)}
-            </span>
+            <Calendar className="w-3 h-3 text-slate-400" />
+            <span>{formatDiscoveryDate(product.createdAt)}</span>
           </span>
         )}
 
