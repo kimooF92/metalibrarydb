@@ -14,8 +14,9 @@ import {
 } from "../lib/network-extractor";
 import { getCleanDomain } from "../lib/utils";
 import { normalizeProductUrl } from "../lib/firecrawl";
-import { isPriceString } from "../lib/html-scraper";
 import { trackedPages, adObservations } from "../db/schema";
+import { enhanceProductWithJev } from "../lib/product-enhancer";
+import { isPriceString } from "../lib/html-scraper";
 
 interface RunOptions {
   limit: number;
@@ -100,10 +101,17 @@ async function runProductScraperBatch() {
       const pixels = extractMetaPixelIds(rawHtml);
       const delivery = extractDeliveryInfo(rawHtml, res.data.delivery_cost);
 
-      // AI classification bypassed per user instructions to avoid external failures/delays
-      const category = null;
-      const subCategory = null;
-      const targetAudience = null;
+      // Enhance with TypeSafe Jev Decision Engine (resolve price doubt / 0 DT & classify niche)
+      const enhanced = await enhanceProductWithJev({
+        title: res.data.title,
+        currentPrice: res.data.current_price,
+        originalPrice: res.data.original_price,
+        url: targetUrl,
+        domain: resolvedDomain,
+        html: rawHtml,
+        markdown: res.raw?.markdown,
+        fallbackCurrencySymbol: "DT",
+      });
 
       const formattedOffers = (res.data.all_offers || []).map((o) => ({
         tierName: o.tier_name,
@@ -117,8 +125,8 @@ async function runProductScraperBatch() {
           url: targetUrl,
           domain: resolvedDomain,
           title: res.data.title,
-          currentPrice: res.data.current_price,
-          originalPrice: res.data.original_price,
+          currentPrice: enhanced.currentPrice,
+          originalPrice: enhanced.originalPrice,
           currency: res.data.currency || "TND",
           discountOrOffer: res.data.discount_or_offer,
           mainImageUrl: res.data.main_image_url,
@@ -129,9 +137,9 @@ async function runProductScraperBatch() {
           whatsappNumbers: wa,
           metaPixelIds: pixels,
           deliveryCost: delivery.label,
-          category,
-          subCategory,
-          targetAudience,
+          category: enhanced.category,
+          subCategory: enhanced.subCategory,
+          targetAudience: enhanced.targetAudience,
           scrapeStatus: "success",
           lastScrapedAt: new Date(),
         })
@@ -139,8 +147,8 @@ async function runProductScraperBatch() {
           target: scrapedProducts.url,
           set: {
             title: res.data.title,
-            currentPrice: res.data.current_price,
-            originalPrice: res.data.original_price,
+            currentPrice: enhanced.currentPrice,
+            originalPrice: enhanced.originalPrice,
             currency: res.data.currency || "TND",
             discountOrOffer: res.data.discount_or_offer,
             mainImageUrl: res.data.main_image_url,
@@ -151,9 +159,9 @@ async function runProductScraperBatch() {
             whatsappNumbers: wa,
             metaPixelIds: pixels,
             deliveryCost: delivery.label,
-            category,
-            subCategory,
-            targetAudience,
+            category: enhanced.category,
+            subCategory: enhanced.subCategory,
+            targetAudience: enhanced.targetAudience,
             scrapeStatus: "success",
             failureReason: null,
             lastScrapedAt: new Date(),
@@ -173,7 +181,7 @@ async function runProductScraperBatch() {
       console.log(`Price:    ${res.data.current_price || "N/A"} (${res.data.currency || "TND"})`);
       console.log(`Offer:    ${res.data.discount_or_offer || "None"}`);
       console.log(`Platform: ${platform || "Unknown"}`);
-      console.log(`Category: ${category || "Unclassified"}`);
+      console.log(`Category: ${enhanced.category || "Unclassified"}`);
       console.log(`Image:    ${res.data.main_image_url || "No image"}`);
     } else {
       console.error(`\n❌ [${elapsed}ms] Extraction failed: ${res.error || "Unknown"}`);
@@ -431,10 +439,20 @@ async function runProductScraperBatch() {
         const pixels = extractMetaPixelIds(rawHtml);
         const delivery = extractDeliveryInfo(rawHtml, res.data.delivery_cost);
 
-        // AI classification bypassed per user instructions to avoid external failures/delays
-        const category = item.category || null;
-        const subCategory = item.subCategory || null;
-        const targetAudience = item.targetAudience || null;
+        // Enhance with TypeSafe Jev Decision Engine (resolve price doubt / 0 DT & classify niche)
+        const enhanced = await enhanceProductWithJev({
+          title: res.data.title || item.title,
+          currentPrice: res.data.current_price || item.currentPrice,
+          originalPrice: res.data.original_price || item.originalPrice,
+          url: targetUrl,
+          domain: resolvedDomain || item.domain,
+          html: rawHtml,
+          markdown: res.raw?.markdown,
+          existingCategory: item.category,
+          existingSubCategory: item.subCategory,
+          existingTargetAudience: item.targetAudience,
+          fallbackCurrencySymbol: item.currency === "MAD" ? "DH" : "DT",
+        });
 
         const formattedOffers = (res.data.all_offers || []).map((o) => ({
           tierName: o.tier_name,
@@ -449,8 +467,8 @@ async function runProductScraperBatch() {
             domain: resolvedDomain || item.domain,
             pageId: (options as any).pageIdOverride || item.pageId,
             title: res.data.title || item.title,
-            currentPrice: res.data.current_price || item.currentPrice,
-            originalPrice: res.data.original_price || item.originalPrice,
+            currentPrice: enhanced.currentPrice,
+            originalPrice: enhanced.originalPrice,
             currency: res.data.currency || item.currency || "TND",
             discountOrOffer: res.data.discount_or_offer || item.discountOrOffer,
             mainImageUrl: res.data.main_image_url || item.mainImageUrl,
@@ -461,9 +479,9 @@ async function runProductScraperBatch() {
             whatsappNumbers: wa.length > 0 ? wa : item.whatsappNumbers,
             metaPixelIds: pixels.length > 0 ? pixels : item.metaPixelIds,
             deliveryCost: delivery.label || item.deliveryCost,
-            category,
-            subCategory,
-            targetAudience,
+            category: enhanced.category,
+            subCategory: enhanced.subCategory,
+            targetAudience: enhanced.targetAudience,
             scrapeStatus: "success",
             lastScrapedAt: new Date(),
           })
@@ -473,8 +491,8 @@ async function runProductScraperBatch() {
               domain: resolvedDomain || item.domain,
               pageId: (options as any).pageIdOverride || item.pageId,
               title: res.data.title || item.title,
-              currentPrice: res.data.current_price || item.currentPrice,
-              originalPrice: res.data.original_price || item.originalPrice,
+              currentPrice: enhanced.currentPrice,
+              originalPrice: enhanced.originalPrice,
               currency: res.data.currency || item.currency || "TND",
               discountOrOffer: res.data.discount_or_offer || item.discountOrOffer,
               mainImageUrl: res.data.main_image_url || item.mainImageUrl,
@@ -485,9 +503,9 @@ async function runProductScraperBatch() {
               whatsappNumbers: wa.length > 0 ? wa : item.whatsappNumbers,
               metaPixelIds: pixels.length > 0 ? pixels : item.metaPixelIds,
               deliveryCost: delivery.label || item.deliveryCost,
-              category,
-              subCategory,
-              targetAudience,
+              category: enhanced.category,
+              subCategory: enhanced.subCategory,
+              targetAudience: enhanced.targetAudience,
               scrapeStatus: "success",
               failureReason: null,
               lastScrapedAt: new Date(),

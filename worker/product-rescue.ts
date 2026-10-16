@@ -12,6 +12,7 @@ import {
   extractDeliveryInfo,
 } from "../lib/network-extractor";
 import { formatPrice, formatDelivery } from "../lib/format-price";
+import { enhanceProductWithJev } from "../lib/product-enhancer";
 
 let isRescueRunning = false;
 let lastRescueAttemptTime = 0;
@@ -31,8 +32,7 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
   isRescueRunning = true;
 
   try {
-    // Find products that failed or are pending and lack a product image.
-    // If a product image already exists, it is NOT considered a failure (even with 0 DT).
+    // Find products that failed or are pending and lack a product image or have 0 DT.
     // Never recheck 404s, dead links, or impossible-to-scrape items.
     const failedItems = await db
       .select({
@@ -42,6 +42,9 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
         title: scrapedProducts.title,
         currentPrice: scrapedProducts.currentPrice,
         originalPrice: scrapedProducts.originalPrice,
+        category: scrapedProducts.category,
+        subCategory: scrapedProducts.subCategory,
+        targetAudience: scrapedProducts.targetAudience,
         currency: scrapedProducts.currency,
         discountOrOffer: scrapedProducts.discountOrOffer,
         mainImageUrl: scrapedProducts.mainImageUrl,
@@ -183,8 +186,23 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
           savings: o.savings,
         }));
 
-        const finalPrice = formatPrice(extracted.current_price || item.currentPrice || `0 ${itemSym}`, itemSym);
-        const finalOrigPrice = extracted.original_price || item.originalPrice ? formatPrice(extracted.original_price || item.originalPrice, itemSym) : null;
+        // Use TypeSafe Jev Decision Engine to resolve price doubt (e.g. 0 DT) and classify niche
+        const enhanced = await enhanceProductWithJev({
+          title: extracted.title || item.title,
+          currentPrice: extracted.current_price || item.currentPrice,
+          originalPrice: extracted.original_price || item.originalPrice,
+          url: targetUrl,
+          domain: resolvedDomain || item.domain,
+          html: rawHtml,
+          markdown: extractionResult.raw?.markdown,
+          existingCategory: item.category,
+          existingSubCategory: item.subCategory,
+          existingTargetAudience: item.targetAudience,
+          fallbackCurrencySymbol: itemSym,
+        });
+
+        const finalPrice = enhanced.currentPrice;
+        const finalOrigPrice = enhanced.originalPrice;
         const finalDelivery = delivery.label ? formatDelivery(delivery.label, itemSym) : item.deliveryCost;
 
         await db
@@ -194,6 +212,9 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
             title: extracted.title || item.title,
             currentPrice: finalPrice,
             originalPrice: finalOrigPrice,
+            category: enhanced.category,
+            subCategory: enhanced.subCategory,
+            targetAudience: enhanced.targetAudience,
             currency: extracted.currency || itemCurrency,
             discountOrOffer: extracted.discount_or_offer || item.discountOrOffer,
             mainImageUrl: extracted.main_image_url || item.mainImageUrl,

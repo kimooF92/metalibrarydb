@@ -11,8 +11,8 @@ export function normalizeProductUrl(rawUrl: string | null | undefined): string |
   if (!unwrapped) return null;
 
   try {
-    // Strip carriage returns, tabs, and invalid whitespace
-    const sanitizedUrl = unwrapped.trim().replace(/[\r\n\t]+/g, "").replace(/\s+/g, "");
+    // Strip carriage returns, tabs, and line breaks from copy-pasting
+    const sanitizedUrl = unwrapped.trim().replace(/[\r\n\t]+/g, "");
     const parsed = new URL(sanitizedUrl);
 
     // Comprehensive list of advertising, analytics, and affiliate tracking query parameters

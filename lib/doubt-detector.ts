@@ -7,7 +7,7 @@
  * weird decimal conversion artifacts like 13.32, or non-product titles).
  */
 
-import { callJevDecisions, JevChoiceAnswer } from "./typesafe-jev";
+import { callJevDecisions, JevChoiceAnswer, DEFAULT_DECISION_MODEL } from "./typesafe-jev";
 
 export interface ExtractionDoubtResult {
   hasDoubt: boolean;
@@ -85,45 +85,99 @@ export function detectExtractionDoubt(data: {
   };
 }
 
+export interface PriceCandidate {
+  value: string;
+  context: string;
+  num: number;
+  isDelivery?: boolean;
+  isTotal?: boolean;
+  isOriginal?: boolean;
+}
+
 /**
  * Scans raw HTML/markdown to harvest competing candidate prices and context hints.
+ * Handles Tunisian millimes (e.g. 20.000 or 20,000 DT), Moroccan DH, and Arabic indicators.
  */
 export function harvestPriceCandidates(
   html?: string | null,
   markdown?: string | null,
   fallbackCurrencySymbol = "DT"
-): Array<{ value: string; context: string }> {
+): PriceCandidate[] {
   const content = `${markdown || ""} ${html || ""}`;
   if (!content || content.length < 10) return [];
 
-  const candidatesMap = new Map<string, string>();
+  const candidatesMap = new Map<string, PriceCandidate>();
 
-  // 1. Match prices with currency indicators
-  const regex = /([0-9]+(?:\.[0-9]+)?)\s*(?:DT|TND|dt|د\.ت|دت|DH|MAD|dh|د\.م|درهم)/gi;
-  let match;
-  while ((match = regex.exec(content)) !== null) {
-    const num = parseFloat(match[1]);
-    if (isNaN(num) || num <= 0 || num > 5000) continue;
+  const recordCandidate = (rawNumStr: string, matchIndex: number, matchLength: number) => {
+    // Standardize commas to dots for parsing
+    const cleanNumStr = rawNumStr.replace(/,/g, ".");
+    let num = parseFloat(cleanNumStr);
+    if (isNaN(num) || num <= 0 || num > 50000) return;
 
-    // Grab surrounding 40 chars context
-    const startIdx = Math.max(0, match.index - 30);
-    const endIdx = Math.min(content.length, match.index + match[0].length + 30);
+    // In Tunisia (TND/DT), numbers like 20.000 or 20,000 are thousands of millimes = 20 DT.
+    // However, numbers like 22.900 = 22.9 DT.
+    if (cleanNumStr.includes(".")) {
+      const parts = cleanNumStr.split(".");
+      if (parts[1] === "000" || parts[1] === "00") {
+        num = parseInt(parts[0], 10);
+      }
+    }
+
+    // Grab surrounding 50 chars context
+    const startIdx = Math.max(0, matchIndex - 35);
+    const endIdx = Math.min(content.length, matchIndex + matchLength + 35);
     const snippet = content.slice(startIdx, endIdx).replace(/\s+/g, " ").trim();
+
+    const isDelivery = /(?:livraison|delivery|توصيل|شحن|frais|exp[eé]dition)/i.test(snippet) && num <= 20;
+    const isTotal = /(?:total|المجموع|sous-total|net [aà] payer|somme)/i.test(snippet);
+    const isOriginal = /(?:ancien|barr[eé]|original|prix initial|avant|regular|avant r[eé]duction|قبل الخصم)/i.test(snippet);
 
     const formattedValue = `${num} ${fallbackCurrencySymbol}`;
     if (!candidatesMap.has(formattedValue)) {
-      candidatesMap.set(formattedValue, snippet.slice(0, 50));
+      candidatesMap.set(formattedValue, {
+        value: formattedValue,
+        context: snippet.slice(0, 70),
+        num,
+        isDelivery,
+        isTotal,
+        isOriginal,
+      });
+    }
+  };
+
+  // 1. Suffix currency match (e.g. "20 DT", "20.000 دت", "20,000 DT", "30 DH")
+  const regexSuffix = /([0-9]+(?:[.,][0-9]+)?)\s*(?:DT|TND|dt|د\.ت|دت|DH|MAD|dh|د\.م|درهم)/gi;
+  let match;
+  while ((match = regexSuffix.exec(content)) !== null) {
+    recordCandidate(match[1], match.index, match[0].length);
+  }
+
+  // 2. Prefix currency match (e.g. "DT 20", "د.ت 20", "DH 250")
+  const regexPrefix = /(?:DT|TND|dt|د\.ت|دت|DH|MAD|dh|د\.م|درهم)\s*([0-9]+(?:[.,][0-9]+)?)/gi;
+  while ((match = regexPrefix.exec(content)) !== null) {
+    recordCandidate(match[1], match.index, match[0].length);
+  }
+
+  // 3. Structured HTML e-commerce price patterns if no explicit currency candidates found
+  if (candidatesMap.size === 0) {
+    const structuredRegexes = [
+      /(?:class|data-price|itemprop)=["'][^"']*(?:price|amount)[^"']*["'][^>]*>([0-9]+(?:[.,][0-9]+)?)/gi,
+      /<meta\s+property=["']product:price:amount["']\s+content=["']([0-9]+(?:[.,][0-9]+)?)["']/gi,
+      /"price":\s*"?([0-9]+(?:[.,][0-9]+)?)"?/gi,
+    ];
+
+    for (const sRegex of structuredRegexes) {
+      while ((match = sRegex.exec(content)) !== null) {
+        recordCandidate(match[1], match.index, match[0].length);
+      }
     }
   }
 
-  return Array.from(candidatesMap.entries()).map(([value, context]) => ({
-    value,
-    context,
-  }));
+  return Array.from(candidatesMap.values());
 }
 
 /**
- * When doubt is detected, invokes TypeSafe Jev as a split-second referee to resolve the true price.
+ * When doubt is detected (e.g. price is 0 DT or suspicious), invokes TypeSafe Jev as a split-second referee.
  * Micro-token cost (~50-80 tokens), called ONLY on doubtful items.
  */
 export async function resolvePriceDoubtWithJev(params: {
@@ -134,17 +188,33 @@ export async function resolvePriceDoubtWithJev(params: {
   fallbackCurrencySymbol?: string;
 }): Promise<{ resolvedPrice: string; modelUsed: string; confidence: number } | null> {
   const currencySymbol = params.fallbackCurrencySymbol || "DT";
-  const candidates = harvestPriceCandidates(params.html, params.markdown, currencySymbol);
+  const allCandidates = harvestPriceCandidates(params.html, params.markdown, currencySymbol);
 
-  // If no candidates or only 1 candidate, nothing to disambiguate
-  if (candidates.length <= 1) {
+  if (allCandidates.length === 0) {
     return null;
+  }
+
+  // Filter out pure delivery fees and totals if viable product price candidates exist
+  const nonDeliveryCandidates = allCandidates.filter((c) => !c.isDelivery && !c.isTotal);
+  const candidates = nonDeliveryCandidates.length > 0 ? nonDeliveryCandidates : allCandidates;
+
+  // Single candidate heuristic: if only 1 price candidate exists on page, it is the real price!
+  if (candidates.length === 1) {
+    const single = candidates[0];
+    if (single.num > 0 && !single.isDelivery) {
+      return {
+        resolvedPrice: single.value,
+        modelUsed: "single_candidate_heuristic",
+        confidence: 0.95,
+      };
+    }
   }
 
   // Format compact criteria map for Jev
   const criteriaMap: Record<string, string> = {};
   for (const c of candidates.slice(0, 5)) {
-    criteriaMap[c.value] = c.context.slice(0, 35);
+    const tag = c.isOriginal ? "Original/Regular price" : "Retail selling price";
+    criteriaMap[c.value] = `${tag}: ${c.context.slice(0, 45)}`;
   }
 
   const response = await callJevDecisions(
@@ -155,21 +225,33 @@ export async function resolvePriceDoubtWithJev(params: {
     {
       real_price: {
         type: "choice",
-        instructions: "Pick the true single-unit retail selling price (ignore delivery fees or multi-pack sums).",
+        instructions:
+          "Pick the active single-unit retail selling price (choose discounted selling price over regular/crossed-out price). Never pick delivery or checkout total sums.",
         criteria: criteriaMap,
       },
     },
-    { timeoutMs: 3500 }
+    { timeoutMs: 4000 }
   );
 
   const answer = response?.answers?.real_price as JevChoiceAnswer | undefined;
   if (!answer || answer.type !== "choice" || !answer.choice) {
+    // If Jev was unreachable, take the best candidate heuristic (lowest non-delivery candidate > 10 DT)
+    const valid = candidates.filter((c) => c.num >= 10);
+    if (valid.length > 0) {
+      const best = valid.find((c) => !c.isOriginal) || valid[0];
+      return {
+        resolvedPrice: best.value,
+        modelUsed: "price_heuristic_fallback",
+        confidence: 0.7,
+      };
+    }
     return null;
   }
 
   return {
     resolvedPrice: answer.choice,
-    modelUsed: response?.model || "typesafe/jev-1.13",
+    modelUsed: response?.model || DEFAULT_DECISION_MODEL,
     confidence: answer.confidence ?? 1.0,
   };
 }
+

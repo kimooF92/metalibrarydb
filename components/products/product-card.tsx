@@ -505,6 +505,17 @@ export const ProductCard = memo(function ProductCard({
             </span>
           ) : null}
 
+          {/* Classified Niche Pill */}
+          {product.category && product.category !== "General & Other" && (
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+              title={`${product.category}${product.subCategory ? ` > ${product.subCategory}` : ""}`}
+            >
+              <Tag className="w-2.5 h-2.5" />
+              <span className="truncate max-w-[130px]">{product.subCategory || product.category}</span>
+            </span>
+          )}
+
           {isRecentlyViewed && (
             <span
               className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800/60"
@@ -517,28 +528,41 @@ export const ProductCard = memo(function ProductCard({
 
         {/* Primary Indicator: Hero Main Price */}
         <div className="mt-auto pt-2 pb-2">
-          {product.currentPrice ? (
-            <div className="flex items-baseline gap-2">
-              <span
-                className={`text-lg font-black tracking-tight ${
-                  isPageOnHold || isInactive
-                    ? "text-slate-600 dark:text-slate-400"
-                    : "text-indigo-600 dark:text-indigo-400"
-                }`}
-              >
-                {formatPrice(product.currentPrice, sym)}
-              </span>
-              {product.originalPrice && (
-                <span className="text-xs text-slate-400 dark:text-slate-500 line-through font-medium">
-                  {formatPrice(product.originalPrice, sym)}
-                </span>
-              )}
-            </div>
-          ) : isPendingScrape ? (
-            <span className="text-xs text-amber-500 font-medium">Scrape to get price</span>
-          ) : (
-            <span className="text-xs text-slate-400 italic">Price not detected</span>
-          )}
+          {(() => {
+            const rawPrice = (product.currentPrice || "").trim();
+            const isZeroPrice = !rawPrice || /^0(\.0+)?\s*(dt|dh|mad|tnd|usd|eur)?$/i.test(rawPrice);
+
+            if (!isZeroPrice) {
+              const formattedMainPrice = formatPrice(rawPrice, sym);
+              const rawOrigPrice = (product.originalPrice || "").trim();
+              const isZeroOrigPrice = !rawOrigPrice || /^0(\.0+)?\s*(dt|dh|mad|tnd|usd|eur)?$/i.test(rawOrigPrice);
+
+              return (
+                <div className="flex items-baseline gap-2">
+                  <span
+                    className={`text-lg font-black tracking-tight ${
+                      isPageOnHold || isInactive
+                        ? "text-slate-600 dark:text-slate-400"
+                        : "text-indigo-600 dark:text-indigo-400"
+                    }`}
+                  >
+                    {formattedMainPrice}
+                  </span>
+                  {!isZeroOrigPrice && (
+                    <span className="text-xs text-slate-400 dark:text-slate-500 line-through font-medium">
+                      {formatPrice(rawOrigPrice, sym)}
+                    </span>
+                  )}
+                </div>
+              );
+            }
+
+            if (isPendingScrape) {
+              return <span className="text-xs text-amber-500 font-medium">Scrape to get price</span>;
+            }
+
+            return <span className="text-xs text-slate-400 italic">Price not detected</span>;
+          })()}
         </div>
 
         {/* Footer info & action buttons (clean action bar, no duplicate delete) */}

@@ -69,6 +69,18 @@ async function runWorker() {
     } catch (rescueErr: any) {
       console.warn("[Worker Startup] Product rescue notice:", rescueErr?.message);
     }
+
+    // Run Jev Decision Engine startup sweep (reclassify General Merchandise & resolve 0 DT)
+    try {
+      const { runJevMaintenanceSweep } = await import("./jev-maintenance");
+      console.log("[Worker Startup] Checking active products for General Merchandise reclassification & 0 DT price resolution...");
+      const jevStats = await runJevMaintenanceSweep();
+      if (jevStats.reclassified > 0 || jevStats.pricesResolved > 0) {
+        console.log(`[Worker Startup] 🚀 Jev Sweep: Reclassified ${jevStats.reclassified} products, Resolved ${jevStats.pricesResolved} prices.`);
+      }
+    } catch (jevErr: any) {
+      console.warn("[Worker Startup] Jev maintenance notice:", jevErr?.message);
+    }
   }
 
   // Load live application settings from database (with fallback defaults)
@@ -76,6 +88,13 @@ async function runWorker() {
 
   // Check command line arguments and environment variables
   const args = process.argv.slice(2);
+
+  if (args.includes("--jev-sweep")) {
+    const { runJevMaintenanceSweep } = await import("./jev-maintenance");
+    const jevStats = await runJevMaintenanceSweep();
+    console.log(`[Jev Sweep CLI] Finished: Reclassified ${jevStats.reclassified}, Resolved ${jevStats.pricesResolved}`);
+    process.exit(0);
+  }
   const testUrlIdx = args.indexOf("--test-url");
   const testSpyIdx = args.indexOf("--test-spy-url");
   const testDiscoveryIdx = args.indexOf("--discovery-url");
@@ -255,6 +274,8 @@ async function runWorker() {
   };
 
   let lastHeartbeatAt = 0;
+  let lastJevSweepAt = Date.now();
+  const JEV_SWEEP_FREQUENCY_MS = parseInt(process.env.JEV_SWEEP_INTERVAL_MS || "600000", 10); // default 10 minutes
 
   try {
     while (true) {
@@ -389,6 +410,23 @@ async function runWorker() {
           await rescueFailedProductsBatch(3);
         } catch (rescueErr: any) {
           console.warn("[Local Rescue] Background rescue cycle warning:", rescueErr?.message);
+        }
+
+        // Jev Frequency Sweep: Periodically reclassify General Merchandise & Resolve 0 DT prices
+        const now = Date.now();
+        if (now - lastJevSweepAt >= JEV_SWEEP_FREQUENCY_MS) {
+          lastJevSweepAt = now;
+          try {
+            const { runJevMaintenanceSweep } = await import("./jev-maintenance");
+            const jevStats = await runJevMaintenanceSweep();
+            if (jevStats.reclassified > 0 || jevStats.pricesResolved > 0) {
+              console.log(
+                `[Jev Frequency Sweep] 🚀 Reclassified ${jevStats.reclassified} products, Resolved ${jevStats.pricesResolved} prices.`
+              );
+            }
+          } catch (jevErr: any) {
+            console.warn("[Jev Frequency Sweep] Notice:", jevErr?.message);
+          }
         }
 
         if (isSingleRun) {

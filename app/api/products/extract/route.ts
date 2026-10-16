@@ -18,6 +18,7 @@ import {
 import { createNotification } from "@/lib/notifications";
 import { buildProductExtractionNotification } from "@/lib/product-extraction";
 import { PRODUCT_EXTRACTION_LOOKUP_PROJECTION } from "@/lib/product-projections";
+import { enhanceProductWithJev } from "@/lib/product-enhancer";
 
 export async function POST(req: NextRequest) {
   const authError = await validateApiSecret(req);
@@ -207,6 +208,25 @@ export async function POST(req: NextRequest) {
       extracted.all_offers
     );
 
+    // 2c. Enhance with TypeSafe Jev Decision Engine (resolve price doubt / 0 DT & classify niche)
+    const isMorocco = resolvedWorkspaceId === "00000000-0000-0000-0000-000000000002" || /\.ma(\/|$)/i.test(domain || normalizedUrl);
+    const fallbackCurrencySymbol = isMorocco ? "DH" : "DT";
+
+    const enhanced = await enhanceProductWithJev({
+      title: extracted.title || existingProduct?.title,
+      currentPrice: extracted.current_price || existingProduct?.currentPrice,
+      originalPrice: extracted.original_price || existingProduct?.originalPrice,
+      url: finalEffectiveUrl,
+      domain: resolvedDomain,
+      adText: adCaptionText,
+      html: rawHtml,
+      markdown: extractionResult.raw?.markdown,
+      existingCategory: existingProduct?.category,
+      existingSubCategory: existingProduct?.subCategory,
+      existingTargetAudience: existingProduct?.targetAudience,
+      fallbackCurrencySymbol,
+    });
+
     // 3. Save or update product in DB
     let savedProduct;
     if (existingProduct) {
@@ -219,8 +239,11 @@ export async function POST(req: NextRequest) {
           workspaceId: existingProduct.workspaceId || resolvedWorkspaceId,
           brandDomainId: existingProduct.brandDomainId || resolvedBrandDomainId,
           title: extracted.title || existingProduct.title,
-          currentPrice: extracted.current_price || existingProduct.currentPrice,
-          originalPrice: extracted.original_price || existingProduct.originalPrice,
+          currentPrice: enhanced.currentPrice,
+          originalPrice: enhanced.originalPrice,
+          category: enhanced.category,
+          subCategory: enhanced.subCategory,
+          targetAudience: enhanced.targetAudience,
           currency: extracted.currency || existingProduct.currency,
           discountOrOffer: extracted.discount_or_offer || existingProduct.discountOrOffer,
           mainImageUrl: extracted.main_image_url || existingProduct.mainImageUrl,
@@ -250,8 +273,11 @@ export async function POST(req: NextRequest) {
           workspaceId: resolvedWorkspaceId,
           brandDomainId: resolvedBrandDomainId,
           title: extracted.title || null,
-          currentPrice: extracted.current_price || null,
-          originalPrice: extracted.original_price || null,
+          currentPrice: enhanced.currentPrice,
+          originalPrice: enhanced.originalPrice,
+          category: enhanced.category,
+          subCategory: enhanced.subCategory,
+          targetAudience: enhanced.targetAudience,
           currency: extracted.currency || null,
           discountOrOffer: extracted.discount_or_offer || null,
           mainImageUrl: extracted.main_image_url || null,

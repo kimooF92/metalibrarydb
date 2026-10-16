@@ -75,3 +75,24 @@ jobs:
           fi
           echo "Executing product scraper with flags: $FLAGS"
           npx tsx scripts/run-product-scraper.ts $FLAGS
+
+      - name: Reclassify General Merchandise with TypeSafe Jev
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          echo "Running Jev classification for active General Merchandise products..."
+          npx tsx scripts/classify-active-products-jev.ts --concurrency 5
+
+      - name: Resolve 0 DT Prices with TypeSafe Jev Referee
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          echo "Running Jev price referee for active 0 DT products..."
+          npx tsx scripts/resolve-zero-prices-jev.ts --concurrency 4
+

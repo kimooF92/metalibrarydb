@@ -57,6 +57,10 @@ export const PRODUCT_EXTRACTION_LOOKUP_PROJECTION = {
   metaPixelIds: scrapedProducts.metaPixelIds,
   storePlatform: scrapedProducts.storePlatform,
   deliveryCost: scrapedProducts.deliveryCost,
+  category: scrapedProducts.category,
+  subCategory: scrapedProducts.subCategory,
+  targetAudience: scrapedProducts.targetAudience,
+  supplierUrls: scrapedProducts.supplierUrls,
   scrapeStatus: scrapedProducts.scrapeStatus,
 } as const;
 

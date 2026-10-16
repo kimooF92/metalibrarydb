@@ -68,7 +68,8 @@ export interface JevProductResult extends ProductClassificationResult {
   isPhysicalProduct?: boolean;
 }
 
-const DEFAULT_JEV_MODEL = "typesafe/jev-1.13";
+export const DEFAULT_DECISION_MODEL = process.env.DECISION_MODEL || "respan/span-02";
+const DEFAULT_JEV_MODEL = DEFAULT_DECISION_MODEL;
 const DECISIONS_ENDPOINT = "https://openrouter.ai/api/alpha/decisions";
 
 /**
