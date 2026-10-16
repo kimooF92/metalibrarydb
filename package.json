@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "node init && next dev",
+    "build": "node init && next build",
+    "start": "node init && next start",
     "lint": "eslint",
     "test": "tsx --test lib/ad-reconciliation.test.ts lib/product-extraction.test.ts lib/doubt-detector.test.ts lib/b2-storage.test.ts lib/html-scraper.test.ts worker/circuit-breaker.test.ts lib/url-parser.test.ts lib/breakout-detector.test.ts",
     "worker": "npx tsx worker/index.ts",

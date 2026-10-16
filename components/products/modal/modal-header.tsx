@@ -24,9 +24,12 @@ import {
   MoreHorizontal,
   Undo2,
   Save,
+  Calendar,
+  Rocket,
 } from "lucide-react";
 import { ModalTab, generateAIProductPrompt, generateCleanMarkdown } from "./modal-types";
 import { getNicheDisplayLabel, getSubNicheDisplayLabel } from "@/lib/niches-taxonomy";
+import { formatDiscoveryDate, formatDiscoveryLabel } from "@/lib/format-date";
 import { useAuth } from "@/components/auth-context";
 
 interface ModalHeaderProps {
@@ -265,6 +268,31 @@ export function ModalHeader({
                     {product.subCategory && (
                       <span className="text-amber-600/70 dark:text-amber-400/70 font-medium">› {getSubNicheDisplayLabel(product.subCategory)}</span>
                     )}
+                  </span>
+                )}
+
+                {/* Date Badge: Discovery & Ad Launch */}
+                {(product.createdAt || product.earliestAdDate) && (
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 select-none shrink-0"
+                    title={
+                      product.createdAt
+                        ? product.earliestAdDate
+                          ? `${formatDiscoveryLabel(product.createdAt)} • First Ad Launched: ${new Date(product.earliestAdDate).toLocaleDateString()} (${product.daysRunning || 1}d running)`
+                          : formatDiscoveryLabel(product.createdAt)
+                        : `First Ad Launched: ${new Date(product.earliestAdDate!).toLocaleDateString()}`
+                    }
+                  >
+                    {product.earliestAdDate ? (
+                      <Rocket className="w-2.5 h-2.5 text-amber-500" />
+                    ) : (
+                      <Calendar className="w-2.5 h-2.5 text-slate-400" />
+                    )}
+                    <span>
+                      {product.createdAt
+                        ? `Discovered ${formatDiscoveryDate(product.createdAt)}`
+                        : `Launched ${formatDiscoveryDate(product.earliestAdDate)}`}
+                    </span>
                   </span>
                 )}
 
