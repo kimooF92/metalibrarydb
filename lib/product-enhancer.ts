@@ -106,7 +106,7 @@ export async function enhanceProductWithJev(
         targetAudience = offline.targetAudience;
       }
     } catch (err: any) {
-      console.warn(`[Jev Classifier] Error for "${params.title}":`, err?.message || err);
+      console.warn(`[Decision Engine] Error classifying "${params.title}":`, err?.message || err);
       const offline = classifyProductOffline(params.title);
       category = offline.category;
       subCategory = offline.subCategory;

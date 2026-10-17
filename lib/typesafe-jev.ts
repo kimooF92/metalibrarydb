@@ -68,34 +68,22 @@ export interface JevProductResult extends ProductClassificationResult {
   isPhysicalProduct?: boolean;
 }
 
-export const DEFAULT_DECISION_MODEL = process.env.DECISION_MODEL || "respan/span-02";
+export const SPAN_DECISION_MODEL = "respan/span-02";
+export const JEV_BACKUP_MODEL = "typesafe/jev-1.13";
+export const DEFAULT_DECISION_MODEL = process.env.DECISION_MODEL || SPAN_DECISION_MODEL;
 const DEFAULT_JEV_MODEL = DEFAULT_DECISION_MODEL;
 const DECISIONS_ENDPOINT = "https://openrouter.ai/api/alpha/decisions";
 
 /**
- * Low-level caller for OpenRouter /api/alpha/decisions
+ * Executes a single HTTP request to OpenRouter Decisions API
  */
-export async function callJevDecisions(
+async function executeDecisionPass(
   state: Record<string, any> | string,
   questions: Record<string, JevQuestion>,
-  options?: {
-    model?: string;
-    timeoutMs?: number;
-    apiKey?: string;
-  }
+  model: string,
+  apiKey: string,
+  timeoutMs: number
 ): Promise<JevDecisionsResponse | null> {
-  const apiKey =
-    options?.apiKey ||
-    process.env.OPENROUTER_API_KEY ||
-    process.env.OPEN_ROUTER_API_KEY;
-
-  if (!apiKey || apiKey.trim() === "") {
-    return null;
-  }
-
-  const model = options?.model || DEFAULT_JEV_MODEL;
-  const timeoutMs = options?.timeoutMs || 5000;
-
   try {
     const response = await fetch(DECISIONS_ENDPOINT, {
       method: "POST",
@@ -115,16 +103,63 @@ export async function callJevDecisions(
 
     if (!response.ok) {
       const errText = await response.text();
-      console.warn(`[Jev Decision Notice] HTTP ${response.status}: ${errText.slice(0, 200)}`);
+      console.warn(`[Decision Engine] HTTP ${response.status} from ${model}: ${errText.slice(0, 200)}`);
       return null;
     }
 
     const data = (await response.json()) as JevDecisionsResponse;
     return data;
   } catch (err: any) {
-    console.warn(`[Jev Decision Notice] Failed to query ${model}:`, err?.message || err);
+    console.warn(`[Decision Engine] Failed to query ${model}:`, err?.message || err);
     return null;
   }
+}
+
+/**
+ * Caller for OpenRouter /api/alpha/decisions
+ * Strict Policy: Uses ONLY span (respan/span-02). If span fails or times out, uses jev (typesafe/jev-1.13) as backup.
+ * No other LLMs are used.
+ */
+export async function callJevDecisions(
+  state: Record<string, any> | string,
+  questions: Record<string, JevQuestion>,
+  options?: {
+    model?: string;
+    timeoutMs?: number;
+    apiKey?: string;
+    disableBackup?: boolean;
+  }
+): Promise<JevDecisionsResponse | null> {
+  const apiKey =
+    options?.apiKey ||
+    process.env.OPENROUTER_API_KEY ||
+    process.env.OPEN_ROUTER_API_KEY;
+
+  if (!apiKey || apiKey.trim() === "") {
+    return null;
+  }
+
+  const primaryModel = options?.model || DEFAULT_DECISION_MODEL;
+  const timeoutMs = options?.timeoutMs || 8000;
+
+  // 1. Primary: Use Span model (respan/span-02)
+  const primaryResult = await executeDecisionPass(state, questions, primaryModel, apiKey, timeoutMs);
+  if (primaryResult?.answers) {
+    return primaryResult;
+  }
+
+  // 2. Backup: If span fails, use jev (typesafe/jev-1.13) as backup!
+  if (!options?.disableBackup && primaryModel !== JEV_BACKUP_MODEL) {
+    console.warn(
+      `[Decision Engine Fallback] Primary span model (${primaryModel}) failed or timed out. Engaging jev (${JEV_BACKUP_MODEL}) as backup...`
+    );
+    const backupResult = await executeDecisionPass(state, questions, JEV_BACKUP_MODEL, apiKey, timeoutMs);
+    if (backupResult?.answers) {
+      return backupResult;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -147,7 +182,7 @@ function deriveSubCategory(title: string, category: ProductCategory): string {
       if (/barbe|homme|tondeuse|لحية/i.test(text)) return "Men's Grooming";
       if (/parfum|fragrance|عطر/i.test(text)) return "Fragrances & Perfumes";
       if (/cheveux|shampoing|lissante|sechoir|sèche-cheveux|شعر/i.test(text)) return "Hair Care & Styling";
-      if (/creme|crème|serum|sérum|visage|peau|anti-rides|glow|بشرة|كريم/i.test(text)) return "Skincare & Face";
+      if (/creme|crème|serum|sérum|visage|peau|anti-rides|glow|بشرة|كريم|مكياج|ماكياج|maquillage/i.test(text)) return "Skincare & Face";
       if (/dent|dents|dentaire|blanchiment|hismile|أسنان/i.test(text)) return "Dental & Oral Care";
       if (/ongle|champignon|fongique|pied|diabétique|diabete|diabex|douleur|مرهم/i.test(text)) return "Foot & Nail Care";
       if (/massage|minceur|santé|مساج/i.test(text)) return "Health & Wellness";
@@ -166,7 +201,7 @@ function deriveSubCategory(title: string, category: ProductCategory): string {
     case "Fashion & Jewelry":
       if (/bague|collier|bracelet|bijoux|مجوهرات/i.test(text)) return "Jewelry & Accessories";
       if (/chaussure|sneaker|basket|sandale|talons|حذاء|crocos/i.test(text)) return "Footwear & Shoes";
-      if (/sac|sacoche|portefeuille|حقيبة/i.test(text)) return "Bags & Wallets";
+      if (/sac|sacoche|portefeuille|trousse|trousses|تروس|حقيبة/i.test(text)) return "Bags & Wallets";
       if (/gaine|waist trainer|corset|lingerie/i.test(text)) return "Shapewear & Underwear";
       return "Apparel & Fashion";
 
@@ -249,8 +284,8 @@ export async function classifyProductWithJev(
   // 2. Fast offline audience inference to save input tokens if unambiguous
   let resolvedAudience: "unisex" | "men" | "women" | "kids" | null = null;
   const combinedText = `${cleanTitle} ${slugHint}`.toLowerCase();
-  if (/(?:homme|men|beard|barbe|rasoir)/i.test(combinedText)) resolvedAudience = "men";
-  else if (/(?:femme|women|robe|jupe|dentelle|maquillage|lingerie)/i.test(combinedText)) resolvedAudience = "women";
+  if (/(?:homme|men|beard|barbe|rasoir|رجالي|لحية)/i.test(combinedText)) resolvedAudience = "men";
+  else if (/(?:femme|women|robe|jupe|dentelle|maquillage|مكياج|ماكياج|نسائي|lingerie)/i.test(combinedText)) resolvedAudience = "women";
   else if (/(?:bebe|bébé|enfant|enfants|kids|baby|jouet|livre|livres|كتب|طفل|أطفال)/i.test(combinedText)) resolvedAudience = "kids";
 
   // 3. Compact criteria definitions to minimize input token billing
@@ -293,7 +328,7 @@ export async function classifyProductWithJev(
 
   const response = await callJevDecisions(statePayload, questions, {
     model: DEFAULT_JEV_MODEL,
-    timeoutMs: 4000,
+    timeoutMs: 8000,
   });
 
   if (!response?.answers) {

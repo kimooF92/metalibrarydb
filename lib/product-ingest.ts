@@ -377,19 +377,22 @@ export async function linkAndAutoScrapeProduct({
           );
           const deliveryCost = deliveryInfo?.label ? formatDelivery(deliveryInfo.label, fallbackCurrencySymbol) : null;
 
-          // High-speed TypeSafe Jev classification (~300ms) with deterministic offline fallback
+          // High-speed Decision AI classification (Span/Jev model with AI cascade fallback)
           let category: string | null = null;
           let subCategory: string | null = null;
           let targetAudience: string | null = null;
 
           if (extracted.title) {
             try {
+              // Strict Decision AI Engine: Uses ONLY span (respan/span-02), and if failed, jev (typesafe/jev-1.13) as backup. No other LLMs.
               const jevClassification = await classifyProductWithJev(extracted.title, {
                 domain: resolvedDomain,
+                url: finalEffectiveUrl,
                 adText: adCopy,
+                allowGeneral: false, // Never allow General Merchandise
               });
 
-              if (jevClassification?.category) {
+              if (jevClassification?.category && jevClassification.category !== "General & Other") {
                 category = jevClassification.category;
                 subCategory = jevClassification.subCategory;
                 targetAudience = jevClassification.targetAudience;
@@ -400,7 +403,7 @@ export async function linkAndAutoScrapeProduct({
                 targetAudience = fallback.targetAudience;
               }
             } catch (err: any) {
-              console.warn(`[Auto-Scraper] Jev classification error for "${extracted.title}":`, err?.message || err);
+              console.warn(`[Auto-Scraper] Decision AI classification error for "${extracted.title}":`, err?.message || err);
               const fallback = classifyProductOffline(extracted.title);
               category = fallback.category;
               subCategory = fallback.subCategory;
