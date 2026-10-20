@@ -89,6 +89,14 @@ async function runWorker() {
   // Check command line arguments and environment variables
   const args = process.argv.slice(2);
 
+  if (args.includes("--headed") || args.includes("--head") || args.includes("--show")) {
+    process.env.PLAYWRIGHT_HEADLESS = "false";
+  } else if (args.includes("--headless")) {
+    process.env.PLAYWRIGHT_HEADLESS = "true";
+  }
+  const isBrowserHeadless = process.env.PLAYWRIGHT_HEADLESS !== "false";
+  console.log(`[Browser Mode] 🖥️  ${isBrowserHeadless ? "HEADLESS (background)" : "NORMAL / HEADED (visible window)"}`);
+
   if (args.includes("--jev-sweep")) {
     const { runJevMaintenanceSweep } = await import("./jev-maintenance");
     const jevStats = await runJevMaintenanceSweep();

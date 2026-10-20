@@ -10,6 +10,7 @@ export async function getBrowserSession(): Promise<{ context: BrowserContext; pa
   }
 
   const isHeadless = process.env.PLAYWRIGHT_HEADLESS !== "false";
+  console.log(`[Browser Session] Initializing Chromium persistent context (Headless: ${isHeadless})`);
   const userDataDir = path.join(process.cwd(), ".playwright_profile");
 
   const options = {

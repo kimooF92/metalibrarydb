@@ -26,8 +26,15 @@ interface LocalBrowserOptions {
 
 function parseArgs(): LocalBrowserOptions {
   const args = process.argv.slice(2);
+  const isHeadExplicit = args.includes("--head") || args.includes("--headed") || args.includes("--show");
+  const isHeadlessExplicit = args.includes("--headless");
+
+  let headless = process.env.PLAYWRIGHT_HEADLESS !== "false";
+  if (isHeadExplicit) headless = false;
+  if (isHeadlessExplicit) headless = true;
+
   const options: LocalBrowserOptions = {
-    headless: !args.includes("--head") && !args.includes("--show"),
+    headless,
     limit: 50,
   };
 
