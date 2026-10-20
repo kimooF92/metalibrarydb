@@ -83,10 +83,8 @@ async function main() {
         or(
           isNull(scrapedProducts.currentPrice),
           sql`TRIM(${scrapedProducts.currentPrice}) = ''`,
-          sql`${scrapedProducts.currentPrice} LIKE '%0 DT%'`,
-          sql`${scrapedProducts.currentPrice} = '0'`,
-          sql`${scrapedProducts.currentPrice} LIKE '%0 DH%'`,
-          sql`${scrapedProducts.currentPrice} LIKE '%0.00%'`
+          sql`TRIM(${scrapedProducts.currentPrice}) ~* '^0+(\\.0+|,0+)?(\\s*(dt|dh|tnd|mad))?$'`,
+          sql`${scrapedProducts.currentPrice} = '0'`
         ),
         activeAdCondition
       )

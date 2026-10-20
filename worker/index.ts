@@ -54,40 +54,50 @@ async function runWorker() {
   console.log(` Meta Ad Library Tracker — Worker Started${shardTag} `);
   console.log("==========================================");
 
+  // Check command line arguments and environment variables
+  const args = process.argv.slice(2);
+
+  const shouldSkipStartupSweep =
+    args.includes("--skip-sweep") ||
+    args.includes("--no-sweep") ||
+    args.includes("--skip-maintenance") ||
+    process.env.SKIP_STARTUP_SWEEP === "true";
+
   // Only the primary coordinator (Shard 0 or standalone runner) clears orphaned jobs
   if (isCoordinator) {
     await resetStuckJobs();
 
-    // Check and immediately rescue any stuck or failed product scrapings on worker startup
-    try {
-      const { rescueFailedProductsBatch } = await import("./product-rescue");
-      console.log("[Worker Startup] Checking for stuck or failed product scrapings to rescue...");
-      const rescuedCount = await rescueFailedProductsBatch(5, true);
-      if (rescuedCount > 0) {
-        console.log(`[Worker Startup] 🟢 Rescued ${rescuedCount} stuck product(s) via local residential browser.`);
+    if (!shouldSkipStartupSweep) {
+      // Check and immediately rescue any stuck or failed product scrapings on worker startup
+      try {
+        const { rescueFailedProductsBatch } = await import("./product-rescue");
+        console.log("[Worker Startup] Checking for stuck or failed product scrapings to rescue...");
+        const rescuedCount = await rescueFailedProductsBatch(5, true);
+        if (rescuedCount > 0) {
+          console.log(`[Worker Startup] 🟢 Rescued ${rescuedCount} stuck product(s) via local residential browser.`);
+        }
+      } catch (rescueErr: any) {
+        console.warn("[Worker Startup] Product rescue notice:", rescueErr?.message);
       }
-    } catch (rescueErr: any) {
-      console.warn("[Worker Startup] Product rescue notice:", rescueErr?.message);
-    }
 
-    // Run Jev Decision Engine startup sweep (reclassify General Merchandise & resolve 0 DT)
-    try {
-      const { runJevMaintenanceSweep } = await import("./jev-maintenance");
-      console.log("[Worker Startup] Checking active products for General Merchandise reclassification & 0 DT price resolution...");
-      const jevStats = await runJevMaintenanceSweep();
-      if (jevStats.reclassified > 0 || jevStats.pricesResolved > 0) {
-        console.log(`[Worker Startup] 🚀 Jev Sweep: Reclassified ${jevStats.reclassified} products, Resolved ${jevStats.pricesResolved} prices.`);
+      // Run Jev Decision Engine startup sweep (reclassify General Merchandise & resolve 0 DT)
+      try {
+        const { runJevMaintenanceSweep } = await import("./jev-maintenance");
+        console.log("[Worker Startup] Checking active products for General Merchandise reclassification & 0 DT price resolution...");
+        const jevStats = await runJevMaintenanceSweep();
+        if (jevStats.reclassified > 0 || jevStats.pricesResolved > 0) {
+          console.log(`[Worker Startup] 🚀 Jev Sweep: Reclassified ${jevStats.reclassified} products, Resolved ${jevStats.pricesResolved} prices.`);
+        }
+      } catch (jevErr: any) {
+        console.warn("[Worker Startup] Jev maintenance notice:", jevErr?.message);
       }
-    } catch (jevErr: any) {
-      console.warn("[Worker Startup] Jev maintenance notice:", jevErr?.message);
+    } else {
+      console.log("[Worker Startup] ⏩ Startup rescue & maintenance sweep skipped by flag.");
     }
   }
 
   // Load live application settings from database (with fallback defaults)
   const settings = await getAppSettings();
-
-  // Check command line arguments and environment variables
-  const args = process.argv.slice(2);
 
   if (args.includes("--headed") || args.includes("--head") || args.includes("--show")) {
     process.env.PLAYWRIGHT_HEADLESS = "false";

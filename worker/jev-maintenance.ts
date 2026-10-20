@@ -125,10 +125,8 @@ export async function sweepAndResolveZeroPrices(limit = 8): Promise<number> {
         or(
           isNull(scrapedProducts.currentPrice),
           sql`TRIM(${scrapedProducts.currentPrice}) = ''`,
-          sql`${scrapedProducts.currentPrice} LIKE '%0 DT%'`,
-          sql`${scrapedProducts.currentPrice} = '0'`,
-          sql`${scrapedProducts.currentPrice} LIKE '%0 DH%'`,
-          sql`${scrapedProducts.currentPrice} LIKE '%0.00%'`
+          sql`TRIM(${scrapedProducts.currentPrice}) ~* '^0+(\\.0+|,0+)?(\\s*(dt|dh|tnd|mad))?$'`,
+          sql`${scrapedProducts.currentPrice} = '0'`
         ),
         sql`EXISTS (
           SELECT 1 FROM ${ads}
@@ -158,6 +156,7 @@ export async function sweepAndResolveZeroPrices(limit = 8): Promise<number> {
       /\.ma(\/|$)/i.test(item.domain || item.url);
     const itemSym = isMorocco ? "DH" : "DT";
 
+    let resolvedThisItem = false;
     try {
       // 1. Direct fetch HTML to harvest price candidates
       const scrapeRes = await scrapeProductDirectHtml(item.url, 8000, 1, {
@@ -183,6 +182,7 @@ export async function sweepAndResolveZeroPrices(limit = 8): Promise<number> {
           .where(eq(scrapedProducts.id, item.id));
 
         resolvedCount++;
+        resolvedThisItem = true;
         console.log(`[Jev Frequency Sweep] 🟢 Direct resolved price for "${item.title?.slice(0, 30)}": ${finalPrice}`);
         continue;
       }
@@ -213,6 +213,7 @@ export async function sweepAndResolveZeroPrices(limit = 8): Promise<number> {
                   .where(eq(scrapedProducts.id, item.id));
 
                 resolvedCount++;
+                resolvedThisItem = true;
                 console.log(`[Jev Frequency Sweep] 🚀 Rendered resolved price for "${item.title?.slice(0, 30)}": ${finalPrice}`);
                 continue;
               }
@@ -242,12 +243,26 @@ export async function sweepAndResolveZeroPrices(limit = 8): Promise<number> {
           .where(eq(scrapedProducts.id, item.id));
 
         resolvedCount++;
+        resolvedThisItem = true;
         console.log(
           `[Jev Frequency Sweep] 🎯 Jev resolved 0 DT price for "${item.title?.slice(0, 30)}" ➔ ${finalPrice} (${resolved.modelUsed})`
         );
       }
     } catch (err: any) {
       console.warn(`[Jev Frequency Sweep] Price resolution error for "${item.title?.slice(0, 30)}":`, err?.message || err);
+    } finally {
+      if (!resolvedThisItem) {
+        // Touch updatedAt so that unresolvable items (e.g. store homepages or non-product links)
+        // rotate to the back of the queue and don't block subsequent sweeps
+        try {
+          await db
+            .update(scrapedProducts)
+            .set({ updatedAt: new Date() })
+            .where(eq(scrapedProducts.id, item.id));
+        } catch {
+          // ignore timestamp touch failure
+        }
+      }
     }
   }
 
