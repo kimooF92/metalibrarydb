@@ -107,9 +107,9 @@ export function ProductsTopBar({
     { id: "all" as SmartPreset, label: "All Products", icon: null },
     { id: "favorites" as SmartPreset, label: "Favorites", icon: Sparkles, color: "text-amber-400" },
     { id: "breakout" as SmartPreset, label: "Breakout", icon: Flame, color: "text-amber-500", sort: "most_scaled" },
-    { id: "scaled" as SmartPreset, label: "Most Scaled", icon: TrendingUp, color: "text-emerald-500", sort: "most_scaled" },
-    { id: "new" as SmartPreset, label: "New This Week", icon: Sparkles, color: "text-blue-500", sort: "latest" },
-    { id: "evergreen" as SmartPreset, label: "Evergreen", icon: Clock, color: "text-purple-500", sort: "top_lasting" },
+    { id: "most_scaled" as SmartPreset, label: "Most Scaled", icon: TrendingUp, color: "text-emerald-500", sort: "most_scaled" },
+    { id: "new_discovered" as SmartPreset, label: "New This Week", icon: Sparkles, color: "text-blue-500", sort: "latest" },
+    { id: "top_lasting" as SmartPreset, label: "Evergreen", icon: Clock, color: "text-purple-500", sort: "top_lasting" },
     { id: "with_offers" as SmartPreset, label: "Offers", icon: Tag, color: "text-rose-500" },
   ];
 

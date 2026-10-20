@@ -148,7 +148,7 @@ export function ProductsSidebarFilters({
     longevity:
       (adLaunchFilter !== "all" ? 1 : 0) +
       (discoveryFilter !== "all" ? 1 : 0) +
-      (!stillRunningOnly ? 1 : 0),
+      (stillRunningOnly ? 1 : 0),
     platform: platform !== "all" ? 1 : 0,
     brand: brandInput.trim().length > 0 ? 1 : 0,
   };
@@ -336,9 +336,9 @@ export function ProductsSidebarFilters({
               <div className="grid grid-cols-2 gap-1.5 pt-1">
                 {[
                   { id: "breakout" as SmartPreset, label: "Breakout", icon: Flame, color: "text-amber-500" },
-                  { id: "scaled" as SmartPreset, label: "Most Scaled", icon: TrendingUp, color: "text-emerald-500" },
-                  { id: "new" as SmartPreset, label: "New This Week", icon: Sparkles, color: "text-blue-500" },
-                  { id: "evergreen" as SmartPreset, label: "Evergreen", icon: Clock, color: "text-purple-500" },
+                  { id: "most_scaled" as SmartPreset, label: "Most Scaled", icon: TrendingUp, color: "text-emerald-500" },
+                  { id: "new_discovered" as SmartPreset, label: "New This Week", icon: Sparkles, color: "text-blue-500" },
+                  { id: "top_lasting" as SmartPreset, label: "Evergreen", icon: Clock, color: "text-purple-500" },
                   { id: "with_offers" as SmartPreset, label: "Discounts & Offers", icon: Tag, color: "text-rose-500" },
                   { id: "favorites" as SmartPreset, label: "Favorites", icon: Sparkles, color: "text-amber-400" },
                 ].map((item) => {

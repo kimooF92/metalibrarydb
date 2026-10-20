@@ -11,6 +11,14 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const maxDuration = 60;
 
+interface CachedProductsResponse {
+  data: any;
+  timestamp: number;
+}
+
+const productsCacheMap = new Map<string, CachedProductsResponse>();
+const PRODUCTS_CACHE_TTL_MS = 15 * 1000; // 15 seconds
+
 export async function GET(req: NextRequest) {
   const authError = await validateApiSecret(req);
   if (authError) return authError;
@@ -38,7 +46,7 @@ export async function GET(req: NextRequest) {
       ? stillRunningParam === "true"
       : (adLaunch !== "all" || hideInactive);
     const activeStatus = searchParams.get("activeStatus") || (hideInactive || (stillRunning && adLaunch !== "all") ? "active" : "all");
-    const smartPreset = searchParams.get("smartPreset") || "all";
+    const smartPreset = searchParams.get("smartPreset") || searchParams.get("preset") || "all";
     const discovery = searchParams.get("discovery") || "all";
     const discoveryFrom = searchParams.get("discoveryFrom");
     const discoveryTo = searchParams.get("discoveryTo");
@@ -51,8 +59,20 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "24", 10)));
     const offset = (page - 1) * limit;
+    const isLean = searchParams.get("lean") === "true" || limit > 50;
 
     const activeWorkspace = await getActiveWorkspace(req);
+
+    // Short-lived in-memory cache check (15s) to eliminate duplicate waterfalls during rapid navigation / polling
+    const forceRefresh = searchParams.get("_t") !== null || searchParams.get("refresh") === "true";
+    const cacheKey = `${activeWorkspace.id}:${role}:${req.url}`;
+    const now = Date.now();
+    const cached = productsCacheMap.get(cacheKey);
+    if (!forceRefresh && cached && now - cached.timestamp < PRODUCTS_CACHE_TTL_MS) {
+      return NextResponse.json(cached.data, {
+        headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY },
+      });
+    }
 
     const conditions: any[] = [
       sql`${scrapedProducts.scrapeStatus} NOT IN ('deleted', 'ignored')`,
@@ -414,7 +434,7 @@ export async function GET(req: NextRequest) {
 
     const asyncLookups: Promise<any>[] = [];
 
-    if (productIds.length > 0) {
+    if (!isLean && productIds.length > 0) {
       asyncLookups.push(
         db
           .select({
@@ -444,7 +464,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    if (pageIdsFromProducts.length > 0) {
+    if (!isLean && pageIdsFromProducts.length > 0) {
       asyncLookups.push(
         db
           .select({
@@ -525,7 +545,7 @@ export async function GET(req: NextRequest) {
     const total = totalCountResult[0]?.count || 0;
     const totalPages = Math.ceil(total / limit);
 
-    return NextResponse.json({
+    const responsePayload = {
       success: true,
       products,
       pagination: {
@@ -534,7 +554,17 @@ export async function GET(req: NextRequest) {
         total,
         totalPages,
       },
-    }, {
+    };
+
+    if (!forceRefresh && !includeDetails) {
+      if (productsCacheMap.size > 100) {
+        const oldestKey = productsCacheMap.keys().next().value;
+        if (oldestKey) productsCacheMap.delete(oldestKey);
+      }
+      productsCacheMap.set(cacheKey, { data: responsePayload, timestamp: now });
+    }
+
+    return NextResponse.json(responsePayload, {
       headers: {
         "Cache-Control": includeDetails ? PRIVATE_DETAIL_CACHE_CONTROL : PRIVATE_READ_CACHE_CONTROL,
         Vary: PRIVATE_AUTH_VARY,
@@ -742,11 +772,12 @@ export async function DELETE(req: NextRequest) {
       .set({ productId: null })
       .where(eq(ads.productId, id));
 
-    // Mark product as deleted so background sync/scrapers never resurrect it
+    // Mark product as deleted and purge ephemeral raw_extract to protect 500 MB disk quota
     await db
       .update(scrapedProducts)
       .set({
         scrapeStatus: "deleted",
+        rawExtract: null,
         isFavorite: false,
         isFavoriteStaff: false,
         updatedAt: new Date(),

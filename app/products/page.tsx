@@ -85,6 +85,7 @@ export default function ProductsPage() {
   const [showBackToTop, setShowBackToTop] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const userHasCustomSortRef = useRef<boolean>(false);
 
   const [statsLoading, setStatsLoading] = useState(true);
   const [stats, setStats] = useState<{
@@ -400,7 +401,7 @@ export default function ProductsPage() {
       if (adLaunchFrom) newParams.set("adLaunchFrom", adLaunchFrom);
       if (adLaunchTo) newParams.set("adLaunchTo", adLaunchTo);
     }
-    if (!stillRunningOnly) newParams.set("stillRunning", "false");
+    newParams.set("stillRunning", stillRunningOnly ? "true" : "false");
 
     const nextSearch = newParams.toString();
     const nextUrl = nextSearch ? `${url.pathname}?${nextSearch}` : url.pathname;
@@ -477,7 +478,7 @@ export default function ProductsPage() {
           if (adLaunchFrom) query.set("adLaunchFrom", adLaunchFrom);
           if (adLaunchTo) query.set("adLaunchTo", adLaunchTo);
         }
-        if (!stillRunningOnly) query.set("stillRunning", "false");
+        query.set("stillRunning", stillRunningOnly ? "true" : "false");
 
         const res = await fetch(`/api/products?${query.toString()}`, {
           signal: currentController.signal,
@@ -917,15 +918,16 @@ export default function ProductsPage() {
     setAdLaunchTo("");
     setStillRunningOnly(true);
     setSortBy("latest");
+    userHasCustomSortRef.current = false;
     setHideInactive(false);
     setPage(1);
     setAutoLoadCount(0);
   }, []);
 
-  // KPI bar preset handler — also updates sortBy when a default is provided
+  // KPI bar preset handler — only updates sortBy when user hasn't chosen a custom sort
   const handleSelectPreset = useCallback((preset: SmartPreset, defaultSort?: string) => {
     setSmartPreset(preset);
-    if (defaultSort) setSortBy(defaultSort);
+    if (defaultSort && !userHasCustomSortRef.current) setSortBy(defaultSort);
     setPage(1);
   }, []);
 
@@ -1146,6 +1148,7 @@ export default function ProductsPage() {
           onSelectPreset={handleSelectPreset}
           sortBy={sortBy}
           onChangeSortBy={(v) => {
+            userHasCustomSortRef.current = true;
             setSortBy(v);
             setPage(1);
           }}
