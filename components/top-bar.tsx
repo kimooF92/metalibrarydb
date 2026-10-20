@@ -28,7 +28,7 @@ const ROUTE_INFO: Record<
   "/": { label: "Dashboard", icon: LayoutDashboard },
   "/discovery": { label: "Discover Pages", icon: Globe },
   "/spy": { label: "Ad Spy Feed", icon: Eye },
-  "/products": { label: "Product Intelligence", icon: ShoppingBag },
+  "/products": { label: "Tracked Products", icon: ShoppingBag },
   "/analytics": { label: "Analytics", icon: BarChart3 },
   "/settings": { label: "Settings", icon: Settings },
   "/import": { label: "Import Pages", icon: UploadCloud },

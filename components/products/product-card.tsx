@@ -209,52 +209,40 @@ export const ProductCard = memo(function ProductCard({
           </div>
         )}
 
-        {/* Breakout Winner Badge */}
-        {isBreakout && (
-          <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-pink-600 via-rose-500 to-amber-500 text-white text-[10px] font-extrabold shadow-md shadow-pink-500/25">
-            <Rocket className="w-3 h-3 animate-bounce" />
-            <span>🚀 Breakout ({product.maxDuplications || 3}x Copies)</span>
-          </div>
-        )}
-
-        {/* Winning Product Badge */}
-        {isWinning && (
-          <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[11px] font-bold shadow-md">
-            <Sparkles className="w-3 h-3 fill-current" />
-            <span>Winning ({product.linkedAdsCount} Ads)</span>
-          </div>
-        )}
-
-        {/* Inactive / Off-Air Badge */}
-        {isInactive && !isPageOnHold && (
-          <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900/85 text-slate-300 text-[10px] font-bold shadow-md border border-slate-700/80 backdrop-blur-xs">
-            <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-            <span>Inactive (Off-Air)</span>
-          </div>
-        )}
-
-        {/* Top Lasting (Evergreen) Badge */}
-        {!isWinning && !isInactive && product.daysRunning && product.daysRunning >= 30 && (
-          <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full bg-purple-600 text-white text-[10px] font-bold shadow-md">
-            <Clock className="w-3 h-3" />
-            <span>⏳ {product.daysRunning}d Running</span>
-          </div>
-        )}
-
-        {/* Pending / Failed Scrape Badge */}
-        {isPendingScrape && (
-          <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-500/90 text-white text-[10px] font-bold shadow-sm backdrop-blur-sm">
-            <Clock className="w-3 h-3" />
-            <span>Pending Scrape</span>
-          </div>
-        )}
-
-        {isFailedScrape && (
-          <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 px-2.5 py-1 rounded-md bg-rose-500/90 text-white text-[10px] font-bold shadow-sm backdrop-blur-sm">
-            <AlertCircle className="w-3 h-3" />
-            <span>Scrape Failed</span>
-          </div>
-        )}
+        {/* Top Left Primary Status Badge (Single Non-Colliding Hierarchical Badge) */}
+        <div className={`absolute left-2.5 z-10 flex flex-col items-start gap-1 max-w-[65%] ${isPageOnHold ? "top-8" : "top-2.5"}`}>
+          {isBreakout ? (
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-pink-600 via-rose-500 to-amber-500 text-white text-[10px] font-extrabold shadow-md shadow-pink-500/25">
+              <Rocket className="w-3 h-3 animate-bounce" />
+              <span>🚀 Breakout ({product.maxDuplications || 3}x Copies)</span>
+            </div>
+          ) : isWinning ? (
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[11px] font-bold shadow-md">
+              <Sparkles className="w-3 h-3 fill-current" />
+              <span>Winning ({product.linkedAdsCount} Ads)</span>
+            </div>
+          ) : product.daysRunning && product.daysRunning >= 30 && !isInactive ? (
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-purple-600 text-white text-[10px] font-bold shadow-md">
+              <Clock className="w-3 h-3" />
+              <span>⏳ {product.daysRunning}d Running</span>
+            </div>
+          ) : isInactive && !isPageOnHold ? (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900/85 text-slate-300 text-[10px] font-bold shadow-md border border-slate-700/80 backdrop-blur-xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+              <span>Inactive (Off-Air)</span>
+            </div>
+          ) : isPendingScrape ? (
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-500/90 text-white text-[10px] font-bold shadow-sm backdrop-blur-sm">
+              <Clock className="w-3 h-3" />
+              <span>Pending Scrape</span>
+            </div>
+          ) : isFailedScrape ? (
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-rose-500/90 text-white text-[10px] font-bold shadow-sm backdrop-blur-sm">
+              <AlertCircle className="w-3 h-3" />
+              <span>Scrape Failed</span>
+            </div>
+          ) : null}
+        </div>
 
         {/* Top Right: Favorite Star & Delete Button */}
         <div className={`absolute right-2.5 z-10 flex items-center gap-1.5 ${isPageOnHold ? "top-7" : "top-2.5"}`}>
@@ -284,10 +272,10 @@ export const ProductCard = memo(function ProductCard({
           )}
         </div>
 
-        {/* Offer Overlay Ribbon */}
+        {/* Offer Overlay Ribbon (Scoped to never collide with top creative thumbnail) */}
         {product.discountOrOffer && (
           <div
-            className={`absolute bottom-2.5 left-2.5 z-10 flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-md backdrop-blur-sm max-w-[60%] truncate ${
+            className={`absolute bottom-2.5 left-2.5 z-10 flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-md backdrop-blur-sm max-w-[calc(100%-3.5rem)] truncate ${
               isInactive
                 ? "bg-slate-800/90 text-slate-300 border border-slate-700/80"
                 : "bg-emerald-600/90 text-white"

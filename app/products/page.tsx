@@ -8,7 +8,6 @@ import { ProductCard } from "@/components/products/product-card";
 import { ProductRow } from "@/components/products/product-row";
 import { ProductDetailsModal } from "@/components/products/product-details-modal";
 import { AddProductModal } from "@/components/products/add-product-modal";
-import { ProductsKpiBar } from "@/components/products/products-kpi-bar";
 import type { SmartPreset } from "@/components/products/products-kpi-bar";
 import { ProductsSidebarFilters } from "@/components/products/products-sidebar-filters";
 import { ProductsTopBar } from "@/components/products/products-top-bar";
@@ -28,6 +27,16 @@ import {
   CheckCircle2,
   PlusCircle,
 } from "lucide-react";
+
+const SORT_LABEL_MAP: Record<string, string> = {
+  latest: "Newest Discovered",
+  oldest: "Oldest Discovered",
+  most_scaled: "Most Scaled (Active Ads)",
+  top_lasting: "Longest Lasting (Evergreen)",
+  price_desc: "Price: High to Low",
+  price_asc: "Price: Low to High",
+  title: "Title: A to Z",
+};
 
 export default function ProductsPage() {
   const router = useRouter();
@@ -1079,11 +1088,11 @@ export default function ProductsPage() {
                 <ShoppingBag className="w-4 h-4" />
               </div>
               <h1 className="text-lg font-black text-foreground tracking-tight">
-                Product Intelligence &amp; Catalog Hub
+                Tracked Products
               </h1>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Discover winning products, star favorites, track active brand campaigns, and benchmark competitor pricing.
+              Monitor competitor store offers, verify live ads, and watch for scaling signals.
             </p>
           </div>
 
@@ -1092,10 +1101,10 @@ export default function ProductsPage() {
               <button
                 onClick={() => setIsAddProductModalOpen(true)}
                 className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-sm shadow-indigo-600/30 transition-all cursor-pointer"
-                title="Add product page link or store website"
+                title="Track a new product landing page or store URL"
               >
                 <PlusCircle className="w-3.5 h-3.5" />
-                <span>Add Product Link</span>
+                <span>Track Product</span>
               </button>
             )}
 
@@ -1124,15 +1133,7 @@ export default function ProductsPage() {
           </div>
         </div>
 
-        {/* 1. KPI Bar */}
-        <ProductsKpiBar
-          stats={stats}
-          statsLoading={statsLoading}
-          smartPreset={smartPreset}
-          onSelectPreset={handleSelectPreset}
-        />
-
-        {/* Top Bar (Search, Presets, Active filters, View Mode) */}
+        {/* Top Bar (Search, Smart Presets with Live Counts, Active filters, View Mode) */}
         <ProductsTopBar
           searchInput={searchInput}
           onChangeSearch={(v) => {
@@ -1146,6 +1147,13 @@ export default function ProductsPage() {
           }}
           smartPreset={smartPreset}
           onSelectPreset={handleSelectPreset}
+          presetCounts={{
+            all: stats.totalProducts,
+            favorites: stats.favoritesCount,
+            new_discovered: stats.newThisWeekCount,
+            top_lasting: stats.evergreenCount,
+            with_offers: stats.withOffersCount,
+          }}
           sortBy={sortBy}
           onChangeSortBy={(v) => {
             userHasCustomSortRef.current = true;
@@ -1207,6 +1215,34 @@ export default function ProductsPage() {
           stillRunningOnly={stillRunningOnly}
           onResetFilters={handleResetFilters}
         />
+
+        {/* Results Count & Active Sort Summary Bar */}
+        <div className="flex items-center justify-between text-xs text-muted-foreground px-1 py-1">
+          <div className="flex items-center gap-2">
+            <span>
+              {loading && products.length === 0 ? (
+                "Loading products catalog..."
+              ) : (
+                <>
+                  Showing <span className="font-semibold text-foreground">{products.length}</span> of{" "}
+                  <span className="font-semibold text-foreground">{pagination.total}</span> products
+                </>
+              )}
+            </span>
+            {isFetchingMore && (
+              <span className="inline-flex items-center gap-1 text-[11px] text-indigo-500 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping" />
+                Loading more...
+              </span>
+            )}
+          </div>
+          <div className="hidden sm:flex items-center gap-1.5 text-[11px]">
+            <span>Sorted by:</span>
+            <span className="font-medium text-foreground bg-muted px-2 py-0.5 rounded-md border border-border/70">
+              {SORT_LABEL_MAP[sortBy] || sortBy}
+            </span>
+          </div>
+        </div>
 
       {/* 3. Products Display Area */}
       {loading && products.length === 0 ? (

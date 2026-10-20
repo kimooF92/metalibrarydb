@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Search,
   X,
@@ -18,10 +18,23 @@ import {
   Eye,
   EyeOff,
   Layers,
+  ArrowUpDown,
+  ChevronDown,
+  Check,
 } from "lucide-react";
 import type { SmartPreset } from "./products-kpi-bar";
 import { getNicheDisplayLabel } from "@/lib/niches-taxonomy";
 import { useAuth } from "@/components/auth-context";
+
+const SORT_OPTIONS = [
+  { value: "latest", label: "Newest Discovered" },
+  { value: "oldest", label: "Oldest Discovered" },
+  { value: "most_scaled", label: "Most Scaled (Active Ads)" },
+  { value: "top_lasting", label: "Longest Lasting (Evergreen)" },
+  { value: "price_desc", label: "Price: High to Low" },
+  { value: "price_asc", label: "Price: Low to High" },
+  { value: "title", label: "Title: A to Z" },
+];
 
 export interface ProductsTopBarProps {
   // Search
@@ -32,6 +45,7 @@ export interface ProductsTopBarProps {
   // Presets
   smartPreset: SmartPreset;
   onSelectPreset: (preset: SmartPreset, defaultSort?: string) => void;
+  presetCounts?: Partial<Record<SmartPreset, number>>;
 
   // Sorting & View
   sortBy: string;
@@ -74,6 +88,7 @@ export function ProductsTopBar({
   onClearSearch,
   smartPreset,
   onSelectPreset,
+  presetCounts,
   sortBy,
   onChangeSortBy,
   viewMode,
@@ -102,15 +117,57 @@ export function ProductsTopBar({
   onResetFilters,
 }: ProductsTopBarProps) {
   const { isStaff } = useAuth();
+  const [isSortOpen, setIsSortOpen] = useState(false);
+  const sortRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Keyboard shortcut '/' to focus search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "/" && document.activeElement !== searchInputRef.current) {
+        const activeTag = document.activeElement?.tagName;
+        if (
+          activeTag === "INPUT" ||
+          activeTag === "TEXTAREA" ||
+          activeTag === "SELECT" ||
+          (document.activeElement as HTMLElement)?.isContentEditable
+        ) {
+          return;
+        }
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Close sort dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sortRef.current && !sortRef.current.contains(e.target as Node)) {
+        setIsSortOpen(false);
+      }
+    };
+    if (isSortOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isSortOpen]);
+
+  const currentSortLabel =
+    SORT_OPTIONS.find((opt) => opt.value === sortBy)?.label || "Sort";
 
   const allPresetTabs = [
-    { id: "all" as SmartPreset, label: "All Products", icon: null },
-    { id: "favorites" as SmartPreset, label: "Favorites", icon: Sparkles, color: "text-amber-400" },
+    { id: "all" as SmartPreset, label: "All Products", count: presetCounts?.all, icon: null },
+    { id: "favorites" as SmartPreset, label: "Favorites", count: presetCounts?.favorites, icon: Sparkles, color: "text-amber-400" },
     { id: "breakout" as SmartPreset, label: "Breakout", icon: Flame, color: "text-amber-500", sort: "most_scaled" },
     { id: "most_scaled" as SmartPreset, label: "Most Scaled", icon: TrendingUp, color: "text-emerald-500", sort: "most_scaled" },
-    { id: "new_discovered" as SmartPreset, label: "New This Week", icon: Sparkles, color: "text-blue-500", sort: "latest" },
-    { id: "top_lasting" as SmartPreset, label: "Evergreen", icon: Clock, color: "text-purple-500", sort: "top_lasting" },
-    { id: "with_offers" as SmartPreset, label: "Offers", icon: Tag, color: "text-rose-500" },
+    { id: "new_discovered" as SmartPreset, label: "Fresh Drops", count: presetCounts?.new_discovered, icon: Sparkles, color: "text-blue-500", sort: "latest" },
+    { id: "top_lasting" as SmartPreset, label: "Evergreen", count: presetCounts?.top_lasting, icon: Clock, color: "text-purple-500", sort: "top_lasting" },
+    { id: "with_offers" as SmartPreset, label: "Offers", count: presetCounts?.with_offers, icon: Tag, color: "text-rose-500" },
   ];
 
   const PRESET_TABS = isStaff
@@ -135,13 +192,14 @@ export function ProductsTopBar({
         <div className="relative flex-1 max-w-md">
           <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-muted-foreground" />
           <input
+            ref={searchInputRef}
             type="text"
             value={searchInput}
             onChange={(e) => onChangeSearch(e.target.value)}
             placeholder="Search product title, brand, URL, offer..."
-            className="w-full bg-background text-foreground text-xs placeholder:text-muted-foreground rounded-lg pl-9 pr-8 py-2 border border-border focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium transition-colors"
+            className="w-full bg-background text-foreground text-xs placeholder:text-muted-foreground rounded-lg pl-9 pr-10 py-2 border border-border focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium transition-colors"
           />
-          {searchInput && (
+          {searchInput ? (
             <button
               type="button"
               onClick={onClearSearch}
@@ -149,6 +207,13 @@ export function ProductsTopBar({
             >
               <X className="w-3.5 h-3.5" />
             </button>
+          ) : (
+            <kbd
+              className="hidden sm:inline-flex items-center absolute right-2.5 top-2.5 px-1.5 py-0.5 text-[10px] font-mono font-medium text-muted-foreground bg-muted border border-border/70 rounded pointer-events-none select-none"
+              title="Press / to focus search"
+            >
+              /
+            </kbd>
           )}
         </div>
 
@@ -218,20 +283,58 @@ export function ProductsTopBar({
             <span>Active Only</span>
           </button>
 
-          {/* Quick Sort Dropdown */}
-          <select
-            value={sortBy}
-            onChange={(e) => onChangeSortBy(e.target.value)}
-            className="bg-background text-xs font-semibold rounded-lg border border-border px-2.5 py-2 text-foreground focus:outline-none cursor-pointer"
-          >
-            <option value="latest">Newest Discovered</option>
-            <option value="oldest">Oldest Discovered</option>
-            <option value="most_scaled">Most Scaled (Active Ads)</option>
-            <option value="top_lasting">Longest Lasting (Evergreen)</option>
-            <option value="price_desc">Price: High to Low</option>
-            <option value="price_asc">Price: Low to High</option>
-            <option value="title">Title: A to Z</option>
-          </select>
+          {/* Custom Styled Sort Dropdown */}
+          <div className="relative" ref={sortRef}>
+            <button
+              type="button"
+              onClick={() => setIsSortOpen((prev) => !prev)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-semibold border border-border bg-background hover:bg-accent text-foreground transition-all cursor-pointer select-none"
+              title="Change sort order"
+              aria-expanded={isSortOpen}
+            >
+              <ArrowUpDown className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+              <span className="hidden sm:inline">{currentSortLabel}</span>
+              <span className="sm:hidden">Sort</span>
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-150 ${
+                  isSortOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            {isSortOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-56 bg-card border border-border rounded-xl shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/50">
+                  Sort Products
+                </div>
+                <div className="p-1 space-y-0.5">
+                  {SORT_OPTIONS.map((opt) => {
+                    const isSelected = sortBy === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          onChangeSortBy(opt.value);
+                          setIsSortOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                          isSelected
+                            ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold"
+                            : "text-foreground hover:bg-accent"
+                        }`}
+                      >
+                        <span>{opt.label}</span>
+                        {isSelected && (
+                          <Check className="w-3.5 h-3.5 text-indigo-500 shrink-0 ml-2" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Grid / List View Toggle */}
           <div className="flex items-center bg-muted p-0.5 rounded-lg border border-border">
@@ -273,7 +376,7 @@ export function ProductsTopBar({
               key={tab.id}
               type="button"
               onClick={() => onSelectPreset(tab.id, tab.sort)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 cursor-pointer select-none border ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 cursor-pointer select-none border group ${
                 isActive
                   ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
                   : "bg-card hover:bg-accent text-muted-foreground hover:text-foreground border-border"
@@ -281,6 +384,17 @@ export function ProductsTopBar({
             >
               {Icon && <Icon className={`w-3.5 h-3.5 ${isActive ? "text-white" : tab.color || ""}`} />}
               <span>{tab.label}</span>
+              {typeof tab.count === "number" && tab.count > 0 && (
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold tabular-nums transition-colors ${
+                    isActive
+                      ? "bg-white/20 text-white"
+                      : "bg-muted text-muted-foreground group-hover:text-foreground"
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              )}
             </button>
           );
         })}

@@ -5,18 +5,10 @@ import {
   Filter,
   RotateCcw,
   Layers,
-  Zap,
   Calendar,
   Globe2,
   Building2,
   ChevronDown,
-  Eye,
-  EyeOff,
-  Tag,
-  Flame,
-  TrendingUp,
-  Clock,
-  Sparkles,
   X,
   Search,
   PanelLeftClose,
@@ -33,11 +25,11 @@ export interface ProductsSidebarFiltersProps {
   onChangeSubNiches: (subs: string[]) => void;
   nicheCounts?: NicheCountItem[];
 
-  // Signals / Presets
-  hideInactive: boolean;
-  onToggleHideInactive: () => void;
-  smartPreset: SmartPreset;
-  onSelectPreset: (preset: SmartPreset) => void;
+  // Signals / Presets (optional for backwards compatibility)
+  hideInactive?: boolean;
+  onToggleHideInactive?: () => void;
+  smartPreset?: SmartPreset;
+  onSelectPreset?: (preset: SmartPreset) => void;
 
   // Longevity & Dates
   adLaunchFilter: string;
@@ -82,9 +74,9 @@ export function ProductsSidebarFilters({
   selectedSubNiches,
   onChangeSubNiches,
   nicheCounts = [],
-  hideInactive,
+  hideInactive = false,
   onToggleHideInactive,
-  smartPreset,
+  smartPreset = "all",
   onSelectPreset,
   adLaunchFilter,
   onChangeAdLaunchFilter,
@@ -131,8 +123,7 @@ export function ProductsSidebarFilters({
   // Accordion section collapse state
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     niches: true,
-    signals: true,
-    longevity: false,
+    longevity: true,
     platform: false,
     brand: false,
   });
@@ -144,7 +135,6 @@ export function ProductsSidebarFilters({
   // Count active filters per section
   const sectionActiveCounts = {
     niches: selectedNiches.length + selectedSubNiches.length,
-    signals: (hideInactive ? 1 : 0) + (smartPreset !== "all" ? 1 : 0),
     longevity:
       (adLaunchFilter !== "all" ? 1 : 0) +
       (discoveryFilter !== "all" ? 1 : 0) +
@@ -276,96 +266,7 @@ export function ProductsSidebarFilters({
           )}
         </div>
 
-        {/* SECTION 2: Signals & Performance */}
-        <div className="rounded-xl border border-border/80 bg-background/50 overflow-hidden">
-          <button
-            type="button"
-            onClick={() => toggleSection("signals")}
-            className="w-full flex items-center justify-between p-2.5 text-xs font-bold text-foreground hover:bg-accent/40 cursor-pointer transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <Zap className="w-3.5 h-3.5 text-amber-500" />
-              <span>Signals &amp; Status</span>
-              {sectionActiveCounts.signals > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-indigo-600 text-white">
-                  {sectionActiveCounts.signals}
-                </span>
-              )}
-            </div>
-            <ChevronDown
-              className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 ${
-                openSections.signals ? "rotate-180" : ""
-              }`}
-            />
-          </button>
-
-          {openSections.signals && (
-            <div className="p-2.5 pt-1 border-t border-border/40 space-y-2">
-              {/* Active Ads Only Switch */}
-              <button
-                type="button"
-                onClick={onToggleHideInactive}
-                className={`w-full flex items-center justify-between p-2 rounded-lg border text-xs font-semibold cursor-pointer transition-all ${
-                  hideInactive
-                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
-                    : "border-border hover:bg-accent text-foreground"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  {hideInactive ? (
-                    <EyeOff className="w-3.5 h-3.5 text-emerald-500" />
-                  ) : (
-                    <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                  )}
-                  <span>Show Active Only (Live Ads)</span>
-                </div>
-                <div
-                  className={`w-7 h-4 rounded-full transition-colors relative ${
-                    hideInactive ? "bg-emerald-500" : "bg-muted"
-                  }`}
-                >
-                  <div
-                    className={`w-3 h-3 rounded-full bg-white absolute top-0.5 transition-transform ${
-                      hideInactive ? "right-0.5" : "left-0.5"
-                    }`}
-                  />
-                </div>
-              </button>
-
-              {/* Smart Signal Pills */}
-              <div className="grid grid-cols-2 gap-1.5 pt-1">
-                {[
-                  { id: "breakout" as SmartPreset, label: "Breakout", icon: Flame, color: "text-amber-500" },
-                  { id: "most_scaled" as SmartPreset, label: "Most Scaled", icon: TrendingUp, color: "text-emerald-500" },
-                  { id: "new_discovered" as SmartPreset, label: "New This Week", icon: Sparkles, color: "text-blue-500" },
-                  { id: "top_lasting" as SmartPreset, label: "Evergreen", icon: Clock, color: "text-purple-500" },
-                  { id: "with_offers" as SmartPreset, label: "Discounts & Offers", icon: Tag, color: "text-rose-500" },
-                  { id: "favorites" as SmartPreset, label: "Favorites", icon: Sparkles, color: "text-amber-400" },
-                ].map((item) => {
-                  const isActive = smartPreset === item.id;
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => onSelectPreset(isActive ? "all" : item.id)}
-                      className={`flex items-center gap-1.5 p-2 rounded-lg border text-[11px] font-semibold cursor-pointer transition-all ${
-                        isActive
-                          ? "bg-indigo-600 border-indigo-600 text-white shadow-xs"
-                          : "border-border hover:bg-accent text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      <Icon className={`w-3 h-3 ${isActive ? "text-white" : item.color}`} />
-                      <span className="truncate">{item.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* SECTION 3: Longevity & Date Ranges */}
+        {/* SECTION 2: Longevity & Date Ranges */}
         <div className="rounded-xl border border-border/80 bg-background/50 overflow-hidden">
           <button
             type="button"
@@ -469,15 +370,24 @@ export function ProductsSidebarFilters({
 
               {/* Still Running Switch */}
               <div className="pt-1 border-t border-border/40">
-                <label className="flex items-center justify-between cursor-pointer py-1 text-[11px] font-medium text-foreground">
+                <button
+                  type="button"
+                  onClick={onToggleStillRunningOnly}
+                  className="w-full flex items-center justify-between py-1.5 px-1 rounded-lg hover:bg-accent/40 cursor-pointer text-xs font-semibold text-foreground transition-colors"
+                >
                   <span>Only if Still Running</span>
-                  <input
-                    type="checkbox"
-                    checked={stillRunningOnly}
-                    onChange={onToggleStillRunningOnly}
-                    className="w-3.5 h-3.5 rounded border-border text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                  />
-                </label>
+                  <div
+                    className={`w-7 h-4 rounded-full transition-colors relative ${
+                      stillRunningOnly ? "bg-indigo-600" : "bg-muted border border-border"
+                    }`}
+                  >
+                    <div
+                      className={`w-3 h-3 rounded-full bg-white absolute top-0.5 transition-transform ${
+                        stillRunningOnly ? "right-0.5" : "left-0.5"
+                      }`}
+                    />
+                  </div>
+                </button>
               </div>
 
               {/* Discovery Date Range */}
