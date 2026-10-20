@@ -297,22 +297,45 @@ function FreshWinnersContent() {
                 </button>
 
                 <div className="flex items-center gap-1">
-                  {Array.from({ length: Math.min(5, pagination.totalPages) }).map((_, i) => {
-                    const pageNum = i + 1;
-                    return (
-                      <button
-                        key={pageNum}
-                        onClick={() => setPage(pageNum)}
-                        className={`w-8 h-8 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                          page === pageNum
-                            ? "bg-rose-600 text-white shadow-xs"
-                            : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                        }`}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
+                  {(() => {
+                    const totalPages = pagination.totalPages;
+                    const getPageNumbers = () => {
+                      if (totalPages <= 7) {
+                        return Array.from({ length: totalPages }, (_, i) => i + 1);
+                      }
+                      if (page <= 4) {
+                        return [1, 2, 3, 4, 5, "...", totalPages];
+                      }
+                      if (page >= totalPages - 3) {
+                        return [1, "...", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+                      }
+                      return [1, "...", page - 1, page, page + 1, "...", totalPages];
+                    };
+
+                    return getPageNumbers().map((p, idx) => {
+                      if (p === "...") {
+                        return (
+                          <span key={`ellipsis-${idx}`} className="px-1.5 py-1 text-slate-500 text-xs select-none">
+                            ...
+                          </span>
+                        );
+                      }
+                      const pageNum = p as number;
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setPage(pageNum)}
+                          className={`w-8 h-8 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            page === pageNum
+                              ? "bg-rose-600 text-white shadow-xs"
+                              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    });
+                  })()}
                 </div>
 
                 <button

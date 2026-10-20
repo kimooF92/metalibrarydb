@@ -101,14 +101,14 @@ export function ImportDropzone() {
     <div className="max-w-3xl mx-auto">
       {/* Error Message Banner */}
       {errorMessage && (
-        <div className="mb-4 flex items-center justify-between bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs p-3.5 rounded-xl">
+        <div className="mb-4 flex items-center justify-between bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-300 text-xs p-3.5 rounded-xl">
           <div className="flex items-center space-x-2">
-            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
             <span>{errorMessage}</span>
           </div>
           <button
             onClick={() => setErrorMessage(null)}
-            className="p-1 hover:text-white transition-colors"
+            className="p-1 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white transition-colors"
             aria-label="Dismiss error"
           >
             <X className="w-3.5 h-3.5" />
@@ -138,7 +138,7 @@ export function ImportDropzone() {
         />
 
         <div className="flex flex-col items-center justify-center space-y-4">
-          <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-550 dark:text-indigo-400">
+          <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
             <UploadCloud className="w-8 h-8" />
           </div>
 
@@ -155,7 +155,7 @@ export function ImportDropzone() {
             <div className="inline-flex items-center space-x-2 bg-slate-100 dark:bg-slate-900 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-200">
               <FileSpreadsheet className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
               <span className="font-medium">{file.name}</span>
-              <span className="text-slate-450 dark:text-slate-500">
+              <span className="text-slate-400 dark:text-slate-500">
                 ({(file.size / 1024).toFixed(1)} KB)
               </span>
               <button
@@ -167,7 +167,7 @@ export function ImportDropzone() {
                   setErrorMessage(null);
                 }}
                 aria-label="Remove selected file"
-                className="p-1 text-slate-500 dark:text-slate-400 hover:text-slate-750 dark:hover:text-slate-200 transition-colors ml-1 cursor-pointer"
+                className="p-1 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors ml-1 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -255,7 +255,7 @@ export function ImportDropzone() {
                     <button
                       onClick={confirmQueueExecution}
                       disabled={confirming}
-                      className="mt-4 flex items-center space-x-2 bg-amber-500 hover:bg-amber-450 text-slate-950 font-bold text-xs px-5 py-2.5 rounded-lg shadow-md transition-all cursor-pointer disabled:opacity-50"
+                      className="mt-4 flex items-center space-x-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs px-5 py-2.5 rounded-lg shadow-md transition-all cursor-pointer disabled:opacity-50"
                     >
                       {confirming ? (
                         <Loader2 className="w-4 h-4 animate-spin text-slate-950" />

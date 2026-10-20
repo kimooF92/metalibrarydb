@@ -151,7 +151,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
         onClick={toggleWorker}
         disabled={loading}
         title={isPaused ? "Worker is Paused. Click to Resume." : isBackoffActive ? "Worker Cooldown. Click to Resume." : "Worker Active. Click to Pause."}
-        className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-slate-200/40 dark:hover:bg-slate-805 border border-transparent hover:border-slate-200 dark:hover:border-slate-800/60 transition-all cursor-pointer relative"
+        className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-slate-200/40 dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-800/60 transition-all cursor-pointer relative"
       >
         <span className="relative flex h-3.5 w-3.5">
           {!isPaused && !isBackoffActive && (
@@ -291,7 +291,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
         <button
           onClick={resetWorkerLimits}
           disabled={loading}
-          className="flex items-center justify-center space-x-1.5 text-[10px] w-full text-slate-600 dark:text-slate-400 hover:text-indigo-650 dark:hover:text-indigo-300 bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-500/10 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-500/30 transition-all cursor-pointer mb-2"
+          className="flex items-center justify-center space-x-1.5 text-[10px] w-full text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-500/10 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-500/30 transition-all cursor-pointer mb-2"
           title="Reset hourly and daily scan count limits counters immediately"
         >
           <Cpu className="w-3 h-3" />
@@ -303,7 +303,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
           <button
             onClick={pruneQueue}
             disabled={pruning}
-            className="flex items-center justify-center space-x-1.5 text-[10px] w-full text-slate-600 dark:text-slate-400 hover:text-rose-650 dark:hover:text-rose-300 bg-white dark:bg-slate-900/60 hover:bg-rose-50 dark:hover:bg-rose-500/10 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-rose-300 dark:hover:border-rose-500/30 transition-all cursor-pointer"
+            className="flex items-center justify-center space-x-1.5 text-[10px] w-full text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-300 bg-white dark:bg-slate-900/60 hover:bg-rose-50 dark:hover:bg-rose-500/10 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-rose-300 dark:hover:border-rose-500/30 transition-all cursor-pointer"
           >
             <Trash2 className="w-3 h-3" />
             <span>Prune {pruneCount} old jobs</span>
@@ -355,7 +355,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
               }`}
             ></span>
           </span>
-          <span className="text-xs font-medium text-slate-705 dark:text-slate-300">
+          <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
             {isPaused
               ? "Paused"
               : isBackoffActive
@@ -411,8 +411,8 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
           title={isPaused ? "Resume worker activity" : "Immediately pause all worker activity"}
           className={`flex items-center space-x-1 text-xs px-2.5 py-1 rounded-full font-medium transition-all ${
             isPaused
-              ? "bg-emerald-50 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/30 border border-emerald-250 dark:border-emerald-500/30"
-              : "bg-rose-50 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-500/30 border border-rose-250 dark:border-rose-500/30"
+              ? "bg-emerald-50 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/30 border border-emerald-200 dark:border-emerald-500/30"
+              : "bg-rose-50 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-500/30 border border-rose-200 dark:border-rose-500/30"
           }`}
         >
           {isPaused ? (
@@ -434,7 +434,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
         onClick={resetWorkerLimits}
         disabled={loading}
         title="Reset hourly/daily scan count limits counters immediately"
-        className="hidden md:flex items-center space-x-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-indigo-650 dark:hover:text-indigo-400 bg-white dark:bg-slate-900/60 hover:bg-slate-50 py-1.5 px-2.5 rounded-full border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-500/30 transition-all cursor-pointer"
+        className="hidden md:flex items-center space-x-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-white dark:bg-slate-900/60 hover:bg-slate-50 py-1.5 px-2.5 rounded-full border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-500/30 transition-all cursor-pointer"
       >
         <Cpu className="w-3 h-3" />
         <span>Reset Limits</span>
@@ -446,7 +446,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
           onClick={pruneQueue}
           disabled={pruning}
           title={`Prune ${pruneCount} completed queue job(s) older than 30 days`}
-          className="hidden md:flex items-center space-x-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-rose-650 dark:hover:text-rose-300 bg-white dark:bg-slate-900/60 hover:bg-rose-50 dark:hover:bg-rose-505/10 px-2.5 py-1 rounded-full border border-slate-202 dark:border-slate-800 hover:border-rose-300 dark:hover:border-rose-500/30 transition-all cursor-pointer"
+          className="hidden md:flex items-center space-x-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-300 bg-white dark:bg-slate-900/60 hover:bg-rose-50 dark:hover:bg-rose-500/10 px-2.5 py-1 rounded-full border border-slate-200 dark:border-slate-800 hover:border-rose-300 dark:hover:border-rose-500/30 transition-all cursor-pointer"
         >
           <Trash2 className="w-3 h-3" />
           <span>Prune ({pruneCount})</span>

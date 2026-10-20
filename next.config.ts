@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
+import path from "node:path";
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    root: path.resolve("."),
+  },
   serverExternalPackages: ["playwright", "playwright-core"],
   images: {
     remotePatterns: [

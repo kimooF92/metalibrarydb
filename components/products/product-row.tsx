@@ -199,7 +199,7 @@ export const ProductRow = memo(function ProductRow({
               className="absolute -bottom-1 -right-1 z-10 group/adthumb cursor-pointer"
               title={`Top ad creative (${product.linkedAdsCount || 1} ads) — click to view ads`}
             >
-              <div className="relative w-6 h-6 rounded-md overflow-hidden border-2 border-white dark:border-slate-850 shadow-md bg-slate-900 transition-transform duration-150 group-hover/adthumb:scale-140">
+              <div className="relative w-6 h-6 rounded-md overflow-hidden border-2 border-white dark:border-slate-800 shadow-md bg-slate-900 transition-transform duration-150 group-hover/adthumb:scale-140">
                 <NextImage
                   src={product.topCreativeThumbnail}
                   alt="Ad Creative"

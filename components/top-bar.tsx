@@ -12,6 +12,8 @@ import {
   Plus,
   LogOut,
   ShieldCheck,
+  Flame,
+  Sparkles,
 } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
 import { SmallPagesScanBadge } from "./small-pages-scan-banner";
@@ -26,9 +28,11 @@ const ROUTE_INFO: Record<
   { label: string; icon: React.ComponentType<{ className?: string }> }
 > = {
   "/": { label: "Dashboard", icon: LayoutDashboard },
+  "/fresh-winners": { label: "Fresh Winners", icon: Flame },
+  "/opportunities": { label: "Opportunity Seeker", icon: Sparkles },
   "/discovery": { label: "Discover Pages", icon: Globe },
   "/spy": { label: "Ad Spy Feed", icon: Eye },
-  "/products": { label: "Tracked Products", icon: ShoppingBag },
+  "/products": { label: "Products", icon: ShoppingBag },
   "/analytics": { label: "Analytics", icon: BarChart3 },
   "/settings": { label: "Settings", icon: Settings },
   "/import": { label: "Import Pages", icon: UploadCloud },
@@ -40,10 +44,11 @@ export function TopBar() {
   const { isStaff } = useAuth();
   const { logout, isLoggingOut } = useLogout();
 
-  const currentRoute = ROUTE_INFO[pathname] || {
-    label: "Meta Ad Tracker",
-    icon: LayoutDashboard,
-  };
+  const currentRoute =
+    ROUTE_INFO[pathname] ||
+    (pathname.startsWith("/spy/brand/")
+      ? { label: "Brand Deep Dive", icon: Eye }
+      : { label: "Meta Ad Tracker", icon: LayoutDashboard });
   const Icon = currentRoute.icon;
 
   return (

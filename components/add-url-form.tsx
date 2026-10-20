@@ -196,14 +196,14 @@ export function AddUrlForm({ onSuccess }: AddUrlFormProps) {
         <div
           className={`mt-3 flex items-start space-x-2 text-xs p-3 rounded-lg border ${
             feedback.type === "success"
-              ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
-              : "bg-rose-500/10 text-rose-300 border-rose-500/20"
+              ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20"
+              : "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20"
           }`}
         >
           {feedback.type === "success" ? (
-            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
           ) : (
-            <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
           )}
           <span>{feedback.message}</span>
         </div>

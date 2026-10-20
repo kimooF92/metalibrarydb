@@ -13,7 +13,7 @@ export default function ImportPage() {
           <div className="flex items-center space-x-2">
             <Link
               href="/"
-              className="text-slate-505 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900"
+              className="text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900"
             >
               <ArrowLeft className="w-4 h-4" />
             </Link>
@@ -26,7 +26,7 @@ export default function ImportPage() {
           </p>
         </div>
 
-        <div className="flex items-center space-x-2 text-xs text-slate-500 dark:text-slate-400 bg-slate-105 dark:bg-slate-900/60 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
+        <div className="flex items-center space-x-2 text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-900/60 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
           <FileSpreadsheet className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
           <span>Accepted formats: .csv, .xlsx</span>
         </div>

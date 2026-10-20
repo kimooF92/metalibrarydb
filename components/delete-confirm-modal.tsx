@@ -49,7 +49,7 @@ export function DeleteConfirmModal({
           onClick={onClose}
           disabled={loading}
           aria-label="Close modal"
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-805 transition-all cursor-pointer disabled:opacity-50"
+          className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer disabled:opacity-50"
         >
           <X className="w-4 h-4" />
         </button>

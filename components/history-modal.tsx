@@ -127,7 +127,7 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
                   href={page.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-xs text-indigo-650 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-305 flex items-center space-x-1"
+                  className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300 flex items-center space-x-1"
                 >
                   <span>View Meta Ad Library</span>
                   <ExternalLink className="w-3 h-3" />
@@ -167,7 +167,7 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
               <span className="text-xs">Loading scan history...</span>
             </div>
           ) : history.length === 0 ? (
-            <div className="text-center py-12 text-slate-550 dark:text-slate-400 text-sm">
+            <div className="text-center py-12 text-slate-500 dark:text-slate-400 text-sm">
               No historical scan records available yet.
             </div>
           ) : (
@@ -193,7 +193,7 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
                 <span className="text-xs text-slate-500 dark:text-slate-400">{history.length} scan records</span>
                 <button
                   onClick={() => setSortAsc((s) => !s)}
-                  className="flex items-center space-x-1 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-205 bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 transition-all cursor-pointer"
+                  className="flex items-center space-x-1 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 transition-all cursor-pointer"
                 >
                   <Calendar className="w-3 h-3" />
                   <span>{sortAsc ? "Oldest First" : "Newest First"}</span>
@@ -203,7 +203,7 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
 
               <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-950/50">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 dark:bg-slate-900/80 text-slate-550 dark:text-slate-400 uppercase font-semibold border-b border-slate-200 dark:border-slate-800">
+                  <thead className="bg-slate-50 dark:bg-slate-900/80 text-slate-500 dark:text-slate-400 uppercase font-semibold border-b border-slate-200 dark:border-slate-800">
                     <tr>
                       <th className="px-4 py-3">Scan Date</th>
                       <th className="px-4 py-3">Result Count</th>
@@ -247,17 +247,17 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
                           <td className="px-4 py-3">{diffBadge}</td>
                           <td className="px-4 py-3">
                             {item.status === "success" && item.results === 0 ? (
-                              <span className="inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border border-slate-205 dark:border-slate-700/60">
+                              <span className="inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60">
                                 0 Active Ads
                               </span>
                             ) : (
                               <span
                                 className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium uppercase ${
                                   item.status === "success"
-                                    ? "bg-emerald-500/10 text-emerald-650 dark:text-emerald-400 border border-emerald-500/20"
+                                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
                                     : item.status === "unclear"
-                                    ? "bg-purple-500/10 text-purple-650 dark:text-purple-300 border border-purple-500/20"
-                                    : "bg-rose-500/10 text-rose-650 dark:text-rose-400 border border-rose-500/20"
+                                    ? "bg-purple-500/10 text-purple-600 dark:text-purple-300 border border-purple-500/20"
+                                    : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
                                 }`}
                               >
                                 {item.status}

@@ -126,7 +126,7 @@ export function Navigation() {
                   >
                     <Icon
                       className={`w-4 h-4 ${
-                        active ? "text-indigo-650 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
+                        active ? "text-indigo-600 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
                       }`}
                     />
                   </Link>
@@ -139,14 +139,14 @@ export function Navigation() {
                   href={item.href}
                   className={`flex items-center justify-between px-4 py-3 rounded-lg text-sm font-semibold transition-all border ${
                     active
-                      ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-650 dark:text-indigo-300 shadow-md shadow-indigo-600/[0.03]"
+                      ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-300 shadow-md shadow-indigo-600/[0.03]"
                       : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
                   }`}
                 >
                   <div className="flex items-center space-x-3 truncate">
                     <Icon
                       className={`w-4 h-4 shrink-0 ${
-                        active ? "text-indigo-650 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
+                        active ? "text-indigo-600 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
                       }`}
                     />
                     <span className="truncate">{item.label}</span>
@@ -202,7 +202,7 @@ export function Navigation() {
               >
                 <Settings
                   className={`w-4 h-4 ${
-                    isSettingsActive ? "text-indigo-650 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
+                    isSettingsActive ? "text-indigo-600 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
                   }`}
                 />
               </Link>
@@ -211,13 +211,13 @@ export function Navigation() {
                 href="/settings"
                 className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all border ${
                   isSettingsActive
-                    ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-650 dark:text-indigo-300 shadow-md shadow-indigo-600/[0.03]"
+                    ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-300 shadow-md shadow-indigo-600/[0.03]"
                     : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
                 }`}
               >
                 <Settings
                   className={`w-4 h-4 ${
-                    isSettingsActive ? "text-indigo-650 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
+                    isSettingsActive ? "text-indigo-600 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
                   }`}
                 />
                 <span className="truncate">Settings</span>
@@ -316,7 +316,7 @@ export function Navigation() {
                   onClick={() => setIsOpen(false)}
                   className={`flex items-center justify-between px-4 py-3 rounded-lg text-sm font-semibold transition-all border ${
                     active
-                      ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-650 dark:text-indigo-300"
+                      ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-300"
                       : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/40"
                   }`}
                 >
@@ -358,7 +358,7 @@ export function Navigation() {
                 onClick={() => setIsOpen(false)}
                 className={`flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all border ${
                   isSettingsActive
-                    ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-650 dark:text-indigo-300"
+                    ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-300"
                     : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/40"
                 }`}
               >

@@ -347,7 +347,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
                 <CheckCircle2 className="w-3 h-3" /> Active
               </span>
             ) : currentAd.isActive === false ? (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-700 dark:text-slate-300 bg-slate-150 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 px-2 py-0.5 rounded-full">
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 px-2 py-0.5 rounded-full">
                 <XCircle className="w-3 h-3 text-slate-600 dark:text-slate-400" /> Inactive
               </span>
             ) : (

@@ -499,7 +499,7 @@ export function PagesTable({
       <div className="flex lg:hidden items-center justify-between gap-2 p-1.5 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-800/80">
         <button
           onClick={() => setShowMobileFilters(!showMobileFilters)}
-          className="flex items-center space-x-2 text-xs font-semibold px-3 py-2 rounded-lg bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-250 border border-slate-200 dark:border-slate-800 transition-all cursor-pointer w-full justify-between"
+          className="flex items-center space-x-2 text-xs font-semibold px-3 py-2 rounded-lg bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 transition-all cursor-pointer w-full justify-between"
         >
           <div className="flex items-center space-x-2">
             <Filter className="w-3.5 h-3.5 text-indigo-500" />
@@ -581,7 +581,7 @@ export function PagesTable({
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
                 className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${active
-                    ? "bg-indigo-655/10 dark:bg-indigo-600/20 border-indigo-400/40 dark:border-indigo-500/40 text-indigo-650 dark:text-indigo-300 shadow-md shadow-indigo-600/10"
+                    ? "bg-indigo-600/10 dark:bg-indigo-600/20 border-indigo-400/40 dark:border-indigo-500/40 text-indigo-600 dark:text-indigo-300 shadow-md shadow-indigo-600/10"
                     : "bg-white dark:bg-slate-900/60 border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                   }`}
               >
@@ -1383,7 +1383,7 @@ export function PagesTable({
                             }}
                             className={`p-1.5 rounded-lg transition-all cursor-pointer ${(p as any).notes
                                 ? "text-yellow-500 dark:text-yellow-400 hover:text-yellow-600 dark:hover:text-yellow-300 hover:bg-yellow-500/10"
-                                : "text-slate-500 dark:text-slate-400 hover:text-yellow-650 dark:hover:text-yellow-300 hover:bg-yellow-500/10 opacity-0 group-hover:opacity-100"
+                                : "text-slate-500 dark:text-slate-400 hover:text-yellow-600 dark:hover:text-yellow-300 hover:bg-yellow-500/10 opacity-0 group-hover:opacity-100"
                               }`}
                             title={(p as any).notes || "Add note"}
                             aria-label={`Notes for ${p.displayName || "tracked page"}`}
@@ -1410,7 +1410,7 @@ export function PagesTable({
 
                           <button
                             onClick={() => onRefresh([p.id])}
-                            className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-indigo-650 dark:hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer"
+                            className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer"
                             title="Refresh scan"
                             aria-label={`Refresh scan for ${p.displayName || "tracked page"}`}
                           >
@@ -1449,7 +1449,7 @@ export function PagesTable({
 
                           <button
                             onClick={() => setPageToDelete(p)}
-                            className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-405 hover:bg-rose-500/10 transition-all cursor-pointer"
+                            className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
                             title="Delete tracked page"
                             aria-label={`Delete ${p.displayName || "tracked page"}`}
                           >
@@ -1505,7 +1505,7 @@ export function PagesTable({
               Page <strong className="text-slate-800 dark:text-slate-200">{page}</strong> of{" "}
               <strong className="text-slate-800 dark:text-slate-200">{totalPages}</strong>
               {totalCount !== undefined && totalCount > 0 && (
-                <span className="ml-1 text-slate-450 dark:text-slate-500">({totalCount} total)</span>
+                <span className="ml-1 text-slate-400 dark:text-slate-500">({totalCount} total)</span>
               )}
             </span>
 
@@ -1518,7 +1518,7 @@ export function PagesTable({
                 id="rows-per-page-select"
                 value={pageSize}
                 onChange={(e) => onPageSizeChange(Number(e.target.value))}
-                className="bg-white dark:bg-slate-950 text-slate-850 dark:text-slate-200 font-semibold px-2 py-0.5 rounded border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer text-xs transition-colors hover:border-slate-300 dark:hover:border-slate-700"
+                className="bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 font-semibold px-2 py-0.5 rounded border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer text-xs transition-colors hover:border-slate-300 dark:hover:border-slate-700"
                 aria-label="Select number of rows per page"
               >
                 <option value={25} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">25 rows</option>
@@ -1556,7 +1556,7 @@ export function PagesTable({
                 return getPageNumbers().map((p, idx) => {
                   if (p === "...") {
                     return (
-                      <span key={`ellipsis-${idx}`} className="px-1.5 py-1 text-slate-550 text-xs select-none">
+                      <span key={`ellipsis-${idx}`} className="px-1.5 py-1 text-slate-500 text-xs select-none">
                         ...
                       </span>
                     );

@@ -89,10 +89,10 @@ function LoginForm() {
       {/* Login Card */}
       <div className="relative rounded-2xl border border-border/80 bg-card/60 backdrop-blur-2xl p-7 shadow-2xl shadow-black/40 overflow-hidden">
         {/* Top subtle gradient accent */}
-        <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-sky-500 to-transparent opacity-80" />
+        <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-indigo-500 to-transparent opacity-80" />
 
         <div className="mb-6">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-sky-400 mb-1">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-indigo-500 dark:text-indigo-400 mb-1">
             <Lock className="w-3.5 h-3.5" />
             <span>Secured Session Gate</span>
           </div>
@@ -117,19 +117,22 @@ function LoginForm() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="block text-xs font-medium text-foreground">
+            <label htmlFor="password" className="block text-xs font-medium text-foreground">
               Master or Staff Password
             </label>
             <div className="relative">
               <input
+                id="password"
+                name="password"
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter password..."
+                autoComplete="current-password"
                 required
                 autoFocus
                 disabled={loading || success}
-                className="w-full rounded-xl border border-input bg-background/80 px-4 py-2.5 pr-11 text-sm text-foreground placeholder:text-muted-foreground/60 shadow-inner transition-all focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20 disabled:opacity-50"
+                className="w-full rounded-xl border border-input bg-background/80 px-4 py-2.5 pr-11 text-sm text-foreground placeholder:text-muted-foreground/60 shadow-inner transition-all focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50"
               />
               <button
                 type="button"
@@ -155,7 +158,7 @@ function LoginForm() {
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
                 disabled={loading || success}
-                className="w-4 h-4 rounded border-border text-sky-500 focus:ring-sky-500/30 bg-background/80"
+                className="w-4 h-4 rounded border-border text-indigo-600 focus:ring-indigo-500/30 bg-background/80"
               />
               <span className="text-xs text-muted-foreground hover:text-foreground transition-colors">
                 Remember this device for 30 days
@@ -166,7 +169,7 @@ function LoginForm() {
           <button
             type="submit"
             disabled={loading || !password.trim() || success}
-            className="w-full relative flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-sky-500/25 hover:from-sky-400 hover:to-indigo-500 active:scale-[0.99] transition-all disabled:opacity-50 disabled:pointer-events-none group"
+            className="w-full relative flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 hover:from-indigo-500 hover:to-indigo-600 active:scale-[0.99] transition-all disabled:opacity-50 disabled:pointer-events-none group cursor-pointer"
           >
             {loading ? (
               <>
@@ -190,7 +193,7 @@ function LoginForm() {
         {/* Security Trust Badges */}
         <div className="mt-6 pt-5 border-t border-border/50 flex items-center justify-between text-[11px] text-muted-foreground/80">
           <div className="flex items-center gap-1.5">
-            <KeyRound className="w-3.5 h-3.5 text-sky-400/80" />
+            <KeyRound className="w-3.5 h-3.5 text-indigo-500/80 dark:text-indigo-400/80" />
             <span>HMAC-256 Signed</span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -211,13 +214,13 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 relative overflow-hidden bg-background">
       {/* Background ambient lighting effects */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-to-tr from-sky-500/10 via-indigo-500/10 to-purple-500/5 blur-[120px] rounded-full pointer-events-none -z-10" />
-      <div className="absolute bottom-10 right-10 w-72 h-72 bg-sky-500/5 blur-[100px] rounded-full pointer-events-none -z-10" />
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-to-tr from-indigo-600/10 via-indigo-500/10 to-purple-500/5 blur-[120px] rounded-full pointer-events-none -z-10" />
+      <div className="absolute bottom-10 right-10 w-72 h-72 bg-indigo-500/5 blur-[100px] rounded-full pointer-events-none -z-10" />
 
       <Suspense
         fallback={
           <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-sky-500/30 border-t-sky-500 rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
             <p className="text-xs text-muted-foreground">Loading security gate...</p>
           </div>
         }
