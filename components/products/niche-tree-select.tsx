@@ -17,7 +17,7 @@ import {
   Package,
   Layers,
 } from "lucide-react";
-import { NICHE_TAXONOMY, NicheDefinition } from "@/lib/niches-taxonomy";
+import { NICHE_TAXONOMY, NicheDefinition, SubNicheDefinition } from "@/lib/niches-taxonomy";
 
 const ICON_MAP: Record<string, React.ElementType> = {
   Sparkles,
@@ -82,48 +82,64 @@ export function NicheTreeSelect({
     }));
   };
 
+  const isNicheSelected = (niche: NicheDefinition) => {
+    return selectedNiches.includes(niche.id) || selectedNiches.includes(niche.dbCategory);
+  };
+
+  const isSubNicheSelected = (sub: SubNicheDefinition, parentSelected: boolean) => {
+    return parentSelected || selectedSubNiches.includes(sub.id) || selectedSubNiches.includes(sub.label);
+  };
+
   const handleNicheToggle = (niche: NicheDefinition) => {
-    const isSelected = selectedNiches.includes(niche.dbCategory);
+    const isSelected = isNicheSelected(niche);
+    const subNicheIds = niche.subNiches.map((s) => s.id);
     const subNicheLabels = niche.subNiches.map((s) => s.label);
 
     if (isSelected) {
       // Unselect niche and all its sub-niches
-      onChangeNiches(selectedNiches.filter((c) => c !== niche.dbCategory));
-      onChangeSubNiches(selectedSubNiches.filter((s) => !subNicheLabels.includes(s)));
+      onChangeNiches(selectedNiches.filter((c) => c !== niche.id && c !== niche.dbCategory));
+      onChangeSubNiches(selectedSubNiches.filter((s) => !subNicheIds.includes(s) && !subNicheLabels.includes(s)));
     } else {
-      // Select niche
-      onChangeNiches([...selectedNiches, niche.dbCategory]);
+      // Select niche by its canonical URL-safe slug
+      const cleaned = selectedNiches.filter((c) => c !== niche.id && c !== niche.dbCategory);
+      onChangeNiches([...cleaned, niche.id]);
       // Remove specific sub-niches belonging to this niche since the whole niche is now active
-      onChangeSubNiches(selectedSubNiches.filter((s) => !subNicheLabels.includes(s)));
+      onChangeSubNiches(selectedSubNiches.filter((s) => !subNicheIds.includes(s) && !subNicheLabels.includes(s)));
     }
   };
 
-  const handleSubNicheToggle = (niche: NicheDefinition, subLabel: string) => {
-    const isSubSelected = selectedSubNiches.includes(subLabel);
-    const isParentSelected = selectedNiches.includes(niche.dbCategory);
+  const handleSubNicheToggle = (niche: NicheDefinition, sub: SubNicheDefinition) => {
+    const parentSelected = isNicheSelected(niche);
+    const isSubActive = selectedSubNiches.includes(sub.id) || selectedSubNiches.includes(sub.label);
 
-    if (isParentSelected) {
+    const subIds = niche.subNiches.map((s) => s.id);
+    const subLabels = niche.subNiches.map((s) => s.label);
+
+    if (parentSelected) {
       // Parent was selected (meaning all). Now switching to selective sub-niches:
       // Remove parent, select all OTHER sub-niches in this category except the clicked one
       const allOtherSubs = niche.subNiches
-        .map((s) => s.label)
-        .filter((s) => s !== subLabel);
-      onChangeNiches(selectedNiches.filter((c) => c !== niche.dbCategory));
-      const newSubs = Array.from(new Set([...selectedSubNiches, ...allOtherSubs]));
-      onChangeSubNiches(newSubs);
+        .filter((s) => s.id !== sub.id)
+        .map((s) => s.id);
+      onChangeNiches(selectedNiches.filter((c) => c !== niche.id && c !== niche.dbCategory));
+      const cleanedSubs = selectedSubNiches.filter((s) => !subIds.includes(s) && !subLabels.includes(s));
+      onChangeSubNiches(Array.from(new Set([...cleanedSubs, ...allOtherSubs])));
       return;
     }
 
-    if (isSubSelected) {
-      onChangeSubNiches(selectedSubNiches.filter((s) => s !== subLabel));
+    if (isSubActive) {
+      onChangeSubNiches(selectedSubNiches.filter((s) => s !== sub.id && s !== sub.label));
     } else {
-      const nextSubs = [...selectedSubNiches, subLabel];
+      const nextSubs = [...selectedSubNiches.filter((s) => s !== sub.label), sub.id];
       // Check if all sub-niches for this category are now selected
-      const allSelected = niche.subNiches.every((s) => nextSubs.includes(s.label));
+      const allSelected = niche.subNiches.every(
+        (s) => nextSubs.includes(s.id) || nextSubs.includes(s.label)
+      );
       if (allSelected) {
         // Upgrade to full parent niche selection
-        onChangeNiches([...selectedNiches, niche.dbCategory]);
-        onChangeSubNiches(nextSubs.filter((s) => !niche.subNiches.map((x) => x.label).includes(s)));
+        const cleaned = selectedNiches.filter((c) => c !== niche.id && c !== niche.dbCategory);
+        onChangeNiches([...cleaned, niche.id]);
+        onChangeSubNiches(nextSubs.filter((s) => !subIds.includes(s) && !subLabels.includes(s)));
       } else {
         onChangeSubNiches(nextSubs);
       }
@@ -171,8 +187,10 @@ export function NicheTreeSelect({
       <div className="space-y-1">
         {filteredTaxonomy.map((niche) => {
           const Icon = ICON_MAP[niche.icon] || Layers;
-          const isParentSelected = selectedNiches.includes(niche.dbCategory);
-          const activeSubNiches = niche.subNiches.filter((s) => selectedSubNiches.includes(s.label));
+          const isParentSelected = isNicheSelected(niche);
+          const activeSubNiches = niche.subNiches.filter(
+            (s) => selectedSubNiches.includes(s.id) || selectedSubNiches.includes(s.label)
+          );
           const isPartiallySelected = !isParentSelected && activeSubNiches.length > 0;
           const isExpanded = hasSearch || !!expandedNiches[niche.id];
 
@@ -237,7 +255,7 @@ export function NicheTreeSelect({
               {isExpanded && (
                 <div className="pl-6 pr-1 py-0.5 space-y-0.5 border-l-2 border-border/40 ml-3.5 my-0.5 animate-in fade-in duration-150">
                   {niche.subNiches.map((sub) => {
-                    const isSubSelected = isParentSelected || selectedSubNiches.includes(sub.label);
+                    const isSubSelected = isSubNicheSelected(sub, isParentSelected);
 
                     // Sub-niche count
                     let subCount = 0;
@@ -253,7 +271,7 @@ export function NicheTreeSelect({
                             ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-medium"
                             : "hover:bg-accent/40 text-muted-foreground hover:text-foreground"
                         }`}
-                        onClick={() => handleSubNicheToggle(niche, sub.label)}
+                        onClick={() => handleSubNicheToggle(niche, sub)}
                       >
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
                           <div

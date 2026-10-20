@@ -5,7 +5,13 @@ import { eq, ilike, and, sql, desc, asc, or, count, inArray, isNull } from "driz
 import { validateApiSecret, validateAdminRole, getRoleFromRequest } from "@/lib/api-guard";
 import { PRIVATE_AUTH_VARY, PRIVATE_DETAIL_CACHE_CONTROL, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
-import { NICHE_TAXONOMY, resolveSubNicheDbValues } from "@/lib/niches-taxonomy";
+import {
+  NICHE_TAXONOMY,
+  resolveSubNicheDbValues,
+  parseNicheParam,
+  parseSubNicheParam,
+  resolveNicheDbCategories,
+} from "@/lib/niches-taxonomy";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -126,14 +132,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Filter by category / niche (supports single or comma-separated multi-select)
-    const categoryParam = searchParams.get("category") || searchParams.get("niche");
-    if (categoryParam && categoryParam !== "all") {
-      const rawCategories = categoryParam.split(",").map((c) => c.trim()).filter(Boolean);
-      const mappedCategories = rawCategories.map((raw) => {
-        const found = NICHE_TAXONOMY.find((n) => n.id === raw || n.dbCategory.toLowerCase() === raw.toLowerCase());
-        return found ? found.dbCategory : raw;
-      });
+    // Filter by category / niche (supports single or comma-separated multi-select, slugs, or dbCategories)
+    const categoryParams = [
+      ...searchParams.getAll("category"),
+      ...searchParams.getAll("niche"),
+    ].filter((p) => Boolean(p) && p !== "all");
+
+    if (categoryParams.length > 0) {
+      const rawCategories = Array.from(new Set(categoryParams.flatMap((p) => parseNicheParam(p))));
+      const mappedCategories = Array.from(new Set(rawCategories.flatMap((raw) => resolveNicheDbCategories(raw))));
 
       const includesGeneral = mappedCategories.some(
         (c) => c === "General & Other" || c.toLowerCase() === "other" || c === "general-seasonal"
@@ -166,10 +173,14 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Filter by sub-category / sub-niche (supports single or comma-separated multi-select)
-    const subCategoryParam = searchParams.get("subCategory") || searchParams.get("subNiche");
-    if (subCategoryParam && subCategoryParam !== "all") {
-      const rawSubCategories = subCategoryParam.split(",").map((s) => s.trim()).filter(Boolean);
+    // Filter by sub-category / sub-niche (supports single or comma-separated multi-select, slugs, or dbValues)
+    const subCategoryParams = [
+      ...searchParams.getAll("subCategory"),
+      ...searchParams.getAll("subNiche"),
+    ].filter((p) => Boolean(p) && p !== "all");
+
+    if (subCategoryParams.length > 0) {
+      const rawSubCategories = Array.from(new Set(subCategoryParams.flatMap((p) => parseSubNicheParam(p))));
       const resolvedDbValues = Array.from(
         new Set(rawSubCategories.flatMap((raw) => resolveSubNicheDbValues(raw)))
       );

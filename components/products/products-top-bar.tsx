@@ -23,7 +23,7 @@ import {
   Check,
 } from "lucide-react";
 import type { SmartPreset } from "./products-kpi-bar";
-import { getNicheDisplayLabel } from "@/lib/niches-taxonomy";
+import { getNicheDisplayLabel, getSubNicheDisplayLabel } from "@/lib/niches-taxonomy";
 import { useAuth } from "@/components/auth-context";
 
 const SORT_OPTIONS = [
@@ -448,7 +448,7 @@ export function ProductsTopBar({
               key={sub}
               className="inline-flex items-center gap-1 px-2 py-0.8 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-300 font-semibold text-[11px]"
             >
-              <span>Sub-Niche: {sub}</span>
+              <span>Sub-Niche: {getSubNicheDisplayLabel(sub)}</span>
               <button
                 type="button"
                 onClick={() => onRemoveSubNiche(sub)}

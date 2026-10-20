@@ -18,6 +18,7 @@ import { useToast } from "@/components/toast-context";
 import { useWorkspace } from "@/components/workspace-context";
 import { useSidebar } from "@/components/sidebar-context";
 import { useAuth } from "@/components/auth-context";
+import { parseNicheParam, parseSubNicheParam, getNicheDisplayLabel, getNicheByDbCategory } from "@/lib/niches-taxonomy";
 import {
   ShoppingBag,
   RotateCw,
@@ -216,11 +217,11 @@ export default function ProductsPage() {
       if (categoryParam) setCategoryFilter(categoryParam);
       const nicheParam = params.get("niche") || categoryParam;
       if (nicheParam && nicheParam !== "all") {
-        setSelectedNiches(nicheParam.split(",").map((n) => n.trim()).filter(Boolean));
+        setSelectedNiches(parseNicheParam(nicheParam));
       }
       const subNicheParam = params.get("subNiche") || params.get("subCategory");
       if (subNicheParam && subNicheParam !== "all") {
-        setSelectedSubNiches(subNicheParam.split(",").map((s) => s.trim()).filter(Boolean));
+        setSelectedSubNiches(parseSubNicheParam(subNicheParam));
       }
       try {
         const storedCollapse = localStorage.getItem("products_sidebar_collapsed");
@@ -1168,7 +1169,10 @@ export default function ProductsPage() {
           onToggleSidebar={handleToggleSecondSidebar}
           selectedNiches={selectedNiches}
           onRemoveNiche={(niche) => {
-            setSelectedNiches((prev) => prev.filter((x) => x !== niche));
+            const def = getNicheByDbCategory(niche);
+            setSelectedNiches((prev) =>
+              prev.filter((x) => x !== niche && (def ? x !== def.id && x !== def.dbCategory : true))
+            );
             setPage(1);
           }}
           selectedSubNiches={selectedSubNiches}
@@ -1303,7 +1307,7 @@ export default function ProductsPage() {
           debouncedSearch={debouncedSearch}
           debouncedBrand={debouncedBrand}
           platform={platform}
-          categoryFilter={selectedNiches.join(", ") || categoryFilter}
+          categoryFilter={selectedNiches.map(getNicheDisplayLabel).join(", ") || categoryFilter}
           statusFilter={statusFilter}
           hideInactive={hideInactive}
           discoveryFilter={discoveryFilter}
