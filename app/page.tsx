@@ -346,10 +346,27 @@ function DashboardContent() {
     }
   }, [page, pageSize, search, statusFilter, searchTypeFilter, tagFilter, activeTab, sortBy, sortOrder, showToast]);
 
-  const loadData = useCallback((silent = false, forceRefresh = false) => {
-    fetchStats(silent, forceRefresh);
-    fetchPages(silent, forceRefresh);
+  const loadData = useCallback(async (silent = false, forceRefresh = false) => {
+    return Promise.all([
+      fetchStats(silent, forceRefresh),
+      fetchPages(silent, forceRefresh),
+    ]);
   }, [fetchStats, fetchPages]);
+
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+
+  const handleManualRefresh = async () => {
+    if (isManualRefreshing || pagesLoading) return;
+    setIsManualRefreshing(true);
+    try {
+      await Promise.all([
+        loadData(false, true),
+        new Promise((resolve) => setTimeout(resolve, 800)),
+      ]);
+    } finally {
+      setIsManualRefreshing(false);
+    }
+  };
 
   const handleSortChange = (col: string) => {
     if (col === sortBy) {
@@ -609,12 +626,19 @@ function DashboardContent() {
           </button>
 
           <button
-            onClick={() => loadData(false, true)}
+            onClick={handleManualRefresh}
+            disabled={isManualRefreshing || pagesLoading}
             title="Refresh dashboard data"
-            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
+            className="group flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer active:scale-95 disabled:opacity-60 shadow-xs hover:shadow-sm"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${pagesLoading ? "animate-spin" : ""}`} />
-            <span>Refresh</span>
+            <RefreshCw
+              className={`w-3.5 h-3.5 transition-transform duration-300 ${
+                isManualRefreshing || pagesLoading
+                  ? "animate-spin text-indigo-500"
+                  : "group-hover:rotate-90 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200"
+              }`}
+            />
+            <span>{isManualRefreshing ? "Refreshing..." : "Refresh"}</span>
           </button>
         </div>
       </div>

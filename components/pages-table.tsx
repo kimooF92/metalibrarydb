@@ -136,8 +136,8 @@ function InlineSparkline({
 interface PagesTableProps {
   pages: TrackedPage[];
   loading: boolean;
-  onRefresh: (ids: string[]) => void;
-  onRetry: (ids?: string[]) => void;
+  onRefresh: (ids: string[]) => Promise<void> | void;
+  onRetry: (ids?: string[]) => Promise<void> | void;
   onDelete: (id: string) => void;
   search: string;
   onSearchChange: (value: string) => void;
@@ -200,6 +200,83 @@ export function PagesTable({
   const [watchlisted, setWatchlisted] = useState<Record<string, boolean>>(
     Object.fromEntries(pages.map((p) => [p.id, p.isWatchlisted ?? false]))
   );
+
+  const [refreshingPageIds, setRefreshingPageIds] = useState<Set<string>>(new Set());
+  const [retryingPageIds, setRetryingPageIds] = useState<Set<string>>(new Set());
+  const [isBulkRefreshing, setIsBulkRefreshing] = useState(false);
+  const [isRetryingAll, setIsRetryingAll] = useState(false);
+
+  const handleRowRefresh = async (pageId: string) => {
+    if (refreshingPageIds.has(pageId)) return;
+    setRefreshingPageIds((prev) => new Set(prev).add(pageId));
+    try {
+      await Promise.all([
+        Promise.resolve(onRefresh([pageId])),
+        new Promise((resolve) => setTimeout(resolve, 800)),
+      ]);
+    } finally {
+      setRefreshingPageIds((prev) => {
+        const next = new Set(prev);
+        next.delete(pageId);
+        return next;
+      });
+    }
+  };
+
+  const handleRowRetry = async (pageId: string) => {
+    if (retryingPageIds.has(pageId)) return;
+    setRetryingPageIds((prev) => new Set(prev).add(pageId));
+    try {
+      await Promise.all([
+        Promise.resolve(onRetry([pageId])),
+        new Promise((resolve) => setTimeout(resolve, 800)),
+      ]);
+    } finally {
+      setRetryingPageIds((prev) => {
+        const next = new Set(prev);
+        next.delete(pageId);
+        return next;
+      });
+    }
+  };
+
+  const handleBulkRefresh = async () => {
+    if (isBulkRefreshing || selectedIds.length === 0) return;
+    setIsBulkRefreshing(true);
+    const idsToRefresh = [...selectedIds];
+    setRefreshingPageIds((prev) => {
+      const next = new Set(prev);
+      idsToRefresh.forEach((id) => next.add(id));
+      return next;
+    });
+    try {
+      await Promise.all([
+        Promise.resolve(onRefresh(idsToRefresh)),
+        new Promise((resolve) => setTimeout(resolve, 800)),
+      ]);
+      setSelectedIds([]);
+    } finally {
+      setIsBulkRefreshing(false);
+      setRefreshingPageIds((prev) => {
+        const next = new Set(prev);
+        idsToRefresh.forEach((id) => next.delete(id));
+        return next;
+      });
+    }
+  };
+
+  const handleToolbarRetry = async () => {
+    if (isRetryingAll) return;
+    setIsRetryingAll(true);
+    try {
+      await Promise.all([
+        Promise.resolve(onRetry()),
+        new Promise((resolve) => setTimeout(resolve, 800)),
+      ]);
+    } finally {
+      setIsRetryingAll(false);
+    }
+  };
 
   const [localSearch, setLocalSearch] = useState(search);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -747,12 +824,17 @@ export function PagesTable({
           {/* Retry Failed - conditionally rendered if failed jobs exist */}
           {((stats?.failed ?? 0) > 0 || pages.some((p) => p.status === "failed")) && (
             <button
-              onClick={() => onRetry()}
-              className="flex items-center space-x-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 transition-all cursor-pointer whitespace-nowrap shrink-0 animate-in fade-in"
+              onClick={handleToolbarRetry}
+              disabled={isRetryingAll}
+              className="group flex items-center space-x-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 transition-all cursor-pointer whitespace-nowrap shrink-0 animate-in fade-in active:scale-95 disabled:opacity-60"
               title="Retry failed scan jobs"
             >
-              <RotateCcw className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-              <span>Retry Failed {stats?.failed ? `(${stats.failed})` : ""}</span>
+              <RotateCcw
+                className={`w-3 h-3 text-amber-600 dark:text-amber-400 transition-transform duration-300 ${
+                  isRetryingAll ? "animate-spin" : "group-hover:-rotate-90"
+                }`}
+              />
+              <span>{isRetryingAll ? "Retrying..." : `Retry Failed ${stats?.failed ? `(${stats.failed})` : ""}`}</span>
             </button>
           )}
         </div>
@@ -772,14 +854,16 @@ export function PagesTable({
 
           <div className="flex items-center space-x-3">
             <button
-              onClick={() => {
-                onRefresh(selectedIds);
-                setSelectedIds([]);
-              }}
-              className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
+              onClick={handleBulkRefresh}
+              disabled={isBulkRefreshing}
+              className="group flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-75 text-white font-semibold shadow-md shadow-indigo-600/30 transition-all cursor-pointer active:scale-95"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Refresh ({selectedIds.length})</span>
+              <RefreshCw
+                className={`w-3.5 h-3.5 transition-transform duration-300 ${
+                  isBulkRefreshing ? "animate-spin" : "group-hover:rotate-90"
+                }`}
+              />
+              <span>{isBulkRefreshing ? "Refreshing..." : `Refresh (${selectedIds.length})`}</span>
             </button>
 
             <button
@@ -1462,14 +1546,30 @@ export function PagesTable({
                             <Sparkles className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
                           </button>
 
-                          <button
-                            onClick={() => onRefresh([p.id])}
-                            className="p-1 rounded-md text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-500/10 transition-all cursor-pointer"
-                            title="Refresh scan"
-                            aria-label={`Refresh scan for ${p.displayName || "tracked page"}`}
-                          >
-                            <RefreshCw className="w-3.5 h-3.5" />
-                          </button>
+                          {(() => {
+                            const isRefreshing = refreshingPageIds.has(p.id) || p.status === "scanning";
+                            return (
+                              <button
+                                onClick={() => handleRowRefresh(p.id)}
+                                disabled={isRefreshing}
+                                className={`group/refresh p-1 rounded-md transition-all duration-200 cursor-pointer active:scale-90 ${
+                                  isRefreshing
+                                    ? "text-indigo-600 dark:text-indigo-400 bg-indigo-500/15"
+                                    : "text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-500/10"
+                                }`}
+                                title={isRefreshing ? "Refreshing scan..." : "Refresh scan"}
+                                aria-label={`Refresh scan for ${p.displayName || "tracked page"}`}
+                              >
+                                <RefreshCw
+                                  className={`w-3.5 h-3.5 transition-transform duration-300 ease-out ${
+                                    isRefreshing
+                                      ? "animate-spin text-indigo-600 dark:text-indigo-400"
+                                      : "group-hover/refresh:rotate-90 group-hover/refresh:text-indigo-600 dark:group-hover/refresh:text-indigo-400"
+                                  }`}
+                                />
+                              </button>
+                            );
+                          })()}
 
                           <button
                             onClick={() => openHistory(p)}
@@ -1493,12 +1593,17 @@ export function PagesTable({
                               </button>
                             ) : (
                               <button
-                                onClick={() => onRetry([p.id])}
-                                className="p-1 rounded-md text-amber-600 dark:text-amber-400 hover:text-amber-500 hover:bg-amber-500/10 transition-all cursor-pointer"
+                                onClick={() => handleRowRetry(p.id)}
+                                disabled={retryingPageIds.has(p.id)}
+                                className="group/retry p-1 rounded-md text-amber-600 dark:text-amber-400 hover:text-amber-500 hover:bg-amber-500/10 transition-all cursor-pointer active:scale-90 disabled:opacity-60"
                                 title="Retry scan"
                                 aria-label={`Retry scan for ${p.displayName || "tracked page"}`}
                               >
-                                <RotateCcw className="w-3.5 h-3.5" />
+                                <RotateCcw
+                                  className={`w-3.5 h-3.5 transition-transform duration-300 ${
+                                    retryingPageIds.has(p.id) ? "animate-spin" : "group-hover/retry:-rotate-90"
+                                  }`}
+                                />
                               </button>
                             )
                           )}
