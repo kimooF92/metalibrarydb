@@ -3,16 +3,12 @@ import { db } from "@/db";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { trackedPages, importJobs } from "@/db/schema";
 import { sql, desc, eq } from "drizzle-orm";
-import { cleanOrphanedScans } from "@/lib/clean-scans";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 import { validateAdminRole } from "@/lib/api-guard";
 
 import { getCached, setCached } from "@/lib/cache-service";
 
 const STATS_CACHE_TTL_SECONDS = 60; // 60 seconds global cache
-
-let lastCleanupTimestamp = 0;
-const CLEANUP_THROTTLE_MS = 15 * 60 * 1000; // 15 minutes
 
 export async function GET(request: Request) {
   const authError = await validateAdminRole(request);
@@ -22,16 +18,6 @@ export async function GET(request: Request) {
     const activeWorkspace = await getActiveWorkspace(request);
     const { searchParams } = new URL(request.url);
     const forceRefresh = searchParams.get("refresh") === "true";
-
-    // 0. Auto-heal orphaned scans asynchronously in the background (at most once every 15 minutes)
-    // Never block the user-facing stats API response on database maintenance routines.
-    const now = Date.now();
-    if (now - lastCleanupTimestamp > CLEANUP_THROTTLE_MS) {
-      lastCleanupTimestamp = now;
-      cleanOrphanedScans(5).catch((err) => {
-        console.warn("Background auto-clean orphaned scans warning:", err);
-      });
-    }
 
     // Check Hybrid L1 (Memory) / L2 (Upstash Redis) cache for active workspace
     const cacheKey = `cache:stats:${activeWorkspace.id}`;

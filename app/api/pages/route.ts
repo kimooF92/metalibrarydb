@@ -344,36 +344,17 @@ export async function GET(request: Request) {
         )
         .orderBy(asc(scanHistory.checkedAt));
 
-      const rankedQueueSubquery = db
+      const queueEntriesPromise = db
         .select({
           trackedPageId: queue.trackedPageId,
           failureReason: queue.failureReason,
           attempts: queue.attempts,
-          rank: sql<number>`row_number() over (partition by ${queue.trackedPageId} order by ${queue.createdAt} desc)`.as("rank"),
+          jobType: queue.jobType,
+          status: queue.status,
         })
         .from(queue)
         .where(inArray(queue.trackedPageId, pageIds))
-        .as("ranked_queue");
-
-      const latestQueuePromise = db
-        .select({
-          trackedPageId: rankedQueueSubquery.trackedPageId,
-          failureReason: rankedQueueSubquery.failureReason,
-          attempts: rankedQueueSubquery.attempts,
-        })
-        .from(rankedQueueSubquery)
-        .where(eq(rankedQueueSubquery.rank, 1));
-
-      const activeCreativeJobsPromise = db
-        .select({ trackedPageId: queue.trackedPageId })
-        .from(queue)
-        .where(
-          and(
-            inArray(queue.trackedPageId, pageIds),
-            eq(queue.jobType, "creative"),
-            inArray(queue.status, ["pending", "running"])
-          )
-        );
+        .orderBy(desc(queue.createdAt));
 
       const adCountsPromise = pageIdValues.length > 0
         ? db
@@ -399,9 +380,16 @@ export async function GET(request: Request) {
 
       const domainPortfolioPromise = domainIds.length > 0
         ? Promise.all([
-            db.query.brandDomains.findMany({
-              where: inArray(brandDomains.id, domainIds),
-            }),
+            db
+              .select({
+                id: brandDomains.id,
+                domain: brandDomains.domain,
+                displayName: brandDomains.displayName,
+                category: brandDomains.category,
+                storePlatform: brandDomains.storePlatform,
+              })
+              .from(brandDomains)
+              .where(inArray(brandDomains.id, domainIds)),
             db
               .select({
                 brandDomainId: trackedPages.brandDomainId,
@@ -421,20 +409,32 @@ export async function GET(request: Request) {
       const [
         fetchedRecentScans,
         fetchedWindowScans,
-        fetchedLatestQueue,
-        fetchedActiveCreativeJobs,
+        fetchedQueueEntries,
         fetchedAdCounts,
         fetchedProductCounts,
         [fetchedDomains, fetchedSisterPageRows]
       ] = await Promise.all([
         recentScansPromise,
         windowScansPromise,
-        latestQueuePromise,
-        activeCreativeJobsPromise,
+        queueEntriesPromise,
         adCountsPromise,
         productCountsPromise,
         domainPortfolioPromise,
       ]);
+
+      // Map queue entries (first encountered per page is latest due to desc(createdAt))
+      for (const q of fetchedQueueEntries) {
+        if (!q.trackedPageId) continue;
+        if (!queueMap[q.trackedPageId]) {
+          queueMap[q.trackedPageId] = {
+            failureReason: q.failureReason,
+            attempts: q.attempts ?? 0,
+          };
+        }
+        if (q.jobType === "creative" && (q.status === "pending" || q.status === "running")) {
+          activeCreativeJobMap[q.trackedPageId] = true;
+        }
+      }
 
       recentScans = fetchedRecentScans;
 
@@ -491,15 +491,7 @@ export async function GET(request: Request) {
         windowDeltaMap[trackedPageId] = results.last - results.first;
       }
 
-      // Map latest queue status
-      queueMap = Object.fromEntries(
-        fetchedLatestQueue.map((q) => [q.trackedPageId, { failureReason: q.failureReason, attempts: q.attempts ?? 0 }])
-      );
 
-      // Map active creative queue jobs
-      activeCreativeJobMap = Object.fromEntries(
-        fetchedActiveCreativeJobs.map((q) => [q.trackedPageId, true])
-      );
 
       // Map active ads and product counts per brand
       const brandAdCounts = new Map<string, number>();

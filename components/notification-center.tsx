@@ -52,6 +52,10 @@ interface NotificationCenterProps {
   onOpenResolveModal?: (trackedPageId: string) => void;
 }
 
+// Shared in-flight deduplicator and memory cache across multiple NotificationCenter instances (desktop + mobile navbar)
+let sharedSummaryPromise: Promise<number> | null = null;
+let sharedSummaryCache: { count: number; timestamp: number } | null = null;
+
 export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: NotificationCenterProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
@@ -69,9 +73,46 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
     requestInFlightRef.current = true;
     if (showLoading) setIsRefreshing(true);
     try {
-      const query = isOpen
-        ? `limit=20${activeTab === "all" ? "" : `&type=${encodeURIComponent(activeTab)}`}`
-        : "summary=true";
+      if (!isOpen) {
+        const now = Date.now();
+        if (sharedSummaryCache && now - sharedSummaryCache.timestamp < 10000) {
+          setUnreadCount(sharedSummaryCache.count);
+          return;
+        }
+
+        if (sharedSummaryPromise) {
+          const count = await sharedSummaryPromise;
+          setUnreadCount(count);
+          return;
+        }
+
+        sharedSummaryPromise = (async () => {
+          try {
+            const res = await fetch("/api/notifications?summary=true", {
+              signal: AbortSignal.timeout(8000),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.success) {
+                const count = data.unreadCount || 0;
+                sharedSummaryCache = { count, timestamp: Date.now() };
+                return count;
+              }
+            }
+          } catch (e) {
+            console.warn("[NotificationCenter] summary fetch failed:", e);
+          } finally {
+            sharedSummaryPromise = null;
+          }
+          return sharedSummaryCache?.count || 0;
+        })();
+
+        const count = await sharedSummaryPromise;
+        setUnreadCount(count);
+        return;
+      }
+
+      const query = `limit=20${activeTab === "all" ? "" : `&type=${encodeURIComponent(activeTab)}`}`;
       const res = await fetch(`/api/notifications?${query}`, {
         signal: AbortSignal.timeout(10000),
       });
@@ -80,6 +121,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
         if (data.success) {
           setNotifications(data.notifications || []);
           setUnreadCount(data.unreadCount || 0);
+          sharedSummaryCache = { count: data.unreadCount || 0, timestamp: Date.now() };
         }
       }
     } catch (err) {

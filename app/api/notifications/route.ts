@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { activityNotifications } from "@/db/schema";
 import { desc, eq, ne, and, inArray, sql } from "drizzle-orm";
 import { getActiveWorkspace } from "@/lib/workspace-server";
+import { getCached, setCached, deleteCached } from "@/lib/cache-service";
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,6 +14,33 @@ export async function GET(req: NextRequest) {
     const summaryOnly = searchParams.get("summary") === "true";
 
     const activeWorkspace = await getActiveWorkspace(req);
+
+    // Fast-path for secondary navbar polling (cached 15s to eliminate duplicate mobile/desktop hits)
+    if (summaryOnly) {
+      const cacheKey = `cache:notifications:summary:${activeWorkspace.id}`;
+      const cached = await getCached<{ unreadCount: number }>(cacheKey);
+      if (cached) {
+        return NextResponse.json({
+          success: true,
+          notifications: [],
+          unreadCount: cached.unreadCount,
+        }, { headers: { "Cache-Control": "private, max-age=10" } });
+      }
+
+      const [unreadCountResult] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(activityNotifications)
+        .where(and(eq(activityNotifications.isRead, false), eq(activityNotifications.workspaceId, activeWorkspace.id)));
+
+      const unreadCount = unreadCountResult?.count || 0;
+      await setCached(cacheKey, { unreadCount }, 15);
+
+      return NextResponse.json({
+        success: true,
+        notifications: [],
+        unreadCount,
+      }, { headers: { "Cache-Control": "private, max-age=10" } });
+    }
 
     const conditions = [
       eq(activityNotifications.workspaceId, activeWorkspace.id),
@@ -31,13 +59,11 @@ export async function GET(req: NextRequest) {
       conditions.push(eq(activityNotifications.isRead, false));
     }
 
-    const notifications = summaryOnly
-      ? []
-      : await db.query.activityNotifications.findMany({
-          where: conditions.length > 0 ? and(...conditions) : undefined,
-          orderBy: [desc(activityNotifications.createdAt)],
-          limit,
-        });
+    const notifications = await db.query.activityNotifications.findMany({
+      where: conditions.length > 0 ? and(...conditions) : undefined,
+      orderBy: [desc(activityNotifications.createdAt)],
+      limit,
+    });
 
     // Count unread notifications for active workspace
     const [unreadCountResult] = await db
@@ -77,6 +103,7 @@ export async function PATCH(req: NextRequest) {
           )
         );
 
+      await deleteCached(`cache:notifications:summary:${activeWorkspace.id}`);
       return NextResponse.json({ success: true, message: "Marked all notifications as read." });
     }
 
@@ -86,6 +113,7 @@ export async function PATCH(req: NextRequest) {
         .set({ isRead: true })
         .where(inArray(activityNotifications.id, ids));
 
+      await deleteCached(`cache:notifications:summary:${activeWorkspace.id}`);
       return NextResponse.json({ success: true, message: `Marked ${ids.length} notifications as read.` });
     }
 
@@ -95,6 +123,7 @@ export async function PATCH(req: NextRequest) {
         .set({ isRead: true })
         .where(eq(activityNotifications.id, id));
 
+      await deleteCached(`cache:notifications:summary:${activeWorkspace.id}`);
       return NextResponse.json({ success: true, message: "Notification marked as read." });
     }
 
@@ -117,11 +146,13 @@ export async function DELETE(req: NextRequest) {
       await db
         .delete(activityNotifications)
         .where(eq(activityNotifications.workspaceId, activeWorkspace.id));
+      await deleteCached(`cache:notifications:summary:${activeWorkspace.id}`);
       return NextResponse.json({ success: true, message: "Cleared all notifications." });
     }
 
     if (id) {
       await db.delete(activityNotifications).where(eq(activityNotifications.id, id));
+      await deleteCached(`cache:notifications:summary:${activeWorkspace.id}`);
       return NextResponse.json({ success: true, message: "Notification deleted." });
     }
 

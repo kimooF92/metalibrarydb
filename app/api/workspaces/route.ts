@@ -15,6 +15,11 @@ import { validateApiSecret, validateAdminRole, getRoleFromRequest } from "@/lib/
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+import { getCached, setCached, deleteByPrefix } from "@/lib/cache-service";
+import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
+
+const WORKSPACES_CACHE_TTL_SECONDS = 60;
+
 // GET /api/workspaces - Lists all workspaces with page & product counts, or pre-flight deletion review
 export async function GET(req: NextRequest) {
   const authError = await validateApiSecret(req);
@@ -24,6 +29,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const reviewId = searchParams.get("id");
     const isReview = searchParams.get("review") === "true";
+    const forceRefresh = searchParams.get("refresh") === "true";
 
     // Pre-flight strict deletion impact review
     if (isReview && reviewId) {
@@ -91,8 +97,19 @@ export async function GET(req: NextRequest) {
     }
 
     const active = await getActiveWorkspace(req);
+    const role = await getRoleFromRequest(req);
+    const cacheKey = `cache:workspaces:${role || "admin"}:${active.id}`;
 
-    // Fetch workspaces with aggregated counts
+    if (!forceRefresh) {
+      const cached = await getCached<any>(cacheKey);
+      if (cached) {
+        return NextResponse.json(cached, {
+          headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY },
+        });
+      }
+    }
+
+    // Fetch workspaces with ultra-fast correlated scalar subqueries (avoids 1.2M row Cartesian product join)
     const rows = await db
       .select({
         id: workspaces.id,
@@ -106,16 +123,12 @@ export async function GET(req: NextRequest) {
         description: workspaces.description,
         createdAt: workspaces.createdAt,
         updatedAt: workspaces.updatedAt,
-        pageCount: sql<number>`cast(count(distinct ${trackedPages.id}) as integer)`,
-        productCount: sql<number>`cast(count(distinct ${scrapedProducts.id}) as integer)`,
+        pageCount: sql<number>`(SELECT count(*)::int FROM tracked_pages tp WHERE tp.workspace_id = "workspaces".id)`,
+        productCount: sql<number>`(SELECT count(*)::int FROM scraped_products sp WHERE sp.workspace_id = "workspaces".id)`,
       })
       .from(workspaces)
-      .leftJoin(trackedPages, eq(trackedPages.workspaceId, workspaces.id))
-      .leftJoin(scrapedProducts, eq(scrapedProducts.workspaceId, workspaces.id))
-      .groupBy(workspaces.id)
       .orderBy(desc(workspaces.isDefault), asc(workspaces.name));
 
-    const role = await getRoleFromRequest(req);
     const visibleWorkspaces =
       role === "staff"
         ? rows.filter(
@@ -126,9 +139,15 @@ export async function GET(req: NextRequest) {
           )
         : rows;
 
-    return NextResponse.json({
+    const payload = {
       workspaces: visibleWorkspaces,
       activeWorkspace: active,
+    };
+
+    await setCached(cacheKey, payload, WORKSPACES_CACHE_TTL_SECONDS);
+
+    return NextResponse.json(payload, {
+      headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY },
     });
   } catch (error: any) {
     console.error("[GET /api/workspaces] Error:", error);
@@ -194,6 +213,8 @@ export async function POST(req: NextRequest) {
       })
       .returning();
 
+    await deleteByPrefix("cache:workspaces:");
+
     return NextResponse.json({
       success: true,
       workspace: created,
@@ -249,6 +270,8 @@ export async function PATCH(req: NextRequest) {
     if (!updated) {
       return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
     }
+
+    await deleteByPrefix("cache:workspaces:");
 
     return NextResponse.json({
       success: true,
@@ -319,6 +342,8 @@ export async function DELETE(req: NextRequest) {
 
     // 4. Execute cascading delete
     await db.delete(workspaces).where(eq(workspaces.id, id));
+
+    await deleteByPrefix("cache:workspaces:");
 
     return NextResponse.json({
       success: true,
