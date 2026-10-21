@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Ad, AdSpyStats, AdFilterParams, PaginationMeta, BrandOption } from "@/types";
+import { getSupabase } from "@/lib/supabase";
 
 const VALID_SPY_STATUSES = ["all", "active", "inactive", "archived", "unknown"] as const;
 const VALID_SPY_MEDIA = ["all", "video", "image", "carousel"] as const;
@@ -613,6 +614,18 @@ export function useSpy(initialParams?: AdFilterParams) {
     return fetchFeedRef.current(true);
   }, []);
 
+  const prependAds = useCallback((newAds: Ad[]) => {
+    setAds((prev) => {
+      const existingIds = new Set(prev.map((item) => item.id));
+      const uniqueIncoming = newAds.filter((item) => !existingIds.has(item.id));
+      return [...uniqueIncoming, ...prev];
+    });
+    setPagination((prev) => ({
+      ...prev,
+      total: prev.total + newAds.length,
+    }));
+  }, []);
+
   return {
     ads,
     pagination,
@@ -624,6 +637,7 @@ export function useSpy(initialParams?: AdFilterParams) {
     updateFilters,
     resetFilters,
     updateAdInFeed,
+    prependAds,
     refetch,
   };
 }
@@ -738,3 +752,98 @@ export function useSpyBrands() {
 }
 
 export const useAdFeed = useSpy;
+
+/**
+ * Real-time Supabase WebSocket stream for newly discovered incoming ad creatives.
+ * 0 polling queries, 0 DB read egress.
+ */
+export function useIncomingAdsStream(options?: {
+  enabled?: boolean;
+}) {
+  const [incomingAds, setIncomingAds] = useState<Ad[]>([]);
+  const [autoStream, setAutoStream] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("spy_auto_stream_ads") === "true";
+  });
+
+  const toggleAutoStream = useCallback((enabled: boolean) => {
+    setAutoStream(enabled);
+    try {
+      localStorage.setItem("spy_auto_stream_ads", String(enabled));
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (options?.enabled === false) return;
+
+    const supabase = getSupabase();
+    const channel = supabase
+      .channel("realtime-incoming-ads")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "ads",
+        },
+        (payload) => {
+          const raw = payload.new as any;
+          if (!raw?.id) return;
+
+          const newAd: Ad = {
+            id: raw.id,
+            adArchiveId: raw.ad_archive_id,
+            pageId: raw.page_id,
+            pageName: raw.page_name,
+            startedRunningOn: raw.started_running_on,
+            caption: raw.caption,
+            title: raw.title,
+            ctaText: raw.cta_text,
+            linkUrl: raw.link_url,
+            productId: raw.product_id,
+            mediaType: raw.media_type || "unknown",
+            mediaUrls: raw.media_urls || [],
+            thumbnailUrl: raw.thumbnail_url,
+            thumbnailStoragePath: raw.thumbnail_storage_path,
+            storyboardUrls: raw.storyboard_urls,
+            firstSeenAt: raw.first_seen_at || new Date().toISOString(),
+            lastSeenAt: raw.last_seen_at || new Date().toISOString(),
+            createdAt: raw.created_at || new Date().toISOString(),
+            updatedAt: raw.updated_at || new Date().toISOString(),
+            duplicationCount: 1,
+            isActive: !raw.is_archived,
+          };
+
+          setIncomingAds((prev) => {
+            if (
+              prev.some(
+                (a) =>
+                  a.id === newAd.id ||
+                  (newAd.adArchiveId && a.adArchiveId === newAd.adArchiveId)
+              )
+            ) {
+              return prev;
+            }
+            return [newAd, ...prev];
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [options?.enabled]);
+
+  const clearIncoming = useCallback(() => {
+    setIncomingAds([]);
+  }, []);
+
+  return {
+    incomingAds,
+    incomingCount: incomingAds.length,
+    clearIncoming,
+    autoStream,
+    setAutoStream: toggleAutoStream,
+  };
+}

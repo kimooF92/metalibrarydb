@@ -88,11 +88,13 @@ export function parseResultCountFromText(bodyText: string): ScanOutcome {
 
 export async function scanMetaAdPage(
   page: Page,
-  url: string
+  url: string,
+  onProgress?: (step: string, label: string, percent: number) => Promise<void> | void
 ): Promise<ScanOutcome> {
   const timeoutMs = parseInt(process.env.PAGE_TIMEOUT || "30000", 10);
 
   try {
+    if (onProgress) await onProgress("navigating", "1. Navigating to Meta Ad Library...", 20);
     await randomDelay(DELAY_CONFIG.beforeNavMin, DELAY_CONFIG.beforeNavMax);
 
     try {
@@ -107,6 +109,7 @@ export async function scanMetaAdPage(
       return { status: "failed", results: null, failureReason: "navigation_error" };
     }
 
+    if (onProgress) await onProgress("settling", "2. Waiting for DOM network settle...", 50);
     await randomDelay(DELAY_CONFIG.afterLoadMin, DELAY_CONFIG.afterLoadMax);
 
     const bodyText = await page.evaluate(() => document.body.innerText);
@@ -118,6 +121,7 @@ export async function scanMetaAdPage(
       return { status: "failed", results: null, failureReason: "captcha" };
     }
 
+    if (onProgress) await onProgress("extracting", "3. Extracting active ad cards...", 75);
     await randomDelay(
       DELAY_CONFIG.beforeExtractMin,
       DELAY_CONFIG.beforeExtractMax

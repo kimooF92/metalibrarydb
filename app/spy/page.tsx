@@ -3,14 +3,14 @@
 import { useState, useRef, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { Ad } from "@/types";
-import { useAdFeed, useAdStats } from "@/hooks/use-spy";
+import { useAdFeed, useAdStats, useIncomingAdsStream } from "@/hooks/use-spy";
 import { AdCard } from "@/components/spy/ad-card";
 import { AdRow } from "@/components/spy/ad-row";
 import { SpyFilters } from "@/components/spy/spy-filters";
 import { ApifyCreditBadge } from "@/components/apify-credit-badge";
 import { useToast } from "@/components/toast-context";
 import { useWorkspace } from "@/components/workspace-context";
-import { Layers, Calendar, Video, Image as ImageIcon, RefreshCw, Eye, ArrowUp } from "lucide-react";
+import { Layers, Calendar, Video, Image as ImageIcon, RefreshCw, Eye, ArrowUp, Sparkles, X, Radio } from "lucide-react";
 
 function AdSpyContent() {
   const {
@@ -24,9 +24,17 @@ function AdSpyContent() {
     updateFilters,
     resetFilters,
     updateAdInFeed,
+    prependAds,
     refetch,
   } = useAdFeed();
   const { stats, refetch: refetchStats } = useAdStats();
+  const {
+    incomingAds,
+    incomingCount,
+    clearIncoming,
+    autoStream,
+    setAutoStream,
+  } = useIncomingAdsStream();
   const { activeWorkspace } = useWorkspace();
   const { showToast } = useToast();
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -45,6 +53,19 @@ function AdSpyContent() {
     }
     prevWorkspaceIdRef.current = activeWorkspace.id;
   }, [activeWorkspace?.id, refetch, refetchStats]);
+
+  // Auto-stream effect: if autoStream is active, automatically inject new incoming ads
+  useEffect(() => {
+    if (autoStream && incomingAds.length > 0) {
+      prependAds(incomingAds);
+      clearIncoming();
+      showToast({
+        type: "info",
+        title: "Real-time Ad Stream",
+        message: `Automatically loaded ${incomingAds.length} newly scraped creative(s) to the feed.`,
+      });
+    }
+  }, [autoStream, incomingAds, prependAds, clearIncoming, showToast]);
 
   // Scroll listener for back to top button
   useEffect(() => {
@@ -167,6 +188,20 @@ function AdSpyContent() {
         </div>
 
         <div className="flex items-center space-x-2">
+          {/* Live Auto-Stream Toggle */}
+          <button
+            onClick={() => setAutoStream(!autoStream)}
+            className={`flex items-center space-x-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition-all cursor-pointer shrink-0 ${
+              autoStream
+                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 ring-1 ring-emerald-500/30"
+                : "bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700"
+            }`}
+            title={autoStream ? "Auto-streaming is ON. New ads appear automatically." : "Click to auto-stream new ads to feed"}
+          >
+            <span className={`w-2 h-2 rounded-full ${autoStream ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
+            <span>Live Stream: {autoStream ? "ON" : "OFF"}</span>
+          </button>
+
           <ApifyCreditBadge />
           <button
             onClick={handleRefreshFeed}
@@ -260,6 +295,51 @@ function AdSpyContent() {
           >
             Retry
           </button>
+        </div>
+      )}
+
+      {/* Realtime Feature 3: Live Incoming Ads Alert Pill */}
+      {incomingCount > 0 && !autoStream && (
+        <div className="sticky top-2 z-30 flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-700 text-white shadow-xl shadow-indigo-600/30 backdrop-blur-md animate-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="relative flex items-center justify-center w-8 h-8 rounded-xl bg-white/20 text-white shrink-0">
+              <Sparkles className="w-4 h-4 animate-spin text-amber-300" />
+              <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400"></span>
+              </span>
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold flex items-center gap-2">
+                <span>✨ {incomingCount} new {incomingCount === 1 ? "ad creative" : "ad creatives"} discovered!</span>
+              </div>
+              <p className="text-[11px] text-indigo-100 truncate">
+                {incomingAds[0]?.pageName ? `Latest: "${incomingAds[0].pageName}" • ` : ""}Click below to inject into feed without losing your scroll position.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => {
+                prependAds(incomingAds);
+                clearIncoming();
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white text-indigo-700 hover:bg-indigo-50 font-extrabold text-xs shadow-md transition-all cursor-pointer"
+            >
+              <ArrowUp className="w-3.5 h-3.5" />
+              <span>Load into Feed</span>
+            </button>
+
+            <button
+              onClick={clearIncoming}
+              className="p-1.5 text-white/80 hover:text-white rounded-lg hover:bg-white/15 transition-colors cursor-pointer"
+              title="Dismiss alert"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
 

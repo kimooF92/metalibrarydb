@@ -5,7 +5,7 @@ import { trackedPages, queue } from "../../db/schema";
 import { eq, and, or, inArray, sql } from "drizzle-orm";
 import { scanMetaAdPage } from "../../worker/scanner";
 import { markJobCompleted } from "../../worker/db";
-import { acquireLock, releaseLock, deleteCached, deleteByPrefix } from "../../lib/cache-service";
+import { acquireLock, releaseLock, deleteCached, deleteByPrefix, setCached } from "../../lib/cache-service";
 
 export interface ScanPageCountPayload {
   pageId?: string;
@@ -118,6 +118,18 @@ export const scanPageCountTask = task({
     const acquired = await acquireLock(lockKey, 180);
     if (!acquired) {
       logger.warn(`Page ${pageRecord.id} (${pageRecord.displayName || targetUrl}) is already locked by another worker. Skipping duplicate scrape.`);
+      await setCached(
+        `scan_step:${pageRecord.id}`,
+        {
+          pageId: pageRecord.id,
+          displayName: pageRecord.displayName || targetUrl,
+          step: "locked",
+          label: "Page already locked by another worker",
+          percent: 0,
+          timestamp: Date.now(),
+        },
+        60
+      );
       return {
         skipped: true,
         pageId: pageRecord.id,
@@ -133,6 +145,19 @@ export const scanPageCountTask = task({
         .update(trackedPages)
         .set({ status: "scanning", updatedAt: new Date() })
         .where(eq(trackedPages.id, pageRecord.id));
+
+      await setCached(
+        `scan_step:${pageRecord.id}`,
+        {
+          pageId: pageRecord.id,
+          displayName: pageRecord.displayName || targetUrl,
+          step: "launching",
+          label: "1. Launching browser instance...",
+          percent: 15,
+          timestamp: Date.now(),
+        },
+        120
+      );
 
       // 2. Launch headless browser
       const isHeadless = process.env.PLAYWRIGHT_HEADLESS !== "false";
@@ -158,9 +183,35 @@ export const scanPageCountTask = task({
 
       const page = await context.newPage();
 
-      // 3. Perform the scrape using existing battle-tested scanner
-      const outcome = await scanMetaAdPage(page, targetUrl);
+      // 3. Perform the scrape with live progress updates
+      const outcome = await scanMetaAdPage(page, targetUrl, async (step, label, pct) => {
+        await setCached(
+          `scan_step:${pageRecord.id}`,
+          {
+            pageId: pageRecord.id,
+            displayName: pageRecord.displayName || targetUrl,
+            step,
+            label,
+            percent: pct,
+            timestamp: Date.now(),
+          },
+          120
+        );
+      });
       logger.info(`Scrape outcome for ${pageRecord.displayName || targetUrl}: ${JSON.stringify(outcome)}`);
+
+      await setCached(
+        `scan_step:${pageRecord.id}`,
+        {
+          pageId: pageRecord.id,
+          displayName: pageRecord.displayName || targetUrl,
+          step: "saving",
+          label: "4. Saving snapshot & updating sparkline...",
+          percent: 90,
+          timestamp: Date.now(),
+        },
+        120
+      );
 
       // 4. Save results to database using existing state machine
       if (outcome.status === "success" || outcome.status === "unclear") {
@@ -173,6 +224,20 @@ export const scanPageCountTask = task({
             failureReason: outcome.failureReason,
             page,
           }
+        );
+
+        await setCached(
+          `scan_step:${pageRecord.id}`,
+          {
+            pageId: pageRecord.id,
+            displayName: pageRecord.displayName || targetUrl,
+            step: "completed",
+            label: `Scan complete: ${outcome.results ?? 0} active ads found`,
+            activeAds: outcome.results,
+            percent: 100,
+            timestamp: Date.now(),
+          },
+          60
         );
       } else {
         // Mark as failed in trackedPages and queue
@@ -194,6 +259,19 @@ export const scanPageCountTask = task({
             failureReason: outcome.failureReason || "scrape_failed",
           })
           .where(and(eq(queue.trackedPageId, pageRecord.id), inArray(queue.status, ["pending", "running"])));
+
+        await setCached(
+          `scan_step:${pageRecord.id}`,
+          {
+            pageId: pageRecord.id,
+            displayName: pageRecord.displayName || targetUrl,
+            step: "failed",
+            label: `Scan failed: ${outcome.failureReason || "unknown error"}`,
+            percent: 100,
+            timestamp: Date.now(),
+          },
+          60
+        );
       }
 
       return {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, Suspense } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { TrackedPage, DashboardStats, SearchTabCounts } from "@/types";
 import { StatsCards } from "@/components/stats-cards";
@@ -10,6 +10,7 @@ import { PagesTable } from "@/components/pages-table";
 import { RefreshCw, X, Plus, UploadCloud } from "lucide-react";
 import { useWorkspace } from "@/components/workspace-context";
 import { getSupabase } from "@/lib/supabase";
+import { ScanProgressWidget } from "@/components/scan-progress-widget";
 
 const VALID_STATUSES = ["all", "success", "pending", "scanning", "failed", "unclear"] as const;
 const VALID_SEARCH_TYPES = ["all", "page", "keyword_exact_phrase", "keyword_unordered"] as const;
@@ -185,6 +186,12 @@ function DashboardContent() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [searchTabCounts, setSearchTabCounts] = useState<SearchTabCounts | null>(null);
+
+  // Active scanning page IDs for real-time progress stream
+  const scanningPageIds = useMemo(
+    () => pages.filter((p) => p.status === "scanning").map((p) => p.id),
+    [pages]
+  );
 
   // Sync state when URL query params change (e.g. from internal router navigation or notification click)
   useEffect(() => {
@@ -691,6 +698,14 @@ function DashboardContent() {
           </div>
         </div>
       )}
+
+      {/* Feature 2: Real-time Live Scraper Progress Bar & Step Stream */}
+      <ScanProgressWidget
+        scanningPageIds={scanningPageIds}
+        onScanFinished={() => {
+          fetchStats(true);
+        }}
+      />
     </div>
   );
 }

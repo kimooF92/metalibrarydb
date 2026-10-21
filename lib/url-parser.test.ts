@@ -131,3 +131,14 @@ test("extractStoreDomain unwraps Meta Ad Library search URLs and rejects bare Fa
   assert.equal(extractStoreDomain("tuni-go.com"), "tuni-go.com");
 });
 
+test("detectPlatformBadge correctly classifies store platforms", async () => {
+  const { detectPlatformBadge } = await import("../components/add-url-form");
+  
+  assert.equal(detectPlatformBadge("https://mystore.myshopify.com/products/item").name, "Shopify Store");
+  assert.equal(detectPlatformBadge("https://brand.youcan.shop").name, "YouCan Shop");
+  assert.equal(detectPlatformBadge("https://www.facebook.com/ads/library/?q=test").name, "Meta Ad Library");
+  assert.equal(detectPlatformBadge("https://mystore.stocki.tn").name, "Stocki COD");
+  assert.equal(detectPlatformBadge("https://custombrand.com/products/test", "product_url").name, "Product Landing Page");
+  assert.equal(detectPlatformBadge("https://custombrand.com").name, "Store Website");
+});
+
