@@ -4,7 +4,6 @@ import { trackedPages, scanHistory, queue, ads, scrapedProducts, brandDomains } 
 import { addSingleUrl } from "@/actions/add-url";
 import { singleUrlSchema } from "@/lib/validators";
 import { eq, ne, ilike, or, and, sql, desc, asc, inArray, gte, lte, isNotNull, isNull, count } from "drizzle-orm";
-import { extractProductClusterKey } from "@/lib/product-clustering";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
@@ -237,10 +236,39 @@ export async function GET(request: Request) {
     const effectivePage = page > totalPages ? 1 : page;
     const effectiveOffset = (effectivePage - 1) * limit;
 
-    // Fetch pages (skip execution if totalCount is 0)
+    // Fetch pages (skip execution if totalCount is 0) with explicit projection
     const pages =
       totalCount > 0
         ? await db.query.trackedPages.findMany({
+            columns: {
+              id: true,
+              url: true,
+              displayName: true,
+              searchType: true,
+              pageId: true,
+              currentResults: true,
+              lastChecked: true,
+              lastSuccessAt: true,
+              status: true,
+              createdAt: true,
+              updatedAt: true,
+              notes: true,
+              tags: true,
+              lastCreativeScan: true,
+              isWatchlisted: true,
+              discoveredPagesCount: true,
+              holdStatus: true,
+              lastKnownValidResults: true,
+              holdStartedAt: true,
+              consecutiveZeroScans: true,
+              autoCreativeScan: true,
+              brandDomainId: true,
+              pageRole: true,
+              canonicalDomain: true,
+              landingPage: true,
+              country: true,
+              workspaceId: true,
+            },
             ...(whereClause ? { where: whereClause } : {}),
             orderBy: orderClauses,
             limit,
@@ -250,13 +278,33 @@ export async function GET(request: Request) {
 
     // Fetch previous scan results & recent history points for these pages
     const pageIds = pages.map((p) => p.id);
+    const pageIdValues = pages.map((p) => p.pageId).filter(Boolean) as string[];
+    const domainIds = Array.from(new Set(pages.map((p) => p.brandDomainId).filter(Boolean))) as string[];
+
     let prevResultsMap: Record<string, number | null> = {};
     let historyPointsMap: Record<string, number[]> = {};
     let windowDeltaMap: Record<string, number> = {};
     let recentScans: Array<{ trackedPageId: string; results: number | null; rank: number }> = [];
+    let queueMap: Record<string, { failureReason?: string | null; attempts?: number }> = {};
+    let activeCreativeJobMap: Record<string, boolean> = {};
+    let approxProductCountMap: Record<string, number> = {};
+    let extractedAdCountMap: Record<string, number> = {};
+    let domainMap: Record<
+      string,
+      {
+        id: string;
+        domain: string;
+        displayName: string;
+        category?: string | null;
+        storePlatform?: string | null;
+        linkedPagesCount: number;
+        totalCombinedAds: number;
+      }
+    > = {};
 
     if (!isLean && pageIds.length > 0) {
-      const rankedScans = db
+      // 1. Build subqueries for concurrent Promise.all execution
+      const rankedScansSubquery = db
         .select({
           trackedPageId: scanHistory.trackedPageId,
           results: scanHistory.results,
@@ -272,15 +320,125 @@ export async function GET(request: Request) {
         )
         .as("ranked_scans");
 
-      recentScans = await db
+      const recentScansPromise = db
         .select({
-          trackedPageId: rankedScans.trackedPageId,
-          results: rankedScans.results,
-          rank: rankedScans.rank,
+          trackedPageId: rankedScansSubquery.trackedPageId,
+          results: rankedScansSubquery.results,
+          rank: rankedScansSubquery.rank,
         })
-        .from(rankedScans)
-        .where(lte(rankedScans.rank, 8));
+        .from(rankedScansSubquery)
+        .where(lte(rankedScansSubquery.rank, 8));
 
+      const windowScansPromise = db
+        .select({
+          trackedPageId: scanHistory.trackedPageId,
+          results: scanHistory.results,
+        })
+        .from(scanHistory)
+        .where(
+          and(
+            inArray(scanHistory.trackedPageId, pageIds),
+            gte(scanHistory.checkedAt, windowStart),
+            isNotNull(scanHistory.results)
+          )
+        )
+        .orderBy(asc(scanHistory.checkedAt));
+
+      const rankedQueueSubquery = db
+        .select({
+          trackedPageId: queue.trackedPageId,
+          failureReason: queue.failureReason,
+          attempts: queue.attempts,
+          rank: sql<number>`row_number() over (partition by ${queue.trackedPageId} order by ${queue.createdAt} desc)`.as("rank"),
+        })
+        .from(queue)
+        .where(inArray(queue.trackedPageId, pageIds))
+        .as("ranked_queue");
+
+      const latestQueuePromise = db
+        .select({
+          trackedPageId: rankedQueueSubquery.trackedPageId,
+          failureReason: rankedQueueSubquery.failureReason,
+          attempts: rankedQueueSubquery.attempts,
+        })
+        .from(rankedQueueSubquery)
+        .where(eq(rankedQueueSubquery.rank, 1));
+
+      const activeCreativeJobsPromise = db
+        .select({ trackedPageId: queue.trackedPageId })
+        .from(queue)
+        .where(
+          and(
+            inArray(queue.trackedPageId, pageIds),
+            eq(queue.jobType, "creative"),
+            inArray(queue.status, ["pending", "running"])
+          )
+        );
+
+      const adCountsPromise = pageIdValues.length > 0
+        ? db
+            .select({
+              pageId: ads.pageId,
+              activeCount: count(ads.id),
+            })
+            .from(ads)
+            .where(and(inArray(ads.pageId, pageIdValues), eq(ads.isArchived, false)))
+            .groupBy(ads.pageId)
+        : Promise.resolve([]);
+
+      const productCountsPromise = pageIdValues.length > 0
+        ? db
+            .select({
+              pageId: scrapedProducts.pageId,
+              productCount: count(scrapedProducts.id),
+            })
+            .from(scrapedProducts)
+            .where(inArray(scrapedProducts.pageId, pageIdValues))
+            .groupBy(scrapedProducts.pageId)
+        : Promise.resolve([]);
+
+      const domainPortfolioPromise = domainIds.length > 0
+        ? Promise.all([
+            db.query.brandDomains.findMany({
+              where: inArray(brandDomains.id, domainIds),
+            }),
+            db
+              .select({
+                brandDomainId: trackedPages.brandDomainId,
+                count: sql<number>`count(*)`,
+                totalAds: sql<number>`coalesce(sum(${trackedPages.currentResults}), 0)`,
+              })
+              .from(trackedPages)
+              .where(inArray(trackedPages.brandDomainId, domainIds))
+              .groupBy(trackedPages.brandDomainId),
+          ]).catch((err) => {
+            console.warn("[Pages API] Error hydrating brand domains:", err);
+            return [[], []] as [any[], any[]];
+          })
+        : Promise.resolve([[], []] as [any[], any[]]);
+
+      // 2. Execute all enrichment subqueries concurrently in a single database roundtrip
+      const [
+        fetchedRecentScans,
+        fetchedWindowScans,
+        fetchedLatestQueue,
+        fetchedActiveCreativeJobs,
+        fetchedAdCounts,
+        fetchedProductCounts,
+        [fetchedDomains, fetchedSisterPageRows]
+      ] = await Promise.all([
+        recentScansPromise,
+        windowScansPromise,
+        latestQueuePromise,
+        activeCreativeJobsPromise,
+        adCountsPromise,
+        productCountsPromise,
+        domainPortfolioPromise,
+      ]);
+
+      recentScans = fetchedRecentScans;
+
+      // Map recent scan history for sparklines & previous results
       for (const s of recentScans) {
         if (Number(s.rank) === 2) {
           prevResultsMap[s.trackedPageId] = s.results;
@@ -317,23 +475,9 @@ export async function GET(request: Request) {
         }
       }
 
-      const windowScans = await db
-        .select({
-          trackedPageId: scanHistory.trackedPageId,
-          results: scanHistory.results,
-        })
-        .from(scanHistory)
-        .where(
-          and(
-            inArray(scanHistory.trackedPageId, pageIds),
-            gte(scanHistory.checkedAt, windowStart),
-            isNotNull(scanHistory.results)
-          )
-        )
-        .orderBy(asc(scanHistory.checkedAt));
-
+      // Map window deltas
       const windowResultsMap: Record<string, { first: number; last: number }> = {};
-      for (const scan of windowScans) {
+      for (const scan of fetchedWindowScans) {
         if (scan.results === null) continue;
         const result = Number(scan.results);
         if (!windowResultsMap[scan.trackedPageId]) {
@@ -346,219 +490,54 @@ export async function GET(request: Request) {
       for (const [trackedPageId, results] of Object.entries(windowResultsMap)) {
         windowDeltaMap[trackedPageId] = results.last - results.first;
       }
-    }
 
-    // Fetch latest queue entry per page for failureReason + attempts
-    let queueMap: Record<string, { failureReason?: string | null; attempts?: number }> = {};
-    if (!isLean && pageIds.length > 0) {
-      // Apply the visible-page filter inside the window query for the same reason
-      // as scan history: do not rank every queue row on each table request.
-      const rankedQueue = db
-        .select({
-          trackedPageId: queue.trackedPageId,
-          failureReason: queue.failureReason,
-          attempts: queue.attempts,
-          rank: sql<number>`row_number() over (partition by ${queue.trackedPageId} order by ${queue.createdAt} desc)`.as("rank"),
-        })
-        .from(queue)
-        .where(inArray(queue.trackedPageId, pageIds))
-        .as("ranked_queue");
-
-      const latestQueue = await db
-        .select({
-          trackedPageId: rankedQueue.trackedPageId,
-          failureReason: rankedQueue.failureReason,
-          attempts: rankedQueue.attempts,
-        })
-        .from(rankedQueue)
-        .where(eq(rankedQueue.rank, 1));
+      // Map latest queue status
       queueMap = Object.fromEntries(
-        latestQueue.map((q) => [q.trackedPageId, { failureReason: q.failureReason, attempts: q.attempts ?? 0 }])
+        fetchedLatestQueue.map((q) => [q.trackedPageId, { failureReason: q.failureReason, attempts: q.attempts ?? 0 }])
       );
-    }
 
-    // Fetch active creative queue entries
-    let activeCreativeJobMap: Record<string, boolean> = {};
-    if (!isLean && pageIds.length > 0) {
-      const activeCreativeJobs = await db
-        .select({ trackedPageId: queue.trackedPageId })
-        .from(queue)
-        .where(
-          and(
-            inArray(queue.trackedPageId, pageIds),
-            eq(queue.jobType, "creative"),
-            inArray(queue.status, ["pending", "running"])
-          )
-        );
-      activeCreativeJobMap = Object.fromEntries(activeCreativeJobs.map((q) => [q.trackedPageId, true]));
-    }
+      // Map active creative queue jobs
+      activeCreativeJobMap = Object.fromEntries(
+        fetchedActiveCreativeJobs.map((q) => [q.trackedPageId, true])
+      );
 
-    // Fetch active non-archived ads and canonical scraped products per Meta pageId
-    // to calculate the exact distinct product catalog count per brand
-    let approxProductCountMap: Record<string, number> = {};
-    let extractedAdCountMap: Record<string, number> = {};
-    if (!isLean && pageIds.length > 0) {
-      const pageIdValues = pages
-        .map((p) => p.pageId)
-        .filter(Boolean) as string[];
-
-      if (pageIdValues.length > 0) {
-        const [adCountsRows, brandDirectProducts, linkedAdProducts, unlinkedAds] = await Promise.all([
-          // 1. Group active ads count per brand directly in SQL (25 rows max, minimal egress)
-          db
-            .select({
-              pageId: ads.pageId,
-              activeCount: count(ads.id),
-            })
-            .from(ads)
-            .where(
-              and(
-                inArray(ads.pageId, pageIdValues),
-                eq(ads.isArchived, false)
-              )
-            )
-            .groupBy(ads.pageId),
-
-          // 2. Direct scraped products associated with each brand (lean id, pageId)
-          db
-            .select({
-              id: scrapedProducts.id,
-              pageId: scrapedProducts.pageId,
-            })
-            .from(scrapedProducts)
-            .where(inArray(scrapedProducts.pageId, pageIdValues)),
-
-          // 3. Distinct linked product IDs per brand (deduplicated in SQL, zero captions/URLs)
-          db
-            .select({
-              pageId: ads.pageId,
-              productId: ads.productId,
-            })
-            .from(ads)
-            .where(
-              and(
-                inArray(ads.pageId, pageIdValues),
-                eq(ads.isArchived, false),
-                isNotNull(ads.productId)
-              )
-            )
-            .groupBy(ads.pageId, ads.productId),
-
-          // 4. For unlinked ads only, fetch lean linkUrl & title for clustering (zero captions, deduplicated in SQL!)
-          db
-            .select({
-              pageId: ads.pageId,
-              linkUrl: ads.linkUrl,
-              title: ads.title,
-            })
-            .from(ads)
-            .where(
-              and(
-                inArray(ads.pageId, pageIdValues),
-                eq(ads.isArchived, false),
-                isNull(ads.productId)
-              )
-            )
-            .groupBy(ads.pageId, ads.linkUrl, ads.title)
-            .limit(300),
-        ]);
-
-        // Group ads and count unique exact products per brand
-        const brandProducts = new Map<string, Set<string>>();
-        const brandAdCounts = new Map<string, number>();
-
-        // Set ad counts directly from SQL aggregation
-        for (const row of adCountsRows) {
-          if (row.pageId) {
-            brandAdCounts.set(row.pageId, Number(row.activeCount) || 0);
-          }
+      // Map active ads and product counts per brand
+      const brandAdCounts = new Map<string, number>();
+      for (const row of fetchedAdCounts) {
+        if (row.pageId) {
+          brandAdCounts.set(row.pageId, Number(row.activeCount) || 0);
         }
+      }
 
-        // 1. Add direct scraped products associated with each brand
-        for (const prod of brandDirectProducts) {
-          if (prod.pageId) {
-            if (!brandProducts.has(prod.pageId)) {
-              brandProducts.set(prod.pageId, new Set());
-            }
-            brandProducts.get(prod.pageId)!.add(prod.id);
-          }
+      const brandProductCounts = new Map<string, number>();
+      for (const row of fetchedProductCounts) {
+        if (row.pageId) {
+          brandProductCounts.set(row.pageId, Number(row.productCount) || 0);
         }
+      }
 
-        // 2. Add distinct linked product IDs from ads
-        for (const linked of linkedAdProducts) {
-          if (linked.pageId && linked.productId) {
-            if (!brandProducts.has(linked.pageId)) {
-              brandProducts.set(linked.pageId, new Set());
-            }
-            brandProducts.get(linked.pageId)!.add(linked.productId);
+      for (const p of pages) {
+        if (p.pageId) {
+          if (brandProductCounts.has(p.pageId)) {
+            approxProductCountMap[p.id] = brandProductCounts.get(p.pageId)!;
           }
-        }
-
-        // 3. Add fallback cluster keys for unlinked ads only
-        for (const ad of unlinkedAds) {
-          if (!brandProducts.has(ad.pageId)) {
-            brandProducts.set(ad.pageId, new Set());
-          }
-          const keyInfo = extractProductClusterKey(ad);
-          brandProducts.get(ad.pageId)!.add(keyInfo.productKey);
-        }
-
-        // Map counts by tracked page ID
-        for (const p of pages) {
-          if (p.pageId) {
-            if (brandProducts.has(p.pageId)) {
-              approxProductCountMap[p.id] = brandProducts.get(p.pageId)!.size;
-            }
-            if (brandAdCounts.has(p.pageId)) {
-              extractedAdCountMap[p.id] = brandAdCounts.get(p.pageId)!;
-            }
+          if (brandAdCounts.has(p.pageId)) {
+            extractedAdCountMap[p.id] = brandAdCounts.get(p.pageId)!;
           }
         }
       }
-    }
 
-    // Hydrate domain portfolio metadata for pages linked to brand_domains
-    const domainIds = Array.from(
-      new Set(pages.map((p) => p.brandDomainId).filter(Boolean))
-    ) as string[];
-    let domainMap: Record<
-      string,
-      {
-        id: string;
-        domain: string;
-        displayName: string;
-        category?: string | null;
-        storePlatform?: string | null;
-        linkedPagesCount: number;
-        totalCombinedAds: number;
-      }
-    > = {};
-
-    if (!isLean && domainIds.length > 0) {
-      try {
-        const domains = await db.query.brandDomains.findMany({
-          where: inArray(brandDomains.id, domainIds),
-        });
-
-        const sisterPageRows = await db
-          .select({
-            brandDomainId: trackedPages.brandDomainId,
-            count: sql<number>`count(*)`,
-            totalAds: sql<number>`coalesce(sum(${trackedPages.currentResults}), 0)`,
-          })
-          .from(trackedPages)
-          .where(inArray(trackedPages.brandDomainId, domainIds))
-          .groupBy(trackedPages.brandDomainId);
-
+      // Map brand domain portfolios
+      if (domainIds.length > 0 && fetchedDomains.length > 0) {
         const sisterMap = Object.fromEntries(
-          sisterPageRows.map((r) => [
+          fetchedSisterPageRows.map((r: any) => [
             r.brandDomainId!,
             { count: Number(r.count), totalAds: Number(r.totalAds) },
           ])
         );
 
         domainMap = Object.fromEntries(
-          domains.map((d) => [
+          fetchedDomains.map((d: any) => [
             d.id,
             {
               id: d.id,
@@ -571,8 +550,6 @@ export async function GET(request: Request) {
             },
           ])
         );
-      } catch (err) {
-        console.warn("[Pages API] Error hydrating brand domains:", err);
       }
     }
 

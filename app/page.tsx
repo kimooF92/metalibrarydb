@@ -382,15 +382,28 @@ function DashboardContent() {
     }
   }, []);
 
+  // Track previous workspace ID to distinguish initial mount from an actual workspace switch
+  const prevWorkspaceIdRef = useRef<string | null>(null);
+
   // Initial load on mount and when filters/pagination change
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  // Re-fetch dashboard data whenever the active workspace switches
+  // Re-fetch dashboard data ONLY when the active workspace actually switches to a different one
   useEffect(() => {
-    if (activeWorkspace?.id) {
-      loadData(false, true);
+    if (!activeWorkspace?.id) return;
+
+    if (prevWorkspaceIdRef.current === null) {
+      // First resolution on initial mount: record the id without double-fetching or forcing cache bypass
+      prevWorkspaceIdRef.current = activeWorkspace.id;
+      return;
+    }
+
+    if (prevWorkspaceIdRef.current !== activeWorkspace.id) {
+      prevWorkspaceIdRef.current = activeWorkspace.id;
+      // Workspace changed by user: fetch without forceRefresh so Redis cache can serve it immediately if warm
+      loadData(false, false);
     }
   }, [activeWorkspace?.id, loadData]);
 
