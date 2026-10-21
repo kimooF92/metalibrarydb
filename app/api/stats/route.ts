@@ -17,7 +17,7 @@ export async function GET(request: Request) {
   try {
     const activeWorkspace = await getActiveWorkspace(request);
     const { searchParams } = new URL(request.url);
-    const forceRefresh = searchParams.get("refresh") === "true";
+    const forceRefresh = searchParams.get("refresh") === "true" || searchParams.has("_t");
 
     // Check Hybrid L1 (Memory) / L2 (Upstash Redis) cache for active workspace
     const cacheKey = `cache:stats:${activeWorkspace.id}`;

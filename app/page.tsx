@@ -278,7 +278,7 @@ function DashboardContent() {
   const fetchStats = useCallback(async (silent = false, forceRefresh = false) => {
     if (!silent) setStatsLoading(true);
     try {
-      const cacheBust = forceRefresh ? `?_t=${Date.now()}` : "";
+      const cacheBust = forceRefresh ? `?refresh=true&_t=${Date.now()}` : "";
       const res = await fetch(`/api/stats${cacheBust}`, {
         cache: forceRefresh ? "no-store" : "default",
         headers: forceRefresh ? { "Cache-Control": "no-cache" } : undefined,
@@ -479,8 +479,8 @@ function DashboardContent() {
             })
           );
 
-          // Silently sync the top summary stats (pending, scanning, completed) without showing loaders
-          fetchStats(true);
+          // Silently sync the top summary stats (pending, scanning, completed) with fresh data
+          fetchStats(true, true);
         }
       )
       .subscribe();
@@ -489,6 +489,15 @@ function DashboardContent() {
       supabase.removeChannel(channel);
     };
   }, [fetchStats]);
+
+  // Active scan sync loop: while scans are in progress (scanning or pending > 0), poll stats every 3s
+  useEffect(() => {
+    if (!stats || (stats.scanning === 0 && stats.pending === 0)) return;
+    const interval = setInterval(() => {
+      fetchStats(true, true);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [stats?.scanning, stats?.pending, fetchStats]);
 
   const handleRefresh = async (ids: string[]) => {
     try {
