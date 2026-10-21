@@ -13,6 +13,7 @@ export const maxDuration = 60;
 import { normalizeProductUrl } from "@/lib/firecrawl";
 import { getCleanDomain } from "@/lib/utils";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
+import { getActiveWorkspace } from "@/lib/workspace-server";
 
 const isUuid = (str: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
@@ -101,18 +102,44 @@ export async function GET(
       }
     }
 
-    // If still not in tracked_pages, look in ads table
+    const activeWorkspace = await getActiveWorkspace(req);
+
+    // If still not in tracked_pages, look in ads table only if observed in this workspace
     if (!pageId && !brandDomain) {
       const sampleAd = await db.query.ads.findFirst({
         where: or(eq(ads.pageId, decodedId), eq(ads.pageName, decodedId)),
+        columns: { id: true, pageId: true, pageName: true },
       });
-      if (sampleAd) {
-        pageId = sampleAd.pageId;
-        displayName = sampleAd.pageName || `Brand ${sampleAd.pageId}`;
-      } else {
-        pageId = decodedId;
-        displayName = `Brand ${decodedId}`;
+
+      if (!sampleAd) {
+        return NextResponse.json(
+          { error: "Brand not found or has been deleted." },
+          { status: 404 }
+        );
       }
+
+      // Check if sampleAd is actively observed by a tracked page in this workspace
+      const activeObs = await db
+        .select({ id: adObservations.id })
+        .from(adObservations)
+        .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+        .where(
+          and(
+            eq(adObservations.adId, sampleAd.id),
+            eq(trackedPages.workspaceId, activeWorkspace.id)
+          )
+        )
+        .limit(1);
+
+      if (activeObs.length === 0) {
+        return NextResponse.json(
+          { error: "Brand not found or has been deleted from this workspace." },
+          { status: 404 }
+        );
+      }
+
+      pageId = sampleAd.pageId;
+      displayName = sampleAd.pageName || `Brand ${sampleAd.pageId}`;
     }
 
     // Optional sister page sub-filter
