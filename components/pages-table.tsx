@@ -375,7 +375,7 @@ export function PagesTable({
     const active = sortBy === col;
     return (
       <th
-        className={`px-3 md:px-4 xl:px-5 py-3 whitespace-nowrap text-xs uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 ${className}`}
+        className={`px-2.5 md:px-3.5 xl:px-4 py-2.5 whitespace-nowrap text-[10px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 ${className}`}
       >
         <button
           onClick={() => onSortChange(col)}
@@ -903,10 +903,10 @@ export function PagesTable({
       {/* Main Table */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 flex-1 min-h-[400px] md:min-h-0 flex flex-col overflow-hidden shadow-xs">
         <div className="overflow-y-auto overflow-x-auto md:overflow-x-hidden flex-1 min-h-0 relative">
-          <table className="w-full md:table-fixed text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-900 sticky top-0 z-20 text-xs uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800/80 select-none shadow-xs">
+          <table className="w-full md:table-fixed text-left text-[11px]">
+            <thead className="bg-slate-50 dark:bg-slate-900 sticky top-0 z-20 text-[10px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800/80 select-none shadow-xs">
               <tr>
-                <th className="px-2 md:px-3 py-3 w-10 text-center">
+                <th className="px-2 md:px-2.5 py-2.5 w-10 text-center">
                   <input
                     type="checkbox"
                     checked={allVisibleSelected}
@@ -914,12 +914,12 @@ export function PagesTable({
                     className="rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-slate-900 cursor-pointer"
                   />
                 </th>
-                <th className="px-1 md:px-2 py-3 w-9 text-center">
+                <th className="px-1 md:px-1.5 py-2.5 w-8 text-center">
                   <Star className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 mx-auto" />
                 </th>
-                <SortHeader col="displayName" label="Brand" className="w-[24%] min-w-[200px]" />
-                <th className="px-3 md:px-4 xl:px-5 py-3 whitespace-nowrap w-[22%] min-w-[190px]">
-                  <div className="flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wider select-none">
+                <SortHeader col="displayName" label="Brand" className="w-[28%] min-w-[170px]" />
+                <th className="px-2.5 md:px-3.5 xl:px-4 py-2.5 whitespace-nowrap w-[20%] min-w-[155px]">
+                  <div className="flex items-center gap-1.5 font-semibold text-[10px] uppercase tracking-wider select-none">
                     <button
                       onClick={() => onSortChange("currentResults")}
                       className={`flex items-center gap-0.5 group transition-colors cursor-pointer uppercase tracking-wider ${
@@ -966,15 +966,15 @@ export function PagesTable({
                     </button>
                   </div>
                 </th>
-                <th className="px-2 md:px-3 xl:px-4 py-3 text-center whitespace-nowrap text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider w-[11%] min-w-[95px]" title="Unique products catalog">
+                <th className="px-2 md:px-2.5 xl:px-3 py-2.5 text-center whitespace-nowrap text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase tracking-wider w-[9%] min-w-[65px]" title="Unique products catalog">
                   <span className="inline-flex items-center justify-center gap-1 uppercase tracking-wider">
                     <Package className="w-3.5 h-3.5 text-slate-400" />
                     <span className="uppercase tracking-wider">Products</span>
                   </span>
                 </th>
-                <SortHeader col="status" label="Pattern & Status" className="hidden md:table-cell w-[17%] min-w-[160px] whitespace-nowrap" />
-                <SortHeader col="lastChecked" label="Last Checked" className="w-[13%] min-w-[120px] whitespace-nowrap" />
-                <th className="px-3 md:px-4 xl:px-5 py-3 text-right whitespace-nowrap text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider w-[13%] min-w-[130px]">
+                <SortHeader col="status" label="Pattern & Status" className="hidden md:table-cell w-[17%] min-w-[135px] whitespace-nowrap" />
+                <SortHeader col="lastChecked" label="Last Checked" className="w-[13%] min-w-[100px] whitespace-nowrap" />
+                <th className="px-2.5 md:px-3.5 xl:px-4 py-2.5 text-right whitespace-nowrap text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase tracking-wider w-[11%] min-w-[95px]">
                   <span className="uppercase tracking-wider">Actions</span>
                 </th>
               </tr>
@@ -1160,7 +1160,7 @@ export function PagesTable({
                       }`}
                     >
                       {/* Checkbox */}
-                      <td className="px-2 md:px-3 py-3 text-center w-10">
+                      <td className="px-2 md:px-2.5 py-2.5 text-center w-10">
                         <label className="relative inline-flex items-center justify-center cursor-pointer">
                           <input
                             type="checkbox"
@@ -1182,7 +1182,7 @@ export function PagesTable({
                       </td>
 
                       {/* Watchlist Star */}
-                      <td className="px-1 md:px-2 py-3 text-center w-9">
+                      <td className="px-1 md:px-1.5 py-2.5 text-center w-8">
                         <button
                           onClick={() => toggleWatchlist(p.id)}
                           title={watchlisted[p.id] ? "Remove from watchlist" : "Add to watchlist"}
@@ -1197,7 +1197,7 @@ export function PagesTable({
                       </td>
 
                       {/* Brand Name & Archetype Badge */}
-                      <td className="px-3 md:px-4 xl:px-5 py-3 min-w-0">
+                      <td className="px-2.5 md:px-3.5 xl:px-4 py-2.5 min-w-0">
                         {editingId === p.id ? (
                           <div className="flex items-center space-x-1.5">
                             <input
@@ -1239,7 +1239,7 @@ export function PagesTable({
                               <Link
                                 href={`/spy/brand/${encodeURIComponent(p.pageId || p.landingPage || p.displayName || "")}`}
                                 title={`Open ${p.displayName || "brand"} Analytics${p.pageId ? ` (ID: ${p.pageId})` : ""}`}
-                                className="font-bold text-xs text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 underline-offset-2 hover:underline transition-colors truncate min-w-0"
+                                className="font-bold text-[11px] text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 underline-offset-2 hover:underline transition-colors truncate min-w-0"
                               >
                                 {p.displayName || "Meta Ad Search"}
                               </Link>
@@ -1260,7 +1260,7 @@ export function PagesTable({
                                 <Pencil className="w-3 h-3" />
                               </button>
 
-                              {/* Quick Copy Page ID on row hover */}
+                              {/* Quick Copy Page ID on row hover (icon only) */}
                               {p.pageId && (
                                 <button
                                   type="button"
@@ -1273,11 +1273,11 @@ export function PagesTable({
                                       type: "success",
                                     });
                                   }}
-                                  className="opacity-0 group-hover:opacity-70 hover:!opacity-100 transition-opacity inline-flex items-center gap-0.5 text-xs text-slate-400 hover:text-slate-200 font-mono tracking-tight cursor-pointer px-1 py-0.5 rounded hover:bg-slate-700/30 shrink-0"
-                                  title={`Meta Page ID: ${p.pageId} (Click to copy)`}
+                                  className="opacity-0 group-hover:opacity-70 hover:!opacity-100 transition-opacity p-0.5 rounded hover:bg-slate-700/30 text-slate-400 hover:text-slate-200 cursor-pointer shrink-0"
+                                  title={`Meta Page ID: #${p.pageId} (Click to copy)`}
+                                  aria-label={`Copy Meta Page ID: #${p.pageId}`}
                                 >
-                                  <Copy className="w-3 h-3 text-slate-400" />
-                                  <span>#{p.pageId}</span>
+                                  <Copy className="w-3 h-3" />
                                 </button>
                               )}
                             </div>
@@ -1288,16 +1288,16 @@ export function PagesTable({
                               (p.discoveredPagesCount && p.discoveredPagesCount >= 2) ||
                               (p.searchType !== "page" && p.discoveredPagesCount && p.discoveredPagesCount > 0)
                             ) && (
-                              <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 min-w-0 mt-0.5">
+                              <div className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 min-w-0 mt-0.5">
                                 {p.brandDomainId && p.brandDomain && (p.brandDomain.linkedPagesCount ?? 0) > 1 && (
                                   <button
                                     onClick={() => setManageDomainId(p.brandDomainId!)}
                                     className="inline-flex items-center gap-1 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer group/domain truncate max-w-[200px]"
                                     title={`Part of ${p.brandDomain.domain} portfolio (${p.brandDomain.linkedPagesCount} pages, ${p.brandDomain.totalCombinedAds} combined ads). Click to manage.`}
                                   >
-                                    <Globe className="w-3 h-3 shrink-0 opacity-60 group-hover/domain:opacity-100" />
+                                    <Globe className="w-2.5 h-2.5 shrink-0 opacity-60 group-hover/domain:opacity-100" />
                                     <span className="truncate">{p.brandDomain.domain}</span>
-                                    <span className="text-xs text-slate-400 dark:text-slate-500 font-mono">
+                                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
                                       ({p.brandDomain.linkedPagesCount} pages)
                                     </span>
                                   </button>
@@ -1310,10 +1310,10 @@ export function PagesTable({
                                 ) && (
                                   <button
                                     onClick={() => setResolveModalPageId(p.id)}
-                                    className="inline-flex items-center gap-0.5 text-xs font-medium text-amber-500 hover:text-amber-400 hover:underline transition-colors shrink-0"
+                                    className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-500 hover:text-amber-400 hover:underline transition-colors shrink-0"
                                     title="Multiple Facebook Pages detected for this domain. Click to review and resolve."
                                   >
-                                    <AlertTriangle className="w-3 h-3 shrink-0" />
+                                    <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
                                     <span>{p.discoveredPagesCount} found</span>
                                   </button>
                                 )}
@@ -1324,16 +1324,16 @@ export function PagesTable({
                       </td>
 
                       {/* Active Ads, Delta & Sparkline (Combined Unified Cell) */}
-                      <td className="px-3 md:px-4 xl:px-5 py-3">
+                      <td className="px-2.5 md:px-3.5 xl:px-4 py-2.5">
                         <div className="flex items-center gap-3">
                           <div className="flex items-baseline gap-1.5 shrink-0 min-w-[60px]">
                             {isOnHold && p.lastKnownValidResults ? (
                               <span
-                                className="text-xs font-mono text-amber-500 font-bold"
+                                className="text-[11px] font-mono text-amber-500 font-bold"
                                 title={`Account hold — was ${p.lastKnownValidResults} ads. Under grace period (${p.consecutiveZeroScans ?? 1}/3 scans).`}
                               >
                                 0
-                                <span className="text-[10px] font-normal text-amber-500/80 ml-0.5">
+                                <span className="text-[9px] font-normal text-amber-500/80 ml-0.5">
                                   (was {p.lastKnownValidResults})
                                 </span>
                               </span>
@@ -1345,7 +1345,7 @@ export function PagesTable({
                                   </span>
                                 )}
                                 <span
-                                  className={`text-xs font-mono tabular-nums ${
+                                  className={`text-[11px] font-mono tabular-nums ${
                                     p.currentResults >= 50
                                       ? "text-amber-500 dark:text-amber-400 font-black"
                                       : p.currentResults === 0
@@ -1357,13 +1357,13 @@ export function PagesTable({
                                 </span>
                               </div>
                             ) : (
-                              <span className="text-slate-400 text-xs">—</span>
+                              <span className="text-slate-400 text-[11px]">—</span>
                             )}
 
                             {/* Clean Delta text */}
                             {diff !== null && diff !== undefined && diff !== 0 && (
                               <span
-                                className={`inline-flex items-center text-xs font-extrabold ${
+                                className={`inline-flex items-center text-[10px] font-extrabold ${
                                   diff > 0
                                     ? "text-emerald-700 dark:text-emerald-400"
                                     : "text-rose-600 dark:text-rose-400"
@@ -1371,9 +1371,9 @@ export function PagesTable({
                                 title={`Previous scan: ${p.previousResults ?? "—"} (${diff > 0 ? "+" : ""}${diff} ads)`}
                               >
                                 {diff > 0 ? (
-                                  <ArrowUpRight className="w-3.5 h-3.5 mr-0.5 stroke-[2.5]" />
+                                  <ArrowUpRight className="w-3 h-3 mr-0.5 stroke-[2.5]" />
                                 ) : (
-                                  <ArrowDownRight className="w-3.5 h-3.5 mr-0.5 stroke-[2.5]" />
+                                  <ArrowDownRight className="w-3 h-3 mr-0.5 stroke-[2.5]" />
                                 )}
                                 {diff > 0 ? `+${diff}` : diff}
                               </span>
@@ -1385,10 +1385,10 @@ export function PagesTable({
                       </td>
 
                       {/* Exact Products Count */}
-                      <td className="px-2 md:px-3 xl:px-4 py-3 text-center">
+                      <td className="px-2 md:px-2.5 xl:px-3 py-2.5 text-center">
                         <Link
                           href={`/spy/brand/${encodeURIComponent(p.pageId || p.landingPage || p.displayName || "")}?tab=products`}
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-all cursor-pointer"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-all cursor-pointer"
                           title={`Open ${p.displayName || "brand"} Product Catalog (${p.approxProductCount || 0} products)`}
                         >
                           <Package className="w-3.5 h-3.5 text-slate-400" />
@@ -1401,7 +1401,7 @@ export function PagesTable({
                       </td>
 
                       {/* Pattern & Status Column */}
-                      <td className="px-3 md:px-4 xl:px-5 py-3 hidden md:table-cell whitespace-nowrap">
+                      <td className="px-2.5 md:px-3.5 xl:px-4 py-2.5 hidden md:table-cell whitespace-nowrap">
                         <div className="flex items-center gap-2 flex-nowrap">
                           {/* 1. Status Indicator Icon (clean, borderless) */}
                           {p.status === "scanning" ? (
@@ -1445,7 +1445,7 @@ export function PagesTable({
                           {/* 3. Pattern Badge / Special State */}
                           {isOnHold ? (
                             <span
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 shrink-0"
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 shrink-0"
                               title={`Account hold detected — was ${p.lastKnownValidResults ?? "?"} ads. Grace period verification scan ${p.consecutiveZeroScans ?? 1}/3.`}
                             >
                               <Pause className="w-2.5 h-2.5 text-amber-500 shrink-0" />
@@ -1453,7 +1453,7 @@ export function PagesTable({
                             </span>
                           ) : p.holdStatus === "inactive" ? (
                             <span
-                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20 shrink-0"
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20 shrink-0"
                               title="Brand inactive (0 active ads confirmed over 3 scans)."
                             >
                               <span className="w-1.5 h-1.5 rounded-full bg-slate-400/80 shrink-0" />
@@ -1470,7 +1470,7 @@ export function PagesTable({
 
                               return (
                                 <span
-                                  className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-md border shrink-0 ${
+                                  className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md border shrink-0 ${
                                     isBurst
                                       ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25"
                                       : isScaling
@@ -1509,15 +1509,15 @@ export function PagesTable({
                               );
                             })()
                           ) : (
-                            <span className="text-slate-400 text-xs shrink-0">—</span>
+                            <span className="text-slate-400 text-[10px] shrink-0">—</span>
                           )}
                         </div>
                       </td>
 
                       {/* Last Checked (Relative Timestamps) */}
-                      <td className="px-3 md:px-4 xl:px-5 py-3 text-slate-500 dark:text-slate-400 text-xs whitespace-nowrap">
+                      <td className="px-2.5 md:px-3.5 xl:px-4 py-2.5 text-slate-500 dark:text-slate-400 text-[11px] whitespace-nowrap">
                         <div className="flex flex-col gap-0.5">
-                          <span className="font-medium text-xs text-slate-700 dark:text-slate-300" title={p.lastChecked ? `Ad count checked: ${new Date(p.lastChecked).toLocaleString()}` : "Never checked"}>
+                          <span className="font-medium text-[11px] text-slate-700 dark:text-slate-300" title={p.lastChecked ? `Ad count checked: ${new Date(p.lastChecked).toLocaleString()}` : "Never checked"}>
                             {formatRelativeTime(p.lastChecked)}
                           </span>
                           {p.lastCreativeScan && (
@@ -1530,7 +1530,7 @@ export function PagesTable({
                       </td>
 
                       {/* Actions */}
-                      <td className="px-3 md:px-4 xl:px-5 py-3 text-right whitespace-nowrap">
+                      <td className="px-2.5 md:px-3.5 xl:px-4 py-2.5 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-0.5">
                           {/* Notes button */}
                           <button
