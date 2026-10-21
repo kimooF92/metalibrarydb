@@ -379,13 +379,13 @@ export function PagesTable({
       >
         <button
           onClick={() => onSortChange(col)}
-          className={`flex items-center gap-1 group transition-colors cursor-pointer ${
+          className={`flex items-center gap-1 group transition-colors cursor-pointer uppercase tracking-wider ${
             active
               ? "text-indigo-600 dark:text-indigo-400 font-bold"
               : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
           }`}
         >
-          <span>{label}</span>
+          <span className="uppercase tracking-wider">{label}</span>
           <span className="transition-transform">
             {active ? (
               sortOrder === "asc" ? (
@@ -903,7 +903,7 @@ export function PagesTable({
       {/* Main Table */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 flex-1 min-h-[400px] md:min-h-0 flex flex-col overflow-hidden shadow-xs">
         <div className="overflow-y-auto overflow-x-auto md:overflow-x-hidden flex-1 min-h-0 relative">
-          <table className="w-full md:table-fixed text-left text-sm">
+          <table className="w-full md:table-fixed text-left text-xs">
             <thead className="bg-slate-50 dark:bg-slate-900 sticky top-0 z-20 text-xs uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800/80 select-none shadow-xs">
               <tr>
                 <th className="px-2 md:px-3 py-3 w-10 text-center">
@@ -922,14 +922,14 @@ export function PagesTable({
                   <div className="flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wider select-none">
                     <button
                       onClick={() => onSortChange("currentResults")}
-                      className={`flex items-center gap-0.5 group transition-colors cursor-pointer ${
+                      className={`flex items-center gap-0.5 group transition-colors cursor-pointer uppercase tracking-wider ${
                         sortBy === "currentResults"
                           ? "text-indigo-600 dark:text-indigo-400 font-bold"
                           : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
                       }`}
                       title="Sort by Total Active Ads volume"
                     >
-                      <span>Active Ads</span>
+                      <span className="uppercase tracking-wider">Active Ads</span>
                       {sortBy === "currentResults" ? (
                         sortOrder === "asc" ? (
                           <ChevronUp className="w-3.5 h-3.5 text-indigo-500" />
@@ -945,7 +945,7 @@ export function PagesTable({
 
                     <button
                       onClick={() => onSortChange("difference")}
-                      className={`flex items-center gap-0.5 group transition-colors cursor-pointer ${
+                      className={`flex items-center gap-0.5 group transition-colors cursor-pointer uppercase tracking-wider ${
                         sortBy === "difference"
                           ? "text-emerald-600 dark:text-emerald-400 font-bold"
                           : "text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-300"
@@ -953,7 +953,7 @@ export function PagesTable({
                       title="Sort by Net New Creatives Added (Top Gainers & Scalers)"
                     >
                       <ArrowUpRight className="w-3.5 h-3.5" />
-                      <span>+Δ New</span>
+                      <span className="uppercase tracking-wider">+Δ New</span>
                       {sortBy === "difference" ? (
                         sortOrder === "asc" ? (
                           <ChevronUp className="w-3.5 h-3.5 text-emerald-500" />
@@ -967,14 +967,16 @@ export function PagesTable({
                   </div>
                 </th>
                 <th className="px-2 md:px-3 xl:px-4 py-3 text-center whitespace-nowrap text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider w-[11%] min-w-[95px]" title="Unique products catalog">
-                  <span className="inline-flex items-center justify-center gap-1">
+                  <span className="inline-flex items-center justify-center gap-1 uppercase tracking-wider">
                     <Package className="w-3.5 h-3.5 text-slate-400" />
-                    Products
+                    <span className="uppercase tracking-wider">Products</span>
                   </span>
                 </th>
                 <SortHeader col="status" label="Pattern & Status" className="hidden md:table-cell w-[17%] min-w-[160px] whitespace-nowrap" />
                 <SortHeader col="lastChecked" label="Last Checked" className="w-[13%] min-w-[120px] whitespace-nowrap" />
-                <th className="px-3 md:px-4 xl:px-5 py-3 text-right whitespace-nowrap text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider w-[13%] min-w-[130px]">Actions</th>
+                <th className="px-3 md:px-4 xl:px-5 py-3 text-right whitespace-nowrap text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider w-[13%] min-w-[130px]">
+                  <span className="uppercase tracking-wider">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
@@ -1206,7 +1208,7 @@ export function PagesTable({
                                 if (e.key === "Enter") saveEditing(p.id);
                                 if (e.key === "Escape") cancelEditing();
                               }}
-                              className="bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-white px-2 py-1 rounded border border-indigo-500 focus:outline-none w-44"
+                              className="bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white px-2 py-1 rounded border border-indigo-500 focus:outline-none w-44"
                               autoFocus
                               disabled={savingEdit}
                             />
@@ -1237,7 +1239,7 @@ export function PagesTable({
                               <Link
                                 href={`/spy/brand/${encodeURIComponent(p.pageId || p.landingPage || p.displayName || "")}`}
                                 title={`Open ${p.displayName || "brand"} Analytics${p.pageId ? ` (ID: ${p.pageId})` : ""}`}
-                                className="font-bold text-sm text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 underline-offset-2 hover:underline transition-colors truncate min-w-0"
+                                className="font-bold text-xs text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 underline-offset-2 hover:underline transition-colors truncate min-w-0"
                               >
                                 {p.displayName || "Meta Ad Search"}
                               </Link>
@@ -1327,23 +1329,23 @@ export function PagesTable({
                           <div className="flex items-baseline gap-1.5 shrink-0 min-w-[60px]">
                             {isOnHold && p.lastKnownValidResults ? (
                               <span
-                                className="text-sm font-mono text-amber-500 font-bold"
+                                className="text-xs font-mono text-amber-500 font-bold"
                                 title={`Account hold — was ${p.lastKnownValidResults} ads. Under grace period (${p.consecutiveZeroScans ?? 1}/3 scans).`}
                               >
                                 0
-                                <span className="text-xs font-normal text-amber-500/80 ml-0.5">
+                                <span className="text-[10px] font-normal text-amber-500/80 ml-0.5">
                                   (was {p.lastKnownValidResults})
                                 </span>
                               </span>
                             ) : p.currentResults !== null ? (
                               <div className="flex items-center gap-1.5">
                                 {p.currentResults >= 50 && (
-                                  <span title="High Volume: 50+ active ads" className="select-none text-sm leading-none shrink-0" aria-label="50+ active ads">
-                                    🔥
+                                  <span title="High Volume: 50+ active ads" className="inline-flex shrink-0">
+                                    <Flame className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 fill-amber-500/20" />
                                   </span>
                                 )}
                                 <span
-                                  className={`text-sm font-mono tabular-nums ${
+                                  className={`text-xs font-mono tabular-nums ${
                                     p.currentResults >= 50
                                       ? "text-amber-500 dark:text-amber-400 font-black"
                                       : p.currentResults === 0
@@ -1355,13 +1357,13 @@ export function PagesTable({
                                 </span>
                               </div>
                             ) : (
-                              <span className="text-slate-400 text-sm">—</span>
+                              <span className="text-slate-400 text-xs">—</span>
                             )}
 
                             {/* Clean Delta text */}
                             {diff !== null && diff !== undefined && diff !== 0 && (
                               <span
-                                className={`inline-flex items-center text-xs sm:text-sm font-extrabold ${
+                                className={`inline-flex items-center text-xs font-extrabold ${
                                   diff > 0
                                     ? "text-emerald-700 dark:text-emerald-400"
                                     : "text-rose-600 dark:text-rose-400"
@@ -1386,7 +1388,7 @@ export function PagesTable({
                       <td className="px-2 md:px-3 xl:px-4 py-3 text-center">
                         <Link
                           href={`/spy/brand/${encodeURIComponent(p.pageId || p.landingPage || p.displayName || "")}?tab=products`}
-                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-all cursor-pointer"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-all cursor-pointer"
                           title={`Open ${p.displayName || "brand"} Product Catalog (${p.approxProductCount || 0} products)`}
                         >
                           <Package className="w-3.5 h-3.5 text-slate-400" />
@@ -1513,14 +1515,14 @@ export function PagesTable({
                       </td>
 
                       {/* Last Checked (Relative Timestamps) */}
-                      <td className="px-3 md:px-4 xl:px-5 py-3 text-slate-500 dark:text-slate-400 text-sm whitespace-nowrap">
+                      <td className="px-3 md:px-4 xl:px-5 py-3 text-slate-500 dark:text-slate-400 text-xs whitespace-nowrap">
                         <div className="flex flex-col gap-0.5">
-                          <span className="font-medium text-sm text-slate-700 dark:text-slate-300" title={p.lastChecked ? `Ad count checked: ${new Date(p.lastChecked).toLocaleString()}` : "Never checked"}>
+                          <span className="font-medium text-xs text-slate-700 dark:text-slate-300" title={p.lastChecked ? `Ad count checked: ${new Date(p.lastChecked).toLocaleString()}` : "Never checked"}>
                             {formatRelativeTime(p.lastChecked)}
                           </span>
                           {p.lastCreativeScan && (
-                            <span className="text-xs text-purple-600 dark:text-purple-400 flex items-center gap-0.5" title={`Ad Spy scan: ${new Date(p.lastCreativeScan).toLocaleString()}`}>
-                              <Sparkles className="w-3 h-3 shrink-0" />
+                            <span className="text-[10px] text-purple-600 dark:text-purple-400 flex items-center gap-0.5" title={`Ad Spy scan: ${new Date(p.lastCreativeScan).toLocaleString()}`}>
+                              <Sparkles className="w-2.5 h-2.5 shrink-0" />
                               {formatRelativeTime(p.lastCreativeScan)}
                             </span>
                           )}
