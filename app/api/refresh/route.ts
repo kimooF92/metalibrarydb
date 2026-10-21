@@ -5,6 +5,7 @@ import { inArray, eq } from "drizzle-orm";
 import { refreshSchema } from "@/lib/validators";
 import { triggerGitHubWorkflow } from "@/lib/github";
 import { validateAdminRole } from "@/lib/api-guard";
+import { scanPageCountTask } from "@/src/trigger";
 
 export async function POST(request: Request) {
   const authError = await validateAdminRole(request);
@@ -62,8 +63,23 @@ export async function POST(request: Request) {
       );
     }
 
-    // Trigger GitHub Action worker workflow
-    await triggerGitHubWorkflow("worker.yml").catch(() => {});
+    // Dispatch to Trigger.dev if available
+    let triggerDevDispatched = false;
+    if (process.env.TRIGGER_SECRET_KEY && idsToEnqueue.length > 0) {
+      try {
+        await scanPageCountTask.batchTrigger(
+          idsToEnqueue.map((id) => ({ payload: { pageId: id } }))
+        );
+        triggerDevDispatched = true;
+      } catch (triggerErr: any) {
+        console.warn("[Trigger.dev Dispatch Warning]:", triggerErr?.message || triggerErr);
+      }
+    }
+
+    // Trigger GitHub Action worker workflow as backup if Trigger.dev wasn't used
+    if (!triggerDevDispatched) {
+      await triggerGitHubWorkflow("worker.yml").catch(() => {});
+    }
 
     return NextResponse.json({
       success: true,

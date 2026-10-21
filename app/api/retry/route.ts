@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { trackedPages, queue, scanHistory } from "@/db/schema";
 import { inArray, eq, and, sql } from "drizzle-orm";
 import { retrySchema } from "@/lib/validators";
+import { scanPageCountTask } from "@/src/trigger";
 
 export async function POST(request: Request) {
   try {
@@ -93,6 +94,17 @@ export async function POST(request: Request) {
             attempts: (attemptsMap[id] || 0) + 1,
           }))
         );
+
+        // Dispatch to Trigger.dev if available
+        if (process.env.TRIGGER_SECRET_KEY && newRetryIds.length > 0) {
+          try {
+            await scanPageCountTask.batchTrigger(
+              newRetryIds.map((id) => ({ payload: { pageId: id } }))
+            );
+          } catch (triggerErr: any) {
+            console.warn("[Trigger.dev Retry Dispatch Warning]:", triggerErr?.message || triggerErr);
+          }
+        }
       }
     }
 

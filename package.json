@@ -27,7 +27,8 @@
     "verify:favorites": "npx tsx scripts/verify-favorite-ads.ts",
     "verify:pending": "npx tsx scripts/verify-favorite-ads.ts --pending",
     "db:maintenance": "npx tsx scripts/run-maintenance.ts",
-    "db:vacuum": "npx tsx scripts/reclaim-disk-space.ts"
+    "db:vacuum": "npx tsx scripts/reclaim-disk-space.ts",
+    "trigger:dev": "trigger.dev dev"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1111.0",
@@ -38,6 +39,7 @@
     "@supabase/storage-js": "^2.110.8",
     "@supabase/supabase-js": "^2.110.8",
     "@tanstack/react-table": "^8.21.3",
+    "@trigger.dev/sdk": "4.7.6",
     "@types/ws": "^8.18.1",
     "@vercel/analytics": "^2.0.1",
     "class-variance-authority": "^0.7.1",
@@ -60,6 +62,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@trigger.dev/build": "4.7.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

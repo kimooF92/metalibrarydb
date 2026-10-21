@@ -23,6 +23,7 @@
     }
   },
   "include": [
+    "trigger.config.ts",
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
