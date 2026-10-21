@@ -2,12 +2,14 @@ import { task, logger } from "@trigger.dev/sdk";
 import { chromium } from "playwright";
 import { db } from "../../db";
 import { trackedPages, queue } from "../../db/schema";
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, and, or, inArray, sql } from "drizzle-orm";
 import { scanMetaAdPage } from "../../worker/scanner";
 import { markJobCompleted } from "../../worker/db";
 
 export interface ScanPageCountPayload {
-  pageId: string;
+  pageId?: string;
+  id?: string;
+  trackedPageId?: string;
   url?: string;
   priority?: "normal" | "high";
 }
@@ -27,25 +29,83 @@ export const scanPageCountTask = task({
     concurrencyLimit: 2, // Protect against Meta rate limits
   },
   run: async (payload: ScanPageCountPayload) => {
-    logger.info(`Starting ad count scan for pageId: ${payload.pageId}`);
+    // 0. Extract identifier flexibly
+    const rawTarget =
+      (typeof payload === "string" ? payload : null) ||
+      (payload as any)?.pageId ||
+      (payload as any)?.id ||
+      (payload as any)?.trackedPageId ||
+      (payload as any)?.payload?.pageId ||
+      (payload as any)?.payload?.id;
 
-    // 1. Fetch tracked page record
-    const [pageRecord] = await db
-      .select({
-        id: trackedPages.id,
-        url: trackedPages.url,
-        displayName: trackedPages.displayName,
-        currentResults: trackedPages.currentResults,
-      })
-      .from(trackedPages)
-      .where(eq(trackedPages.id, payload.pageId))
-      .limit(1);
+    const inputUrl = (payload as any)?.url || (typeof rawTarget === "string" && rawTarget.startsWith("http") ? rawTarget : null);
 
-    if (!pageRecord) {
-      throw new Error(`Tracked page ${payload.pageId} not found in database.`);
+    if ((!rawTarget || typeof rawTarget !== "string" || !rawTarget.trim()) && !inputUrl) {
+      const errMsg = `[scan-page-count] Missing or empty pageId in payload. Received: ${JSON.stringify(payload)}. Example payload: { "pageId": "your-page-uuid" }`;
+      logger.error(errMsg);
+      throw new Error(errMsg);
     }
 
-    const targetUrl = payload.url || pageRecord.url;
+    const cleanTargetId = typeof rawTarget === "string" ? rawTarget.trim() : "";
+    logger.info(`Starting ad count scan for target: "${cleanTargetId || inputUrl}"`);
+
+    const isUuid = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
+    // 1. Fetch tracked page record safely by UUID, Facebook Page ID, or URL
+    let pageRecord: {
+      id: string;
+      url: string;
+      displayName: string | null;
+      currentResults: number | null;
+    } | undefined;
+
+    if (cleanTargetId && isUuid(cleanTargetId)) {
+      const [found] = await db
+        .select({
+          id: trackedPages.id,
+          url: trackedPages.url,
+          displayName: trackedPages.displayName,
+          currentResults: trackedPages.currentResults,
+        })
+        .from(trackedPages)
+        .where(eq(trackedPages.id, cleanTargetId))
+        .limit(1);
+      pageRecord = found;
+    }
+
+    if (!pageRecord && cleanTargetId) {
+      const [found] = await db
+        .select({
+          id: trackedPages.id,
+          url: trackedPages.url,
+          displayName: trackedPages.displayName,
+          currentResults: trackedPages.currentResults,
+        })
+        .from(trackedPages)
+        .where(or(eq(trackedPages.pageId, cleanTargetId), eq(trackedPages.url, cleanTargetId)))
+        .limit(1);
+      pageRecord = found;
+    }
+
+    if (!pageRecord && inputUrl) {
+      const [found] = await db
+        .select({
+          id: trackedPages.id,
+          url: trackedPages.url,
+          displayName: trackedPages.displayName,
+          currentResults: trackedPages.currentResults,
+        })
+        .from(trackedPages)
+        .where(eq(trackedPages.url, inputUrl))
+        .limit(1);
+      pageRecord = found;
+    }
+
+    if (!pageRecord) {
+      throw new Error(`Tracked page "${cleanTargetId || inputUrl}" not found in database.`);
+    }
+
+    const targetUrl = inputUrl || pageRecord.url;
     logger.info(`Navigating to Meta Ad Library: ${targetUrl}`);
 
     // Update status to scanning
