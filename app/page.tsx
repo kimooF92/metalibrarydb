@@ -9,6 +9,7 @@ import { ImportDropzone } from "@/components/import-dropzone";
 import { PagesTable } from "@/components/pages-table";
 import { RefreshCw, X, Plus, UploadCloud } from "lucide-react";
 import { useWorkspace } from "@/components/workspace-context";
+import { getSupabase } from "@/lib/supabase";
 
 const VALID_STATUSES = ["all", "success", "pending", "scanning", "failed", "unclear"] as const;
 const VALID_SEARCH_TYPES = ["all", "page", "keyword_exact_phrase", "keyword_unordered"] as const;
@@ -386,31 +387,62 @@ function DashboardContent() {
     }
   }, [activeWorkspace?.id, loadData]);
 
-  // Determine if there are active scans currently running
-  const isScanningActive =
-    (stats && stats.scanning > 0) ||
-    pages.some((p) => p.status === "scanning");
-
-  // Bounded real-time polling when scraper jobs are actively scanning (max 4 cycles = 60s)
+  // Real-time row status updates via Supabase WebSockets (Zero polling, zero full table reloads)
   useEffect(() => {
-    if (!isScanningActive) return;
+    const supabase = getSupabase();
+    const channel = supabase
+      .channel("realtime-tracked-pages")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "tracked_pages",
+        },
+        (payload) => {
+          const updated = payload.new as any;
+          if (!updated?.id) return;
 
-    let pollCount = 0;
-    const interval = setInterval(() => {
-      if (document.hidden) return;
-      pollCount++;
-      loadData(true);
-      if (pollCount >= 4) {
-        clearInterval(interval);
-      }
-    }, 15000);
+          // In-place row patch: only the updated row reference changes, preventing whole-table re-render or flicker
+          setPages((prevPages) =>
+            prevPages.map((page) =>
+              page.id === updated.id
+                ? {
+                    ...page,
+                    status: updated.status ?? page.status,
+                    currentResults:
+                      updated.current_results !== undefined && updated.current_results !== null
+                        ? updated.current_results
+                        : updated.currentResults !== undefined && updated.currentResults !== null
+                          ? updated.currentResults
+                          : page.currentResults,
+                    lastChecked: updated.last_checked || updated.lastChecked || page.lastChecked,
+                    lastSuccessAt: updated.last_success_at || updated.lastSuccessAt || page.lastSuccessAt,
+                    updatedAt: updated.updated_at || updated.updatedAt || page.updatedAt,
+                    holdStatus: updated.hold_status || updated.holdStatus || page.holdStatus,
+                  }
+                : page
+            )
+          );
 
-    return () => clearInterval(interval);
-  }, [isScanningActive, loadData]);
+          // Silently sync the top summary stats (pending, scanning, completed) without showing loaders
+          fetchStats(true);
+        }
+      )
+      .subscribe();
 
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchStats]);
 
   const handleRefresh = async (ids: string[]) => {
     try {
+      // 1. Optimistic UI: mark row status as 'pending' immediately without reloading table
+      setPages((prev) =>
+        prev.map((p) => (ids.includes(p.id) ? { ...p, status: "pending" } : p))
+      );
+
       const res = await fetch("/api/refresh", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -418,7 +450,9 @@ function DashboardContent() {
       });
       if (res.ok) {
         showToast("info", "Scan refresh queued successfully.");
-        loadData(false, true);
+        fetchStats(true);
+      } else {
+        showToast("error", "Failed to queue refresh.");
       }
     } catch (err) {
       console.error("Refresh action failed", err);
@@ -428,6 +462,11 @@ function DashboardContent() {
 
   const handleRetry = async (ids?: string[]) => {
     try {
+      // 1. Optimistic UI: mark retried failed pages as 'pending' immediately without reloading table
+      setPages((prev) =>
+        prev.map((p) => (!ids || ids.includes(p.id) ? { ...p, status: "pending" } : p))
+      );
+
       const res = await fetch("/api/retry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -435,7 +474,9 @@ function DashboardContent() {
       });
       if (res.ok) {
         showToast("info", "Failed scans queued for retry.");
-        loadData(false, true);
+        fetchStats(true);
+      } else {
+        showToast("error", "Failed to queue retry.");
       }
     } catch (err) {
       console.error("Retry action failed", err);

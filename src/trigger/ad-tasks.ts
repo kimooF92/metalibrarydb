@@ -5,6 +5,7 @@ import { trackedPages, queue } from "../../db/schema";
 import { eq, and, or, inArray, sql } from "drizzle-orm";
 import { scanMetaAdPage } from "../../worker/scanner";
 import { markJobCompleted } from "../../worker/db";
+import { acquireLock, releaseLock, deleteCached, deleteByPrefix } from "../../lib/cache-service";
 
 export interface ScanPageCountPayload {
   pageId?: string;
@@ -57,6 +58,7 @@ export const scanPageCountTask = task({
       url: string;
       displayName: string | null;
       currentResults: number | null;
+      workspaceId: string | null;
     } | undefined;
 
     if (cleanTargetId && isUuid(cleanTargetId)) {
@@ -66,6 +68,7 @@ export const scanPageCountTask = task({
           url: trackedPages.url,
           displayName: trackedPages.displayName,
           currentResults: trackedPages.currentResults,
+          workspaceId: trackedPages.workspaceId,
         })
         .from(trackedPages)
         .where(eq(trackedPages.id, cleanTargetId))
@@ -80,6 +83,7 @@ export const scanPageCountTask = task({
           url: trackedPages.url,
           displayName: trackedPages.displayName,
           currentResults: trackedPages.currentResults,
+          workspaceId: trackedPages.workspaceId,
         })
         .from(trackedPages)
         .where(or(eq(trackedPages.pageId, cleanTargetId), eq(trackedPages.url, cleanTargetId)))
@@ -94,6 +98,7 @@ export const scanPageCountTask = task({
           url: trackedPages.url,
           displayName: trackedPages.displayName,
           currentResults: trackedPages.currentResults,
+          workspaceId: trackedPages.workspaceId,
         })
         .from(trackedPages)
         .where(eq(trackedPages.url, inputUrl))
@@ -108,25 +113,39 @@ export const scanPageCountTask = task({
     const targetUrl = inputUrl || pageRecord.url;
     logger.info(`Navigating to Meta Ad Library: ${targetUrl}`);
 
-    // Update status to scanning
-    await db
-      .update(trackedPages)
-      .set({ status: "scanning", updatedAt: new Date() })
-      .where(eq(trackedPages.id, pageRecord.id));
+    // Acquire atomic distributed lock to prevent duplicate concurrent scrapes
+    const lockKey = `lock:scrape:${pageRecord.id}`;
+    const acquired = await acquireLock(lockKey, 180);
+    if (!acquired) {
+      logger.warn(`Page ${pageRecord.id} (${pageRecord.displayName || targetUrl}) is already locked by another worker. Skipping duplicate scrape.`);
+      return {
+        skipped: true,
+        pageId: pageRecord.id,
+        reason: "concurrent_scrape_locked",
+      };
+    }
 
-    // 2. Launch headless browser
-    const isHeadless = process.env.PLAYWRIGHT_HEADLESS !== "false";
-    const browser = await chromium.launch({
-      headless: isHeadless,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-blink-features=AutomationControlled",
-      ],
-    });
+    let browser: any = null;
 
     try {
+      // Update status to scanning
+      await db
+        .update(trackedPages)
+        .set({ status: "scanning", updatedAt: new Date() })
+        .where(eq(trackedPages.id, pageRecord.id));
+
+      // 2. Launch headless browser
+      const isHeadless = process.env.PLAYWRIGHT_HEADLESS !== "false";
+      browser = await chromium.launch({
+        headless: isHeadless,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-blink-features=AutomationControlled",
+        ],
+      });
+
       const context = await browser.newContext({
         viewport: { width: 1920, height: 1080 },
         userAgent:
@@ -185,7 +204,19 @@ export const scanPageCountTask = task({
         failureReason: outcome.failureReason,
       };
     } finally {
-      await browser.close();
+      if (browser) {
+        await browser.close().catch(() => {});
+      }
+      // Release distributed lock
+      await releaseLock(lockKey);
+
+      // Invalidate Upstash cache for workspace so UI reflects fresh counts
+      if (pageRecord.workspaceId) {
+        await Promise.allSettled([
+          deleteCached(`cache:stats:${pageRecord.workspaceId}`),
+          deleteByPrefix(`cache:pages:${pageRecord.workspaceId}:`),
+        ]);
+      }
     }
   },
 });

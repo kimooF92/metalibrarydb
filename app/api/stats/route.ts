@@ -7,13 +7,9 @@ import { cleanOrphanedScans } from "@/lib/clean-scans";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 import { validateAdminRole } from "@/lib/api-guard";
 
-interface CachedDashboardStats {
-  data: any;
-  timestamp: number;
-}
+import { getCached, setCached } from "@/lib/cache-service";
 
-const statsCacheMap = new Map<string, CachedDashboardStats>();
-const STATS_CACHE_TTL_MS = 30 * 1000; // 30 seconds
+const STATS_CACHE_TTL_SECONDS = 60; // 60 seconds global cache
 
 let lastCleanupTimestamp = 0;
 const CLEANUP_THROTTLE_MS = 15 * 60 * 1000; // 15 minutes
@@ -37,15 +33,18 @@ export async function GET(request: Request) {
       });
     }
 
-    // Check in-memory cache for active workspace
-    const cached = statsCacheMap.get(activeWorkspace.id);
-    if (!forceRefresh && cached && now - cached.timestamp < STATS_CACHE_TTL_MS) {
-      return NextResponse.json(cached.data, {
-        headers: {
-          "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
-          Vary: PRIVATE_AUTH_VARY,
-        },
-      });
+    // Check Hybrid L1 (Memory) / L2 (Upstash Redis) cache for active workspace
+    const cacheKey = `cache:stats:${activeWorkspace.id}`;
+    if (!forceRefresh) {
+      const cached = await getCached<any>(cacheKey);
+      if (cached) {
+        return NextResponse.json(cached, {
+          headers: {
+            "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
+            Vary: PRIVATE_AUTH_VARY,
+          },
+        });
+      }
     }
 
     // 1. Status counts scoped to active workspace
@@ -109,11 +108,8 @@ export async function GET(request: Request) {
         : null,
     };
 
-    // Store in in-memory cache
-    statsCacheMap.set(activeWorkspace.id, {
-      data: responseData,
-      timestamp: Date.now(),
-    });
+    // Store in Hybrid L1 (Memory) and L2 (Upstash Redis) cache
+    await setCached(cacheKey, responseData, STATS_CACHE_TTL_SECONDS);
 
     return NextResponse.json(responseData, {
       headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY },

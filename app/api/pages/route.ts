@@ -9,21 +9,17 @@ import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 import { validateAdminRole, validateApiSecret } from "@/lib/api-guard";
+import { getCached, setCached, deleteByPrefix, deleteCached } from "@/lib/cache-service";
 
-interface CachedPagesResponse {
-  data: any;
-  timestamp: number;
-}
-
-const pagesCacheMap = new Map<string, CachedPagesResponse>();
-const PAGES_CACHE_TTL_MS = 15 * 1000; // 15 seconds
+const PAGES_CACHE_TTL_SECONDS = 30; // 30 seconds global cache
 
 export async function GET(request: Request) {
   const authError = await validateAdminRole(request);
   if (authError) return authError;
 
   try {
-    const { searchParams } = new URL(request.url);
+    const urlObj = new URL(request.url);
+    const searchParams = urlObj.searchParams;
 
     const search = searchParams.get("search")?.trim();
     const statusFilter = searchParams.get("status")?.trim();
@@ -44,15 +40,20 @@ export async function GET(request: Request) {
     // Resolve active workspace
     const activeWorkspace = await getActiveWorkspace(request);
 
-    // Short-lived in-memory cache check (15s) to eliminate duplicate waterfalls during rapid navigation / polling
+    // Hybrid Cache Check (L1 Memory + L2 Upstash Redis) to eliminate duplicate DB waterfalls
     const forceRefresh = searchParams.get("_t") !== null || searchParams.get("refresh") === "true";
-    const cacheKey = `${activeWorkspace.id}:${request.url}`;
-    const now = Date.now();
-    const cached = pagesCacheMap.get(cacheKey);
-    if (!forceRefresh && cached && now - cached.timestamp < PAGES_CACHE_TTL_MS) {
-      return NextResponse.json(cached.data, {
-        headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY },
-      });
+    const cleanParams = new URLSearchParams(searchParams);
+    cleanParams.delete("_t");
+    cleanParams.delete("refresh");
+    const cacheKey = `cache:pages:${activeWorkspace.id}:${cleanParams.toString()}`;
+
+    if (!forceRefresh) {
+      const cached = await getCached<any>(cacheKey);
+      if (cached) {
+        return NextResponse.json(cached, {
+          headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY },
+        });
+      }
     }
 
     // Build base conditions array (workspace + search + filters, before tab scoping)
@@ -633,10 +634,8 @@ export async function GET(request: Request) {
       searchTabCounts,
     };
 
-    pagesCacheMap.set(cacheKey, {
-      data: responsePayload,
-      timestamp: Date.now(),
-    });
+    // Store in Hybrid L1 (Memory) and L2 (Upstash Redis) cache
+    await setCached(cacheKey, responsePayload, PAGES_CACHE_TTL_SECONDS);
 
     return NextResponse.json(responsePayload, {
       headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY },
@@ -662,9 +661,10 @@ export async function POST(request: Request) {
     const activeWorkspace = await getActiveWorkspace(request);
     const result = await addSingleUrl(validated.url, allowDuplicate, activeWorkspace.id);
 
-    // Invalidate pages cache on successful page creation
+    // Invalidate pages and stats cache on successful page creation
     if (result.success) {
-      pagesCacheMap.clear();
+      await deleteByPrefix(`cache:pages:${activeWorkspace.id}:`);
+      await deleteCached(`cache:stats:${activeWorkspace.id}`);
     }
 
     if (!result.success) {
