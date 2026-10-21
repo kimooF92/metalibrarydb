@@ -64,9 +64,28 @@ async function runWorker() {
     args.includes("--skip-maintenance") ||
     process.env.SKIP_STARTUP_SWEEP === "true";
 
-  // Only the primary coordinator (Shard 0 or standalone runner) clears orphaned jobs
+  // Load live application settings from database (with fallback defaults)
+  const settings = await getAppSettings();
+
+  const isForceRefresh = args.includes("--refresh-all") || process.env.REFRESH_ALL === "true";
+  const shouldRefreshAll =
+    isForceRefresh ||
+    process.env.AUTO_BURST_ENQUEUE !== "false";
+
+  // Only the primary coordinator (Shard 0 or standalone runner) clears orphaned jobs and enqueues
   if (isCoordinator) {
     await resetStuckJobs();
+
+    // 1. Immediately enqueue pending/refresh pages FIRST so all worker shards have jobs ready right away
+    if (shouldRefreshAll) {
+      const cooldownHours = isForceRefresh
+        ? 0
+        : parseInt(process.env.AUTO_REFRESH_COOLDOWN_HOURS || String(settings.staleHours || 12), 10);
+      console.log(
+        `[Refresh Mode] Enqueuing eligible pages for auto-refresh (cooldown: ${cooldownHours}h)...`
+      );
+      await enqueueAllPagesForRefresh(cooldownHours);
+    }
 
     if (!shouldSkipStartupSweep) {
       // Check and immediately rescue any stuck or failed product scrapings on worker startup
@@ -96,9 +115,6 @@ async function runWorker() {
       console.log("[Worker Startup] ⏩ Startup rescue & maintenance sweep skipped by flag.");
     }
   }
-
-  // Load live application settings from database (with fallback defaults)
-  const settings = await getAppSettings();
 
   if (args.includes("--headed") || args.includes("--head") || args.includes("--show")) {
     process.env.PLAYWRIGHT_HEADLESS = "false";
@@ -156,22 +172,6 @@ async function runWorker() {
     console.log(
       "[Worker Mode] 🎨 Creative-Only Mode Active: Only Ad Spy creative scans will be processed."
     );
-  }
-
-  const isForceRefresh = args.includes("--refresh-all") || process.env.REFRESH_ALL === "true";
-  const shouldRefreshAll =
-    isForceRefresh ||
-    process.env.AUTO_BURST_ENQUEUE !== "false";
-
-  // Only the primary coordinator (Shard 0) triggers the initial enqueue check
-  if (shouldRefreshAll && isCoordinator) {
-    const cooldownHours = isForceRefresh
-      ? 0
-      : parseInt(process.env.AUTO_REFRESH_COOLDOWN_HOURS || String(settings.staleHours || 12), 10);
-    console.log(
-      `[Refresh Mode] Enqueuing eligible pages for auto-refresh (cooldown: ${cooldownHours}h)...`
-    );
-    await enqueueAllPagesForRefresh(cooldownHours);
   }
 
   const shouldEnqueueSpy =
@@ -293,6 +293,8 @@ async function runWorker() {
   };
 
   let lastHeartbeatAt = 0;
+  let emptyQueueStartupRetries = 0;
+  const MAX_STARTUP_EMPTY_RETRIES = 10;
   let lastJevSweepAt = Date.now();
   const JEV_SWEEP_FREQUENCY_MS = parseInt(process.env.JEV_SWEEP_INTERVAL_MS || "600000", 10); // default 10 minutes
 
@@ -420,6 +422,17 @@ async function runWorker() {
       const nextJob = await getNextPendingJob();
 
       if (!nextJob) {
+        // Multi-shard coordination grace period: If this shard just booted (ranJobs === 0)
+        // in a multi-shard environment, wait for the coordinator to finish enqueuing before exiting.
+        if (isMultiShard && ranJobs === 0 && emptyQueueStartupRetries < MAX_STARTUP_EMPTY_RETRIES) {
+          emptyQueueStartupRetries++;
+          console.log(
+            `[Queue Warmup] Waiting for coordinator to populate queue... (attempt ${emptyQueueStartupRetries}/${MAX_STARTUP_EMPTY_RETRIES})`
+          );
+          await randomDelay(3000, 4000);
+          continue;
+        }
+
         console.log(`[Queue Empty] All pending jobs completed. Worker idling (${ranJobs} processed).`);
         await emitSessionSummary();
 

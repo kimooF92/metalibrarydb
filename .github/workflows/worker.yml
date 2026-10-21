@@ -88,6 +88,7 @@ jobs:
           TOTAL_SHARDS: 4
           COUNT_ONLY: "true"
           AUTO_ENQUEUE_SPY: "false"
+          SKIP_STARTUP_SWEEP: "true"
           RUN_CANARY_CHECK: ${{ github.event.inputs.run_canary || 'false' }}
           ZERO_AD_ANOMALY_THRESHOLD: "3"
           ZERO_AD_ANOMALY_WINDOW_MINUTES: "20"
