@@ -30,6 +30,7 @@ import {
 import { useToast } from "@/components/toast-context";
 import { Switch } from "@/components/ui/switch";
 import { useLogout } from "@/hooks/use-logout";
+import { DispatchWorkerBtn } from "@/components/dispatch-worker-btn";
 
 type SettingsTab = "general" | "spy" | "discovery" | "maintenance" | "security";
 
@@ -561,6 +562,9 @@ function SettingsContent() {
                 <span className="text-[10px] text-slate-500 font-mono">jitter: 2000-5000ms</span>
               </div>
             </div>
+
+            {/* GitHub Actions Fleet Manual Dispatch */}
+            <DispatchWorkerBtn variant="full" className="md:col-span-2" />
           </div>
         </div>
       )}

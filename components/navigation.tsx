@@ -167,26 +167,8 @@ export function Navigation() {
           </nav>
         </div>
 
-        {/* Sidebar Bottom Footer — Add Page CTA, Settings & Lock / Sign Out */}
+        {/* Sidebar Bottom Footer — Settings & Lock / Sign Out */}
         <div className="pt-3 border-t border-slate-200 dark:border-slate-800/80 space-y-1">
-          {/* Add Page CTA Button */}
-          {isCollapsed ? (
-            <button
-              onClick={openAddUrlModal}
-              title="Add Tracked Page"
-              className="flex items-center justify-center w-10 h-10 mx-auto rounded-lg text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 transition-all border border-indigo-500/20 cursor-pointer mb-2"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          ) : (
-            <button
-              onClick={openAddUrlModal}
-              className="w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-lg text-xs font-semibold bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-sm shadow-indigo-500/20 transition-all cursor-pointer mb-2"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>Add Tracked Page</span>
-            </button>
-          )}
 
           {/* Settings Button (Admin Only) */}
           {!isStaff && (

@@ -354,3 +354,88 @@ export const helloWorldTask = task({
     };
   },
 });
+
+export interface DispatchGithubWorkerPayload {
+  target?: "worker" | "spy" | "scraper" | "favorites" | "all";
+  runCanary?: boolean;
+}
+
+/**
+ * Task: dispatchGithubWorkerTask
+ * Lightweight orchestrator task that triggers GitHub Actions workflows via workflow_dispatch.
+ * Consumes near-zero Trigger.dev compute credits (~200ms) while offloading heavy Playwright
+ * scrapers to GitHub's free 2,000 runner minutes/month.
+ */
+export const dispatchGithubWorkerTask = task({
+  id: "dispatch-github-worker",
+  run: async (payload: DispatchGithubWorkerPayload = {}) => {
+    const target = payload.target || "worker";
+    const runCanary = payload.runCanary ? "true" : "false";
+
+    const repoOwner = process.env.GITHUB_REPO_OWNER || "kimooF92";
+    const repoName = process.env.GITHUB_REPO_NAME || "metalibrarydb";
+    const token = process.env.GH_PAT_TOKEN || process.env.GITHUB_TOKEN;
+
+    if (!token) {
+      const errMsg = "Missing GH_PAT_TOKEN or GITHUB_TOKEN in environment variables.";
+      logger.error(errMsg);
+      throw new Error(errMsg);
+    }
+
+    logger.info(`Dispatching GitHub Actions workflow for target: ${target} (${repoOwner}/${repoName})`);
+
+    const workflowMap: Record<string, { file: string; inputs?: Record<string, string> }> = {
+      worker: { file: "worker.yml", inputs: { run_canary: runCanary } },
+      spy: { file: "spy-worker.yml" },
+      scraper: { file: "product-scraper.yml" },
+      favorites: { file: "verify-favorites.yml" },
+    };
+
+    const targetsToRun = target === "all" ? ["worker", "spy", "scraper"] : [target];
+    const results: Record<string, any> = {};
+
+    for (const t of targetsToRun) {
+      const config = workflowMap[t] || { file: "worker.yml" };
+      try {
+        const res = await fetch(
+          `https://api.github.com/repos/${repoOwner}/${repoName}/actions/workflows/${config.file}/dispatches`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: "application/vnd.github.v3+json",
+              "User-Agent": "TriggerDev-Worker-Dispatcher",
+            },
+            body: JSON.stringify({
+              ref: "main",
+              ...(config.inputs ? { inputs: config.inputs } : {}),
+            }),
+          }
+        );
+
+        if (res.status === 204) {
+          logger.info(`Successfully dispatched ${config.file} (HTTP 204)`);
+          results[t] = { status: "dispatched", httpCode: 204, workflow: config.file };
+        } else {
+          const body = await res.text();
+          logger.error(`Failed to dispatch ${config.file}: HTTP ${res.status} - ${body}`);
+          results[t] = { status: "failed", httpCode: res.status, error: body };
+        }
+      } catch (err: any) {
+        logger.error(`Error requesting GitHub API for ${config.file}: ${err.message}`);
+        results[t] = { status: "error", error: err.message };
+      }
+    }
+
+    const hasSuccess = Object.values(results).some((r) => r.status === "dispatched");
+    if (!hasSuccess) {
+      throw new Error(`Failed to dispatch any workflows: ${JSON.stringify(results)}`);
+    }
+
+    return {
+      success: true,
+      dispatchedAt: new Date().toISOString(),
+      results,
+    };
+  },
+});

@@ -87,3 +87,96 @@ export async function triggerSmokeTest(message?: string) {
     return { success: false, error: error.message };
   }
 }
+
+export interface TriggerGithubWorkerOptions {
+  target?: "worker" | "spy" | "scraper" | "favorites" | "all";
+  runCanary?: boolean;
+}
+
+/**
+ * Server Action: Activate GitHub Actions Worker via Trigger.dev (with direct fallback)
+ */
+export async function triggerGithubWorkerAction(options: TriggerGithubWorkerOptions = {}) {
+  const target = options.target || "worker";
+  const runCanary = Boolean(options.runCanary);
+
+  try {
+    // 1. Dispatch via Trigger.dev if available
+    if (process.env.TRIGGER_SECRET_KEY) {
+      try {
+        const handle = await tasks.trigger("dispatch-github-worker", {
+          target,
+          runCanary,
+        });
+        return {
+          success: true,
+          mode: "trigger.dev" as const,
+          runId: handle.id,
+          target,
+          message: `Trigger.dev queued workflow dispatch for '${target}'.`,
+        };
+      } catch (triggerErr: any) {
+        console.warn("[Trigger.dev dispatch notice]:", triggerErr?.message || triggerErr);
+        // Fall through to direct dispatch fallback
+      }
+    }
+
+    // 2. Direct GitHub API Fallback
+    const repoOwner = process.env.GITHUB_REPO_OWNER || "kimooF92";
+    const repoName = process.env.GITHUB_REPO_NAME || "metalibrarydb";
+    const token = process.env.GH_PAT_TOKEN || process.env.GITHUB_TOKEN;
+
+    if (!token) {
+      return {
+        success: false,
+        error: "Missing GH_PAT_TOKEN in environment. Please add it to .env.local",
+      };
+    }
+
+    const workflowMap: Record<string, string> = {
+      worker: "worker.yml",
+      spy: "spy-worker.yml",
+      scraper: "product-scraper.yml",
+      favorites: "verify-favorites.yml",
+    };
+
+    const workflowFile = workflowMap[target] || "worker.yml";
+    const res = await fetch(
+      `https://api.github.com/repos/${repoOwner}/${repoName}/actions/workflows/${workflowFile}/dispatches`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github.v3+json",
+          "User-Agent": "Direct-Worker-Dispatcher",
+        },
+        body: JSON.stringify({
+          ref: "main",
+          inputs: target === "worker" ? { run_canary: runCanary ? "true" : "false" } : undefined,
+        }),
+      }
+    );
+
+    if (res.status === 204) {
+      return {
+        success: true,
+        mode: "github_direct" as const,
+        target,
+        workflow: workflowFile,
+        message: `Directly dispatched ${workflowFile} to GitHub Actions (4 shards).`,
+      };
+    }
+
+    const errorBody = await res.text();
+    return {
+      success: false,
+      error: `GitHub responded with status ${res.status}: ${errorBody}`,
+    };
+  } catch (err: any) {
+    console.error("Failed to trigger GitHub worker:", err);
+    return {
+      success: false,
+      error: err.message || "Unknown error triggering GitHub worker",
+    };
+  }
+}

@@ -9,7 +9,6 @@ import {
   BarChart3,
   UploadCloud,
   Settings,
-  Plus,
   LogOut,
   ShieldCheck,
   Flame,
@@ -17,9 +16,9 @@ import {
 } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
 import { SmallPagesScanBadge } from "./small-pages-scan-banner";
+import { DispatchWorkerBtn } from "./dispatch-worker-btn";
 import { NotificationCenter } from "./notification-center";
 import { WorkspaceSwitcher } from "./workspace-switcher";
-import { useAddUrlModal } from "./add-url-modal";
 import { useAuth } from "./auth-context";
 import { useLogout } from "@/hooks/use-logout";
 
@@ -40,7 +39,6 @@ const ROUTE_INFO: Record<
 
 export function TopBar() {
   const pathname = usePathname();
-  const { openAddUrlModal } = useAddUrlModal();
   const { isStaff } = useAuth();
   const { logout, isLoggingOut } = useLogout();
 
@@ -87,16 +85,9 @@ export function TopBar() {
         <WorkspaceSwitcher />
       </div>
 
-      {/* Right: Actions (Add Page CTA, Notification Center, Theme Toggle & Logout) */}
+      {/* Right: Actions (Run Worker, Notification Center, Theme Toggle & Logout) */}
       <div className="flex items-center space-x-2">
-        <button
-          onClick={openAddUrlModal}
-          className="flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs transition-all cursor-pointer"
-          title="Add new tracked page"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Add Page</span>
-        </button>
+        {!isStaff && <DispatchWorkerBtn variant="navbar" />}
         {!isStaff && <SmallPagesScanBadge />}
         <NotificationCenter layout="navbar" />
         <ThemeToggle size="sm" />
