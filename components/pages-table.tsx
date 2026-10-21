@@ -43,6 +43,7 @@ import {
   FlaskConical,
   Copy,
   Pause,
+  HelpCircle,
 } from "lucide-react";
 import { useToast } from "@/components/toast-context";
 
@@ -975,7 +976,7 @@ export function PagesTable({
                     Products
                   </span>
                 </th>
-                <SortHeader col="status" label="Pattern & Status" className="hidden md:table-cell w-[15%] min-w-[125px] whitespace-nowrap" />
+                <SortHeader col="status" label="Pattern & Status" className="hidden md:table-cell w-[16%] min-w-[145px] whitespace-nowrap" />
                 <SortHeader col="lastChecked" label="Last Checked" className="w-[12%] min-w-[100px] whitespace-nowrap" />
                 <th className="px-3 py-2 text-right whitespace-nowrap text-slate-600 dark:text-slate-400 font-semibold w-[13%] min-w-[120px]">Actions</th>
               </tr>
@@ -1400,99 +1401,127 @@ export function PagesTable({
 
                       {/* Pattern & Status Column */}
                       <td className="px-3 py-2 hidden md:table-cell whitespace-nowrap">
-                        {p.status === "scanning" ? (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10.5px] font-semibold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 animate-pulse">
-                            <Loader2 className="w-2.5 h-2.5 animate-spin shrink-0 text-cyan-500" />
-                            <span>Scanning</span>
-                          </span>
-                        ) : p.status === "failed" ? (
-                          <span
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-semibold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
-                            title={p.failureReason || "Scan failed"}
-                          >
-                            <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
-                            <span>Failed</span>
-                          </span>
-                        ) : isOnHold ? (
-                          <span
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20"
-                            title={`Account hold detected — was ${p.lastKnownValidResults ?? "?"} ads. Grace period verification scan ${p.consecutiveZeroScans ?? 1}/3.`}
-                          >
-                            <Pause className="w-2.5 h-2.5 text-amber-500 shrink-0" />
-                            <span>On Hold ({p.consecutiveZeroScans ?? 1}/3)</span>
-                          </span>
-                        ) : p.holdStatus === "inactive" ? (
-                          <span
-                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10.5px] font-medium bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20"
-                            title="Brand inactive (0 active ads confirmed over 3 scans)."
-                          >
-                            <span className="w-1.5 h-1.5 rounded-full bg-slate-400/80 shrink-0" />
-                            <span>Inactive</span>
-                          </span>
-                        ) : p.autoCreativeScan === false ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setRunnerModalPages([p]);
-                              setRunnerModalOpen(true);
-                            }}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25 hover:bg-amber-500/20 transition-colors cursor-pointer"
-                            title="Automatic creative scans paused. Click to open runner."
-                          >
-                            <Pause className="w-2.5 h-2.5" />
-                            <span>Auto Paused</span>
-                          </button>
-                        ) : p.status === "unclear" ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-                            <span>Unclear</span>
-                          </span>
-                        ) : scaling.archetype !== "inactive" ? (
-                          (() => {
-                            const isScaler =
-                              scaling.archetype === "aggressive" ||
-                              scaling.archetype === "breakout" ||
-                              scaling.archetype === "burst" ||
-                              (scaling.archetype as string) === "scaling";
-                            const isDropping = scaling.archetype === "descaling" || scaling.archetype === "off_air";
-                            return (
-                              <span
-                                className={`inline-flex items-center gap-1.5 text-[10.5px] font-semibold px-2 py-0.5 rounded-md border shrink-0 ${
-                                  isScaler
-                                    ? "bg-amber-500/10 text-amber-600 dark:text-amber-300 border-amber-500/20"
-                                    : scaling.archetype === "stable"
-                                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/20"
-                                    : scaling.archetype === "heavy_tester"
-                                    ? "bg-cyan-500/10 text-cyan-600 dark:text-cyan-300 border-cyan-500/20"
-                                    : isDropping
-                                    ? "bg-rose-500/10 text-rose-600 dark:text-rose-300 border-rose-500/20"
-                                    : "bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-500/20"
-                                }`}
-                                title={`${scaling.label} (${scaling.confidence} confidence): ${scaling.description}${
-                                  scaling.velocityPerDay !== undefined
-                                    ? `\n• Velocity: ${scaling.velocityPerDay > 0 ? "+" : ""}${scaling.velocityPerDay} ads/day`
-                                    : ""
-                                }${scaling.volatility !== undefined ? `\n• Volatility: σ=${scaling.volatility}` : ""}${
-                                  scaling.reversionRate !== undefined ? `\n• Sawtooth Flips: ${Math.round(scaling.reversionRate * 100)}%` : ""
-                                }`}
-                              >
-                                {isScaler ? (
-                                  <TrendingUp className="w-3 h-3 text-amber-500 shrink-0" />
-                                ) : isDropping ? (
-                                  <TrendingDown className="w-3 h-3 text-rose-500 shrink-0" />
-                                ) : scaling.archetype === "heavy_tester" ? (
-                                  <FlaskConical className="w-3 h-3 text-cyan-500 shrink-0" />
-                                ) : scaling.archetype === "stable" ? (
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                                ) : (
-                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
-                                )}
-                                <span>{scaling.shortLabel}</span>
-                              </span>
-                            );
-                          })()
-                        ) : (
-                          <span className="text-slate-400 text-xs">—</span>
-                        )}
+                        <div className="flex items-center gap-1.5 flex-nowrap">
+                          {/* 1. Status Indicator Badge */}
+                          {p.status === "scanning" ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/25 animate-pulse shrink-0"
+                              title="Scan in progress"
+                            >
+                              <Loader2 className="w-2.5 h-2.5 animate-spin shrink-0 text-cyan-500" />
+                              <span>Scanning</span>
+                            </span>
+                          ) : p.status === "pending" ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25 animate-pulse shrink-0"
+                              title="Scan pending in queue"
+                            >
+                              <Clock className="w-2.5 h-2.5 shrink-0 text-amber-500" />
+                              <span>Pending</span>
+                            </span>
+                          ) : p.status === "failed" ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/25 shrink-0"
+                              title={p.failureReason || "Scan failed"}
+                            >
+                              <AlertTriangle className="w-2.5 h-2.5 shrink-0 text-rose-500" />
+                              <span>Failed</span>
+                            </span>
+                          ) : p.status === "unclear" ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/25 shrink-0"
+                              title="Scan status: Unclear results"
+                            >
+                              <HelpCircle className="w-2.5 h-2.5 shrink-0 text-purple-500" />
+                              <span>Unclear</span>
+                            </span>
+                          ) : (
+                            <span
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0"
+                              title="Scan status: Success (Up to date)"
+                            >
+                              <Check className="w-3 h-3 stroke-[2.5]" />
+                            </span>
+                          )}
+
+                          {/* 2. Pattern Badge / Special State */}
+                          {isOnHold ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 shrink-0"
+                              title={`Account hold detected — was ${p.lastKnownValidResults ?? "?"} ads. Grace period verification scan ${p.consecutiveZeroScans ?? 1}/3.`}
+                            >
+                              <Pause className="w-2.5 h-2.5 text-amber-500 shrink-0" />
+                              <span>On Hold ({p.consecutiveZeroScans ?? 1}/3)</span>
+                            </span>
+                          ) : p.holdStatus === "inactive" ? (
+                            <span
+                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10.5px] font-medium bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20 shrink-0"
+                              title="Brand inactive (0 active ads confirmed over 3 scans)."
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400/80 shrink-0" />
+                              <span>Inactive</span>
+                            </span>
+                          ) : p.autoCreativeScan === false ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRunnerModalPages([p]);
+                                setRunnerModalOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25 hover:bg-amber-500/20 transition-colors cursor-pointer shrink-0"
+                              title="Automatic creative scans paused. Click to open runner."
+                            >
+                              <Pause className="w-2.5 h-2.5" />
+                              <span>Auto Paused</span>
+                            </button>
+                          ) : scaling.archetype !== "inactive" ? (
+                            (() => {
+                              const isScaler =
+                                scaling.archetype === "aggressive" ||
+                                scaling.archetype === "breakout" ||
+                                scaling.archetype === "burst" ||
+                                (scaling.archetype as string) === "scaling";
+                              const isDropping = scaling.archetype === "descaling" || scaling.archetype === "off_air";
+                              return (
+                                <span
+                                  className={`inline-flex items-center gap-1.5 text-[10.5px] font-semibold px-2 py-0.5 rounded-md border shrink-0 ${
+                                    isScaler
+                                      ? "bg-amber-500/10 text-amber-600 dark:text-amber-300 border-amber-500/20"
+                                      : scaling.archetype === "stable"
+                                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/20"
+                                      : scaling.archetype === "heavy_tester"
+                                      ? "bg-cyan-500/10 text-cyan-600 dark:text-cyan-300 border-cyan-500/20"
+                                      : isDropping
+                                      ? "bg-rose-500/10 text-rose-600 dark:text-rose-300 border-rose-500/20"
+                                      : "bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-500/20"
+                                  }`}
+                                  title={`${scaling.label} (${scaling.confidence} confidence): ${scaling.description}${
+                                    scaling.velocityPerDay !== undefined
+                                      ? `\n• Velocity: ${scaling.velocityPerDay > 0 ? "+" : ""}${scaling.velocityPerDay} ads/day`
+                                      : ""
+                                  }${scaling.volatility !== undefined ? `\n• Volatility: σ=${scaling.volatility}` : ""}${
+                                    scaling.reversionRate !== undefined ? `\n• Sawtooth Flips: ${Math.round(scaling.reversionRate * 100)}%` : ""
+                                  }`}
+                                >
+                                  {isScaler ? (
+                                    <TrendingUp className="w-3 h-3 text-amber-500 shrink-0" />
+                                  ) : isDropping ? (
+                                    <TrendingDown className="w-3 h-3 text-rose-500 shrink-0" />
+                                  ) : scaling.archetype === "heavy_tester" ? (
+                                    <FlaskConical className="w-3 h-3 text-cyan-500 shrink-0" />
+                                  ) : scaling.archetype === "stable" ? (
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                  ) : (
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
+                                  )}
+                                  <span>{scaling.shortLabel}</span>
+                                </span>
+                              );
+                            })()
+                          ) : (
+                            <span className="text-slate-400 text-xs shrink-0">—</span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Last Checked (Relative Timestamps) */}
