@@ -39,19 +39,40 @@ export async function POST(request: Request) {
           inArray(q.trackedPageId, foundIds),
           inArray(q.status, ["pending", "running"])
         ),
-      columns: { trackedPageId: true },
+      columns: { id: true, trackedPageId: true, status: true, startedAt: true },
     });
     const existingSet = new Set(existingQueueJobs.map((q) => q.trackedPageId));
+
+    // Reset stuck running jobs (> 3 mins) or boost pending jobs
+    const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+    const stuckJobIds: string[] = [];
+    const pendingJobIds: string[] = [];
+
+    for (const job of existingQueueJobs) {
+      if (job.status === "running" && job.startedAt && new Date(job.startedAt) < threeMinutesAgo) {
+        stuckJobIds.push(job.id);
+      } else if (job.status === "pending") {
+        pendingJobIds.push(job.id);
+      }
+    }
+
+    if (stuckJobIds.length > 0) {
+      await db
+        .update(queue)
+        .set({ status: "pending", startedAt: null, priority: 10 })
+        .where(inArray(queue.id, stuckJobIds));
+    }
+
+    if (pendingJobIds.length > 0) {
+      await db
+        .update(queue)
+        .set({ priority: 10 })
+        .where(inArray(queue.id, pendingJobIds));
+    }
 
     const idsToEnqueue = foundIds.filter((id) => !existingSet.has(id));
 
     if (idsToEnqueue.length > 0) {
-      // Update status to 'pending' in tracked_pages
-      await db
-        .update(trackedPages)
-        .set({ status: "pending", updatedAt: new Date() })
-        .where(inArray(trackedPages.id, idsToEnqueue));
-
       // Insert pending queue jobs
       await db.insert(queue).values(
         idsToEnqueue.map((id) => ({
@@ -62,6 +83,12 @@ export async function POST(request: Request) {
         }))
       );
     }
+
+    // Always update status to 'pending' in tracked_pages for all requested IDs
+    await db
+      .update(trackedPages)
+      .set({ status: "pending", updatedAt: new Date() })
+      .where(inArray(trackedPages.id, foundIds));
 
     // Dispatch to Trigger.dev if available
     let triggerDevDispatched = false;
@@ -84,9 +111,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: `Enqueued ${idsToEnqueue.length} page(s) for refresh (${foundIds.length - idsToEnqueue.length} already in progress).`,
-      enqueuedCount: idsToEnqueue.length,
-      skippedCount: foundIds.length - idsToEnqueue.length,
+      message: `Enqueued ${foundIds.length} page(s) for refresh.`,
+      enqueuedCount: foundIds.length,
+      newlyCreatedCount: idsToEnqueue.length,
+      requeuedCount: existingSet.size,
     });
   } catch (error: any) {
     if (error.name === "ZodError") {

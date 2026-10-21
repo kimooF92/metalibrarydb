@@ -10,18 +10,33 @@ import { inArray, eq } from "drizzle-orm";
  */
 export async function triggerSinglePageRefresh(pageId: string) {
   try {
+    // 1. Mark page as pending in DB
+    await db
+      .update(trackedPages)
+      .set({ status: "pending", updatedAt: new Date() })
+      .where(eq(trackedPages.id, pageId));
+
+    // 2. Insert into DB queue so local worker can process as fallback
+    const existingQueueJob = await db.query.queue.findFirst({
+      where: (q, { and, eq, inArray }) =>
+        and(eq(q.trackedPageId, pageId), inArray(q.status, ["pending", "running"])),
+    });
+
+    if (!existingQueueJob) {
+      await db.insert(queue).values({
+        trackedPageId: pageId,
+        jobType: "count",
+        status: "pending",
+        priority: 10,
+      });
+    }
+
+    // 3. Dispatch to Trigger.dev if available
     if (process.env.TRIGGER_SECRET_KEY) {
       const handle = await tasks.trigger("scan-page-count", { pageId });
       return { success: true, runId: handle.id, mode: "trigger.dev" };
     }
 
-    // Fallback if TRIGGER_SECRET_KEY is missing
-    await db.insert(queue).values({
-      trackedPageId: pageId,
-      jobType: "count",
-      status: "pending",
-      priority: 10,
-    });
     return { success: true, mode: "database_queue" };
   } catch (error: any) {
     console.error("Error triggering page refresh:", error);

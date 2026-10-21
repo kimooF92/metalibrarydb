@@ -1,8 +1,8 @@
 import { task, logger } from "@trigger.dev/sdk";
 import { chromium } from "playwright";
 import { db } from "../../db";
-import { trackedPages } from "../../db/schema";
-import { eq, sql } from "drizzle-orm";
+import { trackedPages, queue } from "../../db/schema";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { scanMetaAdPage } from "../../worker/scanner";
 import { markJobCompleted } from "../../worker/db";
 
@@ -96,15 +96,25 @@ export const scanPageCountTask = task({
           }
         );
       } else {
-        // Mark as failed
+        // Mark as failed in trackedPages and queue
+        const now = new Date();
         await db
           .update(trackedPages)
           .set({
             status: "failed",
-            lastChecked: new Date(),
-            updatedAt: new Date(),
+            lastChecked: now,
+            updatedAt: now,
           })
           .where(eq(trackedPages.id, pageRecord.id));
+
+        await db
+          .update(queue)
+          .set({
+            status: "failed",
+            finishedAt: now,
+            failureReason: outcome.failureReason || "scrape_failed",
+          })
+          .where(and(eq(queue.trackedPageId, pageRecord.id), inArray(queue.status, ["pending", "running"])));
       }
 
       return {

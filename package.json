@@ -28,7 +28,7 @@
     "verify:pending": "npx tsx scripts/verify-favorite-ads.ts --pending",
     "db:maintenance": "npx tsx scripts/run-maintenance.ts",
     "db:vacuum": "npx tsx scripts/reclaim-disk-space.ts",
-    "trigger:dev": "trigger.dev dev"
+    "trigger:dev": "trigger dev"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1111.0",
@@ -70,6 +70,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.11",
     "tailwindcss": "^4",
+    "trigger.dev": "^4.7.6",
     "typescript": "^5"
   }
 }
