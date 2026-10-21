@@ -38,7 +38,13 @@ import {
   CheckCircle2,
   Package,
   Globe,
+  TrendingUp,
+  TrendingDown,
+  FlaskConical,
+  Copy,
+  Pause,
 } from "lucide-react";
+import { useToast } from "@/components/toast-context";
 
 function formatRelativeTime(dateInput: string | Date | null | undefined): string {
   if (!dateInput) return "Never";
@@ -190,6 +196,7 @@ export function PagesTable({
   onResetFilters,
   stats,
 }: PagesTableProps) {
+  const { showToast } = useToast();
   const [watchlisted, setWatchlisted] = useState<Record<string, boolean>>(
     Object.fromEntries(pages.map((p) => [p.id, p.isWatchlisted ?? false]))
   );
@@ -1164,17 +1171,38 @@ export function PagesTable({
                                 target="_blank"
                                 rel="noreferrer"
                                 title="Open Meta Ad Library in new tab"
-                                className="text-slate-400 hover:text-indigo-500 transition-colors p-0.5 shrink-0 opacity-40 group-hover:opacity-100"
+                                className="text-slate-400 hover:text-indigo-400 transition-colors p-0.5 shrink-0 opacity-0 group-hover:opacity-70 hover:!opacity-100"
                               >
                                 <ExternalLink className="w-3 h-3" />
                               </a>
                               <button
                                 onClick={() => startEditing(p)}
-                                className="opacity-0 group-hover:opacity-100 text-slate-400 dark:text-slate-500 hover:text-indigo-500 transition-all p-0.5 flex-shrink-0 cursor-pointer"
+                                className="opacity-0 group-hover:opacity-60 hover:!opacity-100 text-slate-400 dark:text-slate-500 hover:text-indigo-400 transition-all p-0.5 flex-shrink-0 cursor-pointer"
                                 title="Edit Display Name"
                               >
                                 <Pencil className="w-3 h-3" />
                               </button>
+
+                              {/* Quick Copy Page ID on row hover */}
+                              {p.pageId && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigator.clipboard.writeText(p.pageId!);
+                                    showToast({
+                                      title: "Page ID Copied",
+                                      message: `#${p.pageId} copied to clipboard`,
+                                      type: "success",
+                                    });
+                                  }}
+                                  className="opacity-0 group-hover:opacity-70 hover:!opacity-100 transition-opacity inline-flex items-center gap-0.5 text-[9.5px] text-slate-400 hover:text-slate-200 font-mono tracking-tight cursor-pointer px-1 py-0.5 rounded hover:bg-slate-700/30 shrink-0"
+                                  title={`Meta Page ID: ${p.pageId} (Click to copy)`}
+                                >
+                                  <Copy className="w-2.5 h-2.5 text-slate-400" />
+                                  <span>#{p.pageId}</span>
+                                </button>
+                              )}
 
                               {/* Scanning indicator */}
                               {p.status === "scanning" && (
@@ -1185,111 +1213,137 @@ export function PagesTable({
                               )}
                             </div>
 
-                            {/* Subline: Scaling Archetype Badge + Faint ID */}
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              {isOnHold && (
+                            {/* Subline: Clean Single Status Pill + Inline Domain Portfolio */}
+                            <div className="flex items-center gap-1.5 flex-nowrap overflow-hidden text-ellipsis">
+                              {/* Primary Single Status */}
+                              {isOnHold ? (
                                 <span
-                                  className="inline-flex items-center gap-1 text-[9.5px] font-extrabold px-1.5 py-0.2 rounded border bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20 shadow-2xs"
+                                  className="inline-flex items-center gap-1 text-[9.5px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-300 border border-amber-500/20 shrink-0"
                                   title={`Account hold detected — was ${p.lastKnownValidResults ?? "?"} ads. Grace period verification scan ${p.consecutiveZeroScans ?? 1}/3.`}
                                 >
-                                  <span>⏸️</span>
+                                  <Pause className="w-2.5 h-2.5 text-amber-500 shrink-0" />
                                   <span>On Hold ({p.consecutiveZeroScans ?? 1}/3)</span>
                                 </span>
-                              )}
-
-                              {p.holdStatus === "inactive" && (
+                              ) : p.holdStatus === "inactive" ? (
                                 <span
-                                  className="inline-flex items-center gap-1 text-[9.5px] font-extrabold px-1.5 py-0.2 rounded border bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20 shadow-2xs"
-                                  title="Brand inactive (0 active ads confirmed over 3 scans). Monitored adaptively for ad relaunches."
+                                  className="inline-flex items-center gap-1 text-[9.5px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20 shrink-0"
+                                  title="Brand inactive (0 active ads confirmed over 3 scans)."
                                 >
-                                  <span>💤</span>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400/80 shrink-0" />
                                   <span>Inactive</span>
                                 </span>
-                              )}
-
-                              {p.autoCreativeScan === false && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setRunnerModalPages([p]);
-                                    setRunnerModalOpen(true);
-                                  }}
-                                  className="inline-flex items-center gap-1 text-[9.5px] font-extrabold px-1.5 py-0.2 rounded border bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30 shadow-2xs hover:bg-amber-500/20 transition-colors cursor-pointer"
-                                  title="Automatic creative scans are paused for this brand. Click to open modal and resume or run a manual scan."
-                                >
-                                  <span>⏸️</span>
-                                  <span>Auto Paused</span>
-                                </button>
-                              )}
-
-                              {scaling.archetype !== "inactive" && (
+                              ) : p.status === "failed" ? (
                                 <span
-                                  className={`inline-flex items-center gap-1 text-[9.5px] font-extrabold px-1.5 py-0.2 rounded border shadow-2xs ${scaling.badgeClass}`}
-                                  title={`${scaling.label} (${scaling.confidence} confidence): ${scaling.description}${
-                                    scaling.velocityPerDay !== undefined
-                                      ? `\n• Velocity: ${scaling.velocityPerDay > 0 ? "+" : ""}${scaling.velocityPerDay} ads/day`
-                                      : ""
-                                  }${scaling.volatility !== undefined ? `\n• Volatility: σ=${scaling.volatility}` : ""}${
-                                    scaling.reversionRate !== undefined ? `\n• Sawtooth Flips: ${Math.round(scaling.reversionRate * 100)}%` : ""
-                                  }`}
-                                >
-                                  <span>{scaling.icon}</span>
-                                  <span>{scaling.shortLabel}</span>
-                                </span>
-                              )}
-
-                              {p.status === "failed" && (
-                                <span
-                                  className="inline-flex items-center gap-0.5 text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.2 rounded border border-rose-500/20"
+                                  className="inline-flex items-center gap-1 text-[9.5px] font-semibold px-1.5 py-0.5 rounded-md text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/20 shrink-0"
                                   title={`Scan failed: ${p.failureReason || "Unknown error"}`}
                                 >
                                   <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
                                   <span>Failed</span>
                                 </span>
-                              )}
-
-                              {p.status === "unclear" && (
+                              ) : p.status === "unclear" ? (
                                 <span
-                                  className="text-[9px] font-medium text-purple-600 dark:text-purple-400 bg-purple-500/10 px-1 py-0.2 rounded"
+                                  className="inline-flex items-center gap-1 text-[9.5px] font-semibold px-1.5 py-0.5 rounded-md text-purple-600 dark:text-purple-400 bg-purple-500/10 border border-purple-500/20 shrink-0"
                                   title="Unclear page layout"
                                 >
-                                  Unclear
+                                  <span>Unclear</span>
                                 </span>
+                              ) : scaling.archetype !== "inactive" ? (
+                                (() => {
+                                  const isScaler = scaling.archetype === "aggressive" || scaling.archetype === "breakout" || scaling.archetype === "burst" || (scaling.archetype as string) === "scaling";
+                                  const isDropping = scaling.archetype === "descaling" || scaling.archetype === "off_air";
+                                  return (
+                                    <span
+                                      className={`inline-flex items-center gap-1 text-[9.5px] font-semibold px-1.5 py-0.5 rounded-md border shrink-0 ${
+                                        isScaler
+                                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-300 border-amber-500/20"
+                                          : scaling.archetype === "stable"
+                                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/20"
+                                          : scaling.archetype === "heavy_tester"
+                                          ? "bg-cyan-500/10 text-cyan-600 dark:text-cyan-300 border-cyan-500/20"
+                                          : isDropping
+                                          ? "bg-rose-500/10 text-rose-600 dark:text-rose-300 border-rose-500/20"
+                                          : "bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-500/20"
+                                      }`}
+                                      title={`${scaling.label} (${scaling.confidence} confidence): ${scaling.description}${
+                                        scaling.velocityPerDay !== undefined
+                                          ? `\n• Velocity: ${scaling.velocityPerDay > 0 ? "+" : ""}${scaling.velocityPerDay} ads/day`
+                                          : ""
+                                      }${scaling.volatility !== undefined ? `\n• Volatility: σ=${scaling.volatility}` : ""}${
+                                        scaling.reversionRate !== undefined ? `\n• Sawtooth Flips: ${Math.round(scaling.reversionRate * 100)}%` : ""
+                                      }`}
+                                    >
+                                      {isScaler ? (
+                                        <TrendingUp className="w-2.5 h-2.5 text-amber-500 shrink-0" />
+                                      ) : isDropping ? (
+                                        <TrendingDown className="w-2.5 h-2.5 text-rose-500 shrink-0" />
+                                      ) : scaling.archetype === "heavy_tester" ? (
+                                        <FlaskConical className="w-2.5 h-2.5 text-cyan-500 shrink-0" />
+                                      ) : scaling.archetype === "stable" ? (
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                      ) : (
+                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
+                                      )}
+                                      <span>{scaling.shortLabel}</span>
+                                    </span>
+                                  );
+                                })()
+                              ) : null}
+
+                              {/* Portfolio domain link (inline, no extra row!) */}
+                              {p.brandDomainId && p.brandDomain && (p.brandDomain.linkedPagesCount ?? 0) > 1 && (
+                                <>
+                                  <span className="text-slate-400 dark:text-slate-600 select-none text-[10px]">·</span>
+                                  <button
+                                    onClick={() => setManageDomainId(p.brandDomainId!)}
+                                    className="inline-flex items-center gap-1 text-[10px] font-medium text-indigo-500 dark:text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:underline transition-colors cursor-pointer group/domain shrink-0"
+                                    title={`Part of ${p.brandDomain.domain} portfolio (${p.brandDomain.linkedPagesCount} pages, ${p.brandDomain.totalCombinedAds} combined ads). Click to manage.`}
+                                  >
+                                    <Globe className="w-2.5 h-2.5 shrink-0 opacity-70 group-hover/domain:opacity-100" />
+                                    <span className="font-medium truncate max-w-[120px]">{p.brandDomain.domain}</span>
+                                    <span className="text-[9px] px-1 py-0.2 rounded-full bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 font-mono font-semibold">
+                                      {p.brandDomain.linkedPagesCount}
+                                    </span>
+                                  </button>
+                                </>
                               )}
 
-                              {p.pageId && (
-                                <span className="text-[9px] text-slate-400/50 dark:text-slate-500/50 font-mono tracking-tight">
-                                  #{p.pageId}
-                                </span>
+                              {/* Discovered pages notice (inline) */}
+                              {Boolean(
+                                (p.discoveredPagesCount && p.discoveredPagesCount >= 2) ||
+                                (p.searchType !== "page" && p.discoveredPagesCount && p.discoveredPagesCount > 0)
+                              ) && (
+                                <>
+                                  <span className="text-slate-400 dark:text-slate-600 select-none text-[10px]">·</span>
+                                  <button
+                                    onClick={() => setResolveModalPageId(p.id)}
+                                    className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 hover:underline transition-colors cursor-pointer shrink-0"
+                                    title="Multiple Facebook Pages detected for this domain. Click to review and resolve."
+                                  >
+                                    <AlertTriangle className="w-2.5 h-2.5 shrink-0 text-amber-500" />
+                                    <span>{p.discoveredPagesCount} found</span>
+                                  </button>
+                                </>
+                              )}
+
+                              {/* Auto creative scan paused indicator */}
+                              {p.autoCreativeScan === false && (
+                                <>
+                                  <span className="text-slate-400 dark:text-slate-600 select-none text-[10px]">·</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setRunnerModalPages([p]);
+                                      setRunnerModalOpen(true);
+                                    }}
+                                    className="inline-flex items-center gap-0.5 text-[9.5px] font-medium text-amber-600/90 dark:text-amber-400/90 hover:underline cursor-pointer shrink-0"
+                                    title="Automatic creative scans are paused for this brand. Click to configure."
+                                  >
+                                    <Pause className="w-2 h-2" />
+                                    <span>Paused</span>
+                                  </button>
+                                </>
                               )}
                             </div>
-
-                            {p.brandDomainId && p.brandDomain && (p.brandDomain.linkedPagesCount ?? 0) > 1 ? (
-                              <div>
-                                <button
-                                  onClick={() => setManageDomainId(p.brandDomainId!)}
-                                  className="mt-0.5 inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-600 dark:text-indigo-400 text-[9.5px] font-bold border border-indigo-500/25 transition-all shadow-2xs cursor-pointer"
-                                  title={`Part of ${p.brandDomain.domain} portfolio (${p.brandDomain.linkedPagesCount} pages, ${p.brandDomain.totalCombinedAds} combined ads). Click to manage.`}
-                                >
-                                  <Globe className="w-2.5 h-2.5" />
-                                  <span>{p.brandDomain.linkedPagesCount} Pages Linked ({p.brandDomain.domain})</span>
-                                </button>
-                              </div>
-                            ) : Boolean(
-                              (p.discoveredPagesCount && p.discoveredPagesCount >= 2) ||
-                              (p.searchType !== "page" && p.discoveredPagesCount && p.discoveredPagesCount > 0)
-                            ) && (
-                              <div>
-                                <button
-                                  onClick={() => setResolveModalPageId(p.id)}
-                                  className="mt-0.5 inline-flex items-center space-x-1 px-1.5 py-0.2 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 text-[9.5px] font-bold border border-amber-500/25 transition-all shadow-2xs cursor-pointer"
-                                  title="Multiple Facebook Pages detected for this domain. Click to review and resolve."
-                                >
-                                  <AlertTriangle className="w-2.5 h-2.5" />
-                                  <span>{p.discoveredPagesCount} Pages Found — Resolve</span>
-                                </button>
-                              </div>
-                            )}
                           </div>
                         )}
                       </td>
