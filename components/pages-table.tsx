@@ -1269,13 +1269,6 @@ export function PagesTable({
                               >
                                 <ExternalLink className="w-3 h-3" />
                               </a>
-                              <button
-                                onClick={() => startEditing(p)}
-                                className="opacity-0 group-hover:opacity-60 hover:!opacity-100 text-slate-400 dark:text-slate-500 hover:text-indigo-400 transition-all p-0.5 shrink-0 cursor-pointer"
-                                title="Edit Display Name"
-                              >
-                                <Pencil className="w-3 h-3" />
-                              </button>
 
                               {/* Quick Copy Page ID on row hover (icon only) */}
                               {p.pageId && (
@@ -1614,6 +1607,19 @@ export function PagesTable({
                             {openMenuPageId === p.id && (
                               <div className="absolute right-0 top-full mt-1 w-36 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 text-left divide-y divide-slate-100 dark:divide-slate-800">
                                 <div className="py-0.5">
+                                  {/* Rename Brand */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenMenuPageId(null);
+                                      startEditing(p);
+                                    }}
+                                    className="w-full px-2.5 py-1.5 text-left text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-2 cursor-pointer transition-colors"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5 text-indigo-500" />
+                                    <span>Rename</span>
+                                  </button>
+
                                   {/* View History */}
                                   <button
                                     type="button"
