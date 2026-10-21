@@ -4,9 +4,9 @@ import { eq, and, or, lt, isNull, inArray } from "drizzle-orm";
 
 /**
  * Cleans up orphaned or stuck scans across trackedPages, creativeScans, queue, and discoveryRuns tables.
- * @param timeoutMinutes Age threshold in minutes for considering a scan orphaned (default: 5 mins, 0 for immediate reset of all)
+ * @param timeoutMinutes Age threshold in minutes for considering a scan orphaned (default: 3 mins, 0 for immediate reset of all)
  */
-export async function cleanOrphanedScans(timeoutMinutes: number = 5): Promise<{
+export async function cleanOrphanedScans(timeoutMinutes: number = 3): Promise<{
   fixedPages: number;
   fixedScans: number;
   fixedQueue: number;
@@ -24,6 +24,7 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 5): Promise<{
   const stuckScans = timeoutMinutes === 0
     ? await db.query.creativeScans.findMany({
         where: eq(creativeScans.status, "running"),
+        columns: { id: true },
       })
     : await db.query.creativeScans.findMany({
         where: and(
@@ -34,6 +35,7 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 5): Promise<{
             and(isNull(creativeScans.startedAt), lt(creativeScans.createdAt, cutoff))
           )
         ),
+        columns: { id: true },
       });
 
   if (stuckScans.length > 0) {
@@ -54,6 +56,7 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 5): Promise<{
   const stuckQueue = timeoutMinutes === 0
     ? await db.query.queue.findMany({
         where: eq(queue.status, "running"),
+        columns: { id: true },
       })
     : await db.query.queue.findMany({
         where: and(
@@ -64,6 +67,7 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 5): Promise<{
             and(isNull(queue.startedAt), lt(queue.createdAt, cutoff))
           )
         ),
+        columns: { id: true },
       });
 
   if (stuckQueue.length > 0) {
@@ -83,6 +87,7 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 5): Promise<{
   const stuckDiscoveryRuns = timeoutMinutes === 0
     ? await db.query.discoveryRuns.findMany({
         where: eq(discoveryRuns.status, "running"),
+        columns: { id: true },
       })
     : await db.query.discoveryRuns.findMany({
         where: and(
@@ -93,6 +98,7 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 5): Promise<{
             and(isNull(discoveryRuns.startedAt), lt(discoveryRuns.createdAt, cutoff))
           )
         ),
+        columns: { id: true },
       });
 
   if (stuckDiscoveryRuns.length > 0) {
@@ -113,6 +119,7 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 5): Promise<{
   const scanningPages = timeoutMinutes === 0
     ? await db.query.trackedPages.findMany({
         where: eq(trackedPages.status, "scanning"),
+        columns: { id: true, lastSuccessAt: true, currentResults: true },
       })
     : await db.query.trackedPages.findMany({
         where: and(
@@ -122,6 +129,7 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 5): Promise<{
             lt(trackedPages.updatedAt, cutoff)
           )
         ),
+        columns: { id: true, lastSuccessAt: true, currentResults: true },
       });
 
   for (const page of scanningPages) {
@@ -137,9 +145,20 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 5): Promise<{
         updatedAt: now,
       })
       .where(eq(trackedPages.id, page.id));
+
+    // Cancel any stale queue entries for this page
+    await db
+      .update(queue)
+      .set({
+        status: "failed",
+        failureReason: "orphaned_scan_timeout",
+        finishedAt: now,
+      })
+      .where(and(eq(queue.trackedPageId, page.id), inArray(queue.status, ["pending", "running"])))
+      .catch(() => {});
+
     fixedPages++;
   }
 
   return { fixedPages, fixedScans, fixedQueue, fixedDiscoveryRuns };
 }
-

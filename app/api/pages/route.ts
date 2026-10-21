@@ -39,6 +39,24 @@ export async function GET(request: Request) {
     // Resolve active workspace
     const activeWorkspace = await getActiveWorkspace(request);
 
+    // Throttled self-healing check: automatically rescue any orphaned "scanning" pages older than 3 minutes
+    const lastCleanupCheck = await getCached<number>("lock:pages_orphan_cleanup");
+    if (!lastCleanupCheck) {
+      await setCached("lock:pages_orphan_cleanup", Date.now(), 60);
+      try {
+        await db.execute(sql`
+          UPDATE tracked_pages
+          SET status = CASE WHEN last_success_at IS NOT NULL OR current_results IS NOT NULL THEN 'success' ELSE 'failed' END,
+              updated_at = NOW()
+          WHERE status = 'scanning'
+            AND workspace_id = ${activeWorkspace.id}
+            AND updated_at < NOW() - INTERVAL '3 minutes';
+        `);
+      } catch (cleanupErr) {
+        console.warn("[Pages API] Self-healing orphan check warning:", cleanupErr);
+      }
+    }
+
     // Hybrid Cache Check (L1 Memory + L2 Upstash Redis) to eliminate duplicate DB waterfalls
     const forceRefresh = searchParams.get("_t") !== null || searchParams.get("refresh") === "true";
     const cleanParams = new URLSearchParams(searchParams);

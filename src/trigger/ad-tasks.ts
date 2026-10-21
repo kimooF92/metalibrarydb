@@ -21,6 +21,7 @@ export interface ScanPageCountPayload {
  */
 export const scanPageCountTask = task({
   id: "scan-page-count",
+  machine: "small-2x", // 1 vCPU, 1 GB RAM (prevents Playwright TASK_PROCESS_OOM_KILLED crashes)
   retry: {
     maxAttempts: 3,
     factor: 2,
@@ -167,6 +168,9 @@ export const scanPageCountTask = task({
           "--no-sandbox",
           "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
+          "--disable-gpu",
+          "--single-process",
+          "--no-zygote",
           "--disable-blink-features=AutomationControlled",
         ],
       });
@@ -281,6 +285,31 @@ export const scanPageCountTask = task({
         status: outcome.status,
         failureReason: outcome.failureReason,
       };
+    } catch (taskErr: any) {
+      logger.error(`[scan-page-count] Execution crashed for ${pageRecord.displayName || targetUrl}: ${taskErr?.message || taskErr}`);
+      const now = new Date();
+      // Ensure page does not stay stuck in 'scanning' status upon unhandled crash
+      await db
+        .update(trackedPages)
+        .set({
+          status: "failed",
+          lastChecked: now,
+          updatedAt: now,
+        })
+        .where(eq(trackedPages.id, pageRecord.id))
+        .catch(() => {});
+
+      await db
+        .update(queue)
+        .set({
+          status: "failed",
+          finishedAt: now,
+          failureReason: taskErr?.message || "task_exception",
+        })
+        .where(and(eq(queue.trackedPageId, pageRecord.id), inArray(queue.status, ["pending", "running"])))
+        .catch(() => {});
+
+      throw taskErr;
     } finally {
       if (browser) {
         await browser.close().catch(() => {});
