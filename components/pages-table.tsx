@@ -77,8 +77,8 @@ function InlineSparkline({
 }) {
   if (!points || points.length < 2) {
     return (
-      <div className="w-12 h-4 flex items-center justify-center opacity-40">
-        <div className="w-5 h-[1.5px] bg-slate-300 dark:bg-slate-700 rounded-full" />
+      <div className="w-14 h-4 flex items-center justify-center opacity-40">
+        <div className="w-6 h-[1.5px] bg-slate-300 dark:bg-slate-700 rounded-full" />
       </div>
     );
   }
@@ -87,8 +87,8 @@ function InlineSparkline({
   const max = Math.max(...points);
   const range = max - min || 1;
 
-  const width = 48;
-  const height = 16;
+  const width = 54;
+  const height = 18;
   const padding = 2;
 
   const coords = points.map((v, i) => {
@@ -116,7 +116,7 @@ function InlineSparkline({
     <div className="flex items-center" title={`Trend (last ${points.length} scans): ${points.join(" → ")} ads`}>
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className="w-12 h-4 overflow-visible select-none shrink-0"
+        className="w-14 h-4.5 overflow-visible select-none shrink-0"
       >
         <polygon points={areaStr} fill={fillColor} />
         <polyline
@@ -823,9 +823,9 @@ export function PagesTable({
       <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 flex-1 min-h-[400px] md:min-h-0 flex flex-col overflow-hidden">
         <div className="overflow-y-auto overflow-x-auto md:overflow-x-hidden flex-1 min-h-0 relative">
           <table className="w-full md:table-fixed text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-900 sticky top-0 z-20 text-[11px] font-semibold text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800/80 uppercase tracking-wider select-none shadow-xs">
+            <thead className="bg-slate-50 dark:bg-slate-900 sticky top-0 z-20 text-[11px] font-semibold text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800/80 select-none shadow-xs">
               <tr>
-                <th className="px-2.5 py-2 w-8 text-center">
+                <th className="px-2 py-2 w-9 text-center">
                   <input
                     type="checkbox"
                     checked={allVisibleSelected}
@@ -833,11 +833,11 @@ export function PagesTable({
                     className="rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-slate-900 cursor-pointer"
                   />
                 </th>
-                <th className="px-1 py-2 w-7 text-center">
+                <th className="px-1 py-2 w-8 text-center">
                   <Star className="w-3 h-3 text-slate-400 dark:text-slate-500 mx-auto" />
                 </th>
-                <SortHeader col="displayName" label="Brand" className="" />
-                <th className="px-2.5 py-2 whitespace-nowrap w-44">
+                <SortHeader col="displayName" label="Brand" className="w-[24%] min-w-[180px]" />
+                <th className="px-3 py-2 whitespace-nowrap w-[22%] min-w-[170px]">
                   <div className="flex items-center gap-1 font-semibold text-[11px] select-none">
                     <button
                       onClick={() => onSortChange("currentResults")}
@@ -885,15 +885,15 @@ export function PagesTable({
                     </button>
                   </div>
                 </th>
-                <th className="px-1.5 py-2 text-center whitespace-nowrap text-slate-400 font-medium w-16" title="Unique products catalog">
+                <th className="px-2 py-2 text-center whitespace-nowrap text-slate-600 dark:text-slate-400 font-semibold w-[11%] min-w-[85px]" title="Unique products catalog">
                   <span className="inline-flex items-center justify-center gap-1">
                     <Package className="w-3 h-3 text-slate-400" />
                     Products
                   </span>
                 </th>
-                <SortHeader col="status" label="Pattern & Status" className="hidden md:table-cell w-32 whitespace-nowrap" />
-                <SortHeader col="lastChecked" label="Last Checked" className="w-28 whitespace-nowrap" />
-                <th className="px-2.5 py-2 text-right whitespace-nowrap text-slate-400 font-medium w-36">Actions</th>
+                <SortHeader col="status" label="Pattern & Status" className="hidden md:table-cell w-[15%] min-w-[125px] whitespace-nowrap" />
+                <SortHeader col="lastChecked" label="Last Checked" className="w-[12%] min-w-[100px] whitespace-nowrap" />
+                <th className="px-3 py-2 text-right whitespace-nowrap text-slate-600 dark:text-slate-400 font-semibold w-[13%] min-w-[120px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
@@ -1083,7 +1083,7 @@ export function PagesTable({
                       }`}
                     >
                       {/* Checkbox */}
-                      <td className="px-2.5 py-2 text-center w-8">
+                      <td className="px-2 py-2 text-center w-9">
                         <label className="relative inline-flex items-center justify-center cursor-pointer">
                           <input
                             type="checkbox"
@@ -1105,7 +1105,7 @@ export function PagesTable({
                       </td>
 
                       {/* Watchlist Star */}
-                      <td className="px-1 py-2 text-center w-7">
+                      <td className="px-1 py-2 text-center w-8">
                         <button
                           onClick={() => toggleWatchlist(p.id)}
                           title={watchlisted[p.id] ? "Remove from watchlist" : "Add to watchlist"}
@@ -1247,9 +1247,9 @@ export function PagesTable({
                       </td>
 
                       {/* Active Ads, Delta & Sparkline (Combined Unified Cell) */}
-                      <td className="px-2.5 py-2 w-44">
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-baseline gap-1 shrink-0 min-w-[56px]">
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-baseline gap-1.5 shrink-0 min-w-[60px]">
                             {isOnHold && p.lastKnownValidResults ? (
                               <span
                                 className="text-xs font-mono text-amber-500 font-bold"
@@ -1299,7 +1299,7 @@ export function PagesTable({
                       </td>
 
                       {/* Exact Products Count */}
-                      <td className="px-1.5 py-2 text-center w-16">
+                      <td className="px-2 py-2 text-center">
                         <Link
                           href={`/spy/brand/${encodeURIComponent(p.pageId || p.landingPage || p.displayName || "")}?tab=products`}
                           className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-all cursor-pointer"
@@ -1315,7 +1315,7 @@ export function PagesTable({
                       </td>
 
                       {/* Pattern & Status Column */}
-                      <td className="px-2.5 py-2 hidden md:table-cell whitespace-nowrap w-32">
+                      <td className="px-3 py-2 hidden md:table-cell whitespace-nowrap">
                         {p.status === "scanning" ? (
                           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10.5px] font-semibold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 animate-pulse">
                             <Loader2 className="w-2.5 h-2.5 animate-spin shrink-0 text-cyan-500" />
@@ -1412,7 +1412,7 @@ export function PagesTable({
                       </td>
 
                       {/* Last Checked (Relative Timestamps) */}
-                      <td className="px-2.5 py-2 text-slate-500 dark:text-slate-400 text-[11px] whitespace-nowrap w-28">
+                      <td className="px-3 py-2 text-slate-500 dark:text-slate-400 text-[11px] whitespace-nowrap">
                         <div className="flex flex-col gap-0.5">
                           <span className="font-medium text-slate-700 dark:text-slate-300" title={p.lastChecked ? `Ad count checked: ${new Date(p.lastChecked).toLocaleString()}` : "Never checked"}>
                             {formatRelativeTime(p.lastChecked)}
@@ -1427,7 +1427,7 @@ export function PagesTable({
                       </td>
 
                       {/* Actions */}
-                      <td className="px-2.5 py-1.5 text-right whitespace-nowrap w-36">
+                      <td className="px-3 py-1.5 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-0.5">
                           {/* Notes button */}
                           <button
