@@ -7,7 +7,7 @@ if (typeof globalThis.WebSocket === "undefined") {
 }
 
 import { db } from "../db";
-import { trackedPages, creativeScans, discoveryRuns, discoveredPages } from "../db/schema";
+import { trackedPages, creativeScans, discoveryRuns, discoveredPages, queue } from "../db/schema";
 import { getBrowserSession, closeBrowserSession } from "./browser";
 import { scanMetaAdPage } from "./scanner";
 import { scanAdCreatives } from "./spy-scanner";
@@ -42,6 +42,7 @@ import {
   handleFailure,
   handleSuccess,
 } from "./backoff";
+import { acquireLock, releaseLock, deleteCached, deleteByPrefix } from "../lib/cache-service";
 
 async function runWorker() {
   const shardIndex = process.env.SHARD_INDEX !== undefined ? parseInt(process.env.SHARD_INDEX, 10) : 0;
@@ -468,8 +469,29 @@ async function runWorker() {
         `\n[Processing ${jobType.toUpperCase()} Job (Priority: ${queueJob.priority || 1})] ID: ${queueJob.id} | Target: "${targetDisplayName}"`
       );
 
-      // 4. Route job by type
-      const { page } = await getBrowserSession();
+      // Acquire distributed scrape lock to synchronize with cloud workers
+      let lockKey: string | null = null;
+      if (trackedPage) {
+        lockKey = `lock:scrape:${trackedPage.id}`;
+        const acquired = await acquireLock(lockKey, 180);
+        if (!acquired) {
+          console.log(
+            `[Worker] 🔒 Page "${targetDisplayName}" is already locked by cloud or another worker. Skipping duplicate scrape.`
+          );
+          if (queueJob.id) {
+            await db
+              .update(queue)
+              .set({ status: "completed", finishedAt: new Date() })
+              .where(eq(queue.id, queueJob.id))
+              .catch(() => {});
+          }
+          continue;
+        }
+      }
+
+      try {
+        // 4. Route job by type
+        const { page } = await getBrowserSession();
 
       if (jobType === "discovery_count" && discoveredPage) {
         // Run Discovery Page Verification count scan using the page's selected country
@@ -566,6 +588,17 @@ async function runWorker() {
           );
           await recordSuccessfulScan();
           await handleSuccess();
+
+          // Invalidate Upstash cache for workspace so UI reflects fresh creatives
+          if (trackedPage.workspaceId) {
+            Promise.allSettled([
+              deleteCached(`cache:stats:${trackedPage.workspaceId}`),
+              deleteByPrefix(`cache:pages:${trackedPage.workspaceId}:`),
+              deleteByPrefix(`cache:products:${trackedPage.workspaceId}:`),
+              deleteByPrefix(`cache:fresh_winners:${trackedPage.workspaceId}:`),
+              deleteByPrefix(`cache:spy_ads:${trackedPage.workspaceId}:`),
+            ]).catch(() => {});
+          }
         } else {
           console.warn(
             `[Creative Failed] Reason: ${outcome.failureReason} | Details: ${outcome.outcomeDetails}`
@@ -673,6 +706,17 @@ async function runWorker() {
 
           await recordSuccessfulScan();
           await handleSuccess();
+
+          // Invalidate Upstash cache for workspace so UI reflects fresh counts
+          if (trackedPage.workspaceId) {
+            Promise.allSettled([
+              deleteCached(`cache:stats:${trackedPage.workspaceId}`),
+              deleteByPrefix(`cache:pages:${trackedPage.workspaceId}:`),
+              deleteByPrefix(`cache:products:${trackedPage.workspaceId}:`),
+              deleteByPrefix(`cache:fresh_winners:${trackedPage.workspaceId}:`),
+              deleteByPrefix(`cache:spy_ads:${trackedPage.workspaceId}:`),
+            ]).catch(() => {});
+          }
         } else {
           console.warn(
             `[Count Failed] Reason: ${outcome.failureReason}`
@@ -687,6 +731,11 @@ async function runWorker() {
           await handleFailure();
         }
       }
+    } finally {
+      if (lockKey) {
+        await releaseLock(lockKey).catch(() => {});
+      }
+    }
 
       ranJobs++;
 

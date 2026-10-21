@@ -9,21 +9,13 @@ import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache"
 import { getActiveWorkspace } from "@/lib/workspace-server";
 import type { FreshWinnerItem, FreshWinnersStats } from "@/types";
 
+import { getCached, setCached } from "@/lib/cache-service";
+
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const maxDuration = 60;
 
-interface CachedFreshWinnersPage {
-  items: FreshWinnerItem[];
-  stats: FreshWinnersStats;
-  total: number;
-  totalPages: number;
-  timestamp: number;
-}
-
-const freshWinnersCache = new Map<string, CachedFreshWinnersPage>();
-const freshWinnersStatsCache = new Map<string, { stats: FreshWinnersStats; total: number; timestamp: number }>();
-const FRESH_WINNERS_CACHE_TTL_MS = 60 * 1000; // 60 seconds
+const FRESH_WINNERS_REDIS_TTL = 60; // 60 seconds global Redis cache
 
 export async function GET(req: NextRequest) {
   const authError = await validateApiSecret(req);
@@ -51,30 +43,18 @@ export async function GET(req: NextRequest) {
     const favColumn = role === "staff" ? scrapedProducts.isFavoriteStaff : scrapedProducts.isFavorite;
 
     const baseCacheKey = `${activeWorkspace.id}:${role}:${windowDays}:${minCopies}:${mediaType || 'all'}:${category || 'all'}:${hasProduct}:${search || ''}:${sortBy}`;
-    const pageCacheKey = `${baseCacheKey}:p${page}:l${limit}`;
-    const now = Date.now();
-    const cachedPage = freshWinnersCache.get(pageCacheKey);
+    const pageCacheKey = `cache:fresh_winners:${baseCacheKey}:p${page}:l${limit}`;
 
-    if (!forceRefresh && cachedPage && now - cachedPage.timestamp < FRESH_WINNERS_CACHE_TTL_MS) {
-      return NextResponse.json(
-        {
-          success: true,
-          winners: cachedPage.items,
-          stats: cachedPage.stats,
-          pagination: {
-            page,
-            limit,
-            total: cachedPage.total,
-            totalPages: cachedPage.totalPages,
-          },
-        },
-        {
+    if (!forceRefresh) {
+      const cachedPage = await getCached<any>(pageCacheKey);
+      if (cachedPage) {
+        return NextResponse.json(cachedPage, {
           headers: {
             "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
             Vary: PRIVATE_AUTH_VARY,
           },
-        }
-      );
+        });
+      }
     }
 
     // Build conditions for raw SQL subquery / joins
@@ -110,12 +90,13 @@ export async function GET(req: NextRequest) {
 
     const whereSql = and(...conditions);
 
-    // 1. Resolve aggregate market stats efficiently (cached per base filter key or queried via lean SQL)
+    // 1. Resolve aggregate market stats efficiently (cached in Redis per base filter key or queried via lean SQL)
     let stats: FreshWinnersStats;
     let totalBreakouts = 0;
-    const cachedStats = freshWinnersStatsCache.get(baseCacheKey);
+    const statsCacheKey = `cache:fresh_winners_stats:${baseCacheKey}`;
+    const cachedStats = !forceRefresh ? await getCached<{ stats: FreshWinnersStats; total: number }>(statsCacheKey) : null;
 
-    if (!forceRefresh && cachedStats && now - cachedStats.timestamp < FRESH_WINNERS_CACHE_TTL_MS) {
+    if (cachedStats) {
       stats = cachedStats.stats;
       totalBreakouts = cachedStats.total;
     } else {
@@ -222,7 +203,7 @@ export async function GET(req: NextRequest) {
         activeBrandsCount: Number(statsRow?.activeBrandsCount || 0),
       };
 
-      freshWinnersStatsCache.set(baseCacheKey, { stats, total: totalBreakouts, timestamp: now });
+      await setCached(statsCacheKey, { stats, total: totalBreakouts }, FRESH_WINNERS_REDIS_TTL).catch(() => {});
     }
 
     if (totalBreakouts === 0) {
@@ -402,34 +383,28 @@ export async function GET(req: NextRequest) {
 
     const totalPages = Math.ceil(totalBreakouts / limit);
 
-    // Save page in cache
-    freshWinnersCache.set(pageCacheKey, {
-      items: paginatedItems,
+    const responsePayload = {
+      success: true,
+      winners: paginatedItems,
       stats,
-      total: totalBreakouts,
-      totalPages,
-      timestamp: now,
-    });
-
-    return NextResponse.json(
-      {
-        success: true,
-        winners: paginatedItems,
-        stats,
-        pagination: {
-          page,
-          limit,
-          total: totalBreakouts,
-          totalPages,
-        },
+      pagination: {
+        page,
+        limit,
+        total: totalBreakouts,
+        totalPages,
       },
-      {
-        headers: {
-          "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
-          Vary: PRIVATE_AUTH_VARY,
-        },
-      }
-    );
+    };
+
+    if (!forceRefresh) {
+      await setCached(pageCacheKey, responsePayload, FRESH_WINNERS_REDIS_TTL).catch(() => {});
+    }
+
+    return NextResponse.json(responsePayload, {
+      headers: {
+        "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
+        Vary: PRIVATE_AUTH_VARY,
+      },
+    });
   } catch (error: any) {
     console.error("[Fresh Winners API] Error:", error);
     return NextResponse.json(

@@ -13,17 +13,13 @@ import {
   resolveNicheDbCategories,
 } from "@/lib/niches-taxonomy";
 
+import { getCached, setCached, deleteByPrefix } from "@/lib/cache-service";
+
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const maxDuration = 60;
 
-interface CachedProductsResponse {
-  data: any;
-  timestamp: number;
-}
-
-const productsCacheMap = new Map<string, CachedProductsResponse>();
-const PRODUCTS_CACHE_TTL_MS = 15 * 1000; // 15 seconds
+const PRODUCTS_REDIS_CACHE_TTL = 30; // 30 seconds global Upstash Redis cache
 
 export async function GET(req: NextRequest) {
   const authError = await validateApiSecret(req);
@@ -69,15 +65,17 @@ export async function GET(req: NextRequest) {
 
     const activeWorkspace = await getActiveWorkspace(req);
 
-    // Short-lived in-memory cache check (15s) to eliminate duplicate waterfalls during rapid navigation / polling
+    // Hybrid Upstash Redis cache check to eliminate duplicate DB waterfalls across all serverless instances
     const forceRefresh = searchParams.get("_t") !== null || searchParams.get("refresh") === "true";
-    const cacheKey = `${activeWorkspace.id}:${role}:${req.url}`;
-    const now = Date.now();
-    const cached = productsCacheMap.get(cacheKey);
-    if (!forceRefresh && cached && now - cached.timestamp < PRODUCTS_CACHE_TTL_MS) {
-      return NextResponse.json(cached.data, {
-        headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY },
-      });
+    const cacheKey = `cache:products:${activeWorkspace.id}:${role}:${req.nextUrl.searchParams.toString()}`;
+
+    if (!forceRefresh && !includeDetails) {
+      const cached = await getCached<any>(cacheKey);
+      if (cached) {
+        return NextResponse.json(cached, {
+          headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY },
+        });
+      }
     }
 
     const conditions: any[] = [
@@ -568,11 +566,7 @@ export async function GET(req: NextRequest) {
     };
 
     if (!forceRefresh && !includeDetails) {
-      if (productsCacheMap.size > 100) {
-        const oldestKey = productsCacheMap.keys().next().value;
-        if (oldestKey) productsCacheMap.delete(oldestKey);
-      }
-      productsCacheMap.set(cacheKey, { data: responsePayload, timestamp: now });
+      await setCached(cacheKey, responsePayload, PRODUCTS_REDIS_CACHE_TTL).catch(() => {});
     }
 
     return NextResponse.json(responsePayload, {
@@ -747,6 +741,9 @@ export async function PATCH(req: NextRequest) {
         updatedAt: scrapedProducts.updatedAt,
       });
 
+    // Invalidate products cache across all workspace nodes
+    await deleteByPrefix(`cache:products:`).catch(() => {});
+
     return NextResponse.json({
       success: true,
       message: "Product updated successfully.",
@@ -794,6 +791,9 @@ export async function DELETE(req: NextRequest) {
         updatedAt: new Date(),
       })
       .where(eq(scrapedProducts.id, id));
+
+    // Invalidate products cache across all workspace nodes
+    await deleteByPrefix(`cache:products:`).catch(() => {});
 
     return NextResponse.json({
       success: true,

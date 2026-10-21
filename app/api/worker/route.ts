@@ -6,6 +6,8 @@ import { eq, desc, and, lt, gte } from "drizzle-orm";
 import { cleanOrphanedScans } from "@/lib/clean-scans";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { validateAdminRole } from "@/lib/api-guard";
+import { redis } from "@/lib/redis";
+import { deleteByPrefix } from "@/lib/cache-service";
 
 async function getOrCreateWorkerState() {
   let state = await db.query.workerState.findFirst({
@@ -57,6 +59,24 @@ export async function GET(request: Request) {
       .orderBy(desc(creativeScans.startedAt))
       .limit(5);
 
+    // Overlay live Redis atomic counters if active
+    if (redis) {
+      try {
+        const hourKey = `scan_cap:hour:${new Date().toISOString().slice(0, 13)}`;
+        const dayKey = `scan_cap:day:${new Date().toISOString().slice(0, 10)}`;
+        const [redisHour, redisDay] = await Promise.all([
+          redis.get<number>(hourKey),
+          redis.get<number>(dayKey),
+        ]);
+        if (redisHour !== null && redisHour !== undefined) {
+          state.scansThisHour = redisHour;
+        }
+        if (redisDay !== null && redisDay !== undefined) {
+          state.scansToday = redisDay;
+        }
+      } catch {}
+    }
+
     return NextResponse.json({
       state,
       isBackoffActive,
@@ -100,6 +120,10 @@ export async function POST(request: Request) {
         })
         .where(eq(workerState.id, 1))
         .returning();
+
+      if (redis) {
+        await deleteByPrefix("scan_cap:").catch(() => {});
+      }
 
       return NextResponse.json({
         success: true,

@@ -293,6 +293,9 @@ export const scanPageCountTask = task({
         await Promise.allSettled([
           deleteCached(`cache:stats:${pageRecord.workspaceId}`),
           deleteByPrefix(`cache:pages:${pageRecord.workspaceId}:`),
+          deleteByPrefix(`cache:products:${pageRecord.workspaceId}:`),
+          deleteByPrefix(`cache:fresh_winners:${pageRecord.workspaceId}:`),
+          deleteByPrefix(`cache:spy_ads:${pageRecord.workspaceId}:`),
         ]);
       }
     }

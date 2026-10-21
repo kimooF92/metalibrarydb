@@ -4,6 +4,8 @@
  * Supports Multi-Token Failover: Automatically switches to secondary tokens when Primary token runs out of credits.
  */
 
+import { getCached, setCached, deleteCached } from "./cache-service";
+
 const APIFY_BASE_URL = "https://api.apify.com/v2";
 
 export interface ApifyTokenStatus {
@@ -131,7 +133,9 @@ let cachedBalanceData: {
   data: ApifyBalanceInfo;
   timestamp: number;
 } | null = null;
-const BALANCE_CACHE_TTL_MS = 25_000; // 25 seconds cache to avoid rate limit spam
+const BALANCE_CACHE_TTL_MS = 25_000; // 25 seconds local L1 memory cache
+const APIFY_BALANCE_REDIS_KEY = "cache:apify:balance_info";
+const APIFY_BALANCE_REDIS_TTL = 60; // 60 seconds global Redis cache
 
 /**
  * Fetches current credit balance across all configured tokens in parallel.
@@ -146,12 +150,28 @@ export async function getApifyAccountBalance(options?: {
     return null;
   }
 
-  if (
-    !options?.forceRefresh &&
-    cachedBalanceData &&
-    Date.now() - cachedBalanceData.timestamp < BALANCE_CACHE_TTL_MS
-  ) {
-    return cachedBalanceData.data;
+  // 1. Force refresh invalidation
+  if (options?.forceRefresh) {
+    cachedBalanceData = null;
+    await deleteCached(APIFY_BALANCE_REDIS_KEY).catch(() => {});
+  } else {
+    // 2. Check local in-memory L1 cache
+    if (
+      cachedBalanceData &&
+      Date.now() - cachedBalanceData.timestamp < BALANCE_CACHE_TTL_MS
+    ) {
+      return cachedBalanceData.data;
+    }
+
+    // 3. Check global Upstash Redis L2 cache (shared across all Vercel lambdas & users)
+    const redisCached = await getCached<ApifyBalanceInfo>(APIFY_BALANCE_REDIS_KEY);
+    if (redisCached) {
+      cachedBalanceData = {
+        data: redisCached,
+        timestamp: Date.now(),
+      };
+      return redisCached;
+    }
   }
 
   try {
@@ -283,6 +303,9 @@ export async function getApifyAccountBalance(options?: {
       data: result,
       timestamp: Date.now(),
     };
+
+    // Store in Upstash Redis to shield all concurrent serverless instances
+    await setCached(APIFY_BALANCE_REDIS_KEY, result, APIFY_BALANCE_REDIS_TTL).catch(() => {});
 
     return result;
   } catch (error) {

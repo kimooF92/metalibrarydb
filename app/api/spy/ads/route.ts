@@ -9,6 +9,7 @@ import { enrichAdsWithProductClusters } from "@/lib/product-clustering";
 import { enrichAdsWithCreativeClusters, getDeduplicatedCreativeHeroAds } from "@/lib/creative-clustering";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
+import { getCached, setCached } from "@/lib/cache-service";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -52,6 +53,22 @@ export async function GET(req: NextRequest) {
     const offset = (page - 1) * limit;
 
     const activeWorkspace = await getActiveWorkspace(req);
+
+    // Hybrid Upstash Redis cache check to eliminate duplicate DB scans across all serverless instances
+    const forceRefresh = searchParams.get("_t") !== null || searchParams.get("refresh") === "true";
+    const cacheKey = `cache:spy_ads:${activeWorkspace.id}:${req.nextUrl.searchParams.toString()}`;
+
+    if (!forceRefresh) {
+      const cached = await getCached<any>(cacheKey);
+      if (cached) {
+        return NextResponse.json(cached, {
+          headers: {
+            "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
+            Vary: PRIVATE_AUTH_VARY,
+          },
+        });
+      }
+    }
 
     // Build conditions array
     const conditions = [];
@@ -618,23 +635,26 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    return NextResponse.json(
-      {
-        items: finalItems,
-        pagination: {
-          page,
-          limit,
-          total: minProductCreatives > 0 || productKey || groupBy === "creative" ? finalItems.length : total,
-          totalPages: Math.ceil((minProductCreatives > 0 || productKey || groupBy === "creative" ? finalItems.length : total) / limit),
-        },
+    const responsePayload = {
+      items: finalItems,
+      pagination: {
+        page,
+        limit,
+        total: minProductCreatives > 0 || productKey || groupBy === "creative" ? finalItems.length : total,
+        totalPages: Math.ceil((minProductCreatives > 0 || productKey || groupBy === "creative" ? finalItems.length : total) / limit),
       },
-      {
-        headers: {
-          "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
-          Vary: PRIVATE_AUTH_VARY,
-        },
-      }
-    );
+    };
+
+    if (!forceRefresh) {
+      await setCached(cacheKey, responsePayload, 30).catch(() => {});
+    }
+
+    return NextResponse.json(responsePayload, {
+      headers: {
+        "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
+        Vary: PRIVATE_AUTH_VARY,
+      },
+    });
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || "Failed to fetch ad creatives" },

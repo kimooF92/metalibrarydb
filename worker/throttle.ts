@@ -1,4 +1,5 @@
 import { getWorkerState, updateWorkerState } from "./db";
+import { redis } from "../lib/redis";
 
 export function randomDelay(minMs: number, maxMs: number): Promise<void> {
   const ms = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
@@ -16,12 +17,55 @@ export const DELAY_CONFIG = {
   beforeNextPageMax: 8000,
 };
 
-export async function checkRateCaps(): Promise<{ allowed: boolean; reason?: string }> {
-  const state = await getWorkerState();
-  const now = new Date();
+function getHourKey(date = new Date()): string {
+  return `scan_cap:hour:${date.toISOString().slice(0, 13)}`;
+}
 
+function getDayKey(date = new Date()): string {
+  return `scan_cap:day:${date.toISOString().slice(0, 10)}`;
+}
+
+export async function checkRateCaps(): Promise<{ allowed: boolean; reason?: string }> {
   const maxHour = parseInt(process.env.MAX_SCANS_PER_HOUR || "0", 10);
   const maxDay = parseInt(process.env.MAX_SCANS_PER_DAY || "0", 10);
+
+  // If no limits configured, pass immediately without touching Redis or DB
+  if (maxHour <= 0 && maxDay <= 0) {
+    return { allowed: true };
+  }
+
+  // 1. Fast Redis check (sub-5ms, eliminates high-frequency DB waterfall)
+  if (redis) {
+    try {
+      if (maxHour > 0) {
+        const hourCount = (await redis.get<number>(getHourKey())) || 0;
+        if (hourCount >= maxHour) {
+          return {
+            allowed: false,
+            reason: `Hourly scan cap reached (${hourCount}/${maxHour}). Waiting for hourly window reset.`,
+          };
+        }
+      }
+
+      if (maxDay > 0) {
+        const dayCount = (await redis.get<number>(getDayKey())) || 0;
+        if (dayCount >= maxDay) {
+          return {
+            allowed: false,
+            reason: `Daily scan cap reached (${dayCount}/${maxDay}). Waiting for daily window reset.`,
+          };
+        }
+      }
+
+      return { allowed: true };
+    } catch (err: any) {
+      console.warn("[Throttle] Redis checkRateCaps error, falling back to DB state:", err?.message || err);
+    }
+  }
+
+  // 2. Fallback to PostgreSQL worker_state
+  const state = await getWorkerState();
+  const now = new Date();
 
   // Check hourly window
   const hourStart = state.hourWindowStart ? new Date(state.hourWindowStart) : now;
@@ -59,9 +103,34 @@ export async function checkRateCaps(): Promise<{ allowed: boolean; reason?: stri
 }
 
 export async function recordSuccessfulScan() {
+  // 1. Atomic Redis increment (sub-5ms, zero DB writes)
+  if (redis) {
+    try {
+      const hourKey = getHourKey();
+      const dayKey = getDayKey();
+
+      const [hCount, dCount] = await Promise.all([
+        redis.incr(hourKey),
+        redis.incr(dayKey),
+      ]);
+
+      if (hCount === 1) {
+        await redis.expire(hourKey, 7200); // 2 hours
+      }
+      if (dCount === 1) {
+        await redis.expire(dayKey, 172800); // 48 hours
+      }
+      return;
+    } catch (err: any) {
+      console.warn("[Throttle] Redis recordSuccessfulScan error, falling back to DB:", err?.message || err);
+    }
+  }
+
+  // 2. Fallback to PostgreSQL
   const state = await getWorkerState();
   await updateWorkerState({
     scansThisHour: (state.scansThisHour || 0) + 1,
     scansToday: (state.scansToday || 0) + 1,
   });
 }
+
