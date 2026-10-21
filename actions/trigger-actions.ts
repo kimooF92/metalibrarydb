@@ -1,6 +1,6 @@
 "use server";
 
-import { scanPageCountTask, retryFailedPagesTask, helloWorldTask } from "@/src/trigger";
+import { tasks } from "@trigger.dev/sdk";
 import { db } from "@/db";
 import { trackedPages, queue } from "@/db/schema";
 import { inArray, eq } from "drizzle-orm";
@@ -11,7 +11,7 @@ import { inArray, eq } from "drizzle-orm";
 export async function triggerSinglePageRefresh(pageId: string) {
   try {
     if (process.env.TRIGGER_SECRET_KEY) {
-      const handle = await scanPageCountTask.trigger({ pageId });
+      const handle = await tasks.trigger("scan-page-count", { pageId });
       return { success: true, runId: handle.id, mode: "trigger.dev" };
     }
 
@@ -35,7 +35,7 @@ export async function triggerSinglePageRefresh(pageId: string) {
 export async function triggerBatchRetryFailed() {
   try {
     if (process.env.TRIGGER_SECRET_KEY) {
-      const handle = await retryFailedPagesTask.trigger();
+      const handle = await tasks.trigger("retry-failed-pages", {});
       return { success: true, runId: handle.id, mode: "trigger.dev" };
     }
 
@@ -66,7 +66,7 @@ export async function triggerBatchRetryFailed() {
  */
 export async function triggerSmokeTest(message?: string) {
   try {
-    const handle = await helloWorldTask.trigger({ message });
+    const handle = await tasks.trigger("hello-world", { message });
     return { success: true, runId: handle.id };
   } catch (error: any) {
     return { success: false, error: error.message };

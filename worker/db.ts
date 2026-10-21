@@ -3,6 +3,10 @@ import { trackedPages, queue, scanHistory, workerState, creativeScans, discovere
 import { eq, sql, inArray, and } from "drizzle-orm";
 import { shouldArchiveZeroCount } from "../lib/ad-reconciliation";
 
+function isUuid(id?: string | null): boolean {
+  return typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+}
+
 export async function getAppSettings() {
   try {
     const settings = await db.query.appSettings.findFirst({
@@ -596,13 +600,15 @@ export async function markJobRunning(
 ) {
   // Retained for backward compatibility if called directly
   const now = new Date();
-  await db
-    .update(queue)
-    .set({
-      status: "running",
-      startedAt: now,
-    })
-    .where(eq(queue.id, queueId));
+  if (isUuid(queueId)) {
+    await db
+      .update(queue)
+      .set({
+        status: "running",
+        startedAt: now,
+      })
+      .where(eq(queue.id, queueId));
+  }
 
   if (creativeScanId) {
     await db
@@ -748,15 +754,17 @@ export async function markJobCompleted(
       }
 
       // Reset the current queue job to pending with priority 1 so it retries automatically once cooldown expires
-      await db
-        .update(queue)
-        .set({
-          status: "pending",
-          priority: 1,
-          startedAt: null,
-          finishedAt: null,
-        })
-        .where(eq(queue.id, queueId));
+      if (isUuid(queueId)) {
+        await db
+          .update(queue)
+          .set({
+            status: "pending",
+            priority: 1,
+            startedAt: null,
+            finishedAt: null,
+          })
+          .where(eq(queue.id, queueId));
+      }
 
       return {
         brandName,
@@ -1000,13 +1008,23 @@ export async function markJobCompleted(
     .where(eq(discoveredPages.trackedPageId, pageId));
 
   // 4. Mark queue job completed
-  await db
-    .update(queue)
-    .set({
-      status: "completed",
-      finishedAt: now,
-    })
-    .where(eq(queue.id, queueId));
+  if (isUuid(queueId)) {
+    await db
+      .update(queue)
+      .set({
+        status: "completed",
+        finishedAt: now,
+      })
+      .where(eq(queue.id, queueId));
+  } else if (pageId) {
+    await db
+      .update(queue)
+      .set({
+        status: "completed",
+        finishedAt: now,
+      })
+      .where(and(eq(queue.trackedPageId, pageId), inArray(queue.status, ["pending", "running"])));
+  }
 
   // 4b. Log in-app activity notification
   if (!isDropToZero && !isAmbiguousZero && !(isInactive && isValidatedZero) && !(isZeroWhileOnHold && ((trackedPage?.consecutiveZeroScans ?? 0) + 1) < CONFIRM_SCANS)) {
@@ -1318,13 +1336,15 @@ export async function markCreativeJobCompleted(
     })
     .where(eq(creativeScans.id, creativeScanId));
 
-  await db
-    .update(queue)
-    .set({
-      status: "completed",
-      finishedAt: now,
-    })
-    .where(eq(queue.id, queueId));
+  if (isUuid(queueId)) {
+    await db
+      .update(queue)
+      .set({
+        status: "completed",
+        finishedAt: now,
+      })
+      .where(eq(queue.id, queueId));
+  }
 
   const creativeScan = await db.query.creativeScans.findFirst({
     where: eq(creativeScans.id, creativeScanId),
@@ -1451,13 +1471,15 @@ export async function markDiscoveryJobCompleted(
     })
     .where(eq(discoveredPages.id, discoveredPageId));
 
-  await db
-    .update(queue)
-    .set({
-      status: "completed",
-      finishedAt: now,
-    })
-    .where(eq(queue.id, queueId));
+  if (isUuid(queueId)) {
+    await db
+      .update(queue)
+      .set({
+        status: "completed",
+        finishedAt: now,
+      })
+      .where(eq(queue.id, queueId));
+  }
 }
 
 export async function markDiscoveryJobFailed(

@@ -5,7 +5,7 @@ import { inArray, eq } from "drizzle-orm";
 import { refreshSchema } from "@/lib/validators";
 import { triggerGitHubWorkflow } from "@/lib/github";
 import { validateAdminRole } from "@/lib/api-guard";
-import { scanPageCountTask } from "@/src/trigger";
+import { tasks } from "@trigger.dev/sdk";
 
 export async function POST(request: Request) {
   const authError = await validateAdminRole(request);
@@ -65,10 +65,11 @@ export async function POST(request: Request) {
 
     // Dispatch to Trigger.dev if available
     let triggerDevDispatched = false;
-    if (process.env.TRIGGER_SECRET_KEY && idsToEnqueue.length > 0) {
+    if (process.env.TRIGGER_SECRET_KEY && foundIds.length > 0) {
       try {
-        await scanPageCountTask.batchTrigger(
-          idsToEnqueue.map((id) => ({ payload: { pageId: id } }))
+        await tasks.batchTrigger(
+          "scan-page-count",
+          foundIds.map((id) => ({ payload: { pageId: id } }))
         );
         triggerDevDispatched = true;
       } catch (triggerErr: any) {
