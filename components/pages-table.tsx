@@ -1413,46 +1413,32 @@ export function PagesTable({
                       {/* Pattern & Status Column */}
                       <td className="px-2.5 md:px-3.5 xl:px-4 py-2.5 hidden md:table-cell whitespace-nowrap">
                         <div className="flex items-center gap-2 flex-nowrap">
-                          {/* 1. Status Indicator Icon (clean, borderless) */}
-                          {p.status === "scanning" ? (
-                            <span title="Scan in progress" className="inline-flex shrink-0">
-                              <Loader2 className="w-4 h-4 animate-spin text-cyan-500" />
-                            </span>
-                          ) : p.status === "pending" ? (
-                            <span title="Scan pending in queue" className="inline-flex shrink-0">
-                              <Clock className="w-4 h-4 text-amber-500" />
-                            </span>
-                          ) : p.status === "failed" ? (
-                            <span title={p.failureReason || "Scan failed"} className="inline-flex shrink-0">
-                              <AlertTriangle className="w-4 h-4 text-rose-500" />
-                            </span>
-                          ) : p.status === "unclear" ? (
-                            <span title="Scan status: Unclear results" className="inline-flex shrink-0">
-                              <HelpCircle className="w-4 h-4 text-purple-500" />
-                            </span>
-                          ) : (
-                            <span title="Scan status: Success (Up to date)" className="inline-flex shrink-0">
-                              <Check className="w-4 h-4 text-emerald-500 stroke-[2.5]" />
-                            </span>
-                          )}
+                          {/* 1. Status Indicator Icon (clean, borderless, fixed width for perfect column alignment) */}
+                          <div className="w-4 h-4 flex items-center justify-center shrink-0">
+                            {p.status === "scanning" ? (
+                              <span title="Scan in progress" className="inline-flex">
+                                <Loader2 className="w-4 h-4 animate-spin text-cyan-500" />
+                              </span>
+                            ) : p.status === "pending" ? (
+                              <span title="Scan pending in queue" className="inline-flex">
+                                <Clock className="w-4 h-4 text-amber-500" />
+                              </span>
+                            ) : p.status === "failed" ? (
+                              <span title={p.failureReason || "Scan failed"} className="inline-flex">
+                                <AlertTriangle className="w-4 h-4 text-rose-500" />
+                              </span>
+                            ) : p.status === "unclear" ? (
+                              <span title="Scan status: Unclear results" className="inline-flex">
+                                <HelpCircle className="w-4 h-4 text-purple-500" />
+                              </span>
+                            ) : (
+                              <span title="Scan status: Success (Up to date)" className="inline-flex">
+                                <Check className="w-4 h-4 text-emerald-500 stroke-[2.5]" />
+                              </span>
+                            )}
+                          </div>
 
-                          {/* 2. Auto-Paused Icon (clean pause icon without border) */}
-                          {p.autoCreativeScan === false && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setRunnerModalPages([p]);
-                                setRunnerModalOpen(true);
-                              }}
-                              className="text-amber-500 hover:text-amber-400 transition-colors cursor-pointer shrink-0 p-0.5"
-                              title="Automatic creative scans paused. Click to open runner."
-                              aria-label="Auto creative scans paused"
-                            >
-                              <Pause className="w-3.5 h-3.5 fill-amber-500/20" />
-                            </button>
-                          )}
-
-                          {/* 3. Pattern Badge / Special State */}
+                          {/* 2. Pattern Badge / Special State with trailing pause indicator */}
                           {isOnHold ? (
                             <span
                               className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 shrink-0"
@@ -1468,6 +1454,21 @@ export function PagesTable({
                             >
                               <span className="w-1.5 h-1.5 rounded-full bg-slate-400/80 shrink-0" />
                               <span>Inactive</span>
+                              {p.autoCreativeScan === false && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setRunnerModalPages([p]);
+                                    setRunnerModalOpen(true);
+                                  }}
+                                  className="text-amber-500 hover:text-amber-400 transition-colors cursor-pointer shrink-0 ml-0.5 p-0.5 rounded hover:bg-amber-500/10"
+                                  title="Automatic creative scans paused. Click to open runner."
+                                  aria-label="Auto creative scans paused"
+                                >
+                                  <Pause className="w-2.5 h-2.5 fill-amber-500/30" />
+                                </button>
+                              )}
                             </span>
                           ) : scaling.archetype !== "inactive" ? (
                             (() => {
@@ -1515,11 +1516,43 @@ export function PagesTable({
                                     <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
                                   )}
                                   <span>{scaling.shortLabel}</span>
+                                  {p.autoCreativeScan === false && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setRunnerModalPages([p]);
+                                        setRunnerModalOpen(true);
+                                      }}
+                                      className="text-amber-500 hover:text-amber-400 transition-colors cursor-pointer shrink-0 ml-0.5 p-0.5 rounded hover:bg-amber-500/10"
+                                      title="Automatic creative scans paused. Click to open runner."
+                                      aria-label="Auto creative scans paused"
+                                    >
+                                      <Pause className="w-2.5 h-2.5 fill-amber-500/30" />
+                                    </button>
+                                  )}
                                 </span>
                               );
                             })()
                           ) : (
-                            <span className="text-slate-400 text-[10px] shrink-0">—</span>
+                            <div className="inline-flex items-center gap-1 shrink-0">
+                              <span className="text-slate-400 text-[10px]">—</span>
+                              {p.autoCreativeScan === false && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setRunnerModalPages([p]);
+                                    setRunnerModalOpen(true);
+                                  }}
+                                  className="text-amber-500 hover:text-amber-400 transition-colors cursor-pointer shrink-0 p-0.5 rounded hover:bg-amber-500/10"
+                                  title="Automatic creative scans paused. Click to open runner."
+                                  aria-label="Auto creative scans paused"
+                                >
+                                  <Pause className="w-2.5 h-2.5 fill-amber-500/30" />
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
                       </td>
