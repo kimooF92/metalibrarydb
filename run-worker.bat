@@ -18,9 +18,10 @@ echo  [3] Creative Spy (Headless)- Only scan ad creatives in background
 echo  [4] Creative Spy (Visible) - Only scan ad creatives with browser GUI
 echo  [5] Count Only Mode        - Fast ad count refresh (no creatives)
 echo  [6] Trigger.dev Dev Worker - Background task runner (Real-time count scans)
+echo  [7] Deploy to Trigger.dev  - Deploy tasks to Cloud (for Vercel production)
 echo.
 set "choice=1"
-set /p "choice=Enter choice [1-6, default is 1]: "
+set /p "choice=Enter choice [1-7, default is 1]: "
 
 if "%choice%"=="1" goto MODE_1
 if "%choice%"=="2" goto MODE_2
@@ -28,6 +29,7 @@ if "%choice%"=="3" goto MODE_3
 if "%choice%"=="4" goto MODE_4
 if "%choice%"=="5" goto MODE_5
 if "%choice%"=="6" goto MODE_6
+if "%choice%"=="7" goto MODE_7
 goto MODE_1
 
 :MODE_1
@@ -58,6 +60,11 @@ goto EXECUTE
 :MODE_6
 set "CMD_TO_RUN=npm run trigger:dev"
 set "LABEL=Trigger.dev Dev Worker"
+goto EXECUTE
+
+:MODE_7
+set "CMD_TO_RUN=npm run trigger:deploy"
+set "LABEL=Deploy Tasks to Trigger.dev Cloud"
 goto EXECUTE
 
 :RUN_WITH_ARGS
