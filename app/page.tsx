@@ -518,7 +518,7 @@ function DashboardContent() {
   };
 
   return (
-    <div className="h-full flex flex-col space-y-4 overflow-y-auto md:overflow-hidden">
+    <div className="h-full flex flex-col space-y-4 overflow-y-auto md:overflow-hidden min-w-0">
       {/* Toast Alert Banner */}
       {toast && (
         <div
