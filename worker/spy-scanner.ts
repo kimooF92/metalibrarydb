@@ -395,6 +395,12 @@ export async function scanAdCreatives(
         console.log(
           `[Spy Scanner] Pre-scan live result count updated: ${liveResults} (difference: ${difference ?? "N/A"})`
         );
+
+        // Update archetype tag
+        try {
+          const { updateAndPersistPageTag } = await import("../lib/page-tagger");
+          updateAndPersistPageTag(trackedPageId).catch(() => {});
+        } catch {}
       }
     } catch (countErr) {
       console.warn("[Spy Scanner] Pre-scan live result count extraction failed, continuing creative extraction:", countErr);

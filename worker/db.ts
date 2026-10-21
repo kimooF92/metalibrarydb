@@ -1025,6 +1025,14 @@ export async function markJobCompleted(
     } catch {}
   }
 
+  // 4c. Update & Persist Archetype Sweet-Spot Tag (Stable, Burst, Scaling, Breakout, etc.)
+  try {
+    const { updateAndPersistPageTag } = await import("../lib/page-tagger");
+    updateAndPersistPageTag(pageId).catch((err) =>
+      console.warn(`[Page Tagger] Non-blocking tag error for ${pageId}:`, err?.message || err)
+    );
+  } catch {}
+
   // 5. Intelligent Creative Routing
   const hasPreviousScan = Boolean(trackedPage?.lastCreativeScan);
   // For a brand-new page with no previous creative scan OR a brand relaunching from inactive, all positive results count as new ads to extract

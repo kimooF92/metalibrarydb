@@ -12,6 +12,7 @@ import { useWorkspace } from "@/components/workspace-context";
 
 const VALID_STATUSES = ["all", "success", "pending", "scanning", "failed", "unclear"] as const;
 const VALID_SEARCH_TYPES = ["all", "page", "keyword_exact_phrase", "keyword_unordered"] as const;
+const VALID_TAGS = ["all", "breakout", "scaling", "burst", "stable", "heavy_tester", "descaling", "moderate", "emerging", "off_air", "inactive"] as const;
 const VALID_TABS = ["active", "all", "watchlist", "high_volume", "attention", "zero_ads", "needs_review"] as const;
 const VALID_SORT_COLS = ["createdAt", "displayName", "currentResults", "lastChecked", "lastCreativeScan", "status", "difference"] as const;
 const VALID_PAGE_SIZES = [25, 50, 100] as const;
@@ -21,6 +22,7 @@ function getInitialDashboardState() {
     search: "",
     statusFilter: "all" as (typeof VALID_STATUSES)[number],
     searchTypeFilter: "all" as (typeof VALID_SEARCH_TYPES)[number],
+    tagFilter: "all" as (typeof VALID_TAGS)[number],
     activeTab: "active" as (typeof VALID_TABS)[number],
     sortBy: "createdAt" as (typeof VALID_SORT_COLS)[number],
     sortOrder: "desc" as "asc" | "desc",
@@ -79,6 +81,10 @@ function getInitialDashboardState() {
       const st = urlParams.get("searchType");
       state.searchTypeFilter = st && VALID_SEARCH_TYPES.includes(st as any) ? (st as any) : "all";
     }
+    if (urlParams.has("tag")) {
+      const tg = urlParams.get("tag");
+      state.tagFilter = tg && VALID_TAGS.includes(tg as any) ? (tg as any) : "all";
+    }
     if (urlParams.has("tab")) {
       const t = urlParams.get("tab");
       state.activeTab = t && VALID_TABS.includes(t as any) ? (t as any) : "active";
@@ -109,6 +115,7 @@ function syncDashboardStateToUrl(state: {
   search: string;
   statusFilter: string;
   searchTypeFilter: string;
+  tagFilter: string;
   activeTab: string;
   sortBy: string;
   sortOrder: "asc" | "desc";
@@ -124,6 +131,9 @@ function syncDashboardStateToUrl(state: {
     }
     if (state.searchTypeFilter && state.searchTypeFilter !== "all" && VALID_SEARCH_TYPES.includes(state.searchTypeFilter as any)) {
       query.set("searchType", state.searchTypeFilter);
+    }
+    if (state.tagFilter && state.tagFilter !== "all" && VALID_TAGS.includes(state.tagFilter as any)) {
+      query.set("tag", state.tagFilter);
     }
     if (state.activeTab && state.activeTab !== "active" && VALID_TABS.includes(state.activeTab as any)) {
       query.set("tab", state.activeTab);
@@ -164,6 +174,7 @@ function DashboardContent() {
   const [search, setSearch] = useState(initialLoaded.search);
   const [statusFilter, setStatusFilter] = useState(initialLoaded.statusFilter);
   const [searchTypeFilter, setSearchTypeFilter] = useState(initialLoaded.searchTypeFilter);
+  const [tagFilter, setTagFilter] = useState(initialLoaded.tagFilter);
   const [activeTab, setActiveTab] = useState(initialLoaded.activeTab);
   const [sortBy, setSortBy] = useState(initialLoaded.sortBy);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">(initialLoaded.sortOrder);
@@ -188,6 +199,10 @@ function DashboardContent() {
     if (urlParams.has("searchType")) {
       const st = urlParams.get("searchType");
       if (st && VALID_SEARCH_TYPES.includes(st as any)) setSearchTypeFilter(st as any);
+    }
+    if (urlParams.has("tag")) {
+      const tg = urlParams.get("tag");
+      if (tg && VALID_TAGS.includes(tg as any)) setTagFilter(tg as any);
     }
     if (urlParams.has("tab")) {
       const t = urlParams.get("tab");
@@ -216,6 +231,7 @@ function DashboardContent() {
       search,
       statusFilter,
       searchTypeFilter,
+      tagFilter,
       activeTab,
       sortBy,
       sortOrder,
@@ -286,6 +302,7 @@ function DashboardContent() {
       if (search) params.set("search", search);
       if (statusFilter !== "all") params.set("status", statusFilter);
       if (searchTypeFilter !== "all") params.set("searchType", searchTypeFilter);
+      if (tagFilter !== "all") params.set("tag", tagFilter);
       if (activeTab) params.set("tab", activeTab);
       params.set("sortBy", sortBy);
       params.set("sortOrder", sortOrder);
@@ -319,7 +336,7 @@ function DashboardContent() {
         if (!silent) setPagesLoading(false);
       }
     }
-  }, [page, pageSize, search, statusFilter, searchTypeFilter, activeTab, sortBy, sortOrder, showToast]);
+  }, [page, pageSize, search, statusFilter, searchTypeFilter, tagFilter, activeTab, sortBy, sortOrder, showToast]);
 
   const loadData = useCallback((silent = false, forceRefresh = false) => {
     fetchStats(silent, forceRefresh);
@@ -341,6 +358,7 @@ function DashboardContent() {
     setSearchTabCounts(null);
     setStatusFilter("all");
     setSearchTypeFilter("all");
+    setTagFilter("all");
     setActiveTab("active");
     setSortBy("createdAt");
     setSortOrder("desc");
@@ -546,6 +564,11 @@ function DashboardContent() {
         searchTypeFilter={searchTypeFilter}
         onSearchTypeFilterChange={(val) => {
           setSearchTypeFilter(val as any);
+          setPage(1);
+        }}
+        tagFilter={tagFilter}
+        onTagFilterChange={(val) => {
+          setTagFilter(val as any);
           setPage(1);
         }}
         activeTab={activeTab}

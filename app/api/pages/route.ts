@@ -110,6 +110,17 @@ export async function GET(request: Request) {
       baseConditions.push(eq(trackedPages.searchType, searchTypeFilter));
     }
 
+    // Tag filtering (supports single tag or comma-separated list e.g. tag=scaling or tag=scaling,breakout)
+    const tagFilter = searchParams.get("tag")?.trim()?.toLowerCase();
+    if (tagFilter && tagFilter !== "all") {
+      const tagList = tagFilter.split(",").map((t) => t.trim()).filter(Boolean);
+      if (tagList.length === 1) {
+        baseConditions.push(sql`${tagList[0]} = ANY(${trackedPages.tags})`);
+      } else if (tagList.length > 1) {
+        baseConditions.push(sql`${trackedPages.tags} && ARRAY[${sql.join(tagList.map((t) => sql`${t}`), sql`, `)}]::text[]`);
+      }
+    }
+
     // Compute cross-tab counts in a single fast SQL pass when searching
     let searchTabCounts: {
       all: number;
@@ -595,7 +606,11 @@ export async function GET(request: Request) {
         isWatchlisted: p.isWatchlisted ?? false,
         isCreativeQueued: Boolean(activeCreativeJobMap[p.id]),
         historyPoints,
-        scalingPattern: classifyScalingPattern(historyPoints, effectiveResults),
+        scalingPattern: classifyScalingPattern(historyPoints, effectiveResults, null, {
+          holdStatus: p.holdStatus,
+          lastKnownValidResults: p.lastKnownValidResults,
+          consecutiveZeroScans: p.consecutiveZeroScans,
+        }),
         extractedAdCount: extractedAdCountMap[p.id] ?? 0,
         approxProductCount: approxProductCountMap[p.id] ?? null,
         holdStatus: p.holdStatus ?? "active",

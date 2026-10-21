@@ -139,6 +139,8 @@ interface PagesTableProps {
   onStatusFilterChange: (value: string) => void;
   searchTypeFilter: string;
   onSearchTypeFilterChange: (value: string) => void;
+  tagFilter?: string;
+  onTagFilterChange?: (value: string) => void;
   activeTab: string;
   onTabChange: (tab: string) => void;
   page: number;
@@ -171,6 +173,8 @@ export function PagesTable({
   onStatusFilterChange,
   searchTypeFilter,
   onSearchTypeFilterChange,
+  tagFilter,
+  onTagFilterChange,
   activeTab,
   onTabChange,
   page,
@@ -612,7 +616,7 @@ export function PagesTable({
               type="button"
               onClick={() => setShowFilterPopover((prev) => !prev)}
               className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                statusFilter !== "all" || searchTypeFilter !== "all"
+                statusFilter !== "all" || searchTypeFilter !== "all" || (tagFilter && tagFilter !== "all")
                   ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800 shadow-sm"
                   : "bg-white dark:bg-slate-950/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
               }`}
@@ -620,9 +624,9 @@ export function PagesTable({
             >
               <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-500" />
               <span>Filters</span>
-              {(statusFilter !== "all" || searchTypeFilter !== "all") && (
+              {(statusFilter !== "all" || searchTypeFilter !== "all" || (tagFilter && tagFilter !== "all")) && (
                 <span className="bg-indigo-600 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
-                  {(statusFilter !== "all" ? 1 : 0) + (searchTypeFilter !== "all" ? 1 : 0)}
+                  {(statusFilter !== "all" ? 1 : 0) + (searchTypeFilter !== "all" ? 1 : 0) + (tagFilter && tagFilter !== "all" ? 1 : 0)}
                 </span>
               )}
               {showFilterPopover ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
@@ -635,17 +639,40 @@ export function PagesTable({
                     <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-500" />
                     <span>Table Filters</span>
                   </div>
-                  {(statusFilter !== "all" || searchTypeFilter !== "all") && (
+                  {(statusFilter !== "all" || searchTypeFilter !== "all" || (tagFilter && tagFilter !== "all")) && (
                     <button
                       onClick={() => {
                         onStatusFilterChange("all");
                         onSearchTypeFilterChange("all");
+                        onTagFilterChange?.("all");
                       }}
                       className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-semibold cursor-pointer"
                     >
                       Reset
                     </button>
                   )}
+                </div>
+
+                {/* Archetype Tag Filter */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Archetype Tag</label>
+                  <select
+                    value={tagFilter || "all"}
+                    onChange={(e) => onTagFilterChange?.(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs font-medium rounded-lg px-2.5 py-1.5 border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                  >
+                    <option value="all">All Tags (Any Archetype)</option>
+                    <option value="breakout">⚡ Breakout (+12+ impulse launch)</option>
+                    <option value="scaling">🚀 Scaling (Multi-day expansion)</option>
+                    <option value="burst">🔄 Burst (Sawtooth cycler)</option>
+                    <option value="stable">🟢 Stable (Evergreen baseline)</option>
+                    <option value="heavy_tester">🧪 Heavy Tester (Creative lab)</option>
+                    <option value="descaling">⚠️ Descaling (Budget contraction)</option>
+                    <option value="moderate">📊 Moderate (Steady activity)</option>
+                    <option value="emerging">🆕 Emerging (&lt; 3 scans)</option>
+                    <option value="off_air">⛔ Off-Air (Dropped to 0)</option>
+                    <option value="inactive">⚫ Inactive (0 Ads)</option>
+                  </select>
                 </div>
 
                 {/* Status Filter */}
@@ -956,11 +983,23 @@ export function PagesTable({
                       )}
 
                       {/* Active Filter Chips */}
-                      {(search || statusFilter !== "all" || searchTypeFilter !== "all" || activeTab !== "active" || page > 1) && (
+                      {(search || statusFilter !== "all" || searchTypeFilter !== "all" || (tagFilter && tagFilter !== "all") || activeTab !== "active" || page > 1) && (
                         <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
                           {activeTab !== "active" && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
                               Tab: {activeTab === "all" ? "All Pages" : activeTab}
+                            </span>
+                          )}
+                          {tagFilter && tagFilter !== "all" && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                              <span>Tag: {tagFilter.toUpperCase()}</span>
+                              <button
+                                onClick={() => onTagFilterChange?.("all")}
+                                className="text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-200 cursor-pointer ml-0.5"
+                                aria-label="Clear tag filter"
+                              >
+                                ×
+                              </button>
                             </span>
                           )}
                           {statusFilter !== "all" && (
@@ -1183,10 +1222,16 @@ export function PagesTable({
                                 </button>
                               )}
 
-                              {scaling.archetype !== "emerging" && scaling.archetype !== "inactive" && (
+                              {scaling.archetype !== "inactive" && (
                                 <span
                                   className={`inline-flex items-center gap-1 text-[9.5px] font-extrabold px-1.5 py-0.2 rounded border shadow-2xs ${scaling.badgeClass}`}
-                                  title={`${scaling.label} (${scaling.confidence} confidence): ${scaling.description}`}
+                                  title={`${scaling.label} (${scaling.confidence} confidence): ${scaling.description}${
+                                    scaling.velocityPerDay !== undefined
+                                      ? `\n• Velocity: ${scaling.velocityPerDay > 0 ? "+" : ""}${scaling.velocityPerDay} ads/day`
+                                      : ""
+                                  }${scaling.volatility !== undefined ? `\n• Volatility: σ=${scaling.volatility}` : ""}${
+                                    scaling.reversionRate !== undefined ? `\n• Sawtooth Flips: ${Math.round(scaling.reversionRate * 100)}%` : ""
+                                  }`}
                                 >
                                   <span>{scaling.icon}</span>
                                   <span>{scaling.shortLabel}</span>

@@ -151,7 +151,11 @@ export async function GET(request: Request) {
         attempts: 0,
         isCreativeQueued: false,
         historyPoints,
-        scalingPattern: classifyScalingPattern(historyPoints, effectiveResults),
+        scalingPattern: classifyScalingPattern(historyPoints, effectiveResults, null, {
+          holdStatus: page.holdStatus,
+          lastKnownValidResults: page.lastKnownValidResults,
+          consecutiveZeroScans: page.consecutiveZeroScans,
+        }),
         extractedAdCount: 0,
         approxProductCount: null,
         holdStatus: page.holdStatus ?? "active",
