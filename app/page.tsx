@@ -407,7 +407,7 @@ function DashboardContent() {
     }
   }, [activeWorkspace?.id, loadData]);
 
-  // Real-time row status updates via Supabase WebSockets (Zero polling, zero full table reloads)
+  // Real-time row status & ad-count updates via Supabase WebSockets (Zero polling, zero full table reloads)
   useEffect(() => {
     const supabase = getSupabase();
     const channel = supabase
@@ -425,24 +425,41 @@ function DashboardContent() {
 
           // In-place row patch: only the updated row reference changes, preventing whole-table re-render or flicker
           setPages((prevPages) =>
-            prevPages.map((page) =>
-              page.id === updated.id
-                ? {
-                    ...page,
-                    status: updated.status ?? page.status,
-                    currentResults:
-                      updated.current_results !== undefined && updated.current_results !== null
-                        ? updated.current_results
-                        : updated.currentResults !== undefined && updated.currentResults !== null
-                          ? updated.currentResults
-                          : page.currentResults,
-                    lastChecked: updated.last_checked || updated.lastChecked || page.lastChecked,
-                    lastSuccessAt: updated.last_success_at || updated.lastSuccessAt || page.lastSuccessAt,
-                    updatedAt: updated.updated_at || updated.updatedAt || page.updatedAt,
-                    holdStatus: updated.hold_status || updated.holdStatus || page.holdStatus,
-                  }
-                : page
-            )
+            prevPages.map((page) => {
+              if (page.id !== updated.id) return page;
+
+              const rawResults =
+                updated.current_results !== undefined && updated.current_results !== null
+                  ? updated.current_results
+                  : updated.currentResults !== undefined && updated.currentResults !== null
+                    ? updated.currentResults
+                    : page.currentResults;
+              const newResults = rawResults !== null && rawResults !== undefined ? Number(rawResults) : null;
+
+              const oldResults = page.currentResults;
+              const hasCountChanged = newResults !== null && oldResults !== null && newResults !== oldResults;
+              const difference = hasCountChanged ? newResults - oldResults : page.difference;
+              const previousResults = hasCountChanged ? oldResults : page.previousResults;
+
+              // Dynamically append new point to live sparkline history points
+              let historyPoints = page.historyPoints;
+              if (hasCountChanged && Array.isArray(historyPoints) && newResults !== null) {
+                historyPoints = [...historyPoints.slice(-13), newResults];
+              }
+
+              return {
+                ...page,
+                status: updated.status ?? page.status,
+                currentResults: newResults,
+                previousResults,
+                difference,
+                historyPoints,
+                lastChecked: updated.last_checked || updated.lastChecked || page.lastChecked,
+                lastSuccessAt: updated.last_success_at || updated.lastSuccessAt || page.lastSuccessAt,
+                updatedAt: updated.updated_at || updated.updatedAt || page.updatedAt,
+                holdStatus: updated.hold_status || updated.holdStatus || page.holdStatus,
+              };
+            })
           );
 
           // Silently sync the top summary stats (pending, scanning, completed) without showing loaders
@@ -716,7 +733,7 @@ function DashboardContent() {
       <ScanProgressWidget
         scanningPageIds={scanningPageIds}
         onScanFinished={() => {
-          fetchStats(true);
+          loadData(true, true);
         }}
       />
     </div>

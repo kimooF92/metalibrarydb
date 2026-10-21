@@ -12,6 +12,7 @@ import { ProductDetailsModal } from "@/components/products/product-details-modal
 import { ExportDossierModal } from "@/components/export-dossier-modal";
 import { ManageDomainModal } from "@/components/manage-domain-modal";
 import { useToast } from "@/components/toast-context";
+import { getSupabase } from "@/lib/supabase";
 import { Ad, ScrapedProduct } from "@/types";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import {
@@ -74,6 +75,7 @@ interface BrandAnalyticsData {
     holdStatus?: string | null;
     lastKnownValidResults?: number | null;
     consecutiveZeroScans?: number | null;
+    lastSuccessAt?: string | null;
   };
   summary: {
     totalAdsCaptured: number;
@@ -278,19 +280,86 @@ export default function BrandDeepDivePage({
         message: "Triggered real-time verification scan for this brand.",
         type: "success",
       });
+
+      // Safety timeout in case worker/network drops connection
       setTimeout(() => {
+        setIsCheckingStatus(false);
         fetchBrandData(true);
-      }, 3500);
+      }, 45000);
     } catch (err: any) {
+      setIsCheckingStatus(false);
       showToast({
         title: "Check Failed",
         message: err.message || "Failed to trigger check",
         type: "error",
       });
-    } finally {
-      setIsCheckingStatus(false);
     }
   };
+
+  // Real-time row status & ad count updates via Supabase WebSockets (Zero polling, live instant results)
+  useEffect(() => {
+    const trackedPageId = data?.brand?.id;
+    if (!trackedPageId) return;
+
+    const supabase = getSupabase();
+    const channel = supabase
+      .channel(`realtime-brand-detail-${trackedPageId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "tracked_pages",
+          filter: `id=eq.${trackedPageId}`,
+        },
+        (payload) => {
+          const updated = payload.new as any;
+          if (!updated?.id) return;
+
+          const rawResults =
+            updated.current_results !== undefined && updated.current_results !== null
+              ? updated.current_results
+              : updated.currentResults !== undefined && updated.currentResults !== null
+                ? updated.currentResults
+                : null;
+          const newCount = rawResults !== null ? Number(rawResults) : null;
+
+          setData((prev) => {
+            if (!prev || !prev.brand) return prev;
+            return {
+              ...prev,
+              brand: {
+                ...prev.brand,
+                status: updated.status ?? prev.brand.status,
+                currentResults: newCount !== null ? newCount : prev.brand.currentResults,
+                lastChecked: updated.last_checked || updated.lastChecked || prev.brand.lastChecked,
+                lastSuccessAt: updated.last_success_at || updated.lastSuccessAt || prev.brand.lastSuccessAt,
+                holdStatus: updated.hold_status || updated.holdStatus || prev.brand.holdStatus,
+              },
+            };
+          });
+
+          if (updated.status === "success" || updated.status === "failed") {
+            setIsCheckingStatus(false);
+            fetchBrandData(true);
+            if (updated.status === "success") {
+              showToast({
+                title: "⚡ Ad Count Updated",
+                message: `Ad Library scan complete: ${newCount ?? 0} active ads found.`,
+                type: "success",
+              });
+            }
+          } else if (updated.status === "scanning") {
+            setIsCheckingStatus(true);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [data?.brand?.id, showToast]);
 
   useEffect(() => {
     fetchBrandData();
@@ -701,6 +770,17 @@ export default function BrandDeepDivePage({
               <span>Meta Library</span>
             </a>
 
+            {/* Live Count Check Button */}
+            <button
+              onClick={handleCheckAdLibraryNow}
+              disabled={isCheckingStatus}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all cursor-pointer disabled:opacity-60"
+              title="Verify active ad count live via Trigger.dev"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isCheckingStatus ? "animate-spin text-indigo-500" : ""}`} />
+              <span>{isCheckingStatus ? "Scanning..." : "Check Count"}</span>
+            </button>
+
             {/* Refresh Brand Media */}
             <button
               onClick={handleBulkRefreshMedia}
@@ -709,7 +789,7 @@ export default function BrandDeepDivePage({
               title="Scrape and refresh media files via cloud worker"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingMedia ? "animate-spin text-indigo-500" : ""}`} />
-              <span>{isRefreshingMedia ? "Refreshing..." : "Refresh"}</span>
+              <span>{isRefreshingMedia ? "Refreshing..." : "Refresh Media"}</span>
             </button>
 
             {/* Export LLM Intelligence Dossier */}

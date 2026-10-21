@@ -90,31 +90,44 @@ export async function POST(request: Request) {
       .set({ status: "pending", updatedAt: new Date() })
       .where(inArray(trackedPages.id, foundIds));
 
-    // Dispatch to Trigger.dev if available
-    let triggerDevDispatched = false;
-    if (process.env.TRIGGER_SECRET_KEY && foundIds.length > 0) {
-      try {
-        await tasks.batchTrigger(
-          "scan-page-count",
-          foundIds.map((id) => ({ payload: { pageId: id } }))
-        );
-        triggerDevDispatched = true;
-      } catch (triggerErr: any) {
-        console.warn("[Trigger.dev Dispatch Warning]:", triggerErr?.message || triggerErr);
+    const isSinglePage = foundIds.length === 1;
+
+    // 1. Single Page Ad Count: Dispatch to Trigger.dev immediately
+    if (isSinglePage) {
+      let triggerDevDispatched = false;
+      if (process.env.TRIGGER_SECRET_KEY) {
+        try {
+          await tasks.trigger("scan-page-count", { pageId: foundIds[0] });
+          triggerDevDispatched = true;
+        } catch (triggerErr: any) {
+          console.warn("[Trigger.dev Single Dispatch Warning]:", triggerErr?.message || triggerErr);
+        }
       }
+
+      // If Trigger.dev wasn't dispatched (or errored), fallback to GitHub Action worker
+      if (!triggerDevDispatched) {
+        await triggerGitHubWorkflow("worker.yml").catch(() => {});
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Dispatched single-page ad count scan${triggerDevDispatched ? " via Trigger.dev" : " to worker queue"}.`,
+        enqueuedCount: 1,
+        mode: triggerDevDispatched ? "trigger.dev" : "worker_fallback",
+      });
     }
 
-    // Trigger GitHub Action worker workflow as backup if Trigger.dev wasn't used
-    if (!triggerDevDispatched) {
-      await triggerGitHubWorkflow("worker.yml").catch(() => {});
-    }
-
+    // 2. Multi Page Ad Count (foundIds.length > 1):
+    // Preserves Trigger.dev free-tier limits by NOT invoking Trigger.dev.
+    // Preserves GitHub Actions runners by keeping status as 'pending' in the DB queue
+    // until the user starts the GitHub worker or local worker.
     return NextResponse.json({
       success: true,
-      message: `Enqueued ${foundIds.length} page(s) for refresh.`,
+      message: `Enqueued ${foundIds.length} page(s) as pending. Waiting for GitHub worker or local worker to start.`,
       enqueuedCount: foundIds.length,
       newlyCreatedCount: idsToEnqueue.length,
       requeuedCount: existingSet.size,
+      mode: "pending_worker_queue",
     });
   } catch (error: any) {
     if (error.name === "ZodError") {

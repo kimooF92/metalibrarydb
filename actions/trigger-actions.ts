@@ -46,30 +46,55 @@ export async function triggerSinglePageRefresh(pageId: string) {
 
 /**
  * Server Action: Trigger batch retry for all failed pages
+ * Marks failed pages as pending in DB queue for local/GitHub worker execution
+ * (preserves Trigger.dev free-tier concurrency exclusively for single page ad counts).
  */
 export async function triggerBatchRetryFailed() {
   try {
-    if (process.env.TRIGGER_SECRET_KEY) {
-      const handle = await tasks.trigger("retry-failed-pages", {});
-      return { success: true, runId: handle.id, mode: "trigger.dev" };
-    }
-
-    // Fallback
     const failedPages = await db.query.trackedPages.findMany({
       where: eq(trackedPages.status, "failed"),
       columns: { id: true },
     });
-    if (failedPages.length > 0) {
+
+    if (failedPages.length === 0) {
+      return { success: true, retriedCount: 0, message: "No failed pages to retry." };
+    }
+
+    const failedIds = failedPages.map((p) => p.id);
+    const now = new Date();
+
+    // 1. Mark status as pending in tracked_pages
+    await db
+      .update(trackedPages)
+      .set({ status: "pending", updatedAt: now })
+      .where(inArray(trackedPages.id, failedIds));
+
+    // 2. Insert into queue table (skip already queued pending/running jobs)
+    const existingQueueJobs = await db.query.queue.findMany({
+      where: (q, { and, inArray }) =>
+        and(inArray(q.trackedPageId, failedIds), inArray(q.status, ["pending", "running"])),
+      columns: { trackedPageId: true },
+    });
+    const existingSet = new Set(existingQueueJobs.map((q) => q.trackedPageId));
+    const toEnqueue = failedIds.filter((id) => !existingSet.has(id));
+
+    if (toEnqueue.length > 0) {
       await db.insert(queue).values(
-        failedPages.map((p) => ({
-          trackedPageId: p.id,
-          jobType: "count",
-          status: "pending",
+        toEnqueue.map((id) => ({
+          trackedPageId: id,
+          jobType: "count" as const,
+          status: "pending" as const,
           priority: 10,
         }))
       );
     }
-    return { success: true, retriedCount: failedPages.length, mode: "database_queue" };
+
+    return {
+      success: true,
+      retriedCount: failedIds.length,
+      mode: "database_queue",
+      message: `Enqueued ${failedIds.length} failed page(s) as pending. Waiting for GitHub worker or local worker to start.`,
+    };
   } catch (error: any) {
     console.error("Error triggering batch retry:", error);
     return { success: false, error: error.message };

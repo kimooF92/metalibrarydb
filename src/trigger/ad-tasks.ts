@@ -304,7 +304,8 @@ export const scanPageCountTask = task({
 
 /**
  * Task: retryFailedPagesTask
- * 1-Click recovery task that finds all failed pages and triggers them in batches.
+ * Recovery task that enqueues failed pages as pending in the database queue
+ * for local or GitHub Actions worker processing (avoiding multi-page Trigger.dev usage).
  */
 export const retryFailedPagesTask = task({
   id: "retry-failed-pages",
@@ -322,18 +323,40 @@ export const retryFailedPagesTask = task({
       return { retriedCount: 0 };
     }
 
-    logger.info(`Dispatching retry batch for ${failedPages.length} failed pages...`);
+    const failedIds = failedPages.map((p) => p.id);
+    const now = new Date();
 
-    // Batch trigger scanPageCountTask for all failed pages
-    const batch = await scanPageCountTask.batchTrigger(
-      failedPages.map((p) => ({
-        payload: { pageId: p.id, url: p.url },
-      }))
-    );
+    logger.info(`Setting ${failedPages.length} failed pages to pending in DB queue for local/GitHub worker...`);
+
+    // 1. Mark as pending in tracked_pages
+    await db
+      .update(trackedPages)
+      .set({ status: "pending", updatedAt: now })
+      .where(inArray(trackedPages.id, failedIds));
+
+    // 2. Fetch existing active queue jobs to avoid duplicate entries
+    const existingQueueJobs = await db
+      .select({ trackedPageId: queue.trackedPageId })
+      .from(queue)
+      .where(and(inArray(queue.trackedPageId, failedIds), inArray(queue.status, ["pending", "running"])));
+    const existingSet = new Set(existingQueueJobs.map((q) => q.trackedPageId));
+    const toEnqueue = failedIds.filter((id) => !existingSet.has(id));
+
+    if (toEnqueue.length > 0) {
+      await db.insert(queue).values(
+        toEnqueue.map((id) => ({
+          trackedPageId: id,
+          jobType: "count" as const,
+          status: "pending" as const,
+          priority: 10,
+        }))
+      );
+    }
 
     return {
       retriedCount: failedPages.length,
-      batchId: batch.batchId,
+      mode: "pending_worker_queue",
+      message: `Enqueued ${failedPages.length} failed page(s) into database queue. Waiting for GitHub worker or local worker.`,
     };
   },
 });

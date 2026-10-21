@@ -95,30 +95,33 @@ export async function POST(request: Request) {
           }))
         );
 
-        // Dispatch to Trigger.dev if available
-        if (process.env.TRIGGER_SECRET_KEY && newRetryIds.length > 0) {
+        // Dispatch to Trigger.dev ONLY if it is a single page retry
+        if (newRetryIds.length === 1 && process.env.TRIGGER_SECRET_KEY) {
           try {
-            await tasks.batchTrigger(
-              "scan-page-count",
-              newRetryIds.map((id) => ({ payload: { pageId: id } }))
-            );
+            await tasks.trigger("scan-page-count", { pageId: newRetryIds[0] });
           } catch (triggerErr: any) {
             console.warn("[Trigger.dev Retry Dispatch Warning]:", triggerErr?.message || triggerErr);
           }
         }
+        // Multi retry pages (newRetryIds.length > 1) remain marked as 'pending'
+        // in DB queue until local worker or GitHub worker runs.
       }
     }
 
+    const isSingle = eligibleForRetry.length === 1;
     return NextResponse.json({
       success: true,
-      message: `Enqueued ${eligibleForRetry.length} page(s) for retry.${
-        flaggedForManualReview.length > 0
-          ? ` ${flaggedForManualReview.length} page(s) require manual review due to repeated failures (>= 3).`
-          : ""
-      }`,
+      message: isSingle
+        ? "Enqueued 1 page for retry via Trigger.dev."
+        : `Enqueued ${eligibleForRetry.length} page(s) for retry (pending until local or GitHub worker runs).${
+            flaggedForManualReview.length > 0
+              ? ` ${flaggedForManualReview.length} page(s) require manual review due to repeated failures (>= 3).`
+              : ""
+          }`,
       retriedCount: eligibleForRetry.length,
       flaggedCount: flaggedForManualReview.length,
       flaggedPageIds: flaggedForManualReview,
+      mode: isSingle ? "single_trigger_dev" : "pending_worker_queue",
     });
   } catch (error: any) {
     if (error.name === "ZodError") {
