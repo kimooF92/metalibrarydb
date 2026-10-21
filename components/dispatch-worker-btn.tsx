@@ -77,9 +77,9 @@ export function DispatchWorkerBtn({ variant = "navbar", className = "" }: Dispat
         showToast({
           type: "success",
           title: `🚀 GitHub Worker Dispatched!`,
-          message: res.mode === "trigger.dev"
+          message: res.message || (res.mode === "trigger.dev"
             ? `Trigger.dev routed workflow_dispatch to GitHub Actions for '${target}'.`
-            : `Directly dispatched workflow to GitHub Actions (4 Shards).`,
+            : `Directly dispatched workflow to GitHub Actions (4 Shards).`),
           link: "https://github.com/kimooF92/metalibrarydb/actions",
           linkLabel: "Open GitHub Actions Live Runs",
           duration: 6000,
