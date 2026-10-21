@@ -44,6 +44,7 @@ import {
   Copy,
   Pause,
   HelpCircle,
+  MoreVertical,
 } from "lucide-react";
 import { useToast } from "@/components/toast-context";
 
@@ -335,6 +336,22 @@ export function PagesTable({
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }
   }, [showFilterPopover]);
+
+  const [openMenuPageId, setOpenMenuPageId] = useState<string | null>(null);
+  const rowMenuRef = useRef<HTMLDivElement | null>(null);
+
+  // Close row actions menu on click outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (rowMenuRef.current && !rowMenuRef.current.contains(e.target as Node)) {
+        setOpenMenuPageId(null);
+      }
+    }
+    if (openMenuPageId) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [openMenuPageId]);
 
   useEffect(() => {
     setWatchlisted(Object.fromEntries(pages.map((p) => [p.id, p.isWatchlisted ?? false])));
@@ -917,7 +934,7 @@ export function PagesTable({
                 <th className="px-1 md:px-1.5 py-2.5 w-8 text-center">
                   <Star className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 mx-auto" />
                 </th>
-                <SortHeader col="displayName" label="Brand" className="w-[28%] min-w-[170px]" />
+                <SortHeader col="displayName" label="Brand" className="w-[30%] min-w-[170px]" />
                 <th className="px-2.5 md:px-3.5 xl:px-4 py-2.5 whitespace-nowrap w-[20%] min-w-[155px]">
                   <div className="flex items-center gap-1.5 font-semibold text-[10px] uppercase tracking-wider select-none">
                     <button
@@ -974,7 +991,7 @@ export function PagesTable({
                 </th>
                 <SortHeader col="status" label="Pattern & Status" className="hidden md:table-cell w-[17%] min-w-[135px] whitespace-nowrap" />
                 <SortHeader col="lastChecked" label="Last Checked" className="w-[13%] min-w-[100px] whitespace-nowrap" />
-                <th className="px-2.5 md:px-3.5 xl:px-4 py-2.5 text-right whitespace-nowrap text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase tracking-wider w-[11%] min-w-[95px]">
+                <th className="px-2.5 md:px-3.5 xl:px-4 py-2.5 text-right whitespace-nowrap text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase tracking-wider w-[9%] min-w-[75px]">
                   <span className="uppercase tracking-wider">Actions</span>
                 </th>
               </tr>
@@ -1531,40 +1548,8 @@ export function PagesTable({
 
                       {/* Actions */}
                       <td className="px-2.5 md:px-3.5 xl:px-4 py-2.5 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-0.5">
-                          {/* Notes button */}
-                          <button
-                            onClick={() => {
-                              setEditingNotes(p.id);
-                              setEditingNotesValue((p as any).notes || "");
-                            }}
-                            className={`p-1 rounded-md transition-all cursor-pointer ${(p as any).notes
-                                ? "text-yellow-500 dark:text-yellow-400 hover:text-yellow-600 dark:hover:text-yellow-300 hover:bg-yellow-500/10"
-                                : "text-slate-500 dark:text-slate-400 hover:text-yellow-600 dark:hover:text-yellow-300 hover:bg-yellow-500/10 opacity-0 group-hover:opacity-100"
-                              }`}
-                            title={(p as any).notes || "Add note"}
-                            aria-label={`Notes for ${p.displayName || "tracked page"}`}
-                          >
-                            <StickyNote className="w-3.5 h-3.5" />
-                          </button>
-
-                          {/* Ad Spy Actions */}
-                          <button
-                            onClick={() => {
-                              setRunnerModalPages([p]);
-                              setRunnerModalOpen(true);
-                            }}
-                            className="p-1 rounded-md text-slate-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-300 hover:bg-purple-500/10 transition-all cursor-pointer"
-                            title={
-                              (p as any).lastCreativeScan && new Date((p as any).lastCreativeScan).toDateString() === new Date().toDateString()
-                                ? `Scanned today at ${new Date((p as any).lastCreativeScan).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                                : "Queue Ad Spy extraction scan"
-                            }
-                            aria-label={`Queue creative scan for ${p.displayName || "tracked page"}`}
-                          >
-                            <Sparkles className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
-                          </button>
-
+                        <div className="flex items-center justify-end gap-1">
+                          {/* 1. Refresh Button */}
                           {(() => {
                             const isRefreshing = refreshingPageIds.has(p.id) || p.status === "scanning";
                             return (
@@ -1590,51 +1575,106 @@ export function PagesTable({
                             );
                           })()}
 
+                          {/* 2. Scan Button (Ad Spy Actions) */}
                           <button
-                            onClick={() => openHistory(p)}
-                            className="p-1 rounded-md text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-blue-500/10 transition-all cursor-pointer"
-                            title="View scan history"
-                            aria-label={`View scan history for ${p.displayName || "tracked page"}`}
+                            onClick={() => {
+                              setRunnerModalPages([p]);
+                              setRunnerModalOpen(true);
+                            }}
+                            className="p-1 rounded-md text-slate-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-300 hover:bg-purple-500/10 transition-all cursor-pointer"
+                            title={
+                              (p as any).lastCreativeScan && new Date((p as any).lastCreativeScan).toDateString() === new Date().toDateString()
+                                ? `Scanned today at ${new Date((p as any).lastCreativeScan).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                                : "Queue Ad Spy extraction scan"
+                            }
+                            aria-label={`Queue creative scan for ${p.displayName || "tracked page"}`}
                           >
-                            <History className="w-3.5 h-3.5" />
+                            <Sparkles className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
                           </button>
 
-                          {/* Retry — only when failed */}
-                          {p.status === "failed" && (
-                            (p.attempts ?? 0) >= 3 ? (
-                              <button
-                                onClick={() => openHistory(p)}
-                                className="p-1 rounded-md text-amber-500 dark:text-amber-400/80 hover:text-amber-600 dark:hover:text-amber-300 hover:bg-amber-500/10 transition-all cursor-pointer"
-                                title={`Failed ${p.attempts} times — click to review history`}
-                                aria-label={`Review failure history for ${p.displayName || "tracked page"}`}
-                              >
-                                <ShieldAlert className="w-3.5 h-3.5" />
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleRowRetry(p.id)}
-                                disabled={retryingPageIds.has(p.id)}
-                                className="group/retry p-1 rounded-md text-amber-600 dark:text-amber-400 hover:text-amber-500 hover:bg-amber-500/10 transition-all cursor-pointer active:scale-90 disabled:opacity-60"
-                                title="Retry scan"
-                                aria-label={`Retry scan for ${p.displayName || "tracked page"}`}
-                              >
-                                <RotateCcw
-                                  className={`w-3.5 h-3.5 transition-transform duration-300 ${
-                                    retryingPageIds.has(p.id) ? "animate-spin" : "group-hover/retry:-rotate-90"
-                                  }`}
-                                />
-                              </button>
-                            )
-                          )}
+                          {/* 3. Three-dots More Menu */}
+                          <div className="relative inline-block text-left" ref={openMenuPageId === p.id ? rowMenuRef : undefined}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenuPageId(openMenuPageId === p.id ? null : p.id);
+                              }}
+                              className={`p-1 rounded-md transition-all cursor-pointer ${
+                                openMenuPageId === p.id
+                                  ? "text-slate-900 dark:text-white bg-slate-200 dark:bg-slate-800"
+                                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80"
+                              }`}
+                              title="More options"
+                              aria-label={`More options for ${p.displayName || "tracked page"}`}
+                            >
+                              <MoreVertical className="w-3.5 h-3.5" />
+                            </button>
 
-                          <button
-                            onClick={() => setPageToDelete(p)}
-                            className="p-1 rounded-md text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
-                            title="Delete tracked page"
-                            aria-label={`Delete ${p.displayName || "tracked page"}`}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                            {openMenuPageId === p.id && (
+                              <div className="absolute right-0 top-full mt-1 w-36 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 text-left divide-y divide-slate-100 dark:divide-slate-800">
+                                <div className="py-0.5">
+                                  {/* View History */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenMenuPageId(null);
+                                      openHistory(p);
+                                    }}
+                                    className="w-full px-2.5 py-1.5 text-left text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-2 cursor-pointer transition-colors"
+                                  >
+                                    <History className="w-3.5 h-3.5 text-blue-500" />
+                                    <span>History</span>
+                                  </button>
+
+                                  {/* Notes */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenMenuPageId(null);
+                                      setEditingNotes(p.id);
+                                      setEditingNotesValue((p as any).notes || "");
+                                    }}
+                                    className="w-full px-2.5 py-1.5 text-left text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-2 cursor-pointer transition-colors"
+                                  >
+                                    <StickyNote className={`w-3.5 h-3.5 ${(p as any).notes ? "text-yellow-500" : "text-slate-400"}`} />
+                                    <span>{(p as any).notes ? "Edit Note" : "Add Note"}</span>
+                                  </button>
+
+                                  {/* Retry if failed */}
+                                  {p.status === "failed" && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenMenuPageId(null);
+                                        handleRowRetry(p.id);
+                                      }}
+                                      disabled={retryingPageIds.has(p.id)}
+                                      className="w-full px-2.5 py-1.5 text-left text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 flex items-center gap-2 cursor-pointer transition-colors disabled:opacity-50"
+                                    >
+                                      <RotateCcw className={`w-3.5 h-3.5 ${retryingPageIds.has(p.id) ? "animate-spin" : ""}`} />
+                                      <span>Retry Scan</span>
+                                    </button>
+                                  )}
+                                </div>
+
+                                <div className="py-0.5">
+                                  {/* Delete */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenMenuPageId(null);
+                                      setPageToDelete(p);
+                                    }}
+                                    className="w-full px-2.5 py-1.5 text-left text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 flex items-center gap-2 cursor-pointer transition-colors"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>Delete</span>
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
 
                         {/* Inline Notes Editor */}
