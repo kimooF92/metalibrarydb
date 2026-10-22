@@ -56,6 +56,7 @@ import {
   RotateCw,
   DollarSign,
   Laptop,
+  ChevronDown,
 } from "lucide-react";
 
 interface BrandAnalyticsData {
@@ -195,6 +196,8 @@ export default function BrandDeepDivePage({
   // Products Tab State
   const [isSyncingProducts, setIsSyncingProducts] = useState(false);
   const [isQueueingLocalRescan, setIsQueueingLocalRescan] = useState(false);
+  const [isScrapeMenuOpen, setIsScrapeMenuOpen] = useState(false);
+  const scrapeMenuRef = useRef<HTMLDivElement | null>(null);
   const [isDossierModalOpen, setIsDossierModalOpen] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [productStatusFilter, setProductStatusFilter] = useState<"all" | "scraped" | "pending">("all");
@@ -437,7 +440,7 @@ export default function BrandDeepDivePage({
       const brandTargetName = data?.brand?.displayName || resJson.brandName || resJson.pageId || id;
       showToast({
         type: "success",
-        title: "🖥️ Queued for Local Rescan",
+        title: "Queued for Local Rescan",
         message: `${resJson.count || 0} product(s) marked as Pending for local worker. To run now: npm run scrape:products -- --brand "${brandTargetName}"`,
       });
 
@@ -624,6 +627,18 @@ export default function BrandDeepDivePage({
       setIsRefreshingMedia(false);
     }
   };
+
+  // Close scrape dropdown menu when clicking outside
+  useEffect(() => {
+    if (!isScrapeMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (scrapeMenuRef.current && !scrapeMenuRef.current.contains(e.target as Node)) {
+        setIsScrapeMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isScrapeMenuOpen]);
 
   // Infinite scroll listener for creatives tab
   useEffect(() => {
@@ -876,7 +891,7 @@ export default function BrandDeepDivePage({
               title="Trigger immediate live count check on Meta Ad Library"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isCheckingStatus ? "animate-spin" : ""}`} />
-              <span>{isCheckingStatus ? "Checking..." : "⚡ Check Ad Library Now"}</span>
+              <span>{isCheckingStatus ? "Checking..." : "Check Ad Library Now"}</span>
             </button>
           </div>
         )}
@@ -1404,43 +1419,96 @@ export default function BrandDeepDivePage({
               </p>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            {/* Split-Button with Unified Scraping & Rescan Dropdown */}
+            <div className="relative inline-flex items-stretch shrink-0 rounded-lg shadow-sm" ref={scrapeMenuRef}>
               <button
                 type="button"
-                onClick={handleQueueBrandProductsForLocalRescan}
-                disabled={isQueueingLocalRescan || isSyncingProducts}
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-500/30 text-xs font-bold transition-all cursor-pointer disabled:opacity-60 shadow-xs"
-                title="Reset all brand products to pending and enqueue them for your local worker (uses residential IP to fix USD prices & bypass Cloudflare)"
-              >
-                {isQueueingLocalRescan ? (
-                  <RefreshCw className="w-4 h-4 animate-spin text-amber-600 dark:text-amber-400" />
-                ) : (
-                  <Laptop className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                )}
-                <span>{isQueueingLocalRescan ? "Queueing..." : "🖥️ Set for Local URL Rescan"}</span>
-              </button>
-
-              <button
                 onClick={() => handleSyncBrandProducts(false)}
                 disabled={isSyncingProducts || isQueueingLocalRescan}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-sm shadow-indigo-600/25 transition-all cursor-pointer disabled:opacity-60"
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-l-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all cursor-pointer disabled:opacity-60"
+                title="Extract all destination URLs from ads and scrape new product details"
               >
                 {isSyncingProducts ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                 ) : (
-                  <Zap className="w-4 h-4" />
+                  <Zap className="w-3.5 h-3.5" />
                 )}
-                <span>{isSyncingProducts ? "Scanning & Extracting..." : "⚡ Sync & Scrape Brand Products"}</span>
+                <span>
+                  {isSyncingProducts
+                    ? "Scanning & Extracting..."
+                    : isQueueingLocalRescan
+                    ? "Queueing..."
+                    : "Sync & Scrape Products"}
+                </span>
               </button>
 
               <button
-                onClick={() => handleSyncBrandProducts(true)}
+                type="button"
+                onClick={() => setIsScrapeMenuOpen((prev) => !prev)}
                 disabled={isSyncingProducts || isQueueingLocalRescan}
-                className="p-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 text-xs font-semibold transition-all cursor-pointer"
-                title="Force re-scrape all URLs from landing pages"
+                className="px-2.5 py-2 rounded-r-lg bg-indigo-700 hover:bg-indigo-600 text-white border-l border-indigo-500/40 text-xs transition-all cursor-pointer disabled:opacity-60 flex items-center justify-center"
+                title="More extraction & scraping options"
+                aria-expanded={isScrapeMenuOpen}
               >
-                <RotateCw className="w-4 h-4" />
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                    isScrapeMenuOpen ? "rotate-180" : ""
+                  }`}
+                />
               </button>
+
+              {/* Unified Dropdown Menu */}
+              {isScrapeMenuOpen && (
+                <div className="absolute right-0 top-full mt-1.5 w-76 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3 py-1.5 border-b border-slate-100 dark:border-slate-800/80">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Scraping & Rescan Options
+                    </span>
+                  </div>
+
+                  {/* Option 1: Force Full Re-scrape */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsScrapeMenuOpen(false);
+                      handleSyncBrandProducts(true);
+                    }}
+                    disabled={isSyncingProducts || isQueueingLocalRescan}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-800 flex items-start gap-2.5 transition-colors cursor-pointer text-slate-700 dark:text-slate-200 disabled:opacity-50"
+                  >
+                    <RotateCw className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-semibold text-slate-900 dark:text-white">
+                        Force Re-scrape All URLs
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Bypass cache to re-extract live pricing & content from all landing pages.
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* Option 2: Queue for Local Rescan */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsScrapeMenuOpen(false);
+                      handleQueueBrandProductsForLocalRescan();
+                    }}
+                    disabled={isSyncingProducts || isQueueingLocalRescan}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-800 flex items-start gap-2.5 transition-colors cursor-pointer text-slate-700 dark:text-slate-200 disabled:opacity-50 border-t border-slate-100 dark:border-slate-800/60"
+                  >
+                    <Laptop className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-semibold text-slate-900 dark:text-white">
+                        Queue for Local Residential Rescan
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Mark all products as pending for your local residential worker (fixes USD prices & bypasses Cloudflare).
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1605,7 +1673,7 @@ export default function BrandDeepDivePage({
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/25 transition-all cursor-pointer"
                   >
                     <Zap className="w-4 h-4" />
-                    <span>⚡ Extract & Scrape Brand Products</span>
+                    <span>Extract & Scrape Brand Products</span>
                   </button>
                 </div>
               );
