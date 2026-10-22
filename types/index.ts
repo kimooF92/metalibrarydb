@@ -196,6 +196,7 @@ export interface ScrapedProduct {
   updatedAt: string;
   linkedAdsCount?: number;
   activeAdsCount?: number;
+  hasCarouselAd?: boolean;
   maxDuplications?: number;
   daysRunning?: number;
   brandName?: string | null;

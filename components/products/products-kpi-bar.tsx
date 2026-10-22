@@ -33,7 +33,7 @@ interface ProductsKpiBarProps {
   stats: Stats;
   statsLoading: boolean;
   smartPreset: SmartPreset;
-  onSelectPreset: (preset: SmartPreset, defaultSort?: string) => void;
+  onSelectPreset: (preset: SmartPreset) => void;
 }
 
 export function ProductsKpiBar({
@@ -167,7 +167,7 @@ export function ProductsKpiBar({
 
       {/* Fresh Drops (Last 7 Days) */}
       <div
-        onClick={() => onSelectPreset("new_discovered", "latest")}
+        onClick={() => onSelectPreset("new_discovered")}
         title="Filter by Fresh Drops discovered in the last 7 days"
         className={`px-3 py-2 rounded-lg bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-150 select-none ${
           smartPreset === "new_discovered"
@@ -195,7 +195,7 @@ export function ProductsKpiBar({
 
       {/* Top Lasting (Evergreen 30d+) */}
       <div
-        onClick={() => onSelectPreset("top_lasting", "top_lasting")}
+        onClick={() => onSelectPreset("top_lasting")}
         title="Filter by Longest Running Evergreen products (30d+)"
         className={`px-3 py-2 rounded-lg bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-150 select-none ${
           smartPreset === "top_lasting"

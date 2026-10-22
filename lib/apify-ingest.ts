@@ -573,35 +573,12 @@ export async function ingestApifyDatasetItems(
             pageId: (pageId && !pageId.includes("-")) ? pageId : (detectedPageId && !detectedPageId.includes("-") ? detectedPageId : null),
             adCopy: caption,
             workspaceId: effectiveWsId,
-            isPrimary: true,
-            cardIndex: 0,
           });
           if (prodRes?.isNew) {
             newProductsCount++;
           }
         } catch (e: any) {
           console.warn(`[Apify Ingest] Auto-scrape product warning for ${adArchiveId}:`, e.message);
-        }
-      }
-
-      // Loop through secondary cards (cards 1..N) to discover additional products
-      if (cards.length > 1) {
-        for (let i = 1; i < cards.length; i++) {
-          const secondaryRawUrl = cards[i]?.link_url;
-          const secondaryResolved = resolveDestinationUrl(secondaryRawUrl);
-          if (secondaryResolved) {
-            const candidate = selectBestProductCandidateUrl([secondaryResolved]);
-            if (candidate && candidate.source === "product_page") {
-              linkAndAutoScrapeProduct({
-                adId: upsertedAd.id,
-                linkUrl: candidate.url,
-                pageId: (pageId && !pageId.includes("-")) ? pageId : (detectedPageId && !detectedPageId.includes("-") ? detectedPageId : null),
-                workspaceId: pageRecord?.workspaceId || null,
-                isPrimary: false,
-                cardIndex: i,
-              }).catch(() => {});
-            }
-          }
         }
       }
 

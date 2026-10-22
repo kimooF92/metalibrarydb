@@ -33,7 +33,7 @@ test("Task 1.2: Caption URL extraction recovers product landing page when ad but
   assert.strictEqual(effectiveLinkUrl, "https://boutique-mode.tn/products/robe-ete-2026");
 });
 
-test("Task 1.3: Multi-product carousel cards extract primary and secondary product pages", () => {
+test("Task 1.3: Carousel ads extract primary hero product destination URL", () => {
   const cards = [
     { title: "Montre Or", link_url: "https://montres.tn/products/gold-edition?utm_source=fb" },
     { title: "Montre Argent", link_url: "https://montres.tn/products/silver-edition?utm_source=fb" },
@@ -44,23 +44,8 @@ test("Task 1.3: Multi-product carousel cards extract primary and secondary produ
   const primaryResolved = resolveDestinationUrl(primaryCardUrl);
   assert.strictEqual(primaryResolved, "https://montres.tn/products/gold-edition?utm_source=fb");
 
-  const secondaryProductUrls: string[] = [];
-  if (cards.length > 1) {
-    for (let i = 1; i < cards.length; i++) {
-      const secondaryRawUrl = cards[i]?.link_url;
-      const secondaryResolved = resolveDestinationUrl(secondaryRawUrl);
-      if (secondaryResolved) {
-        const candidate = selectBestProductCandidateUrl([secondaryResolved]);
-        if (candidate && candidate.source === "product_page") {
-          secondaryProductUrls.push(candidate.url);
-        }
-      }
-    }
-  }
-
-  assert.strictEqual(secondaryProductUrls.length, 2);
-  assert.strictEqual(secondaryProductUrls[0], "https://montres.tn/products/silver-edition");
-  assert.strictEqual(secondaryProductUrls[1], "https://montres.tn/products/leather-edition");
+  const primaryCandidate = selectBestProductCandidateUrl([primaryResolved!]);
+  assert.strictEqual(primaryCandidate?.url, "https://montres.tn/products/gold-edition");
 });
 
 test("Task 1.1: Discovery destination inversion retains non-ecommerce CTAs if destination is a real product page", () => {
@@ -288,46 +273,28 @@ test("Finding 7: Product rescue differentiates transient failures (1h) from gene
   );
 });
 
-test("Carousel multi-product ad linking: links both primary and secondary cards into ad_products so active ads are recognized", () => {
+test("Carousel ad linking: links hero product directly to ads.productId and flags hasCarouselAd", () => {
   const ad = {
     id: "ad-12345",
     adArchiveId: "123456789",
     isArchived: false,
     mediaType: "carousel",
+    productId: null as string | null,
   };
 
   const primaryProduct = { id: "prod-primary", url: "https://shop.tn/products/p1" };
-  const secondaryProduct1 = { id: "prod-sec-1", url: "https://shop.tn/products/p2" };
-  const secondaryProduct2 = { id: "prod-sec-2", url: "https://shop.tn/products/p3" };
 
-  // Simulated ad_products junction entries
-  const adProductsTable: Array<{
-    adId: string;
-    productId: string;
-    isPrimary: boolean;
-    cardIndex: number;
-  }> = [];
+  // Ingest links primary product directly to ads.productId
+  ad.productId = primaryProduct.id;
 
-  const linkToAdProducts = (adId: string, productId: string, isPrimary: boolean, cardIndex: number) => {
-    adProductsTable.push({ adId, productId, isPrimary, cardIndex });
-  };
+  assert.strictEqual(ad.productId, primaryProduct.id);
 
-  // 1. Primary card linked with isPrimary = true, cardIndex = 0
-  linkToAdProducts(ad.id, primaryProduct.id, true, 0);
+  // Aggregation detects carousel ad format
+  const adsForProduct = [ad];
+  const activeAdsCount = adsForProduct.filter((a) => !a.isArchived).length;
+  const hasCarouselAd = adsForProduct.some((a) => a.mediaType === "carousel");
 
-  // 2. Secondary cards linked with isPrimary = false, cardIndex = 1, 2
-  linkToAdProducts(ad.id, secondaryProduct1.id, false, 1);
-  linkToAdProducts(ad.id, secondaryProduct2.id, false, 2);
-
-  assert.strictEqual(adProductsTable.length, 3);
-
-  // Verify all 3 products have linked active ads
-  const getActiveAdsCountForProduct = (productId: string) => {
-    return adProductsTable.filter((ap) => ap.productId === productId && ad.isArchived === false).length;
-  };
-
-  assert.strictEqual(getActiveAdsCountForProduct(primaryProduct.id), 1);
-  assert.strictEqual(getActiveAdsCountForProduct(secondaryProduct1.id), 1);
-  assert.strictEqual(getActiveAdsCountForProduct(secondaryProduct2.id), 1);
+  assert.strictEqual(activeAdsCount, 1);
+  assert.strictEqual(hasCarouselAd, true);
 });
 

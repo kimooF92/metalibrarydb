@@ -19,6 +19,7 @@ import {
   Rocket,
   Calendar,
   Pause,
+  Layers,
 } from "lucide-react";
 import { formatDiscoveryDate, formatDiscoveryLabel } from "@/lib/format-date";
 import { useWorkspace } from "@/components/workspace-context";
@@ -461,6 +462,17 @@ export const ProductCard = memo(function ProductCard({
                   ? `Launched ${formatDiscoveryDate(product.earliestAdDate)} (${product.daysRunning}d)`
                   : `${product.daysRunning}d running`}
               </span>
+            </span>
+          )}
+
+          {/* Carousel Ad Format Pill */}
+          {product.hasCarouselAd && (
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/25"
+              title="Active in Meta Carousel Ad format"
+            >
+              <Layers className="w-3 h-3 text-indigo-500 shrink-0" />
+              <span>Carousel Ad</span>
             </span>
           )}
 

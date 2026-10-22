@@ -32,11 +32,14 @@ import {
 const SORT_LABEL_MAP: Record<string, string> = {
   latest: "Newest Discovered",
   oldest: "Oldest Discovered",
-  most_scaled: "Most Scaled (Active Ads)",
-  top_lasting: "Longest Lasting (Evergreen)",
+  launched_desc: "Newest Launched",
+  launched_asc: "Oldest Launched",
   price_desc: "Price: High to Low",
   price_asc: "Price: Low to High",
   title: "Title: A to Z",
+  title_desc: "Title: Z to A",
+  top_lasting: "Oldest Launched",
+  most_scaled: "Newest Discovered",
 };
 
 export default function ProductsPage() {
@@ -95,7 +98,6 @@ export default function ProductsPage() {
   const [showBackToTop, setShowBackToTop] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const userHasCustomSortRef = useRef<boolean>(false);
 
   const [statsLoading, setStatsLoading] = useState(true);
   const [stats, setStats] = useState<{
@@ -931,16 +933,14 @@ export default function ProductsPage() {
     setAdLaunchTo("");
     setStillRunningOnly(false);
     setSortBy("latest");
-    userHasCustomSortRef.current = false;
     setHideInactive(false);
     setPage(1);
     setAutoLoadCount(0);
   }, []);
 
-  // KPI bar preset handler — only updates sortBy when user hasn't chosen a custom sort
-  const handleSelectPreset = useCallback((preset: SmartPreset, defaultSort?: string) => {
+  // Quick preset filter handler — completely detached from sort menu
+  const handleSelectPreset = useCallback((preset: SmartPreset) => {
     setSmartPreset(preset);
-    if (defaultSort && !userHasCustomSortRef.current) setSortBy(defaultSort);
     setPage(1);
   }, []);
 
@@ -1162,7 +1162,6 @@ export default function ProductsPage() {
           }}
           sortBy={sortBy}
           onChangeSortBy={(v) => {
-            userHasCustomSortRef.current = true;
             setSortBy(v);
             setPage(1);
           }}

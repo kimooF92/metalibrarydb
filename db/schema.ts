@@ -289,28 +289,7 @@ export const ads = pgTable(
   ]
 );
 
-// 5b. Ad Products Junction Table (Multi-product support for carousels & dynamic creatives)
-export const adProducts = pgTable(
-  "ad_products",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    adId: uuid("ad_id")
-      .notNull()
-      .references(() => ads.id, { onDelete: "cascade" }),
-    productId: uuid("product_id")
-      .notNull()
-      .references(() => scrapedProducts.id, { onDelete: "cascade" }),
-    isPrimary: boolean("is_primary").default(false).notNull(),
-    cardIndex: integer("card_index").default(0).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    index("idx_ad_products_ad_id").on(table.adId),
-    index("idx_ad_products_product_id").on(table.productId),
-    index("idx_ad_products_product_primary").on(table.productId, table.isPrimary),
-    uniqueIndex("uq_ad_products_ad_product").on(table.adId, table.productId),
-  ]
-);
+
 
 // 6. Ad Observations Table (Links ad to creative_scan and tracked_page)
 export const adObservations = pgTable(

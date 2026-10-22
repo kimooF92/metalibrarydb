@@ -21,20 +21,65 @@ import {
   ArrowUpDown,
   ChevronDown,
   Check,
+  Rocket,
+  History,
+  ArrowDown01,
+  ArrowDown10,
+  ArrowDownAZ,
+  ArrowUpAZ,
 } from "lucide-react";
 import type { SmartPreset } from "./products-kpi-bar";
 import { getNicheDisplayLabel, getSubNicheDisplayLabel } from "@/lib/niches-taxonomy";
 import { useAuth } from "@/components/auth-context";
 
-const SORT_OPTIONS = [
-  { value: "latest", label: "Newest Discovered" },
-  { value: "oldest", label: "Oldest Discovered" },
-  { value: "most_scaled", label: "Most Scaled (Active Ads)" },
-  { value: "top_lasting", label: "Longest Lasting (Evergreen)" },
-  { value: "price_desc", label: "Price: High to Low" },
-  { value: "price_asc", label: "Price: Low to High" },
-  { value: "title", label: "Title: A to Z" },
+export interface SortOption {
+  value: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+export interface SortGroup {
+  group: string;
+  icon: React.ComponentType<{ className?: string }>;
+  options: SortOption[];
+}
+
+export const SORT_GROUPS: SortGroup[] = [
+  {
+    group: "Discovered Date",
+    icon: Calendar,
+    options: [
+      { value: "latest", label: "Newest Discovered", icon: Sparkles },
+      { value: "oldest", label: "Oldest Discovered", icon: History },
+    ],
+  },
+  {
+    group: "Ad Launch Date",
+    icon: Rocket,
+    options: [
+      { value: "launched_desc", label: "Newest Launched", icon: Flame },
+      { value: "launched_asc", label: "Oldest Launched", icon: Clock },
+    ],
+  },
+  {
+    group: "Price",
+    icon: Tag,
+    options: [
+      { value: "price_asc", label: "Price: Low to High", icon: ArrowDown01 },
+      { value: "price_desc", label: "Price: High to Low", icon: ArrowDown10 },
+    ],
+  },
+  {
+    group: "Alphabetical",
+    icon: ArrowDownAZ,
+    options: [
+      { value: "title", label: "Title: A to Z", icon: ArrowDownAZ },
+      { value: "title_desc", label: "Title: Z to A", icon: ArrowUpAZ },
+    ],
+  },
 ];
+
+export const SORT_OPTIONS: SortOption[] = SORT_GROUPS.flatMap((g) => g.options);
 
 export interface ProductsTopBarProps {
   // Search
@@ -44,7 +89,7 @@ export interface ProductsTopBarProps {
 
   // Presets
   smartPreset: SmartPreset;
-  onSelectPreset: (preset: SmartPreset, defaultSort?: string) => void;
+  onSelectPreset: (preset: SmartPreset) => void;
   presetCounts?: Partial<Record<SmartPreset, number>>;
 
   // Sorting & View
@@ -157,16 +202,17 @@ export function ProductsTopBar({
     };
   }, [isSortOpen]);
 
-  const currentSortLabel =
-    SORT_OPTIONS.find((opt) => opt.value === sortBy)?.label || "Sort";
+  const currentSortOption = SORT_OPTIONS.find((opt) => opt.value === sortBy);
+  const currentSortLabel = currentSortOption?.label || "Sort";
+  const CurrentSortIcon = currentSortOption?.icon || ArrowUpDown;
 
   const allPresetTabs = [
     { id: "all" as SmartPreset, label: "All Products", count: presetCounts?.all, icon: null },
     { id: "favorites" as SmartPreset, label: "Favorites", count: presetCounts?.favorites, icon: Sparkles, color: "text-amber-400" },
-    { id: "breakout" as SmartPreset, label: "Breakout", icon: Flame, color: "text-amber-500", sort: "most_scaled" },
-    { id: "most_scaled" as SmartPreset, label: "Most Scaled", icon: TrendingUp, color: "text-emerald-500", sort: "most_scaled" },
-    { id: "new_discovered" as SmartPreset, label: "Fresh Drops", count: presetCounts?.new_discovered, icon: Sparkles, color: "text-blue-500", sort: "latest" },
-    { id: "top_lasting" as SmartPreset, label: "Evergreen", count: presetCounts?.top_lasting, icon: Clock, color: "text-purple-500", sort: "top_lasting" },
+    { id: "breakout" as SmartPreset, label: "Breakout", icon: Flame, color: "text-amber-500" },
+    { id: "most_scaled" as SmartPreset, label: "Most Scaled", icon: TrendingUp, color: "text-emerald-500" },
+    { id: "new_discovered" as SmartPreset, label: "Fresh Drops", count: presetCounts?.new_discovered, icon: Sparkles, color: "text-blue-500" },
+    { id: "top_lasting" as SmartPreset, label: "Evergreen", count: presetCounts?.top_lasting, icon: Clock, color: "text-purple-500" },
     { id: "with_offers" as SmartPreset, label: "Offers", count: presetCounts?.with_offers, icon: Tag, color: "text-rose-500" },
   ];
 
@@ -292,7 +338,7 @@ export function ProductsTopBar({
               title="Change sort order"
               aria-expanded={isSortOpen}
             >
-              <ArrowUpDown className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+              <CurrentSortIcon className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
               <span className="hidden sm:inline">{currentSortLabel}</span>
               <span className="sm:hidden">Sort</span>
               <ChevronDown
@@ -303,32 +349,53 @@ export function ProductsTopBar({
             </button>
 
             {isSortOpen && (
-              <div className="absolute right-0 top-full mt-1.5 w-56 bg-card border border-border rounded-xl shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
+              <div className="absolute right-0 top-full mt-1.5 w-60 bg-card border border-border rounded-xl shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
                 <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/50">
                   Sort Products
                 </div>
-                <div className="p-1 space-y-0.5">
-                  {SORT_OPTIONS.map((opt) => {
-                    const isSelected = sortBy === opt.value;
+                <div className="py-0.5 divide-y divide-border/40 max-h-[380px] overflow-y-auto">
+                  {SORT_GROUPS.map((group) => {
+                    const GroupIcon = group.icon;
                     return (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => {
-                          onChangeSortBy(opt.value);
-                          setIsSortOpen(false);
-                        }}
-                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                          isSelected
-                            ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold"
-                            : "text-foreground hover:bg-accent"
-                        }`}
-                      >
-                        <span>{opt.label}</span>
-                        {isSelected && (
-                          <Check className="w-3.5 h-3.5 text-indigo-500 shrink-0 ml-2" />
-                        )}
-                      </button>
+                      <div key={group.group} className="p-1 space-y-0.5">
+                        <div className="px-2 pt-1.5 pb-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground/70 flex items-center gap-1.5">
+                          <GroupIcon className="w-3 h-3 text-muted-foreground/60 shrink-0" />
+                          <span>{group.group}</span>
+                        </div>
+                        {group.options.map((opt) => {
+                          const isSelected = sortBy === opt.value;
+                          const OptionIcon = opt.icon;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => {
+                                onChangeSortBy(opt.value);
+                                setIsSortOpen(false);
+                              }}
+                              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                                isSelected
+                                  ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold"
+                                  : "text-foreground hover:bg-accent"
+                              }`}
+                            >
+                              <span className="flex items-center gap-2 truncate">
+                                <OptionIcon
+                                  className={`w-3.5 h-3.5 shrink-0 ${
+                                    isSelected
+                                      ? "text-indigo-500"
+                                      : "text-muted-foreground"
+                                  }`}
+                                />
+                                <span className="truncate">{opt.label}</span>
+                              </span>
+                              {isSelected && (
+                                <Check className="w-3.5 h-3.5 text-indigo-500 shrink-0 ml-2" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
                     );
                   })}
                 </div>
@@ -375,7 +442,7 @@ export function ProductsTopBar({
             <button
               key={tab.id}
               type="button"
-              onClick={() => onSelectPreset(tab.id, tab.sort)}
+              onClick={() => onSelectPreset(tab.id)}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 cursor-pointer select-none border group ${
                 isActive
                   ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"

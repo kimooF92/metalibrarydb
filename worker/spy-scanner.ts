@@ -782,29 +782,12 @@ export async function scanAdCreatives(
               pageId: (adData.pageId && !adData.pageId.includes("-")) ? adData.pageId : (extractedPageIds[0] && !extractedPageIds[0].includes("-") ? extractedPageIds[0] : null),
               adCopy: adData.caption,
               workspaceId: pageRecord?.workspaceId || null,
-              isPrimary: true,
-              cardIndex: 0,
             });
             if (prodRes?.isNew) {
               newProductsCount++;
             }
           } catch (e: any) {
             console.warn(`[Worker Spy Scanner] Auto-scrape product warning:`, e.message);
-          }
-        }
-
-        // Enqueue secondary products found in carousel cards
-        if (adData.secondaryProductUrls && adData.secondaryProductUrls.length > 0) {
-          for (let i = 0; i < adData.secondaryProductUrls.length; i++) {
-            const secUrl = adData.secondaryProductUrls[i];
-            linkAndAutoScrapeProduct({
-              adId: upsertedAd.id,
-              linkUrl: secUrl,
-              pageId: (adData.pageId && !adData.pageId.includes("-")) ? adData.pageId : (extractedPageIds[0] && !extractedPageIds[0].includes("-") ? extractedPageIds[0] : null),
-              workspaceId: pageRecord?.workspaceId || null,
-              isPrimary: false,
-              cardIndex: i + 1,
-            }).catch(() => {});
           }
         }
 

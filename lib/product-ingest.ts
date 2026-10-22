@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { ads, adProducts, scrapedProducts, trackedPages, brandDomains, adObservations, workspaces, queue } from "@/db/schema";
+import { ads, scrapedProducts, trackedPages, brandDomains, adObservations, workspaces, queue } from "@/db/schema";
 import { eq, sql, and, or, isNull } from "drizzle-orm";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 import { normalizeProductUrl, extractProductFromUrl } from "@/lib/firecrawl";
@@ -90,61 +90,18 @@ export async function waitForScrapeQueueDrain(timeoutMs: number = 45000): Promis
  * 2. Checks if product already exists in scrapedProducts (instant link, $0 cost).
  * 3. If new, creates a pending scrapedProduct record and triggers background Firecrawl extraction.
  */
-/**
- * Links an ad to a product in both the ad_products junction table (for multi-product / carousel support)
- * and the canonical ads.productId column (for primary backward compatibility).
- */
-export async function linkAdToProduct(
-  adId: string,
-  targetProductId: string,
-  isPrimary: boolean = true,
-  cardIndex: number = 0
-): Promise<void> {
-  try {
-    // 1. Upsert into ad_products junction table
-    await db
-      .insert(adProducts)
-      .values({
-        adId,
-        productId: targetProductId,
-        isPrimary,
-        cardIndex,
-      })
-      .onConflictDoNothing();
-
-    // 2. Set ads.productId if primary OR if ads.productId is currently unset
-    if (isPrimary) {
-      await db
-        .update(ads)
-        .set({ productId: targetProductId })
-        .where(eq(ads.id, adId));
-    } else {
-      await db
-        .update(ads)
-        .set({ productId: targetProductId })
-        .where(and(eq(ads.id, adId), isNull(ads.productId)));
-    }
-  } catch (err) {
-    console.warn("[Product Ingest] linkAdToProduct warning:", err);
-  }
-}
-
 export async function linkAndAutoScrapeProduct({
   adId,
   linkUrl,
   pageId,
   adCopy,
   workspaceId,
-  isPrimary = true,
-  cardIndex = 0,
 }: {
   adId?: string;
   linkUrl: string | null | undefined;
   pageId?: string | null;
   adCopy?: string | null;
   workspaceId?: string | null;
-  isPrimary?: boolean;
-  cardIndex?: number;
 }): Promise<{ productId: string | null; isNew: boolean }> {
   if (!linkUrl) return { productId: null, isNew: false };
 
@@ -268,7 +225,10 @@ export async function linkAndAutoScrapeProduct({
 
       // Link ad to existing product record immediately
       if (adId) {
-        await linkAdToProduct(adId, prodId, isPrimary, cardIndex);
+        await db
+          .update(ads)
+          .set({ productId: prodId })
+          .where(eq(ads.id, adId));
       }
       return { productId: prodId, isNew: false };
     }
@@ -311,14 +271,20 @@ export async function linkAndAutoScrapeProduct({
       }
 
       if (adId && prodId) {
-        await linkAdToProduct(adId, prodId, isPrimary, cardIndex);
+        await db
+          .update(ads)
+          .set({ productId: prodId })
+          .where(eq(ads.id, adId));
       }
       return { productId: prodId, isNew: false };
     }
 
     // Link ad to newly created product record
     if (adId && targetProductId) {
-      await linkAdToProduct(adId, targetProductId, isPrimary, cardIndex);
+      await db
+        .update(ads)
+        .set({ productId: targetProductId })
+        .where(eq(ads.id, adId));
     }
 
     // Insert into PostgreSQL durable queue for background worker (Task 2.1)
@@ -609,19 +575,18 @@ export async function processProductExtraction(
       .where(eq(scrapedProducts.id, productId));
 
     // Task 3.1: Exact canonical normalized URL equality linking (replacing unindexed LIKE)
-    const matchingAds = await db
-      .select({ id: ads.id })
-      .from(ads)
+    await db
+      .update(ads)
+      .set({ productId })
       .where(
-        or(
-          eq(ads.linkUrl, normalizedUrl),
-          sql`LOWER(TRIM(TRAILING '/' FROM ${ads.linkUrl})) = LOWER(TRIM(TRAILING '/' FROM ${normalizedUrl}))`
+        and(
+          isNull(ads.productId),
+          or(
+            eq(ads.linkUrl, normalizedUrl),
+            sql`LOWER(TRIM(TRAILING '/' FROM ${ads.linkUrl})) = LOWER(TRIM(TRAILING '/' FROM ${normalizedUrl}))`
+          )
         )
       );
-
-    for (const mAd of matchingAds) {
-      await linkAdToProduct(mAd.id, productId, true, 0);
-    }
 
     // Complete any pending queue jobs for this product
     await db

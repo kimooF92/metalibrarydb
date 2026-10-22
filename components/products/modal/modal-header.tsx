@@ -26,6 +26,7 @@ import {
   Calendar,
   Rocket,
   Tag,
+  Layers,
 } from "lucide-react";
 import { ModalTab, generateAIProductPrompt, generateCleanMarkdown } from "./modal-types";
 import { getNicheDisplayLabel, getSubNicheDisplayLabel } from "@/lib/niches-taxonomy";
@@ -201,6 +202,17 @@ export function ModalHeader({
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
                   <span>Active</span>
+                </span>
+              )}
+
+              {/* Carousel Ad Format Badge */}
+              {(product.hasCarouselAd || linkedAds.some((a) => a.mediaType === "carousel")) && (
+                <span
+                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-400 border border-indigo-200/80 dark:border-indigo-800/80 shrink-0"
+                  title="Promoted in Meta Carousel Ad format"
+                >
+                  <Layers className="w-3 h-3 text-indigo-500 shrink-0" />
+                  <span>Carousel Ad</span>
                 </span>
               )}
 
