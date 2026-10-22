@@ -7,7 +7,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 <!-- BEGIN:egress-and-performance-rules -->
 # MANDATORY PERFORMANCE, EGRESS & QUOTA PROTECTION RULES
 
-You MUST check and strictly adhere to these rules before implementing any feature, bug fix, or refactor. The project operates under Supabase free-tier constraints (5 GB monthly egress, 500 MB database disk limit, pooler connection limits) and tight API rate limits.
+You MUST check and strictly adhere to these rules before implementing any feature, bug fix, or refactor. The project operates under Supabase free-tier constraints (5 GB monthly egress, 500 MB database disk limit, 100 GB monthly Log Query scan quota, pooler connection limits) and tight API rate limits.
 
 ### 1. Database Egress & Projection Rules
 - **No Blind `SELECT *` / Full Row Fetches**: Always specify explicit columns when querying through Drizzle or SQL (`columns: { id: true, ... }` or `.select({ id: table.id, ... })`). Never fetch entire rows for existence checks, counts, or deduplication.
@@ -28,7 +28,7 @@ You MUST check and strictly adhere to these rules before implementing any featur
 
 ### 4. Supabase Log Volume, Log Query & Quota Protection Rules
 - **Strict Realtime Publication Scope**: Never add high-write or append-heavy tables (like `ads`) to the `supabase_realtime` publication. Every single insert/update triggers logical decoding in Postgres CDC WAL replication, producing 100,000+ internal polling queries. Only low-frequency entity tables (like `tracked_pages`) belong in Realtime.
-- **Log Query Quota Protection (ClickHouse Scans)**: When reading Supabase logs (via Studio Logs Explorer, Management API, or MCP `query_logs`), **always** pass explicit narrow time windows (`iso_timestamp_start` and `iso_timestamp_end`). Defaulting to 24h or 7d scans gigabytes of log partitions on ClickHouse and burns free-tier log scan quotas (which caused the 40 GB spike).
+- **Log Query Quota Protection (ClickHouse Scans)**: The free tier provides ONLY 100 GB of monthly Log Query data scanned. With ~43 GB consumed, the remaining 57 GB must be strictly preserved. Do NOT inspect or query logs unless explicitly requested. When reading Supabase logs (via Studio Logs Explorer, Management API, or MCP `query_logs`), **always** pass explicit narrow time windows (max 15–30 minutes: `iso_timestamp_start` and `iso_timestamp_end`). Defaulting to 24h or 7d scans gigabytes of log partitions on ClickHouse and burns the 100 GB monthly quota.
 - **Index URL & Text Matching Fields**: Never use unindexed wildcard substring matches (`LIKE '%' || url || '%'`) across tables with thousands of rows (`ads`, `scraped_products`). Always use exact matching or functional expression indexes (`idx_ads_link_url_lower_trimmed`). Queries running >10s trigger `auto_explain` full plan dumps directly into `postgres_logs`, bloating log storage.
 <!-- END:egress-and-performance-rules -->
 
