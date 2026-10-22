@@ -135,10 +135,9 @@ export async function DELETE(
       adIdsToDelete = candidateAdIds.filter((adId) => !sharedAdIdSet.has(adId));
     }
 
-    // 4. Collect and delete brand products (if no sister pages remain)
+    // 4. Collect brand products to delete (if no sister pages remain)
+    const productOrClauses: any[] = [];
     if (remainingSisterPages.length === 0) {
-      const productOrClauses: any[] = [];
-
       if (pageId && pageId !== "0" && !pageId.startsWith("pending-")) {
         productOrClauses.push(eq(scrapedProducts.pageId, pageId));
       }
@@ -152,7 +151,7 @@ export async function DELETE(
         productOrClauses.push(sql`lower(${scrapedProducts.domain}) = ${domain}`);
       }
 
-      // Also delete products linked to deleted ads if no other remaining ads reference them
+      // Also identify products linked to deleted ads if no other remaining ads reference them
       if (adIdsToDelete.length > 0) {
         const linkedProductRows = await db
           .select({ productId: ads.productId })
@@ -179,18 +178,9 @@ export async function DELETE(
           }
         }
       }
-
-      if (productOrClauses.length > 0) {
-        await db.delete(scrapedProducts).where(
-          and(
-            or(...productOrClauses),
-            workspaceId ? eq(scrapedProducts.workspaceId, workspaceId) : undefined
-          )
-        );
-      }
     }
 
-    // 5. Delete exclusive ads in safe chunks
+    // 5. Delete exclusive ads first (children before parents) in safe chunks
     if (adIdsToDelete.length > 0) {
       for (let i = 0; i < adIdsToDelete.length; i += 500) {
         const chunk = adIdsToDelete.slice(i, i + 500);
@@ -198,7 +188,38 @@ export async function DELETE(
       }
     }
 
-    // 6. Delete tracked page record (cascades to scan_history, creative_scans, ad_observations, notifications)
+    // 6. Delete products after detaching any remaining FK references to avoid lock collisions
+    if (remainingSisterPages.length === 0 && productOrClauses.length > 0) {
+      const productsToDelete = await db
+        .select({ id: scrapedProducts.id })
+        .from(scrapedProducts)
+        .where(
+          and(
+            or(...productOrClauses),
+            workspaceId ? eq(scrapedProducts.workspaceId, workspaceId) : undefined
+          )
+        );
+      const productIds = productsToDelete.map((p) => p.id);
+
+      if (productIds.length > 0) {
+        // Explicitly decouple any remaining ads.productId references to eliminate FK ON DELETE SET NULL lock contention
+        for (let i = 0; i < productIds.length; i += 500) {
+          const chunk = productIds.slice(i, i + 500);
+          await db
+            .update(ads)
+            .set({ productId: null })
+            .where(inArray(ads.productId, chunk));
+        }
+
+        // Delete products in safe chunks
+        for (let i = 0; i < productIds.length; i += 500) {
+          const chunk = productIds.slice(i, i + 500);
+          await db.delete(scrapedProducts).where(inArray(scrapedProducts.id, chunk));
+        }
+      }
+    }
+
+    // 7. Delete tracked page record (cascades to scan_history, creative_scans, ad_observations, notifications)
     await db.delete(trackedPages).where(eq(trackedPages.id, id));
 
     // 7. Post-delete domain cleanup & primary re-election
