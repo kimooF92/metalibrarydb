@@ -932,7 +932,6 @@ export default function ProductsPage() {
     setAdLaunchFrom("");
     setAdLaunchTo("");
     setStillRunningOnly(false);
-    setSortBy("latest");
     setHideInactive(false);
     setPage(1);
     setAutoLoadCount(0);
