@@ -35,6 +35,19 @@ export async function POST(req: Request) {
     const activeWorkspace = await getActiveWorkspace(req);
     const body = await req.json().catch(() => ({}));
 
+    // Parse scan limit parameters (clamped to safe bounds)
+    const targetMaxAds =
+      typeof body.targetMaxAds === "number" && body.targetMaxAds > 0
+        ? Math.min(Math.max(body.targetMaxAds, 50), 10000)
+        : typeof body.maxAds === "number" && body.maxAds > 0
+        ? Math.min(Math.max(body.maxAds, 50), 10000)
+        : 2500;
+
+    const maxScrolls =
+      typeof body.maxScrolls === "number" && body.maxScrolls > 0
+        ? Math.min(Math.max(body.maxScrolls, 5), 500)
+        : 150;
+
     // Mode 1: Direct Meta Ad Library URL
     const rawUrl = body.url || body.searchUrl;
     if (rawUrl && typeof rawUrl === "string" && rawUrl.trim()) {
@@ -57,6 +70,8 @@ export async function POST(req: Request) {
           query: parsed.query,
           startDateMin,
           startDateMax,
+          targetMaxAds,
+          maxScrolls,
           workspaceId: activeWorkspace.id,
           status: "pending",
           totalAdsScanned: 0,
@@ -103,6 +118,8 @@ export async function POST(req: Request) {
         query,
         startDateMin,
         startDateMax,
+        targetMaxAds,
+        maxScrolls,
         workspaceId: activeWorkspace.id,
         status: "pending",
         totalAdsScanned: 0,

@@ -1535,6 +1535,8 @@ export async function claimNextPendingDiscoveryRun() {
     query: row.query ? String(row.query) : null,
     startDateMin: row.start_date_min ? new Date(row.start_date_min) : null,
     startDateMax: row.start_date_max ? new Date(row.start_date_max) : null,
+    targetMaxAds: row.target_max_ads ? Number(row.target_max_ads) : null,
+    maxScrolls: row.max_scrolls ? Number(row.max_scrolls) : null,
     status: String(row.status || "running"),
   };
 }

@@ -284,8 +284,21 @@ export async function runDiscoveryScan(
   page: Page,
   runId: string,
   targetUrl: string,
-  country: string = "TN"
+  country: string = "TN",
+  options?: {
+    targetMaxAds?: number | null;
+    maxScrolls?: number | null;
+  }
 ): Promise<DiscoveryScanOutcome> {
+  const effectiveTargetMaxAds =
+    typeof options?.targetMaxAds === "number" && options.targetMaxAds > 0
+      ? options.targetMaxAds
+      : TARGET_MAX_ADS;
+  const effectiveMaxScrolls =
+    typeof options?.maxScrolls === "number" && options.maxScrolls > 0
+      ? options.maxScrolls
+      : MAX_SCROLL_ATTEMPTS;
+
   const collectedPages = new Map<string, DiscoveredPageData>();
   const canonicalPageIds = new Set<string>();
   const scannedAdIds = new Set<string>();
@@ -478,10 +491,10 @@ export async function runDiscoveryScan(
     let lastAdCount = scannedAdIds.size;
     let noProgressCount = 0;
 
-    for (let i = 0; i < MAX_SCROLL_ATTEMPTS; i++) {
+    for (let i = 0; i < effectiveMaxScrolls; i++) {
       if (hasCaptchaOrBlock || isRateLimited) break;
-      if (scannedAdIds.size >= TARGET_MAX_ADS) {
-        console.log(`[Discovery Scanner] Reached target ad capacity (${scannedAdIds.size}/${TARGET_MAX_ADS} ads). Ending scan.`);
+      if (scannedAdIds.size >= effectiveTargetMaxAds) {
+        console.log(`[Discovery Scanner] Reached target ad capacity (${scannedAdIds.size}/${effectiveTargetMaxAds} ads). Ending scan.`);
         break;
       }
 
@@ -725,9 +738,9 @@ export async function runDiscoveryScan(
       }
 
       // Anti-Detection Cooldown Pause every STAGE_SCROLL_COUNT iterations
-      if ((i + 1) % STAGE_SCROLL_COUNT === 0 && i < MAX_SCROLL_ATTEMPTS - 1) {
+      if ((i + 1) % STAGE_SCROLL_COUNT === 0 && i < effectiveMaxScrolls - 1) {
         console.log(
-          `[Discovery Scanner] Completed scroll stage (${i + 1}/${MAX_SCROLL_ATTEMPTS}). Pausing ${
+          `[Discovery Scanner] Completed scroll stage (${i + 1}/${effectiveMaxScrolls}). Pausing ${
             STAGE_COOLDOWN_MS / 1000
           }s for anti-detection cooldown... (Discovered: ${collectedPages.size} pages from ${scannedAdIds.size} ads)`
         );
@@ -896,7 +909,7 @@ export async function runDiscoveryScan(
     const finalStatus =
       savedPagesCount === 0 && scannedAdIds.size === 0
         ? "failed"
-        : scannedAdIds.size >= TARGET_MAX_ADS || noProgressCount >= NO_PROGRESS_CAP || savedPagesCount > 0
+        : scannedAdIds.size >= effectiveTargetMaxAds || noProgressCount >= NO_PROGRESS_CAP || savedPagesCount > 0
         ? "completed"
         : "partial";
 

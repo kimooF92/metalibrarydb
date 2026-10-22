@@ -379,6 +379,8 @@ export const discoveryRuns = pgTable(
     status: text("status").default("pending").notNull(), // pending | running | completed | partial | failed
     totalAdsScanned: integer("total_ads_scanned").default(0).notNull(),
     totalPagesDiscovered: integer("total_pages_discovered").default(0).notNull(),
+    targetMaxAds: integer("target_max_ads").default(2500),
+    maxScrolls: integer("max_scrolls").default(150),
     failureReason: text("failure_reason"),
     outcomeDetails: text("outcome_details"),
     workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),

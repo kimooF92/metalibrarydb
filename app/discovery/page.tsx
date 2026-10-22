@@ -33,6 +33,7 @@ import {
   ShoppingBag,
   Store,
   Flame,
+  Sliders,
 } from "lucide-react";
 import { parseMetaAdLibraryDiscoveryUrl, type ParsedMetaAdUrl } from "@/lib/url-parser";
 import { useWorkspace } from "@/components/workspace-context";
@@ -45,6 +46,8 @@ interface DiscoveryRun {
   country: string;
   searchUrl: string;
   query?: string;
+  targetMaxAds?: number | null;
+  maxScrolls?: number | null;
   status: "pending" | "running" | "completed" | "partial" | "failed";
   totalAdsScanned: number;
   totalPagesDiscovered: number;
@@ -279,6 +282,31 @@ export default function DiscoveryPage() {
   const [startDateMin, setStartDateMin] = useState(getSevenDaysAgoStr());
   const [startDateMax, setStartDateMax] = useState(getTodayStr());
   const [activeDatePreset, setActiveDatePreset] = useState<"last7" | "last30" | "today" | "custom">("last7");
+
+  // Scan Depth / Limits State
+  const [scanDepthPreset, setScanDepthPreset] = useState<"quick" | "balanced" | "deep" | "custom">("balanced");
+  const [customMaxAds, setCustomMaxAds] = useState("1000");
+  const [customMaxScrolls, setCustomMaxScrolls] = useState("75");
+
+  const { effectiveTargetMaxAds, effectiveMaxScrolls } = useMemo(() => {
+    switch (scanDepthPreset) {
+      case "quick":
+        return { effectiveTargetMaxAds: 300, effectiveMaxScrolls: 30 };
+      case "deep":
+        return { effectiveTargetMaxAds: 2500, effectiveMaxScrolls: 150 };
+      case "custom": {
+        const ads = parseInt(customMaxAds, 10);
+        const scrolls = parseInt(customMaxScrolls, 10);
+        return {
+          effectiveTargetMaxAds: Number.isFinite(ads) && ads > 0 ? Math.min(Math.max(ads, 50), 10000) : 1000,
+          effectiveMaxScrolls: Number.isFinite(scrolls) && scrolls > 0 ? Math.min(Math.max(scrolls, 5), 500) : 75,
+        };
+      }
+      case "balanced":
+      default:
+        return { effectiveTargetMaxAds: 1000, effectiveMaxScrolls: 75 };
+    }
+  }, [scanDepthPreset, customMaxAds, customMaxScrolls]);
 
   // Table Filter, Sorting & Selection State
   const [searchFilter, setSearchFilter] = useState("");
@@ -663,6 +691,8 @@ export default function DiscoveryPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           url: parsed.cleanUrl,
+          targetMaxAds: effectiveTargetMaxAds,
+          maxScrolls: effectiveMaxScrolls,
         }),
       });
       const data = await res.json();
@@ -722,6 +752,8 @@ export default function DiscoveryPage() {
           query: finalQuery,
           startDateMin,
           startDateMax,
+          targetMaxAds: effectiveTargetMaxAds,
+          maxScrolls: effectiveMaxScrolls,
         }),
       });
       const data = await res.json();
@@ -1144,6 +1176,105 @@ export default function DiscoveryPage() {
           </div>
         </div>
 
+        {/* Scan Depth & Capacity Controls */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 pb-2 border-b border-slate-100 dark:border-slate-800/50">
+          <div className="flex items-center space-x-2 flex-wrap gap-y-1.5">
+            <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <Sliders className="w-3.5 h-3.5 text-indigo-500" />
+              Scan Depth:
+            </span>
+            <div className="flex items-center bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setScanDepthPreset("quick")}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                  scanDepthPreset === "quick"
+                    ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
+                title="Quick: 300 ads / 30 scrolls (~30-60s rapid brand discovery)"
+              >
+                <span>⚡ Quick</span>
+                <span className="text-[9px] font-medium opacity-70">(300 ads)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setScanDepthPreset("balanced")}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                  scanDepthPreset === "balanced"
+                    ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
+                title="Balanced: 1,000 ads / 75 scrolls (Optimal speed vs market breadth)"
+              >
+                <span>🎯 Balanced</span>
+                <span className="text-[9px] font-medium opacity-70">(1k ads)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setScanDepthPreset("deep")}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                  scanDepthPreset === "deep"
+                    ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
+                title="Deep: 2,500 ads / 150 scrolls (Exhaustive search)"
+              >
+                <span>🚀 Deep</span>
+                <span className="text-[9px] font-medium opacity-70">(2.5k ads)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setScanDepthPreset("custom")}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                  scanDepthPreset === "custom"
+                    ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
+                title="Custom: Configure custom ads limit and scroll attempts"
+              >
+                <span>⚙️ Custom</span>
+              </button>
+            </div>
+          </div>
+
+          {/* If Custom is selected, show numeric inputs for Target Ads and Max Scrolls */}
+          {scanDepthPreset === "custom" ? (
+            <div className="flex items-center space-x-2 animate-in fade-in duration-150">
+              <div className="flex items-center space-x-1">
+                <span className="text-[10px] text-slate-500 font-semibold">Max Ads:</span>
+                <input
+                  type="number"
+                  min="50"
+                  max="10000"
+                  step="50"
+                  value={customMaxAds}
+                  onChange={(e) => setCustomMaxAds(e.target.value)}
+                  className="w-20 px-2 py-0.5 text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded font-semibold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div className="flex items-center space-x-1">
+                <span className="text-[10px] text-slate-500 font-semibold">Max Scrolls:</span>
+                <input
+                  type="number"
+                  min="5"
+                  max="500"
+                  step="5"
+                  value={customMaxScrolls}
+                  onChange={(e) => setCustomMaxScrolls(e.target.value)}
+                  className="w-16 px-2 py-0.5 text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded font-semibold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5 font-medium">
+              <span>Target: <strong className="text-slate-700 dark:text-slate-200">{effectiveTargetMaxAds.toLocaleString()} ads</strong></span>
+              <span>·</span>
+              <span>Limit: <strong className="text-slate-700 dark:text-slate-200">{effectiveMaxScrolls} scrolls</strong></span>
+            </div>
+          )}
+        </div>
+
         {/* Mode 1: Direct Meta Ad Library URL Input */}
         {searchMode === "url" ? (
           <div className="space-y-3 pt-1">
@@ -1507,7 +1638,7 @@ export default function DiscoveryPage() {
                         )}
                       </div>
                       <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate" title={`Keyword: ${kw}`}>
-                        KW: {kw} · {run.totalPagesDiscovered} p · {run.totalAdsScanned} ads
+                        KW: {kw} · {run.totalPagesDiscovered} p · {run.totalAdsScanned}{run.targetMaxAds ? `/${run.targetMaxAds}` : ""} ads
                       </div>
                     </div>
                   </div>
@@ -1551,6 +1682,9 @@ export default function DiscoveryPage() {
                 <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase font-bold">Ads Scanned</span>
                 <span className="font-extrabold text-indigo-600 dark:text-indigo-400 text-sm">
                   {activeRun.totalAdsScanned.toLocaleString()}
+                  {activeRun.targetMaxAds ? (
+                    <span className="text-[11px] font-normal text-slate-400 ml-1">/ {activeRun.targetMaxAds.toLocaleString()} max</span>
+                  ) : null}
                 </span>
               </div>
               <div className="h-6 w-[1px] bg-slate-200 dark:bg-slate-800" />

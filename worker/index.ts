@@ -319,7 +319,11 @@ async function runWorker() {
           page,
           pendingDiscoveryRun.id,
           pendingDiscoveryRun.searchUrl,
-          pendingDiscoveryRun.country
+          pendingDiscoveryRun.country,
+          {
+            targetMaxAds: pendingDiscoveryRun.targetMaxAds,
+            maxScrolls: pendingDiscoveryRun.maxScrolls,
+          }
         );
         console.log(
           `[Discovery Finished] Status: ${outcome.status} | Discovered: ${outcome.totalPagesDiscovered} pages from ${outcome.totalAdsScanned} ads`
