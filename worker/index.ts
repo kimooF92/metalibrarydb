@@ -624,6 +624,7 @@ async function runWorker() {
           );
           await handleFailure();
         }
+      } else if (trackedPage) {
         // Run Result Count scan for Tracked Page
         const outcome = await scanMetaAdPage(page, trackedPage.url, undefined, {
           previousCount: trackedPage.currentResults,
