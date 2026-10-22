@@ -233,8 +233,16 @@ async function main() {
 
       if (options.status) {
         conditions.push(eq(scrapedProducts.scrapeStatus, options.status));
+      } else if (options.page) {
+        // Brand target scan: re-scrape all pending or failed products (allows price rechecks even if image exists)
+        conditions.push(
+          sql`${scrapedProducts.scrapeStatus} IN ('failed', 'pending')`
+        );
+        conditions.push(
+          sql`COALESCE(${scrapedProducts.failureReason}, '') NOT LIKE '%[Dead link%' AND COALESCE(${scrapedProducts.failureReason}, '') NOT LIKE '%[Impossible%' AND COALESCE(${scrapedProducts.failureReason}, '') NOT LIKE '%404%'`
+        );
       } else {
-        // Default: failed or pending without an image (if image exists, it's not a fail)
+        // Default broad scan: failed or pending without an image (if image exists, it's not a fail)
         conditions.push(
           sql`${scrapedProducts.scrapeStatus} IN ('failed', 'pending') AND ${scrapedProducts.mainImageUrl} IS NULL`
         );

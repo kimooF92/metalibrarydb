@@ -75,6 +75,10 @@ export async function POST(
     const body = await req.json().catch(() => ({}));
     const forceRefresh = Boolean(body.forceRefresh);
 
+    const activeWorkspace = await getActiveWorkspace(req);
+    const fallbackCurrency = activeWorkspace.currency || "TND";
+    const fallbackCurrencySymbol = activeWorkspace.currencySymbol || "DT";
+
     // 1. Identify Brand & Page ID
     let trackedPage: any = null;
     let pageId: string | null = null;
@@ -101,7 +105,6 @@ export async function POST(
       else pageId = decodedId;
     }
 
-    const activeWorkspace = await getActiveWorkspace(req);
     const resolvedWorkspaceId = trackedPage?.workspaceId || activeWorkspace.id;
     const resolvedBrandDomainId = trackedPage?.brandDomainId || null;
 
@@ -238,7 +241,10 @@ export async function POST(
       const adCopyText = urlToAdCopy.get(normalizedUrl) || "";
 
       try {
-        const extractionResult = await extractProductFromUrl(normalizedUrl);
+        const extractionResult = await extractProductFromUrl(normalizedUrl, {
+          defaultCurrency: fallbackCurrency,
+          defaultCurrencySymbol: fallbackCurrencySymbol,
+        });
 
         if (!extractionResult.success || !extractionResult.data) {
           failedCount++;
@@ -301,7 +307,7 @@ export async function POST(
 
         // Enhance with TypeSafe Jev Decision Engine (resolve price doubt / 0 DT & classify niche)
         const isMorocco = resolvedWorkspaceId === "00000000-0000-0000-0000-000000000002" || /\.ma(\/|$)/i.test(domain || normalizedUrl);
-        const fallbackCurrencySymbol = isMorocco ? "DH" : "DT";
+        const effectiveCurrencySymbol = isMorocco ? "DH" : fallbackCurrencySymbol;
 
         const enhanced = await enhanceProductWithJev({
           title: extracted.title || existingProduct?.title,
@@ -315,7 +321,7 @@ export async function POST(
           existingCategory: existingProduct?.category,
           existingSubCategory: existingProduct?.subCategory,
           existingTargetAudience: existingProduct?.targetAudience,
-          fallbackCurrencySymbol,
+          fallbackCurrencySymbol: effectiveCurrencySymbol,
         });
 
         let savedProduct;

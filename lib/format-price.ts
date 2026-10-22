@@ -29,13 +29,17 @@ export function formatPrice(
     return "";
   }
 
-  // Preserve explicit Western currencies like $29.99 or €19.99 if they don't have local tokens
+  // Preserve explicit Western currencies like $29.99 or €19.99 ONLY if workspace currency itself is Western ($ or €)
+  const isLocalWorkspaceSymbol = /^(?:DT|DH|TND|MAD|د\.ت|دت|د\.م|درهم)$/i.test(currencySymbol);
   if (/^[\$€£]/.test(trimmed) && !CURRENCY_SUFFIX_REGEX.test(trimmed)) {
-    return trimmed;
+    if (!isLocalWorkspaceSymbol) {
+      return trimmed;
+    }
   }
 
-  // Strip legacy / mismatched currency token from end or beginning
+  // Strip legacy / mismatched currency token from end or beginning, including $ prefix
   let cleanValue = trimmed
+    .replace(/^[\$€£]\s*/, "")
     .replace(CURRENCY_SUFFIX_REGEX, "")
     .replace(ARABIC_PREFIX_REGEX, "")
     .trim();

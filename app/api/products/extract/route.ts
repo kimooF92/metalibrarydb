@@ -141,7 +141,10 @@ export async function POST(req: NextRequest) {
 
     // 2. Perform live extraction with Firecrawl
     const domain = getCleanDomain(normalizedUrl);
-    const extractionResult = await extractProductFromUrl(normalizedUrl);
+    const extractionResult = await extractProductFromUrl(normalizedUrl, {
+      defaultCurrency: activeWorkspace.currency || "TND",
+      defaultCurrencySymbol: activeWorkspace.currencySymbol || "DT",
+    });
 
     if (!extractionResult.success || !extractionResult.data) {
       // Record failure if product record exists or create failed record

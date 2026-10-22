@@ -455,6 +455,19 @@ export function parseProductHtmlContent(
       /og:price:currency["'][^>]*content=["']MAD/i.test(html) ||
       /(?:DH|MAD|د\.م|درهم)/i.test(html);
 
+    const isTunisiaDomain = /\.tn(\/|$)/i.test(url);
+    const hasTunisianHint =
+      isTunisiaDomain ||
+      /(?:DT|TND|dt|د\.ت|دت|دinar|Dinar)/i.test(html) ||
+      html.includes("+216") ||
+      /(?:livraison|توصيل|دينار)/i.test(html);
+
+    const isLocalStore =
+      options?.defaultCurrency === "TND" ||
+      options?.defaultCurrency === "MAD" ||
+      hasMoroccanHint ||
+      hasTunisianHint;
+
     let currency: string =
       options?.defaultCurrency ||
       (hasMoroccanHint && !options?.defaultCurrency ? "MAD" : "TND");
@@ -496,10 +509,15 @@ export function parseProductHtmlContent(
           priceNum = Math.round(priceNum / 1000);
         }
         if (offer.priceCurrency) {
-          currency = offer.priceCurrency;
-          if (currency === "MAD") currencySymbol = "DH";
-          else if (currency === "TND") currencySymbol = "DT";
-          else currencySymbol = currency;
+          const rawOfferCurr = String(offer.priceCurrency).trim().toUpperCase();
+          if (rawOfferCurr === "USD" && isLocalStore) {
+            // Ignore USD geo-switch from cloud scrapers on local stores
+          } else {
+            currency = rawOfferCurr;
+            if (currency === "MAD") currencySymbol = "DH";
+            else if (currency === "TND") currencySymbol = "DT";
+            else currencySymbol = currency;
+          }
         }
         currentPrice = `${priceNum} ${currencySymbol}`;
       }
@@ -538,12 +556,16 @@ export function parseProductHtmlContent(
           if (currency === "TND" && num >= 1000 && (cleanedPrice.includes(",000") || cleanedPrice.includes(".000"))) {
             num = Math.round(num / 1000);
           }
-          const detectedCurr = extractMeta(html, "product:price:currency") || extractMeta(html, "og:price:currency");
+          const detectedCurr = (extractMeta(html, "product:price:currency") || extractMeta(html, "og:price:currency"))?.trim().toUpperCase();
           if (detectedCurr) {
-            currency = detectedCurr;
-            if (currency === "MAD") currencySymbol = "DH";
-            else if (currency === "TND") currencySymbol = "DT";
-            else currencySymbol = currency;
+            if (detectedCurr === "USD" && isLocalStore) {
+              // Ignore USD geo-switch from cloud scrapers on local stores
+            } else {
+              currency = detectedCurr;
+              if (currency === "MAD") currencySymbol = "DH";
+              else if (currency === "TND") currencySymbol = "DT";
+              else currencySymbol = currency;
+            }
           }
           currentPrice = `${num} ${currencySymbol}`;
         }

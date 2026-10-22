@@ -79,3 +79,20 @@ test("harvestPriceCandidates extracts unique prices and surrounding context", ()
   assert.ok(values.includes("18.9 DT"));
   assert.ok(values.includes("5 DT"));
 });
+
+test("detectExtractionDoubt flags USD prices caused by cloud scraper geo-switching", () => {
+  const usdPrice = detectExtractionDoubt({
+    title: "Montre Connectée Sport",
+    currentPrice: "$19.99",
+  });
+  assert.equal(usdPrice.hasDoubt, true);
+  assert.equal(usdPrice.needsPriceReferee, true);
+  assert.match(usdPrice.reasons[0], /USD \/ foreign currency detected/i);
+
+  const usdSuffix = detectExtractionDoubt({
+    title: "Casque Bluetooth Sans Fil",
+    currentPrice: "24.99 USD",
+  });
+  assert.equal(usdSuffix.hasDoubt, true);
+  assert.equal(usdSuffix.needsPriceReferee, true);
+});

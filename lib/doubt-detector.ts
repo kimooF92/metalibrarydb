@@ -37,6 +37,9 @@ export function detectExtractionDoubt(data: {
   if (!rawPriceStr || isNaN(priceNum) || priceNum <= 0) {
     reasons.push("Price is 0, empty, or unparseable");
     needsPriceReferee = true;
+  } else if (rawPriceStr.includes("$") || /\bUSD\b/i.test(rawPriceStr)) {
+    reasons.push(`USD / foreign currency detected (${rawPriceStr}) - cloud proxy geo-switch artifact`);
+    needsPriceReferee = true;
   } else if (priceNum <= 10) {
     // In COD e-commerce (Tunisia/Morocco), <= 10 DT/DH is almost always a delivery fee or placeholder
     reasons.push(`Suspiciously low price (${priceNum}) - likely delivery fee or accessory`);

@@ -55,6 +55,7 @@ import {
   Check,
   RotateCw,
   DollarSign,
+  Laptop,
 } from "lucide-react";
 
 interface BrandAnalyticsData {
@@ -193,6 +194,7 @@ export default function BrandDeepDivePage({
 
   // Products Tab State
   const [isSyncingProducts, setIsSyncingProducts] = useState(false);
+  const [isQueueingLocalRescan, setIsQueueingLocalRescan] = useState(false);
   const [isDossierModalOpen, setIsDossierModalOpen] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [productStatusFilter, setProductStatusFilter] = useState<"all" | "scraped" | "pending">("all");
@@ -415,6 +417,50 @@ export default function BrandDeepDivePage({
       });
     } finally {
       setIsSyncingProducts(false);
+    }
+  };
+
+  // Queue all brand products for local worker residential rescan
+  const handleQueueBrandProductsForLocalRescan = async () => {
+    if (isQueueingLocalRescan || !id) return;
+    setIsQueueingLocalRescan(true);
+    try {
+      const res = await fetch(`/api/spy/brand/${encodeURIComponent(id)}/products/queue-rescan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const resJson = await res.json();
+      if (!res.ok || !resJson.success) {
+        throw new Error(resJson.error || "Failed to set brand products for local rescan");
+      }
+
+      const brandTargetName = data?.brand?.displayName || resJson.brandName || resJson.pageId || id;
+      showToast({
+        type: "success",
+        title: "🖥️ Queued for Local Rescan",
+        message: `${resJson.count || 0} product(s) marked as Pending for local worker. To run now: npm run scrape:products -- --brand "${brandTargetName}"`,
+      });
+
+      // Update all products in current state to 'pending'
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          products: (prev.products || []).map((p) => ({
+            ...p,
+            scrapeStatus: "pending",
+            failureReason: "Queued for local worker rescan",
+          })),
+        };
+      });
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Local Rescan Error",
+        message: err.message || "Could not queue brand products for local rescan.",
+      });
+    } finally {
+      setIsQueueingLocalRescan(false);
     }
   };
 
@@ -1358,10 +1404,25 @@ export default function BrandDeepDivePage({
               </p>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              <button
+                type="button"
+                onClick={handleQueueBrandProductsForLocalRescan}
+                disabled={isQueueingLocalRescan || isSyncingProducts}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-500/30 text-xs font-bold transition-all cursor-pointer disabled:opacity-60 shadow-xs"
+                title="Reset all brand products to pending and enqueue them for your local worker (uses residential IP to fix USD prices & bypass Cloudflare)"
+              >
+                {isQueueingLocalRescan ? (
+                  <RefreshCw className="w-4 h-4 animate-spin text-amber-600 dark:text-amber-400" />
+                ) : (
+                  <Laptop className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                )}
+                <span>{isQueueingLocalRescan ? "Queueing..." : "🖥️ Set for Local URL Rescan"}</span>
+              </button>
+
               <button
                 onClick={() => handleSyncBrandProducts(false)}
-                disabled={isSyncingProducts}
+                disabled={isSyncingProducts || isQueueingLocalRescan}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-sm shadow-indigo-600/25 transition-all cursor-pointer disabled:opacity-60"
               >
                 {isSyncingProducts ? (
@@ -1374,7 +1435,7 @@ export default function BrandDeepDivePage({
 
               <button
                 onClick={() => handleSyncBrandProducts(true)}
-                disabled={isSyncingProducts}
+                disabled={isSyncingProducts || isQueueingLocalRescan}
                 className="p-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 text-xs font-semibold transition-all cursor-pointer"
                 title="Force re-scrape all URLs from landing pages"
               >
