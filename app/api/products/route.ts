@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { ads, adObservations, scrapedProducts, trackedPages } from "@/db/schema";
+import { ads, adObservations, scrapedProducts, trackedPages, discoveredPages } from "@/db/schema";
 import { eq, ilike, and, sql, desc, asc, or, count, inArray, isNull } from "drizzle-orm";
 import { validateApiSecret, validateAdminRole, getRoleFromRequest } from "@/lib/api-guard";
 import { PRIVATE_AUTH_VARY, PRIVATE_DETAIL_CACHE_CONTROL, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
@@ -97,7 +97,16 @@ export async function GET(req: NextRequest) {
 
     // Filter by Active / Inactive (Off-Air) Ads status
     const requireActiveAds = activeStatus === "active" || hideInactive || stillRunning;
-    if (requireActiveAds) {
+    if (activeStatus === "discovered") {
+      // Show imported discovery products that are successfully scraped, even before ad creative scan runs
+      conditions.push(
+        eq(scrapedProducts.scrapeStatus, "success"),
+        sql`EXISTS (
+          SELECT 1 FROM ${discoveredPages}
+          WHERE ${discoveredPages.pageId} = ${scrapedProducts.pageId}
+        )`
+      );
+    } else if (requireActiveAds) {
       conditions.push(
         sql`EXISTS (
           SELECT 1 FROM ${ads}

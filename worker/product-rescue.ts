@@ -38,23 +38,6 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
       .select({
         id: scrapedProducts.id,
         url: scrapedProducts.url,
-        domain: scrapedProducts.domain,
-        title: scrapedProducts.title,
-        currentPrice: scrapedProducts.currentPrice,
-        originalPrice: scrapedProducts.originalPrice,
-        category: scrapedProducts.category,
-        subCategory: scrapedProducts.subCategory,
-        targetAudience: scrapedProducts.targetAudience,
-        currency: scrapedProducts.currency,
-        discountOrOffer: scrapedProducts.discountOrOffer,
-        mainImageUrl: scrapedProducts.mainImageUrl,
-        galleryImages: scrapedProducts.galleryImages,
-        allOffers: scrapedProducts.allOffers,
-        storePlatform: scrapedProducts.storePlatform,
-        phoneNumbers: scrapedProducts.phoneNumbers,
-        whatsappNumbers: scrapedProducts.whatsappNumbers,
-        metaPixelIds: scrapedProducts.metaPixelIds,
-        deliveryCost: scrapedProducts.deliveryCost,
         failureReason: scrapedProducts.failureReason,
         lastScrapedAt: scrapedProducts.lastScrapedAt,
         workspaceId: scrapedProducts.workspaceId,
@@ -66,8 +49,24 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
           sql`${scrapedProducts.scrapeStatus} IN ('failed', 'pending')`,
           // 2. If product image already exists, it's NOT a fail! (user requirement)
           isNull(scrapedProducts.mainImageUrl),
-          // 3. Minimum 24h cooldown between rescue attempts
-          sql`(${scrapedProducts.lastScrapedAt} IS NULL OR ${scrapedProducts.lastScrapedAt} < NOW() - INTERVAL '24 hours')`,
+          // 3. Differentiated rescue window:
+          // - Brand new pending items: eligible immediately
+          // - Transient failures (timeouts, 502, 503, 429 rate limit): retry after 1 hour
+          // - Other non-permanent errors: retry after 12 hours
+          sql`(
+            ${scrapedProducts.lastScrapedAt} IS NULL
+            OR (
+              (
+                COALESCE(${scrapedProducts.failureReason}, '') ILIKE '%timeout%'
+                OR COALESCE(${scrapedProducts.failureReason}, '') ILIKE '%502%'
+                OR COALESCE(${scrapedProducts.failureReason}, '') ILIKE '%503%'
+                OR COALESCE(${scrapedProducts.failureReason}, '') ILIKE '%rate%limit%'
+                OR COALESCE(${scrapedProducts.failureReason}, '') ILIKE '%429%'
+              )
+              AND ${scrapedProducts.lastScrapedAt} < NOW() - INTERVAL '1 hour'
+            )
+            OR ${scrapedProducts.lastScrapedAt} < NOW() - INTERVAL '12 hours'
+          )`,
           // 4. Do NOT recheck 404s, dead links, or impossible items
           sql`COALESCE(${scrapedProducts.failureReason}, '') NOT LIKE '%[Dead link%'`,
           sql`COALESCE(${scrapedProducts.failureReason}, '') NOT LIKE '%[Impossible%'`,
@@ -112,6 +111,7 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
         await db
           .update(scrapedProducts)
           .set({
+            rawExtract: null,
             scrapeStatus: "ignored",
             failureReason: extractionResult?.error || "[Dead link] HTTP 404 Not Found",
             lastScrapedAt: new Date(),
@@ -147,6 +147,7 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
         await db
           .update(scrapedProducts)
           .set({
+            rawExtract: null,
             scrapeStatus: "ignored",
             failureReason: extractionResult?.error || "[Dead link] 404 Not Found",
             lastScrapedAt: new Date(),
@@ -158,13 +159,13 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
 
       // 3. User requirement: "if the product image exist thats enough, flagged as not a fail"
       const extracted = extractionResult?.data;
-      const hasImage = Boolean(extracted?.main_image_url || item.mainImageUrl);
+      const hasImage = Boolean(extracted?.main_image_url);
       const hasPrice = Boolean(
         extracted?.current_price &&
         extracted.current_price !== "0 DT" &&
         extracted.current_price !== "0"
       );
-      const hasTitle = Boolean(extracted?.title || item.title);
+      const hasTitle = Boolean(extracted?.title);
 
       if (extractionResult?.success && extracted && hasTitle && (hasImage || hasPrice)) {
         const rawHtml = extractionResult.rawHtml || "";
@@ -176,8 +177,8 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
         const pixels = extractMetaPixelIds(rawHtml);
         const delivery = extractDeliveryInfo(rawHtml, extracted.delivery_cost);
 
-        const isMorocco = item.workspaceId === "00000000-0000-0000-0000-000000000002" || /\.ma(\/|$)/i.test(item.domain || item.url);
-        const itemCurrency = isMorocco ? "MAD" : (item.currency || "TND");
+        const isMorocco = item.workspaceId === "00000000-0000-0000-0000-000000000002" || /\.ma(\/|$)/i.test(targetUrl);
+        const itemCurrency = isMorocco ? "MAD" : "TND";
         const itemSym = isMorocco ? "DH" : "DT";
 
         const formattedOffers = (extracted.all_offers || []).map((o: any) => ({
@@ -188,42 +189,39 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
 
         // Use TypeSafe Jev Decision Engine to resolve price doubt (e.g. 0 DT) and classify niche
         const enhanced = await enhanceProductWithJev({
-          title: extracted.title || item.title,
-          currentPrice: extracted.current_price || item.currentPrice,
-          originalPrice: extracted.original_price || item.originalPrice,
+          title: extracted.title,
+          currentPrice: extracted.current_price,
+          originalPrice: extracted.original_price,
           url: targetUrl,
-          domain: resolvedDomain || item.domain,
+          domain: resolvedDomain,
           html: rawHtml,
           markdown: extractionResult.raw?.markdown,
-          existingCategory: item.category,
-          existingSubCategory: item.subCategory,
-          existingTargetAudience: item.targetAudience,
           fallbackCurrencySymbol: itemSym,
         });
 
         const finalPrice = enhanced.currentPrice;
         const finalOrigPrice = enhanced.originalPrice;
-        const finalDelivery = delivery.label ? formatDelivery(delivery.label, itemSym) : item.deliveryCost;
+        const finalDelivery = delivery.label ? formatDelivery(delivery.label, itemSym) : null;
 
         await db
           .update(scrapedProducts)
           .set({
-            domain: resolvedDomain || item.domain,
-            title: extracted.title || item.title,
+            domain: resolvedDomain || null,
+            title: extracted.title || null,
             currentPrice: finalPrice,
             originalPrice: finalOrigPrice,
             category: enhanced.category,
             subCategory: enhanced.subCategory,
             targetAudience: enhanced.targetAudience,
             currency: extracted.currency || itemCurrency,
-            discountOrOffer: extracted.discount_or_offer || item.discountOrOffer,
-            mainImageUrl: extracted.main_image_url || item.mainImageUrl,
-            galleryImages: extracted.gallery_images || item.galleryImages || [],
-            allOffers: formattedOffers.length > 0 ? formattedOffers : item.allOffers,
-            storePlatform: platform || item.storePlatform,
-            phoneNumbers: phones.length > 0 ? phones : item.phoneNumbers,
-            whatsappNumbers: wa.length > 0 ? wa : item.whatsappNumbers,
-            metaPixelIds: pixels.length > 0 ? pixels : item.metaPixelIds,
+            discountOrOffer: extracted.discount_or_offer || null,
+            mainImageUrl: extracted.main_image_url || null,
+            galleryImages: extracted.gallery_images || [],
+            allOffers: formattedOffers.length > 0 ? formattedOffers : null,
+            storePlatform: platform || "other",
+            phoneNumbers: phones.length > 0 ? phones : null,
+            whatsappNumbers: wa.length > 0 ? wa : null,
+            metaPixelIds: pixels.length > 0 ? pixels : null,
             deliveryCost: finalDelivery,
             scrapeStatus: "success",
             failureReason: null,
@@ -232,11 +230,19 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
           })
           .where(eq(scrapedProducts.id, item.id));
 
-        // Relink unlinked ads for this product
+        // Relink unlinked ads for this product using canonical URL equality (Task 3.1)
         await db
           .update(ads)
           .set({ productId: item.id })
-          .where(sql`${ads.productId} IS NULL AND ${ads.linkUrl} LIKE ${`%${targetUrl}%`}`);
+          .where(
+            and(
+              isNull(ads.productId),
+              or(
+                eq(ads.linkUrl, targetUrl),
+                sql`LOWER(TRIM(TRAILING '/' FROM ${ads.linkUrl})) = LOWER(TRIM(TRAILING '/' FROM ${targetUrl}))`
+              )
+            )
+          );
 
         rescuedCount++;
         console.log(`[Local Rescue] ✅ Successfully rescued: "${extracted.title || "Product"}" ➔ ${extracted.current_price || "Image Extracted"}`);
@@ -246,6 +252,7 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
         await db
           .update(scrapedProducts)
           .set({
+            rawExtract: null,
             scrapeStatus: "failed",
             failureReason: `[Impossible to scrape] ${extractionResult?.error || "Local and cloud extractors could not parse details"}`,
             lastScrapedAt: new Date(),

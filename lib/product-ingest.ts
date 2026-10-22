@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { ads, scrapedProducts, trackedPages, brandDomains, adObservations, workspaces } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { ads, scrapedProducts, trackedPages, brandDomains, adObservations, workspaces, queue } from "@/db/schema";
+import { eq, sql, and, or, isNull } from "drizzle-orm";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 import { normalizeProductUrl, extractProductFromUrl } from "@/lib/firecrawl";
 import { getCleanDomain, isValidPageId } from "@/lib/utils";
@@ -287,6 +287,34 @@ export async function linkAndAutoScrapeProduct({
         .where(eq(ads.id, adId));
     }
 
+    // Insert into PostgreSQL durable queue for background worker (Task 2.1)
+    let targetTrackedPageUuid: string | null = null;
+    if (isValidPageId(pageId)) {
+      try {
+        const pageRec = await db.query.trackedPages.findFirst({
+          where: eq(trackedPages.pageId, String(pageId)),
+          columns: { id: true },
+        });
+        if (pageRec) targetTrackedPageUuid = pageRec.id;
+      } catch {}
+    }
+
+    try {
+      await db
+        .insert(queue)
+        .values({
+          trackedPageId: targetTrackedPageUuid,
+          jobType: "product_scrape",
+          status: "pending",
+          priority: 5,
+          failureReason: `product:${targetProductId}`,
+          workspaceId: resolvedWorkspaceId,
+        })
+        .onConflictDoNothing();
+    } catch (queueErr) {
+      console.warn(`[Product Ingest] Non-fatal queue insertion warning:`, queueErr);
+    }
+
     // 3. Queue asynchronous background scraping (Non-blocking)
     queueBackgroundScrape(async () => {
       // Check if already in-flight
@@ -295,214 +323,12 @@ export async function linkAndAutoScrapeProduct({
         return;
       }
 
-      const scrapePromise = (async () => {
-        try {
-          console.log(`[Auto-Scraper] Starting background product extraction: ${normalizedUrl}`);
-
-          // Resolve workspace default currency dynamically
-          let fallbackCurrency = "TND";
-          let fallbackCurrencySymbol = "DT";
-          if (resolvedWorkspaceId) {
-            const ws = await db.query.workspaces.findFirst({
-              where: eq(workspaces.id, resolvedWorkspaceId),
-              columns: { currency: true, currencySymbol: true },
-            });
-            if (ws?.currency) fallbackCurrency = ws.currency;
-            if (ws?.currencySymbol) fallbackCurrencySymbol = ws.currencySymbol;
-          }
-
-          const extractionResult = await extractProductFromUrl(normalizedUrl, {
-            defaultCurrency: fallbackCurrency,
-            defaultCurrencySymbol: fallbackCurrencySymbol,
-          });
-
-          if (!extractionResult.success || !extractionResult.data) {
-            const isDead = extractionResult.error?.includes("[Dead link]") || extractionResult.error?.includes("404");
-            await db
-              .update(scrapedProducts)
-              .set({
-                scrapeStatus: isDead ? "ignored" : "failed",
-                failureReason: extractionResult.error || "Extraction failed",
-                lastScrapedAt: new Date(),
-                updatedAt: new Date(),
-              })
-              .where(eq(scrapedProducts.id, targetProductId));
-            return;
-          }
-
-          const extracted = extractionResult.data;
-          const rawHtml =
-            extractionResult.raw?.html ||
-            extractionResult.raw?.data?.html ||
-            extractionResult.raw?.rawHtml ||
-            "";
-
-          const finalEffectiveUrl = extracted.resolved_url || normalizedUrl;
-          const resolvedDomain = getCleanDomain(finalEffectiveUrl);
-
-          // Hybrid 0-Credit Noise Gatekeeper: drop policy, cart, legal, or non-product pages
-          const gateCheck = await validateProductWithGatekeeper(
-            extracted.title,
-            finalEffectiveUrl,
-            extracted.current_price
-          );
-
-          if (!gateCheck.isProduct) {
-            console.log(
-              `[Auto-Scraper Gatekeeper] Dropped non-product page: "${extracted.title || finalEffectiveUrl}" (${gateCheck.reason})`
-            );
-            await db
-              .update(scrapedProducts)
-              .set({
-                domain: resolvedDomain || undefined,
-                title: extracted.title || normalizedUrl,
-                scrapeStatus: "ignored",
-                failureReason: gateCheck.reason || "Non-product item filtered by gatekeeper",
-                lastScrapedAt: new Date(),
-                updatedAt: new Date(),
-              })
-              .where(eq(scrapedProducts.id, targetProductId));
-            return;
-          }
-
-          const phoneNumbers = extractTunisianPhoneNumbers(rawHtml);
-          const whatsappNumbers = extractWhatsAppNumbers(rawHtml);
-          const metaPixelIds = extractMetaPixelIds(rawHtml);
-          const storePlatform = detectStorePlatform(rawHtml, finalEffectiveUrl);
-          const deliveryInfo = extractDeliveryInfo(
-            rawHtml,
-            extracted.delivery_cost,
-            extracted.all_offers,
-            fallbackCurrencySymbol
-          );
-          const deliveryCost = deliveryInfo?.label ? formatDelivery(deliveryInfo.label, fallbackCurrencySymbol) : null;
-
-          // High-speed Decision AI classification (Span/Jev model with AI cascade fallback)
-          let category: string | null = null;
-          let subCategory: string | null = null;
-          let targetAudience: string | null = null;
-
-          if (extracted.title) {
-            try {
-              // Strict Decision AI Engine: Uses ONLY span (respan/span-02), and if failed, jev (typesafe/jev-1.13) as backup. No other LLMs.
-              const jevClassification = await classifyProductWithJev(extracted.title, {
-                domain: resolvedDomain,
-                url: finalEffectiveUrl,
-                adText: adCopy,
-                allowGeneral: false, // Never allow General Merchandise
-              });
-
-              if (jevClassification?.category && jevClassification.category !== "General & Other") {
-                category = jevClassification.category;
-                subCategory = jevClassification.subCategory;
-                targetAudience = jevClassification.targetAudience;
-              } else {
-                const fallback = classifyProductOffline(extracted.title);
-                category = fallback.category;
-                subCategory = fallback.subCategory;
-                targetAudience = fallback.targetAudience;
-              }
-            } catch (err: any) {
-              console.warn(`[Auto-Scraper] Decision AI classification error for "${extracted.title}":`, err?.message || err);
-              const fallback = classifyProductOffline(extracted.title);
-              category = fallback.category;
-              subCategory = fallback.subCategory;
-              targetAudience = fallback.targetAudience;
-            }
-          }
-
-          const formattedOffers = (extracted.all_offers || []).map((offer) => ({
-            tierName: offer.tier_name,
-            price: offer.price ? formatPrice(offer.price, fallbackCurrencySymbol) : offer.price,
-            savings: offer.savings,
-          }));
-
-          const effectiveCurrency = extracted.currency || fallbackCurrency;
-
-          // 0-Cost Anomaly / Doubt Detector: triggers Jev referee ONLY on suspicious prices
-          const doubt = detectExtractionDoubt({
-            title: extracted.title,
-            currentPrice: extracted.current_price,
-            url: finalEffectiveUrl,
-          });
-
-          if (doubt.hasDoubt && doubt.needsPriceReferee) {
-            console.log(`[Auto-Scraper] Doubt flagged on "${extracted.title}": ${doubt.reasons.join(", ")}`);
-            try {
-              const resolved = await resolvePriceDoubtWithJev({
-                productTitle: extracted.title,
-                extractedPrice: extracted.current_price,
-                html: rawHtml,
-                markdown: extractionResult.raw?.markdown,
-                fallbackCurrencySymbol,
-              });
-
-              if (resolved?.resolvedPrice) {
-                console.log(
-                  `[Auto-Scraper Jev Referee] Corrected price from "${extracted.current_price}" -> "${resolved.resolvedPrice}" (${(resolved.confidence * 100).toFixed(0)}% conf)`
-                );
-                extracted.current_price = resolved.resolvedPrice;
-              }
-            } catch (err: any) {
-              console.warn("[Auto-Scraper Jev Referee] Price resolution skipped:", err?.message || err);
-            }
-          }
-
-          const effectivePrice = formatPrice(extracted.current_price, fallbackCurrencySymbol);
-          const effectiveOriginalPrice = extracted.original_price
-            ? formatPrice(extracted.original_price, fallbackCurrencySymbol)
-            : null;
-
-          const updateTime = new Date();
-          await db
-            .update(scrapedProducts)
-            .set({
-              domain: resolvedDomain || undefined,
-              title: extracted.title,
-              currentPrice: effectivePrice,
-              originalPrice: effectiveOriginalPrice,
-              currency: effectiveCurrency,
-              discountOrOffer: extracted.discount_or_offer || null,
-              mainImageUrl: extracted.main_image_url || null,
-              galleryImages: extracted.gallery_images || [],
-              allOffers: formattedOffers.length > 0 ? formattedOffers : null,
-              phoneNumbers: phoneNumbers.length > 0 ? phoneNumbers : null,
-              whatsappNumbers: whatsappNumbers.length > 0 ? whatsappNumbers : null,
-              metaPixelIds: metaPixelIds.length > 0 ? metaPixelIds : null,
-              storePlatform: storePlatform || "other",
-              deliveryCost: deliveryCost || null,
-              category,
-              subCategory,
-              targetAudience,
-              rawExtract: extractionResult.raw || null,
-              scrapeStatus: "success",
-              failureReason: null,
-              lastScrapedAt: updateTime,
-              updatedAt: updateTime,
-            })
-            .where(eq(scrapedProducts.id, targetProductId));
-
-          // Ensure all matching ads are linked to this product ID
-          await db
-            .update(ads)
-            .set({ productId: targetProductId })
-            .where(sql`${ads.productId} IS NULL AND ${ads.linkUrl} LIKE ${`%${normalizedUrl}%`}`);
-
-          console.log(`[Auto-Scraper] Successfully extracted: "${extracted.title || normalizedUrl}" (${extracted.current_price || "N/A"})`);
-        } catch (scrapeErr: any) {
-          console.error(`[Auto-Scraper] Failed to extract product ${normalizedUrl}:`, scrapeErr?.message || scrapeErr);
-          await db
-            .update(scrapedProducts)
-            .set({
-              scrapeStatus: "failed",
-              failureReason: scrapeErr?.message || "Background extraction error",
-              updatedAt: new Date(),
-            })
-            .where(eq(scrapedProducts.id, targetProductId));
-        } finally {
-          inFlightScrapes.delete(normalizedUrl);
-        }
-      })();
+      const scrapePromise = processProductExtraction(targetProductId, normalizedUrl, {
+        workspaceId: resolvedWorkspaceId,
+        adCopy,
+      }).finally(() => {
+        inFlightScrapes.delete(normalizedUrl);
+      });
 
       inFlightScrapes.set(normalizedUrl, scrapePromise);
       await scrapePromise;
@@ -512,6 +338,268 @@ export async function linkAndAutoScrapeProduct({
   } catch (err: any) {
     console.error(`[Product Ingest] Error linking product for URL "${normalizedUrl}":`, err?.message || err);
     return { productId: null, isNew: false };
+  }
+}
+
+/**
+ * Executes full product extraction, AI classification, price refereeing, and exact canonical ad linking.
+ * Can be called immediately in background or by the worker durable queue.
+ */
+export async function processProductExtraction(
+  productId: string,
+  normalizedUrl: string,
+  options?: {
+    workspaceId?: string | null;
+    adCopy?: string | null;
+  }
+): Promise<{ success: boolean; status: string; error?: string }> {
+  try {
+    // 1. Atomic claim check: ensure another worker or process is not already extracting this product
+    const claimed = await db
+      .update(scrapedProducts)
+      .set({ scrapeStatus: "scraping", updatedAt: new Date() })
+      .where(
+        and(
+          eq(scrapedProducts.id, productId),
+          sql`${scrapedProducts.scrapeStatus} NOT IN ('scraping', 'success', 'ignored')`
+        )
+      )
+      .returning({ id: scrapedProducts.id });
+
+    if (!claimed || claimed.length === 0) {
+      console.log(`[Auto-Scraper] Product ${productId} is already scraping or completed. Skipping duplicate execution.`);
+      return { success: true, status: "already_claimed" };
+    }
+
+    console.log(`[Auto-Scraper] Starting product extraction: ${normalizedUrl}`);
+
+    // Resolve workspace default currency dynamically
+    let fallbackCurrency = "TND";
+    let fallbackCurrencySymbol = "DT";
+    if (options?.workspaceId) {
+      try {
+        const ws = await db.query.workspaces.findFirst({
+          where: eq(workspaces.id, options.workspaceId),
+          columns: { currency: true, currencySymbol: true },
+        });
+        if (ws?.currency) fallbackCurrency = ws.currency;
+        if (ws?.currencySymbol) fallbackCurrencySymbol = ws.currencySymbol;
+      } catch {}
+    }
+
+    const extractionResult = await extractProductFromUrl(normalizedUrl, {
+      defaultCurrency: fallbackCurrency,
+      defaultCurrencySymbol: fallbackCurrencySymbol,
+    });
+
+    if (!extractionResult.success || !extractionResult.data) {
+      const isDead = extractionResult.error?.includes("[Dead link]") || extractionResult.error?.includes("404");
+      await db
+        .update(scrapedProducts)
+        .set({
+          rawExtract: null,
+          scrapeStatus: isDead ? "ignored" : "failed",
+          failureReason: extractionResult.error || "Extraction failed",
+          lastScrapedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(scrapedProducts.id, productId));
+      return { success: false, status: isDead ? "ignored" : "failed", error: extractionResult.error };
+    }
+
+    const extracted = extractionResult.data;
+    const rawHtml =
+      extractionResult.raw?.html ||
+      extractionResult.raw?.data?.html ||
+      extractionResult.raw?.rawHtml ||
+      "";
+
+    const finalEffectiveUrl = extracted.resolved_url || normalizedUrl;
+    const resolvedDomain = getCleanDomain(finalEffectiveUrl);
+
+    // Hybrid 0-Credit Noise Gatekeeper: drop policy, cart, legal, or non-product pages
+    const gateCheck = await validateProductWithGatekeeper(
+      extracted.title,
+      finalEffectiveUrl,
+      extracted.current_price
+    );
+
+    if (!gateCheck.isProduct) {
+      console.log(
+        `[Auto-Scraper Gatekeeper] Dropped non-product page: "${extracted.title || finalEffectiveUrl}" (${gateCheck.reason})`
+      );
+      await db
+        .update(scrapedProducts)
+        .set({
+          rawExtract: null,
+          domain: resolvedDomain || undefined,
+          title: extracted.title || normalizedUrl,
+          scrapeStatus: "ignored",
+          failureReason: gateCheck.reason || "Non-product item filtered by gatekeeper",
+          lastScrapedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(scrapedProducts.id, productId));
+      return { success: true, status: "ignored" };
+    }
+
+    const phoneNumbers = extractTunisianPhoneNumbers(rawHtml);
+    const whatsappNumbers = extractWhatsAppNumbers(rawHtml);
+    const metaPixelIds = extractMetaPixelIds(rawHtml);
+    const storePlatform = detectStorePlatform(rawHtml, finalEffectiveUrl);
+    const deliveryInfo = extractDeliveryInfo(
+      rawHtml,
+      extracted.delivery_cost,
+      extracted.all_offers,
+      fallbackCurrencySymbol
+    );
+    const deliveryCost = deliveryInfo?.label ? formatDelivery(deliveryInfo.label, fallbackCurrencySymbol) : null;
+
+    // High-speed Decision AI classification (Span/Jev model with AI cascade fallback)
+    let category: string | null = null;
+    let subCategory: string | null = null;
+    let targetAudience: string | null = null;
+
+    if (extracted.title) {
+      try {
+        const jevClassification = await classifyProductWithJev(extracted.title, {
+          domain: resolvedDomain,
+          url: finalEffectiveUrl,
+          adText: options?.adCopy || null,
+          allowGeneral: false,
+        });
+
+        if (jevClassification?.category && jevClassification.category !== "General & Other") {
+          category = jevClassification.category;
+          subCategory = jevClassification.subCategory;
+          targetAudience = jevClassification.targetAudience;
+        } else {
+          const fallback = classifyProductOffline(extracted.title);
+          category = fallback.category;
+          subCategory = fallback.subCategory;
+          targetAudience = fallback.targetAudience;
+        }
+      } catch (err: any) {
+        console.warn(`[Auto-Scraper] Decision AI classification error for "${extracted.title}":`, err?.message || err);
+        const fallback = classifyProductOffline(extracted.title);
+        category = fallback.category;
+        subCategory = fallback.subCategory;
+        targetAudience = fallback.targetAudience;
+      }
+    }
+
+    const formattedOffers = (extracted.all_offers || []).map((offer) => ({
+      tierName: offer.tier_name,
+      price: offer.price ? formatPrice(offer.price, fallbackCurrencySymbol) : offer.price,
+      savings: offer.savings,
+    }));
+
+    const effectiveCurrency = extracted.currency || fallbackCurrency;
+
+    // 0-Cost Anomaly / Doubt Detector: triggers Jev referee ONLY on suspicious prices
+    const doubt = detectExtractionDoubt({
+      title: extracted.title,
+      currentPrice: extracted.current_price,
+      url: finalEffectiveUrl,
+    });
+
+    if (doubt.hasDoubt && doubt.needsPriceReferee) {
+      console.log(`[Auto-Scraper] Doubt flagged on "${extracted.title}": ${doubt.reasons.join(", ")}`);
+      try {
+        const resolved = await resolvePriceDoubtWithJev({
+          productTitle: extracted.title,
+          extractedPrice: extracted.current_price,
+          html: rawHtml,
+          markdown: extractionResult.raw?.markdown,
+          fallbackCurrencySymbol,
+        });
+
+        if (resolved?.resolvedPrice) {
+          console.log(
+            `[Auto-Scraper Jev Referee] Corrected price from "${extracted.current_price}" -> "${resolved.resolvedPrice}" (${(resolved.confidence * 100).toFixed(0)}% conf)`
+          );
+          extracted.current_price = resolved.resolvedPrice;
+        }
+      } catch (err: any) {
+        console.warn("[Auto-Scraper Jev Referee] Price resolution skipped:", err?.message || err);
+      }
+    }
+
+    const effectivePrice = formatPrice(extracted.current_price, fallbackCurrencySymbol);
+    const effectiveOriginalPrice = extracted.original_price
+      ? formatPrice(extracted.original_price, fallbackCurrencySymbol)
+      : null;
+
+    const updateTime = new Date();
+    await db
+      .update(scrapedProducts)
+      .set({
+        domain: resolvedDomain || undefined,
+        title: extracted.title,
+        currentPrice: effectivePrice,
+        originalPrice: effectiveOriginalPrice,
+        currency: effectiveCurrency,
+        discountOrOffer: extracted.discount_or_offer || null,
+        mainImageUrl: extracted.main_image_url || null,
+        galleryImages: extracted.gallery_images || [],
+        allOffers: formattedOffers.length > 0 ? formattedOffers : null,
+        phoneNumbers: phoneNumbers.length > 0 ? phoneNumbers : null,
+        whatsappNumbers: whatsappNumbers.length > 0 ? whatsappNumbers : null,
+        metaPixelIds: metaPixelIds.length > 0 ? metaPixelIds : null,
+        storePlatform: storePlatform || "other",
+        deliveryCost: deliveryCost || null,
+        category,
+        subCategory,
+        targetAudience,
+        rawExtract: extractionResult.raw || null,
+        scrapeStatus: "success",
+        failureReason: null,
+        lastScrapedAt: updateTime,
+        updatedAt: updateTime,
+      })
+      .where(eq(scrapedProducts.id, productId));
+
+    // Task 3.1: Exact canonical normalized URL equality linking (replacing unindexed LIKE)
+    await db
+      .update(ads)
+      .set({ productId })
+      .where(
+        and(
+          isNull(ads.productId),
+          or(
+            eq(ads.linkUrl, normalizedUrl),
+            sql`LOWER(TRIM(TRAILING '/' FROM ${ads.linkUrl})) = LOWER(TRIM(TRAILING '/' FROM ${normalizedUrl}))`
+          )
+        )
+      );
+
+    // Complete any pending queue jobs for this product
+    await db
+      .update(queue)
+      .set({ status: "completed", finishedAt: updateTime })
+      .where(
+        and(
+          eq(queue.jobType, "product_scrape"),
+          eq(queue.status, "pending"),
+          eq(queue.failureReason, `product:${productId}`)
+        )
+      )
+      .catch(() => {});
+
+    console.log(`[Auto-Scraper] Successfully extracted: "${extracted.title || normalizedUrl}" (${extracted.current_price || "N/A"})`);
+    return { success: true, status: "success" };
+  } catch (scrapeErr: any) {
+    console.error(`[Auto-Scraper] Failed to extract product ${normalizedUrl}:`, scrapeErr?.message || scrapeErr);
+    await db
+      .update(scrapedProducts)
+      .set({
+        rawExtract: null,
+        scrapeStatus: "failed",
+        failureReason: scrapeErr?.message || "Background extraction error",
+        updatedAt: new Date(),
+      })
+      .where(eq(scrapedProducts.id, productId));
+    return { success: false, status: "failed", error: scrapeErr?.message };
   }
 }
 

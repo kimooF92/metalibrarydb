@@ -7,14 +7,14 @@ if (typeof globalThis.WebSocket === "undefined") {
 }
 
 import { db } from "../db";
-import { trackedPages, creativeScans, discoveryRuns, discoveredPages, queue } from "../db/schema";
+import { trackedPages, creativeScans, discoveryRuns, discoveredPages, queue, scrapedProducts } from "../db/schema";
 import { getBrowserSession, closeBrowserSession } from "./browser";
 import { scanMetaAdPage } from "./scanner";
 import { scanAdCreatives } from "./spy-scanner";
 import { runDiscoveryScan } from "./discovery-scanner";
 import { mergeExactMatchWithPageId } from "../actions/merge-pages";
 import { isValidPageId } from "../lib/utils";
-import { eq, asc, desc, sql } from "drizzle-orm";
+import { eq, and, asc, desc, sql } from "drizzle-orm";
 import {
   getNextPendingJob,
   claimNextPendingDiscoveryRun,
@@ -110,6 +110,18 @@ async function runWorker() {
         }
       } catch (jevErr: any) {
         console.warn("[Worker Startup] Jev maintenance notice:", jevErr?.message);
+      }
+
+      // Purge ephemeral rawExtract payloads older than 48 hours to preserve Supabase disk limit (Task 3.3)
+      try {
+        const { purgeOldRawExtracts } = await import("./db");
+        console.log("[Worker Startup] Purging expired rawExtract payloads (> 48h)...");
+        const purgedCount = await purgeOldRawExtracts();
+        if (purgedCount > 0) {
+          console.log(`[Worker Startup] 🧹 Purged ${purgedCount} expired rawExtract JSON payload(s) (>48h old).`);
+        }
+      } catch (purgeErr: any) {
+        console.warn("[Worker Startup] Purge raw extracts notice:", purgeErr?.message);
       }
     } else {
       console.log("[Worker Startup] ⏩ Startup rescue & maintenance sweep skipped by flag.");
@@ -463,6 +475,15 @@ async function runWorker() {
           } catch (jevErr: any) {
             console.warn("[Jev Frequency Sweep] Notice:", jevErr?.message);
           }
+
+          // Periodic Ephemeral Payload Purge (Task 3.3)
+          try {
+            const { purgeOldRawExtracts } = await import("./db");
+            const purged = await purgeOldRawExtracts();
+            if (purged > 0) {
+              console.log(`[Periodic Maintenance] 🧹 Purged ${purged} expired rawExtract JSON payload(s).`);
+            }
+          } catch {}
         }
 
         if (isSingleRun) {
@@ -504,6 +525,86 @@ async function runWorker() {
           }
           continue;
         }
+      }
+
+      // Handle durable background product scraping job (Task 2.1)
+      if (jobType === "product_scrape") {
+        if (isCountOnly) {
+          continue;
+        }
+
+        const PRODUCT_COLUMNS = {
+          id: true,
+          url: true,
+          title: true,
+          scrapeStatus: true,
+          workspaceId: true,
+          pageId: true,
+        } as const;
+
+        let targetProduct: any = null;
+        if (queueJob.failureReason?.startsWith("product:")) {
+          const pId = queueJob.failureReason.replace("product:", "");
+          targetProduct = await db.query.scrapedProducts.findFirst({
+            where: eq(scrapedProducts.id, pId),
+            columns: PRODUCT_COLUMNS,
+          });
+        }
+        if (!targetProduct && queueJob.trackedPageId && trackedPage?.pageId) {
+          targetProduct = await db.query.scrapedProducts.findFirst({
+            where: and(
+              eq(scrapedProducts.scrapeStatus, "pending"),
+              eq(scrapedProducts.pageId, trackedPage.pageId)
+            ),
+            orderBy: [asc(scrapedProducts.createdAt)],
+            columns: PRODUCT_COLUMNS,
+          });
+        }
+        if (!targetProduct) {
+          targetProduct = await db.query.scrapedProducts.findFirst({
+            where: eq(scrapedProducts.scrapeStatus, "pending"),
+            orderBy: [asc(scrapedProducts.createdAt)],
+            columns: PRODUCT_COLUMNS,
+          });
+        }
+
+        if (!targetProduct) {
+          console.log(`[Product Scrape Job] No pending product found for queue job ${queueJob.id}. Marking completed.`);
+          await db
+            .update(queue)
+            .set({ status: "completed", finishedAt: new Date() })
+            .where(eq(queue.id, queueJob.id));
+          ranJobs++;
+          continue;
+        }
+
+        if (targetProduct.scrapeStatus === "success" || targetProduct.scrapeStatus === "ignored") {
+          console.log(`[Product Scrape Job] Product "${targetProduct.title || targetProduct.url}" already in status "${targetProduct.scrapeStatus}". Marking completed.`);
+          await db
+            .update(queue)
+            .set({ status: "completed", finishedAt: new Date() })
+            .where(eq(queue.id, queueJob.id));
+          ranJobs++;
+          continue;
+        }
+
+        console.log(`[Product Scrape Job] 🛒 Extracting product landing page: ${targetProduct.url}`);
+        const { processProductExtraction } = await import("../lib/product-ingest");
+        const res = await processProductExtraction(targetProduct.id, targetProduct.url, {
+          workspaceId: targetProduct.workspaceId || queueJob.workspaceId || null,
+        });
+
+        await db
+          .update(queue)
+          .set({
+            status: res.success ? "completed" : "failed",
+            finishedAt: new Date(),
+            failureReason: res.error || null,
+          })
+          .where(eq(queue.id, queueJob.id));
+
+        ranJobs++;
+        continue;
       }
 
       try {

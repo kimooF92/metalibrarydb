@@ -1,6 +1,6 @@
 import { db } from "../db";
-import { trackedPages, queue, scanHistory, workerState, creativeScans, discoveredPages, discoveryRuns, appSettings } from "../db/schema";
-import { eq, sql, inArray, and } from "drizzle-orm";
+import { trackedPages, queue, scanHistory, workerState, creativeScans, discoveredPages, discoveryRuns, appSettings, scrapedProducts } from "../db/schema";
+import { eq, sql, inArray, and, isNotNull } from "drizzle-orm";
 import { shouldArchiveZeroCount } from "../lib/ad-reconciliation";
 
 function isUuid(id?: string | null): boolean {
@@ -474,7 +474,7 @@ export async function claimNextPendingJob() {
   const isCreativeOnly = process.env.CREATIVE_ONLY === "true";
 
   const jobTypeFilter = isCountOnly
-    ? sql`AND job_type != 'creative'`
+    ? sql`AND job_type IN ('count', 'discovery_count')`
     : isCreativeOnly
     ? sql`AND job_type = 'creative'`
     : sql``;
@@ -510,6 +510,7 @@ export async function claimNextPendingJob() {
     status: String(jobRow.status),
     attempts: Number(jobRow.attempts || 1),
     failureReason: jobRow.failure_reason ? String(jobRow.failure_reason) : null,
+    workspaceId: jobRow.workspace_id ? String(jobRow.workspace_id) : null,
     createdAt: jobRow.created_at ? new Date(jobRow.created_at) : null,
     startedAt: jobRow.started_at ? new Date(jobRow.started_at) : null,
     finishedAt: jobRow.finished_at ? new Date(jobRow.finished_at) : null,
@@ -529,7 +530,7 @@ export async function claimNextPendingJob() {
     });
   }
 
-  if (!page && !discoveredPage) return null;
+  if (job.jobType !== "product_scrape" && !page && !discoveredPage) return null;
 
   let creativeScanRecord = null;
   if (job.jobType === "creative") {
@@ -1071,9 +1072,14 @@ export async function markJobCompleted(
       const isCloudEligible = (results || 0) >= 20;
 
       if (!isCloudEligible) {
+        const isWatchlisted = Boolean(trackedPage?.isWatchlisted);
         // MICRO-PAGE (< 20 active ads): Always enqueue for local free Playwright worker.
-        // Require meaningful delta: first-time scan (>= 1), relaunch (>= 1), or subsequent jump (>= 2)
-        const isMeaningfulDelta = isRelaunching || !hasPreviousScan || effectiveDifference >= 2;
+        // Require meaningful delta: first-time scan (>= 1), relaunch (>= 1), watchlisted (>= 1), or subsequent jump (>= 2)
+        const isMeaningfulDelta =
+          isRelaunching ||
+          !hasPreviousScan ||
+          isWatchlisted ||
+          effectiveDifference >= 2;
 
         if (isMeaningfulDelta) {
           const existingJob = await db.query.queue.findFirst({
@@ -1219,9 +1225,16 @@ async function executeApifyDeltaScan(pageId: string, difference: number) {
   // Enforce 24-hour cooldown window to prevent redundant credit usage
   const cooldownCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
   if (page.lastCreativeScan && page.lastCreativeScan > cooldownCutoff) {
-    console.log(
-      `[Apify Auto-Trigger] Skipping "${page.displayName || pageId}": creative scan performed within 24h cooldown.`
-    );
+    if (page.isWatchlisted && difference >= 5) {
+      console.log(
+        `[Apify Cooldown Override] High-priority watchlisted brand "${page.displayName || pageId}" has +${difference} ad spike. Enqueuing local Playwright fallback...`
+      );
+      await enqueueOrEscalateJob(pageId, "creative", 6);
+    } else {
+      console.log(
+        `[Apify Cooldown] Skipping "${page.displayName || pageId}": creative scan performed within 24h cooldown.`
+      );
+    }
     return;
   }
 
@@ -1302,7 +1315,7 @@ async function executeApifyDeltaScan(pageId: string, difference: number) {
       throw new Error("No Apify Run ID returned from startApifyDeltaScan");
     }
   } catch (err: any) {
-    console.error(`[Apify Auto-Trigger] Failed to auto-launch Apify scan for "${page.displayName || pageId}":`, err);
+    console.error(`[Apify Auto-Trigger] Failed to auto-launch Apify scan for "${page.displayName || pageId}". Enqueuing local Playwright fallback:`, err?.message || err);
 
     if (newScanId) {
       const isRateLimited = err?.message?.toLowerCase().includes("rate") || err?.message?.toLowerCase().includes("limit") || err?.message?.toLowerCase().includes("429");
@@ -1315,6 +1328,16 @@ async function executeApifyDeltaScan(pageId: string, difference: number) {
           finishedAt: new Date(),
         })
         .where(eq(creativeScans.id, newScanId));
+    }
+
+    const isWatchlisted = Boolean(page.isWatchlisted);
+    const isRelaunching = page.status === "inactive" && (page.currentResults || 0) > 0;
+    const shouldLocalFallback = isWatchlisted || isRelaunching || difference >= 3;
+    if (shouldLocalFallback) {
+      console.log(`[Apify Failover] Enqueuing local Playwright fallback for "${page.displayName || pageId}" (priority: ${isWatchlisted ? 7 : 4})...`);
+      await enqueueOrEscalateJob(pageId, "creative", isWatchlisted ? 7 : 4);
+    } else {
+      console.log(`[Apify Failover] Cloud launch failed for "${page.displayName || pageId}", non-critical page skipped local fallback to protect worker queue.`);
     }
   }
 }
@@ -1539,6 +1562,40 @@ export async function claimNextPendingDiscoveryRun() {
     maxScrolls: row.max_scrolls ? Number(row.max_scrolls) : null,
     status: String(row.status || "running"),
   };
+}
+
+/**
+ * Ephemeral Payload Purge Routine (Task 3.3)
+ * Prunes rawExtract JSON payloads older than 48 hours to preserve Supabase 500 MB disk limits.
+ */
+export async function purgeOldRawExtracts(): Promise<number> {
+  try {
+    // 1. Immediately purge any rawExtract on failed, ignored, or deleted products
+    await db
+      .update(scrapedProducts)
+      .set({ rawExtract: null })
+      .where(
+        and(
+          isNotNull(scrapedProducts.rawExtract),
+          sql`${scrapedProducts.scrapeStatus} IN ('failed', 'ignored', 'deleted')`
+        )
+      );
+
+    // 2. Purge successful rawExtract payloads older than 48 hours based on extraction time
+    const res = await db
+      .update(scrapedProducts)
+      .set({ rawExtract: null })
+      .where(
+        and(
+          isNotNull(scrapedProducts.rawExtract),
+          sql`COALESCE(${scrapedProducts.lastScrapedAt}, ${scrapedProducts.createdAt}) < NOW() - INTERVAL '48 hours'`
+        )
+      );
+    return (res as any)?.count ?? (Array.isArray(res) ? res.length : 0);
+  } catch (err: any) {
+    console.warn("[DB Maintenance] Failed to purge old rawExtracts:", err?.message || err);
+    return 0;
+  }
 }
 
 

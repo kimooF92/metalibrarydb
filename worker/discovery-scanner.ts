@@ -3,6 +3,7 @@ import { db } from "../db";
 import { discoveryRuns, discoveredPages, trackedPages } from "../db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { resolveDestinationUrl } from "../lib/utils";
+import { selectBestProductCandidateUrl } from "../lib/discovery-product-selector";
 
 export interface DiscoveredPageData {
   pageId: string;
@@ -148,14 +149,20 @@ function parseDiscoveryGraphQLNode(
     const ctaType = snapshot.cta_type || snapshot.cta_text || null;
     const ctaText = snapshot.action_link_title || snapshot.cta_text || snapshot.cta_type || null;
 
-    if (!isMatchingEcommerceCta(ctaType, ctaText)) return;
-
     const rawLinkUrl =
       snapshot.link_url ||
       snapshot.ad_creative_link_url ||
       (Array.isArray(snapshot.cards) ? snapshot.cards[0]?.link_url : null) ||
       null;
     const linkUrl = resolveDestinationUrl(rawLinkUrl);
+
+    const hasEcommerceCta = isMatchingEcommerceCta(ctaType, ctaText);
+    const candidate = linkUrl ? selectBestProductCandidateUrl([linkUrl]) : null;
+    const hasProductPage = candidate?.source === "product_page";
+
+    if (!hasEcommerceCta && !hasProductPage) {
+      return; // Exclude non-ecommerce ads
+    }
 
     // Always use the authentic Page ID from the ad node
     const targetPageId = rawPageId;
@@ -188,7 +195,7 @@ function parseDiscoveryGraphQLNode(
     if (ctaText && pageRecord.sampleCtas.size < 5) {
       pageRecord.sampleCtas.add(String(ctaText));
     }
-    if (linkUrl && pageRecord.sampleUrls.size < 5) {
+    if (linkUrl && pageRecord.sampleUrls.size < 10) {
       pageRecord.sampleUrls.add(linkUrl);
     }
   } catch {

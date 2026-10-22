@@ -10,6 +10,7 @@ import { extractMedia, extractPageInfo } from "../lib/apify-ingest";
 import { parseResultCountFromText } from "./scanner";
 import { resolveDestinationUrl } from "../lib/utils";
 import { linkAndAutoScrapeProduct } from "../lib/product-ingest";
+import { selectBestProductCandidateUrl } from "../lib/discovery-product-selector";
 
 export interface ExtractedAdData {
   adArchiveId: string;
@@ -26,6 +27,7 @@ export interface ExtractedAdData {
   duplicationCount: number;
   collationId: string | null;
   isActive: boolean;
+  secondaryProductUrls?: string[];
 }
 
 export interface SpyScanOutcome {
@@ -87,12 +89,50 @@ function parseAdGraphQLNode(node: any): ExtractedAdData | null {
       snapshot.action_link_title ||
       null;
 
-    const rawLinkUrl =
-      snapshot.link_url ||
-      snapshot.ad_creative_link_url ||
-      (Array.isArray(snapshot.cards) ? snapshot.cards[0]?.link_url : null) ||
-      null;
-    const linkUrl = resolveDestinationUrl(rawLinkUrl);
+    const cards = Array.isArray(snapshot.cards) ? snapshot.cards : [];
+    const primaryCardUrl = cards[0]?.link_url ? resolveDestinationUrl(cards[0].link_url) : null;
+    const topLevelUrl = (snapshot.link_url || snapshot.ad_creative_link_url)
+      ? resolveDestinationUrl(snapshot.link_url || snapshot.ad_creative_link_url)
+      : null;
+
+    // Prioritize deep product-page candidate across primary card and top-level URL
+    let effectiveLinkUrl: string | null = null;
+    const directCandidates = [primaryCardUrl, topLevelUrl].filter(Boolean) as string[];
+    if (directCandidates.length > 0) {
+      const bestCandidate = selectBestProductCandidateUrl(directCandidates);
+      effectiveLinkUrl = bestCandidate?.url || topLevelUrl || primaryCardUrl;
+    }
+
+    const isSocialOrMissing =
+      !effectiveLinkUrl ||
+      effectiveLinkUrl.includes("wa.me") ||
+      effectiveLinkUrl.includes("whatsapp.com") ||
+      effectiveLinkUrl.includes("m.me") ||
+      effectiveLinkUrl.includes("facebook.com");
+
+    if (isSocialOrMissing && caption) {
+      const rawMatches = caption.match(/https?:\/\/[^\s"'<>)\]]+/gi) || [];
+      if (rawMatches.length > 0) {
+        const candidate = selectBestProductCandidateUrl(rawMatches);
+        if (candidate && candidate.source === "product_page") {
+          effectiveLinkUrl = candidate.url;
+        }
+      }
+    }
+
+    const secondaryProductUrls: string[] = [];
+    if (cards.length > 1) {
+      for (let i = 1; i < cards.length; i++) {
+        const secondaryRawUrl = cards[i]?.link_url;
+        const secondaryResolved = resolveDestinationUrl(secondaryRawUrl);
+        if (secondaryResolved) {
+          const candidate = selectBestProductCandidateUrl([secondaryResolved]);
+          if (candidate && candidate.source === "product_page") {
+            secondaryProductUrls.push(candidate.url);
+          }
+        }
+      }
+    }
 
     // Extract comprehensive media (Images, Videos, Carousels, Thumbnails)
     const { mediaType, mediaUrls, thumbnailUrl } = extractMedia(node);
@@ -111,13 +151,14 @@ function parseAdGraphQLNode(node: any): ExtractedAdData | null {
       caption: caption ? String(caption) : null,
       title: title ? String(title) : null,
       ctaText: ctaText ? String(ctaText) : null,
-      linkUrl: linkUrl ? String(linkUrl) : null,
+      linkUrl: effectiveLinkUrl ? String(effectiveLinkUrl) : null,
       mediaType,
       mediaUrls,
       thumbnailUrl: thumbnailUrl ? String(thumbnailUrl) : null,
       duplicationCount: typeof collationCount === "number" ? collationCount : 1,
       collationId: collationId ? String(collationId) : null,
       isActive: Boolean(isActive),
+      secondaryProductUrls,
     };
   } catch {
     return null;
@@ -747,6 +788,17 @@ export async function scanAdCreatives(
             }
           } catch (e: any) {
             console.warn(`[Worker Spy Scanner] Auto-scrape product warning:`, e.message);
+          }
+        }
+
+        // Enqueue secondary products found in carousel cards
+        if (adData.secondaryProductUrls && adData.secondaryProductUrls.length > 0) {
+          for (const secUrl of adData.secondaryProductUrls) {
+            linkAndAutoScrapeProduct({
+              linkUrl: secUrl,
+              pageId: (adData.pageId && !adData.pageId.includes("-")) ? adData.pageId : (extractedPageIds[0] && !extractedPageIds[0].includes("-") ? extractedPageIds[0] : null),
+              workspaceId: pageRecord?.workspaceId || null,
+            }).catch(() => {});
           }
         }
 

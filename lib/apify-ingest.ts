@@ -4,6 +4,8 @@ import { eq, and, sql, desc, ne } from "drizzle-orm";
 import { uploadMediaWithHashing, isB2Configured } from "@/lib/b2-storage";
 import { linkAndAutoScrapeProduct } from "@/lib/product-ingest";
 import { checkAndRecordBreakout } from "@/lib/breakout-detector";
+import { resolveDestinationUrl } from "@/lib/utils";
+import { selectBestProductCandidateUrl } from "@/lib/discovery-product-selector";
 
 /**
  * Robustly extracts adArchiveId from multiple candidate fields & URL parameters.
@@ -350,11 +352,43 @@ export async function ingestApifyDatasetItems(
       item.snapshot?.cta_text ||
       null;
 
-    const linkUrl =
+    const cards = Array.isArray(item.snapshot?.cards)
+      ? item.snapshot.cards
+      : Array.isArray(item.cards)
+      ? item.cards
+      : [];
+    const primaryCardUrl = cards[0]?.link_url ? resolveDestinationUrl(cards[0].link_url) : null;
+    const topLevelUrl = resolveDestinationUrl(
       item.linkUrl ||
       item.target_url ||
       item.snapshot?.link_url ||
-      null;
+      null
+    );
+
+    // Prioritize deep product-page candidate across primary card and top-level URL
+    let effectiveLinkUrl: string | null = null;
+    const directCandidates = [primaryCardUrl, topLevelUrl].filter(Boolean) as string[];
+    if (directCandidates.length > 0) {
+      const bestCandidate = selectBestProductCandidateUrl(directCandidates);
+      effectiveLinkUrl = bestCandidate?.url || topLevelUrl || primaryCardUrl;
+    }
+
+    const isSocialOrMissing =
+      !effectiveLinkUrl ||
+      effectiveLinkUrl.includes("wa.me") ||
+      effectiveLinkUrl.includes("whatsapp.com") ||
+      effectiveLinkUrl.includes("m.me") ||
+      effectiveLinkUrl.includes("facebook.com");
+
+    if (isSocialOrMissing && caption) {
+      const rawMatches = caption.match(/https?:\/\/[^\s"'<>)\]]+/gi) || [];
+      if (rawMatches.length > 0) {
+        const candidate = selectBestProductCandidateUrl(rawMatches);
+        if (candidate && candidate.source === "product_page") {
+          effectiveLinkUrl = candidate.url;
+        }
+      }
+    }
 
     const startedRunningOn = parseAdStartDate(item);
     const { mediaType, mediaUrls: rawMediaUrls, thumbnailUrl: rawThumbnailUrl } = extractMedia(item);
@@ -371,7 +405,7 @@ export async function ingestApifyDatasetItems(
         caption,
         title,
         ctaText,
-        linkUrl,
+        linkUrl: effectiveLinkUrl,
         mediaType,
         mediaUrls: rawMediaUrls,
         thumbnailUrl: rawThumbnailUrl,
@@ -524,18 +558,18 @@ export async function ingestApifyDatasetItems(
           firstSeenAt: now,
           lastSeenAt: now,
           mediaType,
-          linkUrl,
+          linkUrl: effectiveLinkUrl,
           isActive: true,
         }).catch((err) => console.warn("[Apify Ingest] Breakout check error:", err));
       }
 
       // 3. Automated Product Landing Page Extraction & Background Scraper Trigger
-      if (linkUrl) {
+      if (effectiveLinkUrl) {
         try {
           const effectiveWsId = pageRecord?.workspaceId || null;
           const prodRes = await linkAndAutoScrapeProduct({
             adId: upsertedAd.id,
-            linkUrl,
+            linkUrl: effectiveLinkUrl,
             pageId: (pageId && !pageId.includes("-")) ? pageId : (detectedPageId && !detectedPageId.includes("-") ? detectedPageId : null),
             adCopy: caption,
             workspaceId: effectiveWsId,
@@ -545,6 +579,24 @@ export async function ingestApifyDatasetItems(
           }
         } catch (e: any) {
           console.warn(`[Apify Ingest] Auto-scrape product warning for ${adArchiveId}:`, e.message);
+        }
+      }
+
+      // Loop through secondary cards (cards 1..N) to discover additional products
+      if (cards.length > 1) {
+        for (let i = 1; i < cards.length; i++) {
+          const secondaryRawUrl = cards[i]?.link_url;
+          const secondaryResolved = resolveDestinationUrl(secondaryRawUrl);
+          if (secondaryResolved) {
+            const candidate = selectBestProductCandidateUrl([secondaryResolved]);
+            if (candidate && candidate.source === "product_page") {
+              linkAndAutoScrapeProduct({
+                linkUrl: candidate.url,
+                pageId: (pageId && !pageId.includes("-")) ? pageId : (detectedPageId && !detectedPageId.includes("-") ? detectedPageId : null),
+                workspaceId: pageRecord?.workspaceId || null,
+              }).catch(() => {});
+            }
+          }
         }
       }
 
