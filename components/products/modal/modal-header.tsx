@@ -7,7 +7,6 @@ import {
   X,
   ExternalLink,
   ShoppingBag,
-  Sparkles,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -26,6 +25,7 @@ import {
   Save,
   Calendar,
   Rocket,
+  Tag,
 } from "lucide-react";
 import { ModalTab, generateAIProductPrompt, generateCleanMarkdown } from "./modal-types";
 import { getNicheDisplayLabel, getSubNicheDisplayLabel } from "@/lib/niches-taxonomy";
@@ -68,7 +68,6 @@ export function ModalHeader({
   onCancelEdit,
   onSaveEdit,
   onStartEdit,
-  onSwitchTab,
   onFavoriteToggle,
   onQueueVerify,
   isQueueingVerify,
@@ -153,210 +152,117 @@ export function ModalHeader({
   };
 
   return (
-    <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 shrink-0 bg-slate-50 dark:bg-slate-950/40">
-      <div className="flex items-center gap-2.5 truncate">
-        <ShoppingBag className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-        <div className="truncate">
+    <div className="px-6 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/40 shrink-0 flex flex-col gap-2.5">
+      {/* Tier 1: Title, Status/Niche Tags, and Modal Navigation Chrome */}
+      <div className="flex items-center justify-between gap-3 min-w-0">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+            <ShoppingBag className="w-4 h-4" />
+          </div>
+
           {isEditMode ? (
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
-                ✏️ Editing Product Details
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0">
+                <Edit3 className="w-3 h-3 text-indigo-500 shrink-0" />
+                <span>Editing Product Details</span>
               </span>
               <span className="text-xs text-slate-500 truncate">{product.title}</span>
             </div>
           ) : (
-            <>
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">
+            <div className="flex items-center gap-2.5 min-w-0 flex-wrap sm:flex-nowrap">
+              <h2
+                className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 truncate"
+                title={product.title || "Product Landing Page"}
+              >
                 {product.title || "Product Landing Page"}
               </h2>
-              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                {(() => {
-                  const brandTarget = (product.brandPageId && !isUuid(product.brandPageId) && product.brandPageId !== "0")
-                    ? product.brandPageId
-                    : (product.domain || (product.brandName && !isUuid(product.brandName) ? product.brandName : null));
 
-                  if (brandTarget) {
-                    if (isStaff) {
-                      return metaAdLibraryUrl ? (
-                        <a
-                          href={metaAdLibraryUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline uppercase tracking-wider inline-flex items-center gap-1"
-                          title="Open brand in Meta Ad Library"
-                        >
-                          <span>{product.brandName || product.domain || "Brand"}</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      ) : (
-                        <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                          {product.brandName || product.domain || "Brand"}
-                        </span>
-                      );
-                    }
-
-                    return (
-                      <a
-                        href={`/spy/brand/${encodeURIComponent(brandTarget)}?tab=products`}
-                        className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline uppercase tracking-wider"
-                      >
-                        {product.brandName || product.domain || "Brand"} &rarr;
-                      </a>
-                    );
-                  }
-
-                  if (product.brandName) {
-                    return metaAdLibraryUrl ? (
-                      <a
-                        href={metaAdLibraryUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline uppercase tracking-wider inline-flex items-center gap-1"
-                        title="Open brand in Meta Ad Library"
-                      >
-                        <span>{product.brandName}</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    ) : (
-                      <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                        {product.brandName}
-                      </span>
-                    );
-                  }
-
-                  return null;
-                })()}
-
-                {product.domain && (
-                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                    • {product.domain}
-                  </span>
-                )}
-
-                {product.url && (
-                  <a
-                    href={product.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs font-mono text-indigo-600 dark:text-indigo-400 hover:underline truncate max-w-xs"
-                    title={product.url}
-                  >
-                    <ExternalLink className="w-3 h-3 shrink-0" />
-                    <span className="truncate">{product.url}</span>
-                  </a>
-                )}
-
-                {product.brandHoldStatus === "on_hold" ? (
-                  <span
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
-                    title="Brand account is on pause / hold (under grace period recheck)"
-                  >
-                    ⏸️ Page on Pause
-                  </span>
-                ) : product.brandHoldStatus === "inactive" || (typeof product.activeAdsCount === "number" && product.activeAdsCount === 0) ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                    ⚫ Inactive / Off-Air
-                  </span>
-                ) : null}
-
-                {product.category && (
-                  <span
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
-                    title={`Niche: ${getNicheDisplayLabel(product.category)}${product.subCategory ? ` > ${getSubNicheDisplayLabel(product.subCategory)}` : ""}${product.targetAudience ? ` (${product.targetAudience})` : ""}`}
-                  >
-                    🏷️ {getNicheDisplayLabel(product.category)}
-                    {product.subCategory && (
-                      <span className="text-amber-600/70 dark:text-amber-400/70 font-medium">› {getSubNicheDisplayLabel(product.subCategory)}</span>
-                    )}
-                  </span>
-                )}
-
-                {/* Date Badge: Discovery & Ad Launch */}
-                {(product.createdAt || product.earliestAdDate) && (
-                  <span
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 select-none shrink-0"
-                    title={
-                      product.createdAt
-                        ? product.earliestAdDate
-                          ? `${formatDiscoveryLabel(product.createdAt)} • First Ad Launched: ${new Date(product.earliestAdDate).toLocaleDateString()} (${product.daysRunning || 1}d running)`
-                          : formatDiscoveryLabel(product.createdAt)
-                        : `First Ad Launched: ${new Date(product.earliestAdDate!).toLocaleDateString()}`
-                    }
-                  >
-                    {product.earliestAdDate ? (
-                      <Rocket className="w-2.5 h-2.5 text-amber-500" />
-                    ) : (
-                      <Calendar className="w-2.5 h-2.5 text-slate-400" />
-                    )}
-                    <span>
-                      {product.createdAt
-                        ? `Discovered ${formatDiscoveryDate(product.createdAt)}`
-                        : `Launched ${formatDiscoveryDate(product.earliestAdDate)}`}
-                    </span>
-                  </span>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => onSwitchTab("ads")}
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-colors ${
-                    linkedAds.length > 0
-                      ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/80 hover:bg-indigo-100 dark:hover:bg-indigo-900/60"
-                      : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:text-slate-700"
-                  }`}
-                  title="Switch directly to Linked Ad Creatives"
+              {/* Status Indicator Dot Tag */}
+              {product.brandHoldStatus === "on_hold" ? (
+                <span
+                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200/80 dark:border-amber-800/80 shrink-0"
+                  title="Brand account is on pause / hold (under grace period recheck)"
                 >
-                  <Sparkles className="w-2.5 h-2.5" />
-                  <span>{linkedAds.length} Ad {linkedAds.length === 1 ? "Creative" : "Creatives"}</span>
-                  <ChevronDown className="w-2.5 h-2.5" />
-                </button>
-              </div>
-            </>
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                  <span>Paused</span>
+                </span>
+              ) : product.brandHoldStatus === "inactive" || (typeof product.activeAdsCount === "number" && product.activeAdsCount === 0) ? (
+                <span
+                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 shrink-0"
+                  title="No active ads detected"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
+                  <span>Off-Air</span>
+                </span>
+              ) : (
+                <span
+                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800/80 shrink-0"
+                  title="Active ads running"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+                  <span>Active</span>
+                </span>
+              )}
+
+              {/* Category / Niche Badge */}
+              {product.category && (
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/80 truncate shrink-0 max-w-[220px]"
+                  title={`Niche: ${getNicheDisplayLabel(product.category)}${product.subCategory ? ` > ${getSubNicheDisplayLabel(product.subCategory)}` : ""}${product.targetAudience ? ` (${product.targetAudience})` : ""}`}
+                >
+                  <Tag className="w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0" />
+                  <span className="truncate">{getNicheDisplayLabel(product.category)}</span>
+                  {product.subCategory && (
+                    <span className="text-slate-400 dark:text-slate-500 font-normal truncate">
+                      › {getSubNicheDisplayLabel(product.subCategory)}
+                    </span>
+                  )}
+                </span>
+              )}
+            </div>
           )}
         </div>
-      </div>
 
-      <div className="flex items-center gap-2 shrink-0">
-        {isEditMode ? (
-          <>
-            <button
-              key="modal-header-cancel-btn"
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onCancelEdit?.();
-              }}
-              disabled={isSavingEdit}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-            >
-              <Undo2 className="w-3.5 h-3.5" />
-              <span>Cancel</span>
-            </button>
-            <button
-              key="modal-header-save-btn"
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onSaveEdit?.();
-              }}
-              disabled={isSavingEdit}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-sm transition-all cursor-pointer disabled:opacity-50"
-            >
-              {isSavingEdit ? (
-                <RotateCw className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Save className="w-3.5 h-3.5" />
-              )}
-              <span>{isSavingEdit ? "Saving..." : "Save Changes"}</span>
-            </button>
-          </>
-        ) : (
-          <>
-            {/* Sequential Product Navigation Indicator & Controls */}
-            {totalCount > 1 && currentIndex >= 0 && (
-              <div key="modal-header-nav-group" className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800/90 rounded-lg p-0.5 border border-slate-200 dark:border-slate-700/80 shrink-0 mr-1">
+        {/* Top Right: Modal Controls (Nav Pager & Close or Edit Save/Cancel) */}
+        <div className="flex items-center gap-2 shrink-0">
+          {isEditMode ? (
+            <div className="flex items-center gap-2">
+              <button
+                key="modal-header-cancel-btn"
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onCancelEdit?.();
+                }}
+                disabled={isSavingEdit}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Undo2 className="w-3.5 h-3.5" />
+                <span>Cancel</span>
+              </button>
+              <button
+                key="modal-header-save-btn"
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onSaveEdit?.();
+                }}
+                disabled={isSavingEdit}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-sm transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isSavingEdit ? (
+                  <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Save className="w-3.5 h-3.5" />
+                )}
+                <span>{isSavingEdit ? "Saving..." : "Save Changes"}</span>
+              </button>
+            </div>
+          ) : (
+            totalCount > 1 && currentIndex >= 0 && (
+              <div key="modal-header-nav-group" className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800/90 rounded-lg p-0.5 border border-slate-200 dark:border-slate-700/80 shrink-0">
                 <button
                   type="button"
                   onClick={onNavigatePrev}
@@ -367,7 +273,7 @@ export function ModalHeader({
                   <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
                 <span
-                  className="text-[10px] font-bold text-slate-600 dark:text-slate-300 px-1.5 select-none whitespace-nowrap"
+                  className="text-[11px] font-bold text-slate-600 dark:text-slate-300 px-1.5 select-none whitespace-nowrap"
                   title="Use ← and → arrow keys to browse products"
                 >
                   {currentIndex + 1} / {totalCount}
@@ -382,9 +288,113 @@ export function ModalHeader({
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
-            )}
+            )
+          )}
 
-            {/* Edit Icon-only Button */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+            title="Close modal (Esc)"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Tier 2: Product Context (Store & Launch Date) + Action Bar */}
+      {!isEditMode && (
+        <div className="flex items-center justify-between gap-3 pt-1 border-t border-slate-200/60 dark:border-slate-800/60 min-w-0 flex-wrap sm:flex-nowrap">
+          {/* Left: Brand / Domain link & Date */}
+          <div className="flex items-center gap-2 min-w-0 text-xs text-slate-500 dark:text-slate-400 truncate">
+            {(() => {
+              const brandTarget = (product.brandPageId && !isUuid(product.brandPageId) && product.brandPageId !== "0")
+                ? product.brandPageId
+                : (product.domain || (product.brandName && !isUuid(product.brandName) ? product.brandName : null));
+
+              const displayName = product.brandName || product.domain || "Store";
+
+              if (brandTarget) {
+                if (isStaff) {
+                  return metaAdLibraryUrl ? (
+                    <a
+                      href={metaAdLibraryUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1 truncate"
+                      title="Open brand in Meta Ad Library"
+                    >
+                      <span className="truncate">{displayName}</span>
+                      <ExternalLink className="w-3 h-3 shrink-0" />
+                    </a>
+                  ) : (
+                    <span className="font-semibold text-indigo-600 dark:text-indigo-400 truncate">
+                      {displayName}
+                    </span>
+                  );
+                }
+
+                return (
+                  <a
+                    href={`/spy/brand/${encodeURIComponent(brandTarget)}?tab=products`}
+                    className="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1 truncate"
+                    title={`View all products from ${displayName}`}
+                  >
+                    <span className="truncate">{displayName}</span>
+                    <ExternalLink className="w-3 h-3 shrink-0" />
+                  </a>
+                );
+              }
+
+              return null;
+            })()}
+
+            {/* Date Badge: Discovery & Ad Launch */}
+            {(product.createdAt || product.earliestAdDate) && (
+              <>
+                <span className="text-slate-300 dark:text-slate-700 select-none">•</span>
+                <span
+                  className="inline-flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 select-none shrink-0"
+                  title={
+                    product.createdAt
+                      ? product.earliestAdDate
+                        ? `${formatDiscoveryLabel(product.createdAt)} • First Ad Launched: ${new Date(product.earliestAdDate).toLocaleDateString()} (${product.daysRunning || 1}d running)`
+                        : formatDiscoveryLabel(product.createdAt)
+                      : `First Ad Launched: ${new Date(product.earliestAdDate!).toLocaleDateString()}`
+                  }
+                >
+                  {product.earliestAdDate ? (
+                    <Rocket className="w-3 h-3 text-amber-500" />
+                  ) : (
+                    <Calendar className="w-3 h-3 text-slate-400" />
+                  )}
+                  <span>
+                    {product.createdAt
+                      ? `Discovered ${formatDiscoveryDate(product.createdAt)}`
+                      : `Launched ${formatDiscoveryDate(product.earliestAdDate)}`}
+                  </span>
+                </span>
+              </>
+            )}
+          </div>
+
+          {/* Right: Unified Action Toolbar */}
+          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+            {/* Star Favorite Toggle */}
+            <button
+              type="button"
+              onClick={onFavoriteToggle}
+              className={`p-1.5 rounded-lg border transition-all cursor-pointer shadow-xs ${
+                product.isFavorite
+                  ? "bg-amber-500 text-slate-950 border-amber-400 font-bold"
+                  : "bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:text-amber-500 hover:bg-slate-50 dark:hover:bg-slate-700"
+              }`}
+              title={product.isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+            >
+              <Star className={`w-3.5 h-3.5 ${product.isFavorite ? "fill-current" : ""}`} />
+            </button>
+
+            {/* Edit Icon Button */}
             <button
               key="modal-header-edit-btn"
               type="button"
@@ -399,38 +409,24 @@ export function ModalHeader({
               <Edit3 className="w-3.5 h-3.5" />
             </button>
 
-            {/* Star Favorite Toggle */}
-            <button
-              type="button"
-              onClick={onFavoriteToggle}
-              className={`p-1.5 rounded-lg border transition-all cursor-pointer shadow-xs ${
-                product.isFavorite
-                  ? "bg-amber-500 text-slate-950 border-amber-400 font-bold"
-                  : "bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:text-amber-500"
-              }`}
-              title={product.isFavorite ? "Remove from Favorites" : "Add to Favorites"}
-            >
-              <Star className={`w-3.5 h-3.5 ${product.isFavorite ? "fill-current" : ""}`} />
-            </button>
-
             {/* 1-Click Copy Dropdown */}
             <div className="relative" ref={copyMenuRef}>
               <button
                 type="button"
                 onClick={() => setShowCopyMenu(!showCopyMenu)}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 rounded-lg shadow-sm transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xs transition-all cursor-pointer"
                 title="Copy Product Pack for AI Copywriting & Store Builders"
               >
                 {copiedType ? (
                   <>
-                    <Check className="w-3.5 h-3.5 text-emerald-300" />
-                    <span>Copied</span>
+                    <Check className="w-3.5 h-3.5 text-emerald-500" />
+                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">Copied</span>
                   </>
                 ) : (
                   <>
-                    <Copy className="w-3.5 h-3.5 text-indigo-200" />
+                    <Copy className="w-3.5 h-3.5 text-indigo-500" />
                     <span>Copy AI</span>
-                    <ChevronDown className="w-3 h-3 text-indigo-200" />
+                    <ChevronDown className="w-3 h-3 text-slate-400" />
                   </>
                 )}
               </button>
@@ -500,7 +496,7 @@ export function ModalHeader({
                 href={metaAdLibraryUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 rounded-lg shadow-xs transition-all"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50/70 dark:bg-blue-950/40 hover:bg-blue-100/70 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800/80 rounded-lg shadow-xs transition-all"
                 title="Open brand in Meta Ad Library"
               >
                 <span>Meta Ads</span>
@@ -508,16 +504,16 @@ export function ModalHeader({
               </a>
             )}
 
-            {/* Visit Store Button */}
+            {/* Primary Action: Visit Store Button */}
             {product.url && (
               <a
                 href={product.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-sm transition-all"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-sm transition-all"
                 title="Open Store Landing Page in New Tab"
               >
-                <span>Visit</span>
+                <span>Visit Store</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             )}
@@ -600,17 +596,9 @@ export function ModalHeader({
                 )}
               </div>
             )}
-          </>
-        )}
-
-        <button
-          type="button"
-          onClick={onClose}
-          className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-        >
-          <X className="w-5 h-5" />
-        </button>
-      </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

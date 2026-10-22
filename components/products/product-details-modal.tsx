@@ -11,6 +11,7 @@ import {
   Boxes,
   Building2,
   Layers,
+  Pause,
 } from "lucide-react";
 import {
   ModalTab,
@@ -297,8 +298,9 @@ export function ProductDetailsModal({
                 <strong>Brand on Hold:</strong> Meta Ad Library detected 0 active ads during recent scans. This product is preserved under the grace period before being marked off-air.
               </span>
             </div>
-            <span className="shrink-0 text-[10px] font-black uppercase bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30">
-              ⏸️ Paused
+            <span className="shrink-0 text-[10px] font-bold uppercase bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30 inline-flex items-center gap-1">
+              <Pause className="w-2.5 h-2.5" />
+              <span>Paused</span>
             </span>
           </div>
         )}

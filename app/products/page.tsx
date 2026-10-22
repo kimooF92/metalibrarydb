@@ -80,7 +80,7 @@ export default function ProductsPage() {
   const [adLaunchFilter, setAdLaunchFilter] = useState("all");
   const [adLaunchFrom, setAdLaunchFrom] = useState("");
   const [adLaunchTo, setAdLaunchTo] = useState("");
-  const [stillRunningOnly, setStillRunningOnly] = useState(true);
+  const [stillRunningOnly, setStillRunningOnly] = useState(false);
   const [sortBy, setSortBy] = useState<string>("latest");
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({
@@ -248,6 +248,7 @@ export default function ProductsPage() {
       const stillRunningParam = params.get("stillRunning");
       if (stillRunningParam === "false") setStillRunningOnly(false);
       else if (stillRunningParam === "true") setStillRunningOnly(true);
+      else if (adLaunchParam && adLaunchParam !== "all") setStillRunningOnly(true);
 
       // Check for deep-linked product ID (?id=... or ?productId=...)
       const idParam = params.get("id") || params.get("productId");
@@ -411,7 +412,9 @@ export default function ProductsPage() {
       if (adLaunchFrom) newParams.set("adLaunchFrom", adLaunchFrom);
       if (adLaunchTo) newParams.set("adLaunchTo", adLaunchTo);
     }
-    newParams.set("stillRunning", stillRunningOnly ? "true" : "false");
+    if (stillRunningOnly) {
+      newParams.set("stillRunning", "true");
+    }
 
     const nextSearch = newParams.toString();
     const nextUrl = nextSearch ? `${url.pathname}?${nextSearch}` : url.pathname;
@@ -926,7 +929,7 @@ export default function ProductsPage() {
     setAdLaunchFilter("all");
     setAdLaunchFrom("");
     setAdLaunchTo("");
-    setStillRunningOnly(true);
+    setStillRunningOnly(false);
     setSortBy("latest");
     userHasCustomSortRef.current = false;
     setHideInactive(false);
@@ -957,7 +960,7 @@ export default function ProductsPage() {
     (discoveryFilter !== "all" ? 1 : 0) +
     (adLaunchFilter !== "all" ? 1 : 0) +
     (hideInactive ? 1 : 0) +
-    (!stillRunningOnly ? 1 : 0);
+    (stillRunningOnly ? 1 : 0);
 
   const discoveryLabels: Record<string, string> = {
     today: "Today",
@@ -1014,6 +1017,8 @@ export default function ProductsPage() {
             if (v === "all") {
               setAdLaunchFrom("");
               setAdLaunchTo("");
+            } else {
+              setStillRunningOnly(true);
             }
             setPage(1);
           }}
@@ -1212,6 +1217,8 @@ export default function ProductsPage() {
             if (v === "all") {
               setAdLaunchFrom("");
               setAdLaunchTo("");
+            } else {
+              setStillRunningOnly(true);
             }
             setPage(1);
           }}
@@ -1486,6 +1493,12 @@ export default function ProductsPage() {
         adLaunchFilter={adLaunchFilter}
         onChangeAdLaunchFilter={(v) => {
           setAdLaunchFilter(v);
+          if (v === "all") {
+            setAdLaunchFrom("");
+            setAdLaunchTo("");
+          } else {
+            setStillRunningOnly(true);
+          }
           setPage(1);
         }}
         adLaunchFrom={adLaunchFrom}

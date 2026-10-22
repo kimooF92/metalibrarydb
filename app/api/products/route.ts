@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
     const stillRunning = stillRunningParam !== null
       ? stillRunningParam === "true"
       : (adLaunch !== "all" || hideInactive);
-    const activeStatus = searchParams.get("activeStatus") || (hideInactive || (stillRunning && adLaunch !== "all") ? "active" : "all");
+    const activeStatus = searchParams.get("activeStatus") || (hideInactive || stillRunning ? "active" : "all");
     const smartPreset = searchParams.get("smartPreset") || searchParams.get("preset") || "all";
     const discovery = searchParams.get("discovery") || "all";
     const discoveryFrom = searchParams.get("discoveryFrom");
@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Filter by Active / Inactive (Off-Air) Ads status
-    const requireActiveAds = activeStatus === "active" || hideInactive || (stillRunning && adLaunch !== "all");
+    const requireActiveAds = activeStatus === "active" || hideInactive || stillRunning;
     if (requireActiveAds) {
       conditions.push(
         sql`EXISTS (
