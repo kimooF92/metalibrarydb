@@ -1176,60 +1176,69 @@ export default function DiscoveryPage() {
           </div>
         </div>
 
-        {/* Scan Depth & Capacity Controls */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 pb-2 border-b border-slate-100 dark:border-slate-800/50">
-          <div className="flex items-center space-x-2 flex-wrap gap-y-1.5">
-            <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-              <Sliders className="w-3.5 h-3.5 text-indigo-500" />
-              Scan Depth:
-            </span>
-            <div className="flex items-center bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800">
+        {/* Dedicated Scan Depth & Capacity Controls Bar */}
+        <div className="p-3 rounded-xl bg-gradient-to-r from-indigo-50/90 via-white to-slate-50 dark:from-indigo-950/40 dark:via-slate-900/60 dark:to-slate-900/40 border-2 border-indigo-200/80 dark:border-indigo-800/60 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center space-x-2.5 flex-wrap gap-y-2">
+            <div className="flex items-center space-x-1.5 text-xs font-extrabold text-slate-800 dark:text-slate-100">
+              <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Sliders className="w-3.5 h-3.5" />
+              </div>
+              <span className="tracking-tight">Scan Depth Limit:</span>
+            </div>
+
+            <div className="inline-flex items-center bg-white dark:bg-slate-950 p-1 rounded-lg border border-slate-200 dark:border-slate-800 shadow-inner gap-1 flex-wrap">
               <button
                 type="button"
                 onClick={() => setScanDepthPreset("quick")}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                   scanDepthPreset === "quick"
-                    ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                    ? "bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-500"
+                    : "text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900"
                 }`}
                 title="Quick: 300 ads / 30 scrolls (~30-60s rapid brand discovery)"
               >
                 <span>⚡ Quick</span>
-                <span className="text-[9px] font-medium opacity-70">(300 ads)</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-medium ${scanDepthPreset === "quick" ? "bg-indigo-700 text-indigo-100" : "bg-slate-100 dark:bg-slate-800 text-slate-500"}`}>
+                  300 ads / 30 scrolls
+                </span>
               </button>
               <button
                 type="button"
                 onClick={() => setScanDepthPreset("balanced")}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                   scanDepthPreset === "balanced"
-                    ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                    ? "bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-500"
+                    : "text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900"
                 }`}
                 title="Balanced: 1,000 ads / 75 scrolls (Optimal speed vs market breadth)"
               >
                 <span>🎯 Balanced</span>
-                <span className="text-[9px] font-medium opacity-70">(1k ads)</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-medium ${scanDepthPreset === "balanced" ? "bg-indigo-700 text-indigo-100" : "bg-slate-100 dark:bg-slate-800 text-slate-500"}`}>
+                  1,000 ads / 75 scrolls
+                </span>
               </button>
               <button
                 type="button"
                 onClick={() => setScanDepthPreset("deep")}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                   scanDepthPreset === "deep"
-                    ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                    ? "bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-500"
+                    : "text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900"
                 }`}
                 title="Deep: 2,500 ads / 150 scrolls (Exhaustive search)"
               >
                 <span>🚀 Deep</span>
-                <span className="text-[9px] font-medium opacity-70">(2.5k ads)</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-medium ${scanDepthPreset === "deep" ? "bg-indigo-700 text-indigo-100" : "bg-slate-100 dark:bg-slate-800 text-slate-500"}`}>
+                  2,500 ads / 150 scrolls
+                </span>
               </button>
               <button
                 type="button"
                 onClick={() => setScanDepthPreset("custom")}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                   scanDepthPreset === "custom"
-                    ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                    ? "bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-500"
+                    : "text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900"
                 }`}
                 title="Custom: Configure custom ads limit and scroll attempts"
               >
@@ -1240,9 +1249,9 @@ export default function DiscoveryPage() {
 
           {/* If Custom is selected, show numeric inputs for Target Ads and Max Scrolls */}
           {scanDepthPreset === "custom" ? (
-            <div className="flex items-center space-x-2 animate-in fade-in duration-150">
+            <div className="flex items-center space-x-2.5 animate-in fade-in duration-150 bg-white dark:bg-slate-950 p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 shadow-xs">
               <div className="flex items-center space-x-1">
-                <span className="text-[10px] text-slate-500 font-semibold">Max Ads:</span>
+                <span className="text-[11px] text-slate-600 dark:text-slate-300 font-bold">Max Ads:</span>
                 <input
                   type="number"
                   min="50"
@@ -1250,11 +1259,11 @@ export default function DiscoveryPage() {
                   step="50"
                   value={customMaxAds}
                   onChange={(e) => setCustomMaxAds(e.target.value)}
-                  className="w-20 px-2 py-0.5 text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded font-semibold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
+                  className="w-20 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
                 />
               </div>
               <div className="flex items-center space-x-1">
-                <span className="text-[10px] text-slate-500 font-semibold">Max Scrolls:</span>
+                <span className="text-[11px] text-slate-600 dark:text-slate-300 font-bold">Max Scrolls:</span>
                 <input
                   type="number"
                   min="5"
@@ -1262,15 +1271,17 @@ export default function DiscoveryPage() {
                   step="5"
                   value={customMaxScrolls}
                   onChange={(e) => setCustomMaxScrolls(e.target.value)}
-                  className="w-16 px-2 py-0.5 text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded font-semibold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
+                  className="w-16 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
                 />
               </div>
             </div>
           ) : (
-            <div className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5 font-medium">
-              <span>Target: <strong className="text-slate-700 dark:text-slate-200">{effectiveTargetMaxAds.toLocaleString()} ads</strong></span>
+            <div className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1.5 font-medium bg-white/80 dark:bg-slate-950/60 px-3 py-1 rounded-lg border border-slate-200/80 dark:border-slate-800">
+              <span>Active Target:</span>
+              <strong className="text-indigo-600 dark:text-indigo-400 font-extrabold">{effectiveTargetMaxAds.toLocaleString()} ads</strong>
               <span>·</span>
-              <span>Limit: <strong className="text-slate-700 dark:text-slate-200">{effectiveMaxScrolls} scrolls</strong></span>
+              <span>Max:</span>
+              <strong className="text-slate-800 dark:text-slate-100 font-bold">{effectiveMaxScrolls} scrolls</strong>
             </div>
           )}
         </div>
@@ -1315,7 +1326,7 @@ export default function DiscoveryPage() {
                 ) : (
                   <>
                     <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Launch URL Discovery</span>
+                    <span>Launch URL Discovery ({effectiveTargetMaxAds.toLocaleString()} Ads)</span>
                   </>
                 )}
               </button>
@@ -1568,7 +1579,7 @@ export default function DiscoveryPage() {
                 ) : (
                   <>
                     <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Launch Discovery</span>
+                    <span>Launch Discovery ({effectiveTargetMaxAds.toLocaleString()} Ads)</span>
                   </>
                 )}
               </button>
