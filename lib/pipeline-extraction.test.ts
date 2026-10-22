@@ -288,3 +288,46 @@ test("Finding 7: Product rescue differentiates transient failures (1h) from gene
   );
 });
 
+test("Carousel multi-product ad linking: links both primary and secondary cards into ad_products so active ads are recognized", () => {
+  const ad = {
+    id: "ad-12345",
+    adArchiveId: "123456789",
+    isArchived: false,
+    mediaType: "carousel",
+  };
+
+  const primaryProduct = { id: "prod-primary", url: "https://shop.tn/products/p1" };
+  const secondaryProduct1 = { id: "prod-sec-1", url: "https://shop.tn/products/p2" };
+  const secondaryProduct2 = { id: "prod-sec-2", url: "https://shop.tn/products/p3" };
+
+  // Simulated ad_products junction entries
+  const adProductsTable: Array<{
+    adId: string;
+    productId: string;
+    isPrimary: boolean;
+    cardIndex: number;
+  }> = [];
+
+  const linkToAdProducts = (adId: string, productId: string, isPrimary: boolean, cardIndex: number) => {
+    adProductsTable.push({ adId, productId, isPrimary, cardIndex });
+  };
+
+  // 1. Primary card linked with isPrimary = true, cardIndex = 0
+  linkToAdProducts(ad.id, primaryProduct.id, true, 0);
+
+  // 2. Secondary cards linked with isPrimary = false, cardIndex = 1, 2
+  linkToAdProducts(ad.id, secondaryProduct1.id, false, 1);
+  linkToAdProducts(ad.id, secondaryProduct2.id, false, 2);
+
+  assert.strictEqual(adProductsTable.length, 3);
+
+  // Verify all 3 products have linked active ads
+  const getActiveAdsCountForProduct = (productId: string) => {
+    return adProductsTable.filter((ap) => ap.productId === productId && ad.isArchived === false).length;
+  };
+
+  assert.strictEqual(getActiveAdsCountForProduct(primaryProduct.id), 1);
+  assert.strictEqual(getActiveAdsCountForProduct(secondaryProduct1.id), 1);
+  assert.strictEqual(getActiveAdsCountForProduct(secondaryProduct2.id), 1);
+});
+

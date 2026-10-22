@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { ads, adObservations, trackedPages, scrapedProducts } from "@/db/schema";
+import { ads, adProducts, adObservations, trackedPages, scrapedProducts } from "@/db/schema";
 import { eq, ilike, gte, lte, and, sql, desc, asc, or, not, inArray } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { syncApifyRuns } from "@/lib/apify-sync";
@@ -180,7 +180,12 @@ export async function GET(req: NextRequest) {
     }
 
     if (productId) {
-      conditions.push(eq(ads.productId, productId));
+      conditions.push(
+        or(
+          eq(ads.productId, productId),
+          sql`EXISTS (SELECT 1 FROM ${adProducts} WHERE ${adProducts.adId} = ${ads.id} AND ${adProducts.productId} = ${productId})`
+        )
+      );
     }
 
     if (excludePageIds.length > 0) {

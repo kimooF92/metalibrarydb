@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { ads, adObservations, scrapedProducts, trackedPages, discoveredPages } from "@/db/schema";
+import { ads, adProducts, adObservations, scrapedProducts, trackedPages, discoveredPages } from "@/db/schema";
 import { eq, ilike, and, sql, desc, asc, or, count, inArray, isNull } from "drizzle-orm";
 import { validateApiSecret, validateAdminRole, getRoleFromRequest } from "@/lib/api-guard";
 import { PRIVATE_AUTH_VARY, PRIVATE_DETAIL_CACHE_CONTROL, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
@@ -109,17 +109,19 @@ export async function GET(req: NextRequest) {
     } else if (requireActiveAds) {
       conditions.push(
         sql`EXISTS (
-          SELECT 1 FROM ${ads}
-          WHERE ${ads.productId} = ${scrapedProducts.id}
-          AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
+          SELECT 1 FROM ${adProducts} ap
+          JOIN ${ads} a ON a.id = ap.ad_id
+          WHERE ap.product_id = ${scrapedProducts.id}
+          AND (a.is_archived = false OR a.is_archived IS NULL)
         )`
       );
     } else if (activeStatus === "inactive") {
       conditions.push(
         sql`NOT EXISTS (
-          SELECT 1 FROM ${ads}
-          WHERE ${ads.productId} = ${scrapedProducts.id}
-          AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
+          SELECT 1 FROM ${adProducts} ap
+          JOIN ${ads} a ON a.id = ap.ad_id
+          WHERE ap.product_id = ${scrapedProducts.id}
+          AND (a.is_archived = false OR a.is_archived IS NULL)
         )`
       );
     }
@@ -263,41 +265,45 @@ export async function GET(req: NextRequest) {
     }
 
     // Ad Launch Date / Winner Longevity Filters (7d+, 15d+, 21d+, 30d+, custom)
-    const stillRunningClause = stillRunning ? sql` AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)` : sql``;
+    const stillRunningClause = stillRunning ? sql` AND (a.is_archived = false OR a.is_archived IS NULL)` : sql``;
 
     if (adLaunch === "7d" || adLaunch === "last_7d") {
       conditions.push(
         sql`EXISTS (
-          SELECT 1 FROM ${ads}
-          WHERE ${ads.productId} = ${scrapedProducts.id}
-          AND COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) <= NOW() - INTERVAL '7 days'
+          SELECT 1 FROM ${adProducts} ap
+          JOIN ${ads} a ON a.id = ap.ad_id
+          WHERE ap.product_id = ${scrapedProducts.id}
+          AND COALESCE(a.started_running_on, a.first_seen_at) <= NOW() - INTERVAL '7 days'
           ${stillRunningClause}
         )`
       );
     } else if (adLaunch === "15d" || adLaunch === "14d" || adLaunch === "last_15d" || adLaunch === "last_14d") {
       conditions.push(
         sql`EXISTS (
-          SELECT 1 FROM ${ads}
-          WHERE ${ads.productId} = ${scrapedProducts.id}
-          AND COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) <= NOW() - INTERVAL '14 days'
+          SELECT 1 FROM ${adProducts} ap
+          JOIN ${ads} a ON a.id = ap.ad_id
+          WHERE ap.product_id = ${scrapedProducts.id}
+          AND COALESCE(a.started_running_on, a.first_seen_at) <= NOW() - INTERVAL '14 days'
           ${stillRunningClause}
         )`
       );
     } else if (adLaunch === "21d" || adLaunch === "last_21d") {
       conditions.push(
         sql`EXISTS (
-          SELECT 1 FROM ${ads}
-          WHERE ${ads.productId} = ${scrapedProducts.id}
-          AND COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) <= NOW() - INTERVAL '21 days'
+          SELECT 1 FROM ${adProducts} ap
+          JOIN ${ads} a ON a.id = ap.ad_id
+          WHERE ap.product_id = ${scrapedProducts.id}
+          AND COALESCE(a.started_running_on, a.first_seen_at) <= NOW() - INTERVAL '21 days'
           ${stillRunningClause}
         )`
       );
     } else if (adLaunch === "30d" || adLaunch === "last_30d" || adLaunch === "month" || adLaunch === "1m") {
       conditions.push(
         sql`EXISTS (
-          SELECT 1 FROM ${ads}
-          WHERE ${ads.productId} = ${scrapedProducts.id}
-          AND COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) <= NOW() - INTERVAL '30 days'
+          SELECT 1 FROM ${adProducts} ap
+          JOIN ${ads} a ON a.id = ap.ad_id
+          WHERE ap.product_id = ${scrapedProducts.id}
+          AND COALESCE(a.started_running_on, a.first_seen_at) <= NOW() - INTERVAL '30 days'
           ${stillRunningClause}
         )`
       );
@@ -305,22 +311,23 @@ export async function GET(req: NextRequest) {
       const launchConditions: any[] = [];
       if (adLaunchFrom && /^\d{4}-\d{2}-\d{2}$/.test(adLaunchFrom.trim())) {
         launchConditions.push(
-          sql`COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) >= ${adLaunchFrom.trim() + " 00:00:00"}::timestamptz`
+          sql`COALESCE(a.started_running_on, a.first_seen_at) >= ${adLaunchFrom.trim() + " 00:00:00"}::timestamptz`
         );
       }
       if (adLaunchTo && /^\d{4}-\d{2}-\d{2}$/.test(adLaunchTo.trim())) {
         launchConditions.push(
-          sql`COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) < (${adLaunchTo.trim() + " 00:00:00"}::timestamptz + INTERVAL '1 day')`
+          sql`COALESCE(a.started_running_on, a.first_seen_at) < (${adLaunchTo.trim() + " 00:00:00"}::timestamptz + INTERVAL '1 day')`
         );
       }
       if (stillRunning) {
-        launchConditions.push(sql`(${ads.isArchived} = false OR ${ads.isArchived} IS NULL)`);
+        launchConditions.push(sql`(a.is_archived = false OR a.is_archived IS NULL)`);
       }
       if (launchConditions.length > 0) {
         conditions.push(
           sql`EXISTS (
-            SELECT 1 FROM ${ads}
-            WHERE ${ads.productId} = ${scrapedProducts.id}
+            SELECT 1 FROM ${adProducts} ap
+            JOIN ${ads} a ON a.id = ap.ad_id
+            WHERE ap.product_id = ${scrapedProducts.id}
             AND ${and(...launchConditions)}
           )`
         );
@@ -331,12 +338,13 @@ export async function GET(req: NextRequest) {
     if (smartPreset === "breakout") {
       conditions.push(
         sql`EXISTS (
-          SELECT 1 FROM ${ads}
-          JOIN ${adObservations} ON ${adObservations.adId} = ${ads.id}
-          WHERE ${ads.productId} = ${scrapedProducts.id}
-          AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
-          AND (${ads.startedRunningOn} >= NOW() - INTERVAL '7 days' OR ${ads.firstSeenAt} >= NOW() - INTERVAL '7 days')
-          AND ${adObservations.duplicationCount} >= 3
+          SELECT 1 FROM ${adProducts} ap
+          JOIN ${ads} a ON a.id = ap.ad_id
+          JOIN ${adObservations} ao ON ao.ad_id = a.id
+          WHERE ap.product_id = ${scrapedProducts.id}
+          AND (a.is_archived = false OR a.is_archived IS NULL)
+          AND (a.started_running_on >= NOW() - INTERVAL '7 days' OR a.first_seen_at >= NOW() - INTERVAL '7 days')
+          AND ao.duplication_count >= 3
         )`
       );
     }
@@ -375,11 +383,11 @@ export async function GET(req: NextRequest) {
       orderByClauses.push(asc(scrapedProducts.createdAt));
     } else if (sortBy === "top_lasting" || sortBy === "longevity" || sortBy === "longest_running") {
       orderByClauses.push(
-        sql`(SELECT MIN(COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt})) FROM ${ads} WHERE ${ads.productId} = ${scrapedProducts.id}) ASC NULLS LAST`
+        sql`(SELECT MIN(COALESCE(a.started_running_on, a.first_seen_at)) FROM ${adProducts} ap JOIN ${ads} a ON a.id = ap.ad_id WHERE ap.product_id = ${scrapedProducts.id}) ASC NULLS LAST`
       );
     } else if (sortBy === "most_scaled" || sortBy === "ads") {
       orderByClauses.push(
-        sql`(SELECT COUNT(${ads.id}) FROM ${ads} WHERE ${ads.productId} = ${scrapedProducts.id} AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)) DESC`
+        sql`(SELECT COUNT(DISTINCT a.id) FROM ${adProducts} ap JOIN ${ads} a ON a.id = ap.ad_id WHERE ap.product_id = ${scrapedProducts.id} AND (a.is_archived = false OR a.is_archived IS NULL)) DESC`
       );
     } else {
       // Default: latest discovery
@@ -456,9 +464,9 @@ export async function GET(req: NextRequest) {
       asyncLookups.push(
         db
           .select({
-            productId: ads.productId,
-            linkedAdsCount: sql<number>`COUNT(${ads.id})`.mapWith(Number),
-            activeAdsCount: sql<number>`COUNT(CASE WHEN ${ads.isArchived} = false OR ${ads.isArchived} IS NULL THEN ${ads.id} END)`.mapWith(Number),
+            productId: adProducts.productId,
+            linkedAdsCount: sql<number>`COUNT(DISTINCT ${ads.id})`.mapWith(Number),
+            activeAdsCount: sql<number>`COUNT(DISTINCT CASE WHEN ${ads.isArchived} = false OR ${ads.isArchived} IS NULL THEN ${ads.id} END)`.mapWith(Number),
             earliestAdDate: sql<string>`MIN(COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}))`,
             latestAdDate: sql<string>`MAX(${ads.lastSeenAt})`,
             brandName: sql<string>`MAX(COALESCE(${trackedPages.displayName}, ${ads.pageName}))`,
@@ -467,10 +475,11 @@ export async function GET(req: NextRequest) {
             brandCurrentResults: sql<number>`MAX(${trackedPages.currentResults})`.mapWith(Number),
             topCreativeThumbnail: sql<string>`MAX(COALESCE(NULLIF(${ads.thumbnailUrl}, ''), NULLIF(${ads.thumbnailStoragePath}, '')))`,
           })
-          .from(ads)
+          .from(adProducts)
+          .innerJoin(ads, eq(ads.id, adProducts.adId))
           .leftJoin(trackedPages, eq(trackedPages.pageId, ads.pageId))
-          .where(inArray(ads.productId, productIds))
-          .groupBy(ads.productId)
+          .where(inArray(adProducts.productId, productIds))
+          .groupBy(adProducts.productId)
           .then((rows) => {
             rows.forEach((m) => {
               if (m.productId) metricsMap.set(m.productId, m);
@@ -783,7 +792,8 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    // Unlink product_id from ads first
+    // Unlink product_id from ads and delete junction records
+    await db.delete(adProducts).where(eq(adProducts.productId, id));
     await db
       .update(ads)
       .set({ productId: null })

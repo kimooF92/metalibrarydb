@@ -573,6 +573,8 @@ export async function ingestApifyDatasetItems(
             pageId: (pageId && !pageId.includes("-")) ? pageId : (detectedPageId && !detectedPageId.includes("-") ? detectedPageId : null),
             adCopy: caption,
             workspaceId: effectiveWsId,
+            isPrimary: true,
+            cardIndex: 0,
           });
           if (prodRes?.isNew) {
             newProductsCount++;
@@ -591,9 +593,12 @@ export async function ingestApifyDatasetItems(
             const candidate = selectBestProductCandidateUrl([secondaryResolved]);
             if (candidate && candidate.source === "product_page") {
               linkAndAutoScrapeProduct({
+                adId: upsertedAd.id,
                 linkUrl: candidate.url,
                 pageId: (pageId && !pageId.includes("-")) ? pageId : (detectedPageId && !detectedPageId.includes("-") ? detectedPageId : null),
                 workspaceId: pageRecord?.workspaceId || null,
+                isPrimary: false,
+                cardIndex: i,
               }).catch(() => {});
             }
           }
