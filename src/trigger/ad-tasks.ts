@@ -130,6 +130,7 @@ export const scanPageCountTask = task({
     // 1. Fetch tracked page record safely by UUID, Facebook Page ID, or URL
     let pageRecord: {
       id: string;
+      pageId: string | null;
       url: string;
       displayName: string | null;
       currentResults: number | null;
@@ -140,6 +141,7 @@ export const scanPageCountTask = task({
       const [found] = await db
         .select({
           id: trackedPages.id,
+          pageId: trackedPages.pageId,
           url: trackedPages.url,
           displayName: trackedPages.displayName,
           currentResults: trackedPages.currentResults,
@@ -155,6 +157,7 @@ export const scanPageCountTask = task({
       const [found] = await db
         .select({
           id: trackedPages.id,
+          pageId: trackedPages.pageId,
           url: trackedPages.url,
           displayName: trackedPages.displayName,
           currentResults: trackedPages.currentResults,
@@ -170,6 +173,7 @@ export const scanPageCountTask = task({
       const [found] = await db
         .select({
           id: trackedPages.id,
+          pageId: trackedPages.pageId,
           url: trackedPages.url,
           displayName: trackedPages.displayName,
           currentResults: trackedPages.currentResults,
@@ -435,12 +439,14 @@ export const scanPageCountTask = task({
 
       // Invalidate Upstash cache for workspace so UI reflects fresh counts
       if (pageRecord.workspaceId) {
+        const canonicalKey = (pageRecord.pageId || pageRecord.id).toLowerCase();
         await Promise.allSettled([
           deleteCached(`cache:stats:${pageRecord.workspaceId}`),
           deleteByPrefix(`cache:pages:${pageRecord.workspaceId}:`),
           deleteByPrefix(`cache:products:${pageRecord.workspaceId}:`),
           deleteByPrefix(`cache:fresh_winners:${pageRecord.workspaceId}:`),
           deleteByPrefix(`cache:spy_ads:${pageRecord.workspaceId}:`),
+          deleteByPrefix(`cache:brand:${pageRecord.workspaceId}:${canonicalKey}:`),
         ]);
       }
     }

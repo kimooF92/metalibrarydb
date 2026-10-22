@@ -235,8 +235,18 @@ export default function BrandDeepDivePage({
     }
   }, []);
 
+  const canonicalIdRef = useRef<string | null>(null);
+  const brandRequestIdRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   // Load brand analytics payload
   const fetchBrandData = async (forceRefresh = false, sisterPageIdOverride?: string | null) => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const currentRequestId = ++brandRequestIdRef.current;
     setIsLoadingAnalytics(true);
     setError(null);
     try {
@@ -247,13 +257,18 @@ export default function BrandDeepDivePage({
       const queryString = params.toString() ? `?${params.toString()}` : "";
       const res = await fetch(`/api/spy/brand/${encodeURIComponent(id)}${queryString}`, {
         cache: forceRefresh ? "no-store" : "default",
+        signal: controller.signal,
       });
       const json = await res.json();
+      if (currentRequestId !== brandRequestIdRef.current) return;
       if (!res.ok) {
         throw new Error(json.error || "Failed to load brand analytics");
       }
       setData(json);
       setIsWatchlisted(Boolean(json.brand?.isWatchlisted));
+      if (json.brand?.pageId) {
+        canonicalIdRef.current = json.brand.pageId;
+      }
 
       // If user navigated with a legacy UUID, automatically replace URL with canonical numeric pageId or clean name
       const isUuid = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
@@ -262,9 +277,13 @@ export default function BrandDeepDivePage({
         router.replace(`/spy/brand/${encodeURIComponent(json.brand.pageId)}${currentUrl.search}`);
       }
     } catch (err: any) {
+      if (err.name === "AbortError") return;
+      if (currentRequestId !== brandRequestIdRef.current) return;
       setError(err.message || "Failed to load brand data");
     } finally {
-      setIsLoadingAnalytics(false);
+      if (currentRequestId === brandRequestIdRef.current) {
+        setIsLoadingAnalytics(false);
+      }
     }
   };
 
@@ -367,7 +386,16 @@ export default function BrandDeepDivePage({
   }, [data?.brand?.id, showToast]);
 
   useEffect(() => {
+    // If id changed to the canonical ID we just fetched via router.replace, skip duplicate fetch
+    if (canonicalIdRef.current && id === canonicalIdRef.current && data) {
+      return;
+    }
     fetchBrandData();
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [id]);
 
   // Brand Ad Feed

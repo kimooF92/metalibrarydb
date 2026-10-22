@@ -709,12 +709,14 @@ async function runWorker() {
 
           // Invalidate Upstash cache for workspace so UI reflects fresh creatives
           if (trackedPage.workspaceId) {
+            const canonicalKey = (trackedPage.pageId || trackedPage.id).toLowerCase();
             Promise.allSettled([
               deleteCached(`cache:stats:${trackedPage.workspaceId}`),
               deleteByPrefix(`cache:pages:${trackedPage.workspaceId}:`),
               deleteByPrefix(`cache:products:${trackedPage.workspaceId}:`),
               deleteByPrefix(`cache:fresh_winners:${trackedPage.workspaceId}:`),
               deleteByPrefix(`cache:spy_ads:${trackedPage.workspaceId}:`),
+              deleteByPrefix(`cache:brand:${trackedPage.workspaceId}:${canonicalKey}:`),
             ]).catch(() => {});
           }
         } else {
@@ -830,12 +832,14 @@ async function runWorker() {
 
           // Invalidate Upstash cache for workspace so UI reflects fresh counts
           if (trackedPage.workspaceId) {
+            const canonicalKey = (trackedPage.pageId || trackedPage.id).toLowerCase();
             Promise.allSettled([
               deleteCached(`cache:stats:${trackedPage.workspaceId}`),
               deleteByPrefix(`cache:pages:${trackedPage.workspaceId}:`),
               deleteByPrefix(`cache:products:${trackedPage.workspaceId}:`),
               deleteByPrefix(`cache:fresh_winners:${trackedPage.workspaceId}:`),
               deleteByPrefix(`cache:spy_ads:${trackedPage.workspaceId}:`),
+              deleteByPrefix(`cache:brand:${trackedPage.workspaceId}:${canonicalKey}:`),
             ]).catch(() => {});
           }
         } else {

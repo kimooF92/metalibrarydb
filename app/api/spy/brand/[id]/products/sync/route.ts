@@ -18,6 +18,7 @@ import {
   extractDeliveryInfo,
 } from "@/lib/network-extractor";
 import { enhanceProductWithJev } from "@/lib/product-enhancer";
+import { deleteByPrefix } from "@/lib/cache-service";
 
 export const maxDuration = 60; // Allow sufficient time for batch scraping if needed
 export const dynamic = "force-dynamic";
@@ -417,6 +418,14 @@ export async function POST(
       .select(PRODUCT_RESPONSE_PROJECTION)
       .from(scrapedProducts)
       .where(inArray(scrapedProducts.url, uniqueNormalizedUrls));
+
+    if (activeWorkspace?.id) {
+      const canonicalKey = (pageId || decodedId).toLowerCase();
+      await Promise.allSettled([
+        deleteByPrefix(`cache:brand:${activeWorkspace.id}:${canonicalKey}:`),
+        deleteByPrefix(`cache:products:${activeWorkspace.id}:`),
+      ]);
+    }
 
     return NextResponse.json({
       success: true,
