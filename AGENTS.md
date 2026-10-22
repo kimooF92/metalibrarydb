@@ -18,11 +18,18 @@ You MUST check and strictly adhere to these rules before implementing any featur
 
 ### 2. Connection Pooler & Driver Health
 - **Preserve `fetch_types: false`**: Never re-enable `fetch_types` in `postgres.js` configuration in `db/index.ts`. It causes 360+ catalog rows to be transferred on every connection handshake.
+- **Connection Churn & Idle Timeout**: Keep `idle_timeout >= 120` seconds in `db/index.ts`. Never set short timeouts (e.g. 20s), which trigger thousands of `ClientHandler: Connection authenticated` and `Terminate` events in Supavisor daily, polluting logs.
 - **Throttled Loops & Heartbeats**: Never update database state or heartbeats unconditionally inside infinite worker/poller loops. Throttle heartbeat updates to at least 30–60 second intervals (`Date.now() - lastHeartbeat >= 30_000`).
 
 ### 3. External API & Worker Call Limits
 - **Batching & Debouncing**: Never make unbounded serial API calls in loops (Meta Ad Library, Apify, Firecrawl). Use concurrency limiters, exponential backoff, and circuit breakers.
+- **Batch Loop History Checks**: In worker schedulers, never execute `.findFirst()` queries sequentially in a `for` loop across pages. Always batch fetch using `DISTINCT ON` or `ANY(:ids::uuid[])`.
 - **Prune & Compress Storage**: Ephemeral scrape payloads (`raw_extract`) must be set to `NULL` for deleted/failed records immediately, and purged within 2 days for successful scrapes.
+
+### 4. Supabase Log Volume, Log Query & Quota Protection Rules
+- **Strict Realtime Publication Scope**: Never add high-write or append-heavy tables (like `ads`) to the `supabase_realtime` publication. Every single insert/update triggers logical decoding in Postgres CDC WAL replication, producing 100,000+ internal polling queries. Only low-frequency entity tables (like `tracked_pages`) belong in Realtime.
+- **Log Query Quota Protection (ClickHouse Scans)**: When reading Supabase logs (via Studio Logs Explorer, Management API, or MCP `query_logs`), **always** pass explicit narrow time windows (`iso_timestamp_start` and `iso_timestamp_end`). Defaulting to 24h or 7d scans gigabytes of log partitions on ClickHouse and burns free-tier log scan quotas (which caused the 40 GB spike).
+- **Index URL & Text Matching Fields**: Never use unindexed wildcard substring matches (`LIKE '%' || url || '%'`) across tables with thousands of rows (`ads`, `scraped_products`). Always use exact matching or functional expression indexes (`idx_ads_link_url_lower_trimmed`). Queries running >10s trigger `auto_explain` full plan dumps directly into `postgres_logs`, bloating log storage.
 <!-- END:egress-and-performance-rules -->
 
 <!-- BEGIN:context7-mcp-rules -->
