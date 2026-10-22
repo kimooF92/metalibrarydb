@@ -60,6 +60,26 @@ export async function GET(request: Request) {
       }
     }
 
+    // Auto-rescue any stuck scanning pages older than 60 seconds so client doesn't poll stats indefinitely
+    if (countsMap.scanning > 0) {
+      try {
+        const rescued = await db.execute(sql`
+          UPDATE tracked_pages
+          SET status = CASE WHEN last_success_at IS NOT NULL OR current_results IS NOT NULL THEN 'success' ELSE 'failed' END,
+              updated_at = NOW()
+          WHERE status = 'scanning'
+            AND workspace_id = ${activeWorkspace.id}
+            AND updated_at < NOW() - INTERVAL '60 seconds'
+          RETURNING id;
+        `);
+        const rescuedCount = (rescued as any)?.length || (rescued as any)?.rowCount || 0;
+        if (rescuedCount > 0) {
+          countsMap.scanning = Math.max(0, countsMap.scanning - rescuedCount);
+          countsMap.success += rescuedCount;
+        }
+      } catch {}
+    }
+
     // 2. Aggregate stats (avg and max results) scoped to active workspace
     const [aggregates] = await db
       .select({

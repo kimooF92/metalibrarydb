@@ -1,5 +1,5 @@
 import { task, logger } from "@trigger.dev/sdk";
-import { chromium } from "playwright";
+import { chromium, Browser, BrowserContext, Page } from "playwright";
 import { db } from "../../db";
 import { trackedPages, queue } from "../../db/schema";
 import { eq, and, or, inArray, sql } from "drizzle-orm";
@@ -21,16 +21,90 @@ export interface ScanPageCountPayload {
  */
 export const scanPageCountTask = task({
   id: "scan-page-count",
-  machine: "small-2x", // 1 vCPU, 1 GB RAM (prevents Playwright TASK_PROCESS_OOM_KILLED crashes)
+  machine: "medium-2x", // 2 vCPU, 4 GB RAM (prevents Playwright TASK_PROCESS_OOM_KILLED crashes)
   retry: {
-    maxAttempts: 3,
+    maxAttempts: 2,
     factor: 2,
     minTimeoutInMs: 3000,
   },
   queue: {
     concurrencyLimit: 2, // Protect against Meta rate limits
   },
-  run: async (payload: ScanPageCountPayload) => {
+  onFailure: async ({ payload, error }: any) => {
+    const errMessage = (error as any)?.message || String(error) || "trigger_task_failed";
+    logger.error(`[scan-page-count] onFailure hook triggered: ${errMessage}`);
+    try {
+      const rawTarget =
+        (typeof payload === "string" ? payload : null) ||
+        (payload as any)?.pageId ||
+        (payload as any)?.id ||
+        (payload as any)?.trackedPageId ||
+        (payload as any)?.payload?.pageId ||
+        (payload as any)?.payload?.id;
+
+      if (!rawTarget || typeof rawTarget !== "string") return;
+      const cleanId = rawTarget.trim();
+
+      const [pageRecord] = await db
+        .select({
+          id: trackedPages.id,
+          status: trackedPages.status,
+          currentResults: trackedPages.currentResults,
+          lastSuccessAt: trackedPages.lastSuccessAt,
+          workspaceId: trackedPages.workspaceId,
+        })
+        .from(trackedPages)
+        .where(or(eq(trackedPages.id, cleanId), eq(trackedPages.pageId, cleanId)))
+        .limit(1);
+
+      if (pageRecord && pageRecord.status === "scanning") {
+        const now = new Date();
+        const fallbackStatus =
+          pageRecord.lastSuccessAt !== null || pageRecord.currentResults !== null ? "success" : "failed";
+
+        await db
+          .update(trackedPages)
+          .set({
+            status: fallbackStatus,
+            lastChecked: now,
+            updatedAt: now,
+          })
+          .where(eq(trackedPages.id, pageRecord.id))
+          .catch(() => {});
+
+        await db
+          .update(queue)
+          .set({
+            status: "failed",
+            finishedAt: now,
+            failureReason: errMessage,
+          })
+          .where(and(eq(queue.trackedPageId, pageRecord.id), inArray(queue.status, ["pending", "running"])))
+          .catch(() => {});
+
+        await releaseLock(`lock:scrape:${pageRecord.id}`).catch(() => {});
+        await setCached(
+          `scan_step:${pageRecord.id}`,
+          {
+            pageId: pageRecord.id,
+            step: "failed",
+            label: `Scan failed: ${errMessage}`,
+            percent: 100,
+            timestamp: Date.now(),
+          },
+          60
+        ).catch(() => {});
+
+        if (pageRecord.workspaceId) {
+          await deleteCached(`cache:stats:${pageRecord.workspaceId}`).catch(() => {});
+          await deleteByPrefix(`cache:pages:${pageRecord.workspaceId}:`).catch(() => {});
+        }
+      }
+    } catch (cleanupErr: any) {
+      logger.error(`[scan-page-count] Error during onFailure cleanup: ${cleanupErr?.message || cleanupErr}`);
+    }
+  },
+  run: async (payload: ScanPageCountPayload, { ctx }: any = {}) => {
     // 0. Extract identifier flexibly
     const rawTarget =
       (typeof payload === "string" ? payload : null) ||
@@ -114,31 +188,25 @@ export const scanPageCountTask = task({
     const targetUrl = inputUrl || pageRecord.url;
     logger.info(`Navigating to Meta Ad Library: ${targetUrl}`);
 
-    // Acquire atomic distributed lock to prevent duplicate concurrent scrapes
+    // Distributed lock with 60s TTL (instead of 180s)
     const lockKey = `lock:scrape:${pageRecord.id}`;
-    const acquired = await acquireLock(lockKey, 180);
-    if (!acquired) {
-      logger.warn(`Page ${pageRecord.id} (${pageRecord.displayName || targetUrl}) is already locked by another worker. Skipping duplicate scrape.`);
-      await setCached(
-        `scan_step:${pageRecord.id}`,
-        {
-          pageId: pageRecord.id,
-          displayName: pageRecord.displayName || targetUrl,
-          step: "locked",
-          label: "Page already locked by another worker",
-          percent: 0,
-          timestamp: Date.now(),
-        },
-        60
-      );
-      return {
-        skipped: true,
-        pageId: pageRecord.id,
-        reason: "concurrent_scrape_locked",
-      };
+
+    // If this is a retry attempt (attempt > 1), release any dangling lock left by the previous crashed attempt
+    if (ctx && ctx.attempt && ctx.attempt.number > 1) {
+      logger.info(`[scan-page-count] Attempt ${ctx.attempt.number}: clearing lock from previous attempt`);
+      await releaseLock(lockKey).catch(() => {});
     }
 
-    let browser: any = null;
+    const acquired = await acquireLock(lockKey, 60);
+    if (!acquired) {
+      logger.warn(`Page ${pageRecord.id} (${pageRecord.displayName || targetUrl}) is already locked by another worker.`);
+      // Throw an error so Trigger.dev retries with backoff rather than falsely recording success
+      throw new Error(`Page ${pageRecord.id} is currently locked by another worker.`);
+    }
+
+    let browser: Browser | null = null;
+    let context: BrowserContext | null = null;
+    let page: Page | null = null;
 
     try {
       // Update status to scanning
@@ -160,7 +228,7 @@ export const scanPageCountTask = task({
         120
       );
 
-      // 2. Launch headless browser
+      // 2. Launch headless browser with low-memory container flags (NO --single-process)
       const isHeadless = process.env.PLAYWRIGHT_HEADLESS !== "false";
       browser = await chromium.launch({
         headless: isHeadless,
@@ -169,14 +237,23 @@ export const scanPageCountTask = task({
           "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
           "--disable-gpu",
-          "--single-process",
           "--no-zygote",
           "--disable-blink-features=AutomationControlled",
+          "--disable-extensions",
+          "--disable-component-extensions-with-background-pages",
+          "--disable-default-apps",
+          "--mute-audio",
+          "--no-default-browser-check",
+          "--disable-background-timer-throttling",
+          "--disable-backgrounding-occluded-windows",
+          "--disable-renderer-backgrounding",
+          "--disable-ipc-flooding-protection",
+          "--js-flags=--max-old-space-size=512",
         ],
       });
 
-      const context = await browser.newContext({
-        viewport: { width: 1920, height: 1080 },
+      context = await browser.newContext({
+        viewport: { width: 1366, height: 768 },
         userAgent:
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         locale: "en-US",
@@ -185,7 +262,16 @@ export const scanPageCountTask = task({
         },
       });
 
-      const page = await context.newPage();
+      page = await context.newPage();
+
+      // Intercept and abort memory-heavy binary resources (video streams, images, fonts)
+      await page.route("**/*", (route) => {
+        const type = route.request().resourceType();
+        if (["image", "media", "font", "imageset"].includes(type)) {
+          return route.abort();
+        }
+        return route.continue();
+      });
 
       // 3. Perform the scrape with live progress updates
       const outcome = await scanMetaAdPage(
@@ -286,6 +372,20 @@ export const scanPageCountTask = task({
         );
       }
 
+      // Explicitly dispose of browser resources immediately
+      if (page && !page.isClosed()) {
+        await page.close().catch(() => {});
+        page = null;
+      }
+      if (context) {
+        await context.close().catch(() => {});
+        context = null;
+      }
+      if (browser) {
+        await browser.close().catch(() => {});
+        browser = null;
+      }
+
       return {
         success: outcome.status === "success",
         pageId: pageRecord.id,
@@ -297,10 +397,12 @@ export const scanPageCountTask = task({
       logger.error(`[scan-page-count] Execution crashed for ${pageRecord.displayName || targetUrl}: ${taskErr?.message || taskErr}`);
       const now = new Date();
       // Ensure page does not stay stuck in 'scanning' status upon unhandled crash
+      const fallbackStatus =
+        pageRecord.currentResults !== null ? "success" : "failed";
       await db
         .update(trackedPages)
         .set({
-          status: "failed",
+          status: fallbackStatus,
           lastChecked: now,
           updatedAt: now,
         })
@@ -319,11 +421,17 @@ export const scanPageCountTask = task({
 
       throw taskErr;
     } finally {
+      if (page && !page.isClosed()) {
+        await page.close().catch(() => {});
+      }
+      if (context) {
+        await context.close().catch(() => {});
+      }
       if (browser) {
         await browser.close().catch(() => {});
       }
       // Release distributed lock
-      await releaseLock(lockKey);
+      await releaseLock(lockKey).catch(() => {});
 
       // Invalidate Upstash cache for workspace so UI reflects fresh counts
       if (pageRecord.workspaceId) {

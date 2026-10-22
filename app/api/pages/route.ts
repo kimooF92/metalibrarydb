@@ -39,10 +39,10 @@ export async function GET(request: Request) {
     // Resolve active workspace
     const activeWorkspace = await getActiveWorkspace(request);
 
-    // Throttled self-healing check: automatically rescue any orphaned "scanning" pages older than 3 minutes
+    // Throttled self-healing check: automatically rescue any orphaned "scanning" pages older than 60 seconds
     const lastCleanupCheck = await getCached<number>("lock:pages_orphan_cleanup");
     if (!lastCleanupCheck) {
-      await setCached("lock:pages_orphan_cleanup", Date.now(), 60);
+      await setCached("lock:pages_orphan_cleanup", Date.now(), 30);
       try {
         await db.execute(sql`
           UPDATE tracked_pages
@@ -50,7 +50,7 @@ export async function GET(request: Request) {
               updated_at = NOW()
           WHERE status = 'scanning'
             AND workspace_id = ${activeWorkspace.id}
-            AND updated_at < NOW() - INTERVAL '3 minutes';
+            AND updated_at < NOW() - INTERVAL '60 seconds';
         `);
       } catch (cleanupErr) {
         console.warn("[Pages API] Self-healing orphan check warning:", cleanupErr);

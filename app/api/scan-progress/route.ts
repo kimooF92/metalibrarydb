@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { getCached } from "@/lib/cache-service";
 import { validateApiSecret } from "@/lib/api-guard";
+import { db } from "@/db";
+import { trackedPages } from "@/db/schema";
+import { eq, and, inArray } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +19,7 @@ export interface ScanProgressStep {
 
 /**
  * GET /api/scan-progress?pageId=xxx OR ?pageIds=xxx,yyy
- * Ultra-fast status reader powered 100% by Upstash Redis.
- * Zero database queries, zero PostgreSQL egress bloat.
+ * Ultra-fast status reader powered by Upstash Redis with auto-healing for crashed workers.
  */
 export async function GET(request: Request) {
   const authError = await validateApiSecret(request);
@@ -55,6 +57,52 @@ export async function GET(request: Request) {
     for (const [id, step] of results) {
       if (step) {
         progressMap[id] = step;
+      }
+    }
+
+    // Auto-rescue any stuck scanning pages that have no active progress in Redis (e.g. worker OOM crash)
+    const missingIds = targetIds.filter((id) => !progressMap[id]);
+    if (missingIds.length > 0) {
+      try {
+        const stuckPages = await db
+          .select({
+            id: trackedPages.id,
+            displayName: trackedPages.displayName,
+            status: trackedPages.status,
+            updatedAt: trackedPages.updatedAt,
+            currentResults: trackedPages.currentResults,
+            lastSuccessAt: trackedPages.lastSuccessAt,
+          })
+          .from(trackedPages)
+          .where(and(inArray(trackedPages.id, missingIds), eq(trackedPages.status, "scanning")));
+
+        const now = Date.now();
+        for (const page of stuckPages) {
+          const ageMs = page.updatedAt ? now - new Date(page.updatedAt).getTime() : 999999;
+          // If scan started more than 45s ago with zero active Redis progress, the worker was terminated
+          if (ageMs > 45_000) {
+            const fallbackStatus = page.lastSuccessAt || page.currentResults !== null ? "success" : "failed";
+            await db
+              .update(trackedPages)
+              .set({ status: fallbackStatus, updatedAt: new Date() })
+              .where(eq(trackedPages.id, page.id))
+              .catch(() => {});
+
+            progressMap[page.id] = {
+              pageId: page.id,
+              displayName: page.displayName,
+              step: fallbackStatus === "success" ? "completed" : "failed",
+              label:
+                fallbackStatus === "success"
+                  ? "Restored prior scan results"
+                  : "Scan timed out or worker process terminated",
+              percent: 100,
+              timestamp: now,
+            };
+          }
+        }
+      } catch (checkErr) {
+        console.warn("[Scan Progress API] Stale scan check warning:", checkErr);
       }
     }
 

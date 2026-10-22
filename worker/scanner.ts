@@ -117,12 +117,21 @@ export async function scanMetaAdPage(
   const timeoutMs = parseInt(process.env.PAGE_TIMEOUT || "30000", 10);
 
   try {
+    // Media blocking guard: abort images, audio, video, web fonts to radically minimize memory footprint
+    await page.route("**/*", (route) => {
+      const type = route.request().resourceType();
+      if (["image", "media", "font", "imageset"].includes(type)) {
+        return route.abort();
+      }
+      return route.continue();
+    }).catch(() => {});
+
     if (onProgress) await onProgress("navigating", "1. Navigating to Meta Ad Library...", 20);
     await randomDelay(DELAY_CONFIG.beforeNavMin, DELAY_CONFIG.beforeNavMax);
 
     try {
       await page.goto(url, {
-        waitUntil: "networkidle",
+        waitUntil: "domcontentloaded",
         timeout: timeoutMs,
       });
     } catch (navError: any) {
@@ -132,8 +141,27 @@ export async function scanMetaAdPage(
       return { status: "failed", results: null, failureReason: "navigation_error" };
     }
 
-    if (onProgress) await onProgress("settling", "2. Waiting for DOM network settle...", 50);
-    await randomDelay(DELAY_CONFIG.afterLoadMin, DELAY_CONFIG.afterLoadMax);
+    if (onProgress) await onProgress("settling", "2. Waiting for DOM settle...", 50);
+
+    // Fast-settle: Wait for either the count pattern to render or fallback delay (max 8s)
+    try {
+      await page.waitForFunction(
+        () => {
+          const text = document.body?.innerText || "";
+          return (
+            /~\s*\d+/i.test(text) ||
+            /\b\d+\s+results\b/i.test(text) ||
+            /no\s+ads?\s+match|no\s+results?\s+found|0\s+matching\s+ads|0\s+results/i.test(text) ||
+            /confirm it'?s you|security check|unusual activity/i.test(text) ||
+            /rate limit exceeded|too many requests/i.test(text)
+          );
+        },
+        null,
+        { timeout: 8000 }
+      );
+    } catch {
+      await randomDelay(DELAY_CONFIG.afterLoadMin, DELAY_CONFIG.afterLoadMax);
+    }
 
     const bodyText = await page.evaluate(() => document.body.innerText);
 
