@@ -559,9 +559,24 @@ export async function processProductExtraction(
       }
     }
 
-    const effectivePrice = formatPrice(extracted.current_price, fallbackCurrencySymbol);
+    const isZeroPrice =
+      !extracted.current_price ||
+      /^0(\.0+)?\s*(dt|dh|mad|tnd|usd|eur|dinar)?$/i.test(extracted.current_price.trim()) ||
+      extracted.current_price.trim() === "0";
+
+    const effectivePrice = !isZeroPrice
+      ? formatPrice(extracted.current_price, fallbackCurrencySymbol)
+      : null;
     const effectiveOriginalPrice = extracted.original_price
       ? formatPrice(extracted.original_price, fallbackCurrencySymbol)
+      : null;
+
+    const isOutOfStock =
+      /rupture\s*de\s*stock|out\s*of\s*stock|actuellement\s*en\s*rupture|غير\s*متوفر|نفذت\s*الكمية/i.test(
+        rawHtml
+      );
+    const failureReason = isOutOfStock && !effectivePrice
+      ? "Produit en rupture de stock sur le site web"
       : null;
 
     const updateTime = new Date();
@@ -587,7 +602,7 @@ export async function processProductExtraction(
         targetAudience,
         rawExtract: extractionResult.raw || null,
         scrapeStatus: "success",
-        failureReason: null,
+        failureReason: failureReason || null,
         lastScrapedAt: updateTime,
         updatedAt: updateTime,
       })

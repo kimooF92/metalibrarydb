@@ -319,10 +319,48 @@ export function parseProductHtmlContent(
       mainImageUrl = extractImageUrl(convertyProduct.thumbnail);
     }
 
+    // 3a. Fallback to WebPage / ItemPage schema in JSON-LD if Product schema was absent
+    if (!mainImageUrl && jsonLdList.length > 0) {
+      for (const item of jsonLdList) {
+        const checkItem = (obj: any) => {
+          if (!obj || typeof obj !== "object") return;
+          if (obj["@type"] === "WebPage" || obj["@type"] === "ItemPage" || obj["@type"] === "ImageObject") {
+            const candidate = extractImageUrl(obj.image || obj.primaryImageOfPage || obj.url || obj.contentUrl);
+            if (candidate && !mainImageUrl && !isTrackingBeacon(candidate)) {
+              mainImageUrl = candidate;
+            }
+          }
+        };
+        checkItem(item);
+        if (Array.isArray(item["@graph"])) {
+          for (const g of item["@graph"]) checkItem(g);
+        }
+      }
+    }
+
     if (!mainImageUrl) {
       mainImageUrl = extractImageUrl(
         extractMeta(html, "og:image:secure_url") || extractMeta(html, "og:image") || extractMeta(html, "twitter:image")
       );
+    }
+
+    // 3b. High-confidence Platform Product Image Selectors (WooCommerce, Shopify, YouCan, Stocki)
+    if (!mainImageUrl && html) {
+      const wooImgMatch =
+        html.match(/<img[^>]+class=["'][^"']*(?:wp-post-image|woocommerce-product-gallery__image|attachment-woocommerce_single|attachment-shop_single)[^"']*["'][^>]*>/i) ||
+        html.match(/<img[^>]+data-large_image=["']([^"']+)["'][^>]*>/i) ||
+        html.match(/<div[^>]+class=["'][^"']*(?:woocommerce-product-gallery__image|product__media)[^"']*["'][^>]*>[\s\S]*?<img[^>]+src=["']([^"']+)["']/i);
+
+      if (wooImgMatch) {
+        const fullTag = wooImgMatch[0];
+        const dataLarge = wooImgMatch[1] || fullTag.match(/data-large_image=["']([^"']+)["']/i)?.[1];
+        const dataSrc = fullTag.match(/data-src=["']([^"']+)["']/i)?.[1];
+        const srcMatch = fullTag.match(/src=["']([^"']+)["']/i)?.[1];
+        const candidate = extractImageUrl(dataLarge || dataSrc || srcMatch);
+        if (candidate && !isTrackingBeacon(candidate, fullTag)) {
+          mainImageUrl = candidate;
+        }
+      }
     }
 
     // Markdown/HTML image fallback for dynamic DOMs
@@ -341,7 +379,13 @@ export function parseProductHtmlContent(
         const src = extractImageUrl(imgMatch[1]);
         if (!src) continue;
 
+        const preContext = html.slice(Math.max(0, imgMatch.index - 200), imgMatch.index);
+        const isEnclosedInLogoOrHeader =
+          /(?:class|id)=["'][^"']*(?:logo|brand|menu__logo|site-header|navbar)[^"']*/i.test(preContext) ||
+          /<a\s+[^>]*href=["'](?:\/|https?:\/\/[^\/"'\s]+\/?)["'][^>]*>\s*$/i.test(preContext.trim());
+
         const isLogoOrTiny =
+          isEnclosedInLogoOrHeader ||
           /alt=["'][^"']*logo[^"']*["']/i.test(fullTag) ||
           /class=["'][^"']*logo[^"']*["']/i.test(fullTag) ||
           /id=["'][^"']*logo[^"']*["']/i.test(fullTag) ||
@@ -707,7 +751,7 @@ export function parseProductHtmlContent(
       success: true,
       data: {
         title: title || "Product Landing Page",
-        current_price: currentPrice || `0 ${currencySymbol}`,
+        current_price: currentPrice || "",
         original_price: originalPrice || undefined,
         currency: currency || "TND",
         discount_or_offer: discountOrOffer || undefined,

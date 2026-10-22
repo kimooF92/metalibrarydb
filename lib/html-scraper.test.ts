@@ -151,3 +151,54 @@ test("parseProductHtmlContent uses DH for Moroccan .ma domains and MAD options",
   assert.equal(resWithOption.data?.current_price, "299 DH");
   assert.equal(resWithOption.data?.currency, "MAD");
 });
+
+test("parseProductHtmlContent rejects header/menu logos and prioritizes WooCommerce product gallery image", () => {
+  const wooHtml = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Table Flexible pour PC YL215 - Yallashopping</title>
+        <script type="application/ld+json">
+          {
+            "@context": "https://schema.org",
+            "@graph": [
+              {
+                "@type": "WebPage",
+                "@id": "https://yallashopping.tn/product/table-pc/#webpage",
+                "image": {
+                  "@type": "ImageObject",
+                  "url": "https://yallashopping.tn/wp-content/uploads/2023/10/real-product-image.jpg"
+                }
+              }
+            ]
+          }
+        </script>
+      </head>
+      <body>
+        <!-- Header Menu with Logo -->
+        <div class="et_pb_menu__logo-wrap">
+          <div class="et_pb_menu__logo">
+            <a href="https://yallashopping.tn/"><img width="320" height="200" src="https://yallashopping.tn/wp-content/uploads/2025/06/Untitled-design-2.png" class="wp-image-103568" /></a>
+          </div>
+        </div>
+        <!-- Product Main Container -->
+        <div class="woocommerce-product-gallery">
+          <img class="wp-post-image" src="https://yallashopping.tn/wp-content/uploads/2023/10/real-product-image.jpg" width="600" height="600" />
+        </div>
+        <p class="stock out-of-stock">Ce produit est actuellement en rupture et indisponible.</p>
+        <p class="price"></p>
+      </body>
+    </html>
+  `;
+
+  const res = parseProductHtmlContent(wooHtml, "https://yallashopping.tn/product/table-pc");
+  assert.equal(res.success, true);
+  assert.equal(res.data?.title, "Table Flexible pour PC YL215");
+  assert.equal(
+    res.data?.main_image_url,
+    "https://yallashopping.tn/wp-content/uploads/2023/10/real-product-image.jpg"
+  );
+  // Price should not be defaulted to fake 0 DT
+  assert.equal(res.data?.current_price, "");
+});
+
