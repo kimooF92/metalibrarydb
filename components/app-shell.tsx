@@ -28,7 +28,7 @@ export function AppShell({
     return <div className="h-full w-full bg-background overflow-y-auto flex flex-col">{children}</div>;
   }
 
-  const isProductsPage = pathname.startsWith("/products");
+  const isFullCanvasPage = pathname.startsWith("/products") || pathname.startsWith("/discovery");
 
   return (
     <AuthProvider initialRole={initialRole}>
@@ -42,7 +42,7 @@ export function AppShell({
                 <SmallPagesScanBanner />
                 <main
                   className={`flex-1 min-w-0 flex flex-col bg-background ${
-                    isProductsPage ? "h-full overflow-hidden p-0" : "overflow-y-auto p-4 md:px-6 md:py-5"
+                    isFullCanvasPage ? "h-full overflow-hidden p-0" : "overflow-y-auto p-4 md:px-6 md:py-5"
                   }`}
                 >
                   {children}

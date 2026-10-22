@@ -411,6 +411,18 @@ export const discoveredPages = pgTable(
     sampleUrls: text("sample_urls").array(),
     status: text("status").default("discovered").notNull(), // discovered | verifying | imported | ignored
     trackedPageId: uuid("tracked_page_id").references(() => trackedPages.id, { onDelete: "set null" }),
+
+    // Ephemeral Staging Columns (Zero-bloat primitive text types)
+    previewProductUrl: text("preview_product_url"),
+    previewProductTitle: text("preview_product_title"),
+    previewProductImage: text("preview_product_image"), // Remote CDN URL string only
+    previewProductPrice: text("preview_product_price"),
+    previewProductCurrency: text("preview_product_currency").default("TND"),
+    previewSource: text("preview_source").default("none"), // 'product_page' | 'homepage_fallback' | 'none'
+    previewScrapeStatus: text("preview_scrape_status").default("idle").notNull(), // 'idle' | 'pending' | 'processing' | 'scraped' | 'no_product' | 'failed' | 'promoted' | 'expired' | 'ignored'
+    previewScrapeAttempts: integer("preview_scrape_attempts").default(0).notNull(),
+    previewScrapedAt: timestamp("preview_scraped_at", { withTimezone: true }),
+
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -420,6 +432,10 @@ export const discoveredPages = pgTable(
     index("idx_discovered_pages_status").on(table.status),
     index("idx_discovered_pages_tracked_page_id").on(table.trackedPageId),
     index("idx_discovered_pages_run_page").on(table.runId, table.pageId),
+    // PARTIAL INDEX: Only indexes pending items for quick enrichment fetching
+    index("idx_discovered_pages_pending_preview")
+      .on(table.runId)
+      .where(sql`${table.previewScrapeStatus} = 'pending'`),
   ]
 );
 

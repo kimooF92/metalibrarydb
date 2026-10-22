@@ -7,6 +7,7 @@ import { inArray, eq, and, ne } from "drizzle-orm";
  * POST /api/discovery/ignore
  *
  * Marks discovered pages as "ignored" (or restores them back to "discovered").
+ * Ephemeral Guard: Immediately nulls all 5 preview staging columns on ignored pages.
  *
  * Supports:
  * - Specific page IDs: { discoveredPageIds: string[], restore?: boolean }
@@ -23,11 +24,18 @@ export async function POST(req: Request) {
     const targetStatus = restore ? "discovered" : "ignored";
 
     if (dismissRemaining && runId) {
-      // Mark all unmerged/un-ignored pages in this run as ignored
+      // Mark all unmerged/un-ignored pages in this run as ignored and immediately null ephemeral preview columns
       const updated = await db
         .update(discoveredPages)
         .set({
           status: "ignored",
+          previewProductUrl: null,
+          previewProductTitle: null,
+          previewProductImage: null,
+          previewProductPrice: null,
+          previewProductCurrency: null,
+          previewSource: "none",
+          previewScrapeStatus: "ignored",
           updatedAt: new Date(),
         })
         .where(
@@ -53,13 +61,27 @@ export async function POST(req: Request) {
       );
     }
 
-    // Update specific page IDs
+    // Update specific page IDs and null preview columns if ignored
+    const updatePayload: Record<string, any> = {
+      status: targetStatus,
+      updatedAt: new Date(),
+    };
+
+    if (!restore) {
+      updatePayload.previewProductUrl = null;
+      updatePayload.previewProductTitle = null;
+      updatePayload.previewProductImage = null;
+      updatePayload.previewProductPrice = null;
+      updatePayload.previewProductCurrency = null;
+      updatePayload.previewSource = "none";
+      updatePayload.previewScrapeStatus = "ignored";
+    } else {
+      updatePayload.previewScrapeStatus = "pending";
+    }
+
     const updated = await db
       .update(discoveredPages)
-      .set({
-        status: targetStatus,
-        updatedAt: new Date(),
-      })
+      .set(updatePayload)
       .where(inArray(discoveredPages.id, ids))
       .returning({ id: discoveredPages.id });
 
@@ -69,7 +91,7 @@ export async function POST(req: Request) {
       status: targetStatus,
       message: restore
         ? `Restored ${updated.length} page(s) to discovery feed`
-        : `Marked ${updated.length} page(s) as ignored`,
+        : `Marked ${updated.length} page(s) as ignored and cleaned staging data`,
     });
   } catch (error: any) {
     return NextResponse.json(

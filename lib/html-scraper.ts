@@ -1,4 +1,5 @@
 import type { ExtractedProductData } from "@/types";
+import net from "net";
 
 /**
  * Extracts JSON-LD schema objects from HTML content.
@@ -727,17 +728,103 @@ export function parseProductHtmlContent(
 
 /**
  * Direct fallback product extraction from landing page HTML.
+/**
+ * Validates that an IP or hostname is not in a private, loopback, or cloud-metadata subnet.
+ * Protects against IPv4 and IPv6 SSRF attacks.
+ */
+export function isSafePublicUrl(urlString: string): boolean {
+  try {
+    const url = new URL(urlString);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+
+    const hostname = url.hostname.toLowerCase().trim();
+    if (
+      !hostname ||
+      hostname === "localhost" ||
+      hostname.endsWith(".local") ||
+      hostname.endsWith(".internal") ||
+      hostname.endsWith(".onion") ||
+      hostname.endsWith(".lan") ||
+      hostname.endsWith(".home") ||
+      hostname.endsWith(".corp")
+    ) {
+      return false;
+    }
+
+    const cleanHost = hostname.startsWith("[") && hostname.endsWith("]")
+      ? hostname.slice(1, -1)
+      : hostname;
+
+    const ipVer = net.isIP(cleanHost);
+    if (ipVer === 4) {
+      const parts = cleanHost.split(".").map(Number);
+      const [o1, o2] = parts;
+      if (o1 === 127) return false; // 127.0.0.0/8 (Loopback)
+      if (o1 === 10) return false;  // 10.0.0.0/8 (Private)
+      if (o1 === 192 && o2 === 168) return false; // 192.168.0.0/16 (Private)
+      if (o1 === 172 && o2 >= 16 && o2 <= 31) return false; // 172.16.0.0/12 (Private)
+      if (o1 === 169 && o2 === 254) return false; // 169.254.0.0/16 (Link-local cloud metadata)
+      if (o1 === 0 || o1 >= 224) return false; // Current network, multicast, or reserved
+      return true;
+    }
+
+    if (ipVer === 6) {
+      if (cleanHost === "::1" || cleanHost === "::") return false; // Loopback or unspecified
+      if (/^0*(:0*)*:1$/.test(cleanHost)) return false; // Expanded loopback
+      if (/^0*(:0*)*:0$/.test(cleanHost)) return false; // Expanded unspecified
+      if (cleanHost.startsWith("fc") || cleanHost.startsWith("fd")) return false; // ULA / Private (fc00::/7)
+      if (/^fe[89ab]/i.test(cleanHost)) return false; // Link-local (fe80::/10)
+      if (/^fe[c-f]/i.test(cleanHost)) return false; // Site-local (fec0::/10)
+      if (cleanHost.includes("::ffff:")) return false; // IPv4-mapped IPv6
+      return true;
+    }
+
+    // Reject non-IP hostnames without a dot (e.g. internal machine names like 'admin', 'metadata')
+    if (!hostname.includes(".")) return false;
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Direct fallback product extraction from landing page HTML.
  * Parses JSON-LD, OpenGraph, Twitter Cards, and common e-commerce HTML DOM structures.
+ * Hardened with SSRF protection, manual redirect validation, byte-capping (512 KB), and active monotonic deadlines.
  */
 export async function scrapeProductDirectHtml(
   url: string,
   timeoutMs = 10000,
   maxRedirects = 2,
-  options?: { defaultCurrency?: string; defaultCurrencySymbol?: string }
+  options?: { defaultCurrency?: string; defaultCurrencySymbol?: string },
+  deadlineMs?: number
 ): Promise<{ success: boolean; data?: ExtractedProductData; error?: string; rawHtml?: string; finalUrl?: string }> {
+  const currentDeadline = deadlineMs || Date.now() + timeoutMs;
+  const remainingMs = currentDeadline - Date.now();
+
+  if (remainingMs <= 0) {
+    return {
+      success: false,
+      error: "Scrape deadline exceeded before fetch completed",
+    };
+  }
+
+  if (!isSafePublicUrl(url)) {
+    return {
+      success: false,
+      error: `[Security] Blocked unsafe target: ${url}`,
+    };
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), remainingMs);
+
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    let currentUrl = url;
+    let res: Response | null = null;
+    let redirectHops = 0;
+    const maxHttpRedirects = Math.max(1, maxRedirects || 2);
 
     const headers: Record<string, string> = {
       "User-Agent":
@@ -747,26 +834,118 @@ export async function scrapeProductDirectHtml(
       "Cache-Control": "no-cache",
     };
 
-    const res = await fetch(url, {
-      headers,
-      signal: controller.signal,
-      redirect: "follow",
-    });
+    while (true) {
+      if (!isSafePublicUrl(currentUrl)) {
+        return {
+          success: false,
+          error: `[Security] Blocked unsafe target: ${currentUrl}`,
+        };
+      }
 
-    clearTimeout(timeoutId);
+      res = await fetch(currentUrl, {
+        headers,
+        signal: controller.signal,
+        redirect: "manual",
+      });
 
-    if (!res.ok) {
-      const isDead = res.status === 404 || res.status === 410;
+      const isRedirect = res.status >= 300 && res.status < 400;
+      if (isRedirect) {
+        redirectHops++;
+        if (redirectHops > maxHttpRedirects) {
+          return {
+            success: false,
+            error: `Too many redirects (exceeded limit of ${maxHttpRedirects})`,
+          };
+        }
+
+        const locationHeader = res.headers.get("location");
+        if (!locationHeader) {
+          return {
+            success: false,
+            error: `Redirect status HTTP ${res.status} returned without Location header`,
+          };
+        }
+
+        let nextUrl: string;
+        try {
+          nextUrl = new URL(locationHeader, currentUrl).toString();
+        } catch {
+          return {
+            success: false,
+            error: `Invalid redirect Location header: ${locationHeader}`,
+          };
+        }
+
+        if (!isSafePublicUrl(nextUrl)) {
+          return {
+            success: false,
+            error: `[Security] Blocked redirect to unsafe URL: ${nextUrl}`,
+          };
+        }
+
+        currentUrl = nextUrl;
+        continue;
+      }
+
+      break;
+    }
+
+    if (!res || !res.ok) {
+      const status = res?.status || 500;
+      const statusText = res?.statusText || "Internal Server Error";
+      const isDead = status === 404 || status === 410;
       return {
         success: false,
         error: isDead
-          ? `[Dead link] HTTP ${res.status}: ${res.statusText}`
-          : `Landing page returned HTTP ${res.status}: ${res.statusText}`,
+          ? `[Dead link] HTTP ${status}: ${statusText}`
+          : `Landing page returned HTTP ${status}: ${statusText}`,
       };
     }
 
-    const html = await res.text();
-    const cleanUrl = res.url || url;
+    // Verify content-length header if provided
+    const contentLength = Number(res.headers.get("content-length"));
+    if (contentLength && contentLength > 3 * 1024 * 1024) {
+      return {
+        success: false,
+        error: `Response size exceeds limit (${contentLength} bytes)`,
+      };
+    }
+
+    // Stream up to 512 KB to prevent memory exhaustion
+    // The timeout remains active throughout the streaming process
+    let html = "";
+    if (res.body) {
+      const maxBytes = 512 * 1024;
+      const reader = res.body.getReader();
+      let receivedBytes = 0;
+      const chunks: Uint8Array[] = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          chunks.push(value);
+          receivedBytes += value.length;
+          if (receivedBytes >= maxBytes) {
+            reader.cancel();
+            break;
+          }
+        }
+      }
+
+      const totalBuffer = new Uint8Array(receivedBytes);
+      let offset = 0;
+      for (const c of chunks) {
+        totalBuffer.set(c.slice(0, Math.min(c.length, receivedBytes - offset)), offset);
+        offset += c.length;
+        if (offset >= receivedBytes) break;
+      }
+      html = new TextDecoder("utf-8").decode(totalBuffer);
+    } else {
+      html = await res.text();
+    }
+
+    const cleanUrl = currentUrl;
     const baseOrigin = new URL(cleanUrl).origin;
 
     // Check for deleted / expired short URLs (e.g. shorturl.at, bit.ly 404s)
@@ -791,8 +970,8 @@ export async function scrapeProductDirectHtml(
             nextUrl = new URL(nextUrl, baseOrigin).toString();
           } catch {}
         }
-        if (nextUrl.startsWith("http") && nextUrl !== url && nextUrl !== cleanUrl) {
-          return scrapeProductDirectHtml(nextUrl, timeoutMs, maxRedirects - 1, options);
+        if (nextUrl.startsWith("http") && nextUrl !== url && nextUrl !== cleanUrl && isSafePublicUrl(nextUrl)) {
+          return scrapeProductDirectHtml(nextUrl, timeoutMs, maxRedirects - 1, options, currentDeadline);
         }
       }
 
@@ -800,8 +979,8 @@ export async function scrapeProductDirectHtml(
       const jsRedirectMatch = /(?:window\.)?location(?:\.href|\.replace)?\s*=\s*["'](https?:\/\/[^"']+)["']/i.exec(html);
       if (jsRedirectMatch && jsRedirectMatch[1]) {
         const nextUrl = jsRedirectMatch[1].trim();
-        if (nextUrl !== url && nextUrl !== cleanUrl && !html.includes("schema.org/Product") && !html.includes("og:price")) {
-          return scrapeProductDirectHtml(nextUrl, timeoutMs, maxRedirects - 1, options);
+        if (nextUrl !== url && nextUrl !== cleanUrl && !html.includes("schema.org/Product") && !html.includes("og:price") && isSafePublicUrl(nextUrl)) {
+          return scrapeProductDirectHtml(nextUrl, timeoutMs, maxRedirects - 1, options, currentDeadline);
         }
       }
     }
@@ -813,6 +992,12 @@ export async function scrapeProductDirectHtml(
       rawHtml: html,
     };
   } catch (err: any) {
+    if (err.name === "AbortError") {
+      return {
+        success: false,
+        error: "Scrape request timed out (deadline exceeded)",
+      };
+    }
     const isDead =
       err.code === "ENOTFOUND" ||
       err.message?.includes("ENOTFOUND") ||
@@ -824,5 +1009,7 @@ export async function scrapeProductDirectHtml(
         ? `[Dead link] Domain unreachable (${err.message})`
         : (err.message || "Failed to fetch and scrape landing page HTML."),
     };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

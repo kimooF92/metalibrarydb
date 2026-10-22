@@ -853,6 +853,12 @@ export async function runDiscoveryScan(
       const existingTrackedId = trackedPageMap.get(pageData.pageId) || null;
       const isIgnored = ignoredPageSet.has(pageData.pageId);
       const initialStatus = existingTrackedId ? "imported" : isIgnored ? "ignored" : "discovered";
+      const initialPreviewStatus =
+        initialStatus === "imported"
+          ? "promoted"
+          : isIgnored
+          ? "ignored"
+          : "pending";
 
       await db
         .insert(discoveredPages)
@@ -867,6 +873,7 @@ export async function runDiscoveryScan(
           sampleUrls: Array.from(pageData.sampleUrls),
           status: initialStatus,
           trackedPageId: existingTrackedId,
+          previewScrapeStatus: initialPreviewStatus,
           createdAt: finishedAt,
           updatedAt: finishedAt,
         })
@@ -907,6 +914,16 @@ export async function runDiscoveryScan(
     console.log(
       `[Discovery Scanner] Scan complete (${finalStatus}). Scanned: ${scannedAdIds.size} ads | Discovered: ${savedPagesCount} unique pages.`
     );
+
+    // Decoupled Ephemeral Enrichment (Runs outside active browser session)
+    if (savedPagesCount > 0) {
+      try {
+        const { enrichDiscoveredPagesForRun } = await import("./discovery-enricher");
+        await enrichDiscoveredPagesForRun(runId);
+      } catch (enrichErr) {
+        console.warn("[Discovery Scanner] Non-fatal product enrichment error:", enrichErr);
+      }
+    }
 
     return {
       status: finalStatus,

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { discoveredPages, trackedPages, queue } from "@/db/schema";
-import { inArray, eq, and, isNull, ne } from "drizzle-orm";
+import { discoveredPages, trackedPages, queue, scrapedProducts } from "@/db/schema";
+import { inArray, eq, and, ne } from "drizzle-orm";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 
 export async function POST(req: Request) {
@@ -68,140 +68,200 @@ export async function POST(req: Request) {
     let newJobsCount = 0;
 
     for (const discPage of pagesToImport) {
-      let tpId: string | undefined = undefined;
+      await db.transaction(async (tx) => {
+        // 1. Atomically lock & mark page as imported, clearing ephemeral preview columns immediately
+        const [claimed] = await tx
+          .update(discoveredPages)
+          .set({
+            status: "imported",
+            previewProductUrl: null,
+            previewProductTitle: null,
+            previewProductImage: null,
+            previewProductPrice: null,
+            previewProductCurrency: null,
+            previewSource: "none",
+            previewScrapeStatus: "promoted",
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(discoveredPages.id, discPage.id),
+              ne(discoveredPages.status, "imported")
+            )
+          )
+          .returning({ id: discoveredPages.id });
 
-      // 1. If this discovered page has a parent tracked page that is an exact-match / keyword target, merge it cleanly
-      if (discPage.trackedPageId) {
-        const parentTrackedPage = await db.query.trackedPages.findFirst({
-          where: eq(trackedPages.id, discPage.trackedPageId),
-        });
+        if (!claimed) {
+          // Already imported concurrently by another request
+          return;
+        }
 
-        if (parentTrackedPage && parentTrackedPage.searchType !== "page") {
-          const { mergeExactMatchWithPageId } = await import("@/actions/merge-pages");
-          const mergeResult = await mergeExactMatchWithPageId(
-            discPage.trackedPageId,
-            discPage.pageId,
-            discPage.displayName
-          );
+        let tpId: string | undefined = undefined;
 
-          if (mergeResult.success && mergeResult.mergedPageId) {
-            tpId = mergeResult.mergedPageId;
+        // 2. If this discovered page has a parent tracked page that is an exact-match / keyword target, merge it cleanly
+        if (discPage.trackedPageId) {
+          const parentTrackedPage = await tx.query.trackedPages.findFirst({
+            where: eq(trackedPages.id, discPage.trackedPageId),
+            columns: { id: true, searchType: true },
+          });
+
+          if (parentTrackedPage && parentTrackedPage.searchType !== "page") {
+            const { mergeExactMatchWithPageId } = await import("@/actions/merge-pages");
+            const mergeResult = await mergeExactMatchWithPageId(
+              discPage.trackedPageId,
+              discPage.pageId,
+              discPage.displayName
+            );
+
+            if (mergeResult.success && mergeResult.mergedPageId) {
+              tpId = mergeResult.mergedPageId;
+            }
           }
         }
-      }
 
-      // 2. If not merged via exact match parent, insert or update canonical page
-      if (!tpId) {
-        const pageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&view_all_page_id=${discPage.pageId}&search_type=page&media_type=all`;
+        // 3. If not merged via exact match parent, insert or update canonical tracked page
+        if (!tpId) {
+          const pageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&view_all_page_id=${discPage.pageId}&search_type=page&media_type=all`;
 
-        // Check if page with this pageId already exists in this workspace
-        const existingByPageId = await db.query.trackedPages.findFirst({
-          where: and(
-            eq(trackedPages.pageId, discPage.pageId),
-            activeWorkspace?.id ? eq(trackedPages.workspaceId, activeWorkspace.id) : undefined
-          ),
-        });
+          const existingByPageId = await tx.query.trackedPages.findFirst({
+            where: and(
+              eq(trackedPages.pageId, discPage.pageId),
+              activeWorkspace?.id ? eq(trackedPages.workspaceId, activeWorkspace.id) : undefined
+            ),
+            columns: { id: true, displayName: true, brandDomainId: true, canonicalDomain: true },
+          });
 
-        let candidateDomain = "";
-        if (discPage.sampleUrls && discPage.sampleUrls.length > 0) {
-          const { resolveTrackableDomain } = await import("@/lib/url-parser");
-          const SHORTENERS = new Set(["bit.ly", "shorturl.at", "tinyurl.com", "wa.me", "api.whatsapp.com", "facebook.com", "instagram.com"]);
-          for (const u of discPage.sampleUrls) {
+          let candidateDomain = "";
+          if (discPage.sampleUrls && discPage.sampleUrls.length > 0) {
+            const { resolveTrackableDomain } = await import("@/lib/url-parser");
+            const SHORTENERS = new Set(["bit.ly", "shorturl.at", "tinyurl.com", "wa.me", "api.whatsapp.com", "facebook.com", "instagram.com"]);
+            for (const u of discPage.sampleUrls) {
+              try {
+                const parsedHost = new URL(u.startsWith("http") ? u : `https://${u}`).hostname;
+                const dom = resolveTrackableDomain(parsedHost);
+                if (dom && !SHORTENERS.has(dom) && dom.includes(".")) {
+                  candidateDomain = dom;
+                  break;
+                }
+              } catch (e) {}
+            }
+          }
+
+          let brandDomainId: string | null = null;
+          if (candidateDomain) {
             try {
-              const parsedHost = new URL(u.startsWith("http") ? u : `https://${u}`).hostname;
-              const dom = resolveTrackableDomain(parsedHost);
-              if (dom && !SHORTENERS.has(dom) && dom.includes(".")) {
-                candidateDomain = dom;
-                break;
-              }
+              const { getOrCreateBrandDomain } = await import("@/lib/domain-portfolio");
+              const bd = await getOrCreateBrandDomain(candidateDomain, discPage.displayName, activeWorkspace?.id);
+              brandDomainId = bd.id;
             } catch (e) {}
           }
-        }
 
-        let brandDomainId: string | null = null;
-        if (candidateDomain) {
-          try {
-            const { getOrCreateBrandDomain } = await import("@/lib/domain-portfolio");
-            const bd = await getOrCreateBrandDomain(candidateDomain, discPage.displayName, activeWorkspace?.id);
-            brandDomainId = bd.id;
-          } catch (e) {}
-        }
-
-        if (existingByPageId) {
-          tpId = existingByPageId.id;
-          await db
-            .update(trackedPages)
-            .set({
-              url: pageUrl,
-              displayName: discPage.displayName || existingByPageId.displayName,
-              searchType: "page",
-              brandDomainId: brandDomainId || existingByPageId.brandDomainId || null,
-              canonicalDomain: candidateDomain || existingByPageId.canonicalDomain || null,
-              updatedAt: new Date(),
-            })
-            .where(eq(trackedPages.id, existingByPageId.id));
-        } else {
-          const [tp] = await db
-            .insert(trackedPages)
-            .values({
-              url: pageUrl,
-              displayName: discPage.displayName || `Page ${discPage.pageId}`,
-              pageId: discPage.pageId,
-              searchType: "page",
-              country: discPage.country || activeWorkspace?.countryCode || "TN",
-              adCount: discPage.matchingAdCount,
-              currentResults: discPage.verifiedAdCount || discPage.matchingAdCount,
-              brandDomainId: brandDomainId || null,
-              canonicalDomain: candidateDomain || null,
-              workspaceId: activeWorkspace?.id,
-              status: "pending",
-            })
-            .onConflictDoUpdate({
-              target: trackedPages.url,
-              set: {
-                displayName: discPage.displayName || trackedPages.displayName,
+          if (existingByPageId) {
+            tpId = existingByPageId.id;
+            await tx
+              .update(trackedPages)
+              .set({
+                url: pageUrl,
+                displayName: discPage.displayName || existingByPageId.displayName,
+                searchType: "page",
+                brandDomainId: brandDomainId || existingByPageId.brandDomainId || null,
+                canonicalDomain: candidateDomain || existingByPageId.canonicalDomain || null,
+                updatedAt: new Date(),
+              })
+              .where(eq(trackedPages.id, existingByPageId.id));
+          } else {
+            const [tp] = await tx
+              .insert(trackedPages)
+              .values({
+                url: pageUrl,
+                displayName: discPage.displayName || `Page ${discPage.pageId}`,
                 pageId: discPage.pageId,
                 searchType: "page",
+                country: discPage.country || activeWorkspace?.countryCode || "TN",
+                adCount: discPage.matchingAdCount,
+                currentResults: discPage.verifiedAdCount || discPage.matchingAdCount,
                 brandDomainId: brandDomainId || null,
                 canonicalDomain: candidateDomain || null,
-                updatedAt: new Date(),
-              },
-            })
-            .returning();
-          tpId = tp.id;
+                workspaceId: activeWorkspace?.id,
+                status: "pending",
+              })
+              .onConflictDoUpdate({
+                target: trackedPages.url,
+                set: {
+                  displayName: discPage.displayName || trackedPages.displayName,
+                  pageId: discPage.pageId,
+                  searchType: "page",
+                  brandDomainId: brandDomainId || null,
+                  canonicalDomain: candidateDomain || null,
+                  updatedAt: new Date(),
+                },
+              })
+              .returning({ id: trackedPages.id });
+            tpId = tp.id;
+          }
         }
-      }
 
-      // Check if job already pending in queue
-      const existingQueueJob = await db.query.queue.findFirst({
-        where: (q, { and, eq, inArray }) =>
-          and(
-            eq(q.trackedPageId, tpId!),
-            eq(q.jobType, "count"),
-            inArray(q.status, ["pending", "running"])
-          ),
-      });
+        // Link trackedPageId back to discoveredPage
+        await tx
+          .update(discoveredPages)
+          .set({ trackedPageId: tpId })
+          .where(eq(discoveredPages.id, discPage.id));
 
-      if (!existingQueueJob) {
-        await db.insert(queue).values({
-          trackedPageId: tpId!,
-          workspaceId: activeWorkspace?.id,
-          jobType: "count",
-          status: "pending",
+        // 4. Product Promotion (Seed scraped_products only if valid deep product URL and image exist)
+        if (
+          discPage.previewProductUrl &&
+          discPage.previewProductImage &&
+          discPage.previewSource === "product_page"
+        ) {
+          const existingProduct = await tx.query.scrapedProducts.findFirst({
+            where: eq(scrapedProducts.url, discPage.previewProductUrl),
+            columns: { id: true },
+          });
+
+          if (!existingProduct) {
+            let productDomain: string | null = null;
+            try {
+              productDomain = new URL(discPage.previewProductUrl).hostname.replace(/^www\./, "");
+            } catch {}
+
+            await tx.insert(scrapedProducts).values({
+              url: discPage.previewProductUrl,
+              domain: productDomain,
+              title: discPage.previewProductTitle || "Validated Discovered Product",
+              mainImageUrl: discPage.previewProductImage,
+              currentPrice: discPage.previewProductPrice,
+              currency: discPage.previewProductCurrency || "TND",
+              pageId: discPage.pageId,
+              scrapeStatus: "success",
+              workspaceId: activeWorkspace?.id,
+              lastScrapedAt: new Date(),
+            });
+          }
+        }
+
+        // 5. Enqueue count job in queue if not already present
+        const existingQueueJob = await tx.query.queue.findFirst({
+          where: (q, { and, eq, inArray }) =>
+            and(
+              eq(q.trackedPageId, tpId!),
+              eq(q.jobType, "count"),
+              inArray(q.status, ["pending", "running"])
+            ),
+          columns: { id: true },
         });
-        newJobsCount++;
-      }
 
-      await db
-        .update(discoveredPages)
-        .set({
-          status: "imported",
-          trackedPageId: tpId!,
-          updatedAt: new Date(),
-        })
-        .where(eq(discoveredPages.id, discPage.id));
+        if (!existingQueueJob) {
+          await tx.insert(queue).values({
+            trackedPageId: tpId!,
+            workspaceId: activeWorkspace?.id,
+            jobType: "count",
+            status: "pending",
+          });
+          newJobsCount++;
+        }
 
-      importedCount++;
+        importedCount++;
+      });
     }
 
     for (const directPage of directPages) {
@@ -211,83 +271,94 @@ export async function POST(req: Request) {
       const pageCountry = directPage.country || activeWorkspace?.countryCode || "ALL";
       const pageUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&view_all_page_id=${cleanPageId}&search_type=page&media_type=all`;
 
-      const existingByPageId = await db.query.trackedPages.findFirst({
-        where: and(
-          eq(trackedPages.pageId, cleanPageId),
-          activeWorkspace?.id ? eq(trackedPages.workspaceId, activeWorkspace.id) : undefined
-        ),
-      });
+      await db.transaction(async (tx) => {
+        const existingByPageId = await tx.query.trackedPages.findFirst({
+          where: and(
+            eq(trackedPages.pageId, cleanPageId),
+            activeWorkspace?.id ? eq(trackedPages.workspaceId, activeWorkspace.id) : undefined
+          ),
+          columns: { id: true, displayName: true },
+        });
 
-      let tpId: string;
-      if (existingByPageId) {
-        tpId = existingByPageId.id;
-        await db
-          .update(trackedPages)
-          .set({
-            url: pageUrl,
-            displayName: directPage.displayName || existingByPageId.displayName,
-            searchType: "page",
-            updatedAt: new Date(),
-          })
-          .where(eq(trackedPages.id, existingByPageId.id));
-      } else {
-        const [tp] = await db
-          .insert(trackedPages)
-          .values({
-            url: pageUrl,
-            displayName: directPage.displayName || `Page ${cleanPageId}`,
-            pageId: cleanPageId,
-            searchType: "page",
-            country: pageCountry,
-            adCount: directPage.matchingAdCount || 0,
-            currentResults: directPage.matchingAdCount || 0,
-            workspaceId: activeWorkspace?.id,
-            status: "pending",
-          })
-          .onConflictDoUpdate({
-            target: trackedPages.url,
-            set: {
-              displayName: directPage.displayName || trackedPages.displayName,
-              pageId: cleanPageId,
+        let tpId: string;
+        if (existingByPageId) {
+          tpId = existingByPageId.id;
+          await tx
+            .update(trackedPages)
+            .set({
+              url: pageUrl,
+              displayName: directPage.displayName || existingByPageId.displayName,
               searchType: "page",
               updatedAt: new Date(),
-            },
-          })
-          .returning();
-        tpId = tp.id;
-      }
+            })
+            .where(eq(trackedPages.id, existingByPageId.id));
+        } else {
+          const [tp] = await tx
+            .insert(trackedPages)
+            .values({
+              url: pageUrl,
+              displayName: directPage.displayName || `Page ${cleanPageId}`,
+              pageId: cleanPageId,
+              searchType: "page",
+              country: pageCountry,
+              adCount: directPage.matchingAdCount || 0,
+              currentResults: directPage.matchingAdCount || 0,
+              workspaceId: activeWorkspace?.id,
+              status: "pending",
+            })
+            .onConflictDoUpdate({
+              target: trackedPages.url,
+              set: {
+                displayName: directPage.displayName || trackedPages.displayName,
+                pageId: cleanPageId,
+                searchType: "page",
+                updatedAt: new Date(),
+              },
+            })
+            .returning({ id: trackedPages.id });
+          tpId = tp.id;
+        }
 
-      // Check if job already pending in queue
-      const existingQueueJob = await db.query.queue.findFirst({
-        where: (q, { and, eq, inArray }) =>
-          and(
-            eq(q.trackedPageId, tpId),
-            eq(q.jobType, "count"),
-            inArray(q.status, ["pending", "running"])
-          ),
-      });
-
-      if (!existingQueueJob) {
-        await db.insert(queue).values({
-          trackedPageId: tpId,
-          workspaceId: activeWorkspace?.id,
-          jobType: "count",
-          status: "pending",
+        // Check if job already pending in queue
+        const existingQueueJob = await tx.query.queue.findFirst({
+          where: (q, { and, eq, inArray }) =>
+            and(
+              eq(q.trackedPageId, tpId),
+              eq(q.jobType, "count"),
+              inArray(q.status, ["pending", "running"])
+            ),
+          columns: { id: true },
         });
-        newJobsCount++;
-      }
 
-      // Mark any matching discoveredPages as imported
-      await db
-        .update(discoveredPages)
-        .set({
-          status: "imported",
-          trackedPageId: tpId,
-          updatedAt: new Date(),
-        })
-        .where(eq(discoveredPages.pageId, cleanPageId));
+        if (!existingQueueJob) {
+          await tx.insert(queue).values({
+            trackedPageId: tpId,
+            workspaceId: activeWorkspace?.id,
+            jobType: "count",
+            status: "pending",
+          });
+          newJobsCount++;
+        }
 
-      importedCount++;
+        // Mark any matching discoveredPages as imported and null their preview columns
+        await tx
+          .update(discoveredPages)
+          .set({
+            status: "imported",
+            trackedPageId: tpId,
+            previewProductUrl: null,
+            previewProductTitle: null,
+            previewProductImage: null,
+            previewProductPrice: null,
+            previewProductCurrency: null,
+            previewSource: "none",
+            previewScrapeStatus: "promoted",
+            updatedAt: new Date(),
+          })
+          .where(eq(discoveredPages.pageId, cleanPageId));
+
+        importedCount++;
+      });
     }
 
     return NextResponse.json({
@@ -302,4 +373,3 @@ export async function POST(req: Request) {
     );
   }
 }
-
