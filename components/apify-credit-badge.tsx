@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { Zap, RefreshCw, Key } from "lucide-react";
+import { Zap, RefreshCw, Key, Clock, RotateCcw } from "lucide-react";
 import { ApifyBalanceInfo } from "@/lib/apify";
 
 export function ApifyCreditBadge() {
   const [balance, setBalance] = useState<ApifyBalanceInfo | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<boolean>(false);
   const [isOpen, setIsOpen] = useState<boolean>(false);
 
@@ -15,6 +16,7 @@ export function ApifyCreditBadge() {
 
   const fetchBalance = async (force = false) => {
     try {
+      if (force) setIsRefreshing(true);
       const url = force ? "/api/apify/balance?force=true" : "/api/apify/balance";
       const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to fetch balance");
@@ -25,6 +27,7 @@ export function ApifyCreditBadge() {
       setError(true);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -149,77 +152,143 @@ export function ApifyCreditBadge() {
         )}
       </div>
 
-      {/* Simplified, Clean Popover on Hover */}
+      {/* Enhanced Popover on Hover with Cycle Loop & Days Remaining */}
       {isOpen && balance && (
         <div
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
-          className="absolute right-0 top-full mt-1.5 w-76 sm:w-80 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl p-3 z-50 animate-in fade-in-0 duration-100 select-none text-slate-800 dark:text-slate-200 overflow-x-hidden"
+          className="absolute right-0 top-full mt-1.5 w-84 sm:w-96 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl p-3 z-50 animate-in fade-in-0 duration-100 select-none text-slate-800 dark:text-slate-200 overflow-x-hidden"
         >
           {/* Header */}
           <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800/80">
-            <span className="text-xs font-bold text-slate-900 dark:text-white">
-              Apify Keys ({totalKeys})
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-bold text-slate-900 dark:text-white">
+                Apify Keys & Cycle Loop ({totalKeys})
+              </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  fetchBalance(true);
+                }}
+                disabled={isRefreshing}
+                title="Force refresh token balances and renewal dates"
+                className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+              >
+                <RefreshCw className={`w-3 h-3 ${isRefreshing ? "animate-spin text-indigo-500" : ""}`} />
+              </button>
+            </div>
             <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
               Pool: <strong className="text-emerald-600 dark:text-emerald-400">${totalPoolRemaining.toFixed(2)}</strong> / ${totalPoolMax.toFixed(2)}
             </span>
           </div>
 
-          {/* Simple List of Every Key */}
-          <div className="divide-y divide-slate-100 dark:divide-slate-800/60 mt-1 max-h-56 overflow-y-auto overflow-x-hidden">
+          {/* List of Every Key with Renewal & Cycle Days Remaining */}
+          <div className="divide-y divide-slate-100 dark:divide-slate-800/60 mt-1 max-h-64 overflow-y-auto overflow-x-hidden">
             {balance.keys && balance.keys.length > 0 ? (
               balance.keys.map((k) => (
                 <div
                   key={k.index}
-                  className={`flex items-center justify-between py-1.5 px-1.5 text-xs rounded-md ${
-                    k.isActive ? "bg-emerald-500/10" : ""
+                  className={`py-2 px-1.5 text-xs rounded-lg transition-colors ${
+                    k.isActive ? "bg-emerald-500/10" : "hover:bg-slate-50 dark:hover:bg-slate-800/30"
                   }`}
                 >
-                  {/* Left: Key index + Status badge + Masked token */}
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="font-mono font-bold text-[10px] text-slate-500 shrink-0 w-3.5">
-                      #{k.index}
-                    </span>
+                  {/* Row 1: Key index + Status badge + Masked token + Balance */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="font-mono font-bold text-[10px] text-slate-500 shrink-0 w-3.5">
+                        #{k.index}
+                      </span>
 
-                    {k.isActive ? (
-                      <span className="px-1.5 py-0.5 rounded text-[9.5px] font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shrink-0">
-                        In Use
-                      </span>
-                    ) : k.isExhausted ? (
-                      <span className="px-1.5 py-0.5 rounded text-[9.5px] font-medium bg-rose-500/10 text-rose-500 dark:text-rose-400 shrink-0">
-                        Exhausted
-                      </span>
-                    ) : (
-                      <span className="px-1.5 py-0.5 rounded text-[9.5px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-400 shrink-0">
-                        Standby
-                      </span>
-                    )}
+                      {k.isActive ? (
+                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shrink-0">
+                          In Use
+                        </span>
+                      ) : k.isExhausted ? (
+                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-medium bg-rose-500/10 text-rose-500 dark:text-rose-400 shrink-0">
+                          Exhausted
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-400 shrink-0">
+                          Standby
+                        </span>
+                      )}
 
-                    <span className="font-mono text-[10px] text-slate-400 truncate max-w-[85px]">
-                      {k.token}
-                    </span>
+                      <span className="font-mono text-[10px] text-slate-400 truncate max-w-[100px]">
+                        {k.token}
+                      </span>
+                    </div>
+
+                    {/* Right: Balance */}
+                    <div className="font-mono text-right shrink-0 text-xs pl-2">
+                      <span
+                        className={
+                          k.isActive
+                            ? "font-bold text-slate-900 dark:text-white"
+                            : k.isExhausted
+                            ? "text-slate-400 line-through"
+                            : "text-slate-600 dark:text-slate-300"
+                        }
+                      >
+                        ${k.remainingUsd.toFixed(2)}
+                      </span>
+                      <span className="text-[10px] text-slate-400"> / ${k.maxMonthlyUsageUsd.toFixed(2)}</span>
+                    </div>
                   </div>
 
-                  {/* Right: Balance */}
-                  <div className="font-mono text-right shrink-0 text-xs pl-2">
-                    <span
-                      className={
-                        k.isActive
-                          ? "font-bold text-slate-900 dark:text-white"
-                          : k.isExhausted
-                          ? "text-slate-400 line-through"
-                          : "text-slate-600 dark:text-slate-300"
-                      }
-                    >
-                      ${k.remainingUsd.toFixed(2)}
-                    </span>
-                    <span className="text-[10px] text-slate-400"> / ${k.maxMonthlyUsageUsd.toFixed(2)}</span>
+                  {/* Row 2: Days Remaining, Renewal Date & Cycle Loop Details */}
+                  <div className="flex items-center justify-between mt-1 pl-5 text-[10px] text-slate-500 dark:text-slate-400">
+                    <div className="flex items-center gap-1 truncate">
+                      <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                      {typeof k.daysRemaining === "number" ? (
+                        k.daysRemaining <= 1 ? (
+                          <span className="font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1 py-0.2 rounded">
+                            ⚡ {k.resetCountdownText} ({k.renewalDateFormatted})
+                          </span>
+                        ) : (
+                          <span>
+                            Renews in <strong className="text-slate-700 dark:text-slate-200">{k.daysRemaining}d</strong> ({k.renewalDateFormatted})
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-slate-400">Renewal date unavailable</span>
+                      )}
+                    </div>
+
+                    {k.cycleDaysTotal ? (
+                      <span className="font-mono text-[9.5px] text-slate-400 shrink-0 pl-1">
+                        {k.cycleDaysTotal}d cycle ({k.cycleProgressPercent}%)
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               ))
             ) : (
               <div className="py-2 text-center text-xs text-slate-400">No keys configured</div>
+            )}
+          </div>
+
+          {/* Cycle Loop Rotation Footer */}
+          <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px]">
+            <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+              <RotateCcw className="w-3 h-3 text-indigo-500" />
+              <span>Cycle Loop Next Recharge:</span>
+            </span>
+            {balance.nextRenewalKeyIndex && typeof balance.nextRenewalDays === "number" ? (
+              <span className="font-medium text-slate-700 dark:text-slate-200">
+                Key #{balance.nextRenewalKeyIndex} in{" "}
+                <strong
+                  className={
+                    balance.nextRenewalDays <= 1
+                      ? "text-emerald-600 dark:text-emerald-400 font-bold"
+                      : "text-indigo-600 dark:text-indigo-400 font-bold"
+                  }
+                >
+                  {balance.nextRenewalDays === 0 ? "today" : `${balance.nextRenewalDays}d`}
+                </strong>
+              </span>
+            ) : (
+              <span className="text-slate-400">Continuous rotation</span>
             )}
           </div>
         </div>

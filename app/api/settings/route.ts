@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { appSettings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { validateAdminRole } from "@/lib/api-guard";
+import { getApifyTokens } from "@/lib/apify";
 
 const DEFAULT_SETTINGS = {
   id: "default",
@@ -33,13 +34,7 @@ export async function GET(request: Request) {
       settings = inserted || DEFAULT_SETTINGS as any;
     }
 
-    const rawTokens = process.env.APIFY_API_TOKENS || process.env.APIFY_API_TOKEN || "";
-    const apifyTokensConfigured = rawTokens
-      ? rawTokens
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean).length
-      : 0;
+    const apifyTokensConfigured = getApifyTokens().length;
 
     const b2Configured = Boolean(
       process.env.B2_APPLICATION_KEY_ID && process.env.B2_APPLICATION_KEY

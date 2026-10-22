@@ -20,6 +20,11 @@ export interface ApifyTokenStatus {
   usagePercent: number;
   cycleStartAt?: string;
   cycleEndAt?: string;
+  daysRemaining?: number | null;
+  cycleDaysTotal?: number | null;
+  cycleProgressPercent?: number;
+  renewalDateFormatted?: string;
+  resetCountdownText?: string;
   error?: string;
 }
 
@@ -31,12 +36,96 @@ export interface ApifyBalanceInfo {
   usagePercent: number;
   cycleStartAt: string;
   cycleEndAt: string;
+  daysRemaining?: number | null;
+  cycleDaysTotal?: number | null;
+  cycleProgressPercent?: number;
+  renewalDateFormatted?: string;
+  resetCountdownText?: string;
+  nextRenewalDays?: number | null;
+  nextRenewalKeyIndex?: number | null;
   activeTokenIndex: number;
   totalTokensCount: number;
   totalPoolRemainingUsd: number;
   totalPoolMaxUsd: number;
   totalPoolUsagePercent: number;
   keys: ApifyTokenStatus[];
+}
+
+/**
+ * Calculates cycle loop metrics: days remaining until renewal, total cycle duration,
+ * cycle progress percentage, and human-friendly countdown text.
+ */
+export function calculateTokenCycleInfo(
+  cycleStartAt?: string,
+  cycleEndAt?: string
+): {
+  daysRemaining: number | null;
+  cycleDaysTotal: number | null;
+  cycleProgressPercent: number;
+  renewalDateFormatted: string;
+  resetCountdownText: string;
+} {
+  if (!cycleEndAt) {
+    return {
+      daysRemaining: null,
+      cycleDaysTotal: null,
+      cycleProgressPercent: 0,
+      renewalDateFormatted: "",
+      resetCountdownText: "Unknown renewal",
+    };
+  }
+
+  const endMs = new Date(cycleEndAt).getTime();
+  const nowMs = Date.now();
+  const diffMs = endMs - nowMs;
+
+  // Days remaining until cycle renewal:
+  // Math.ceil converts partial days into remaining days (e.g. 18 hours left -> 1 day remaining)
+  const daysRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+
+  let cycleDaysTotal: number | null = null;
+  let cycleProgressPercent = 0;
+
+  if (cycleStartAt) {
+    const startMs = new Date(cycleStartAt).getTime();
+    cycleDaysTotal = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
+    const elapsedMs = Math.max(0, nowMs - startMs);
+    const totalMs = Math.max(1, endMs - startMs);
+    cycleProgressPercent = Math.min(
+      100,
+      Math.max(0, Math.round((elapsedMs / totalMs) * 100))
+    );
+  }
+
+  let renewalDateFormatted = "";
+  try {
+    const endDate = new Date(cycleEndAt);
+    renewalDateFormatted = endDate.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    renewalDateFormatted = cycleEndAt.split("T")[0] || "";
+  }
+
+  let resetCountdownText = "";
+  if (daysRemaining === 0) {
+    resetCountdownText = "Renews today";
+  } else if (daysRemaining === 1) {
+    const hoursRemaining = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60)));
+    resetCountdownText =
+      hoursRemaining < 24 ? `Renews in ${hoursRemaining}h` : "Renews in 1 day";
+  } else {
+    resetCountdownText = `Renews in ${daysRemaining} days`;
+  }
+
+  return {
+    daysRemaining,
+    cycleDaysTotal,
+    cycleProgressPercent,
+    renewalDateFormatted,
+    resetCountdownText,
+  };
 }
 
 export interface ApifyActorRunResponse {
@@ -212,6 +301,11 @@ export async function getApifyAccountBalance(options?: {
               monthlyUsageUsd: 5,
               remainingUsd: 0,
               usagePercent: 100,
+              daysRemaining: null,
+              cycleDaysTotal: null,
+              cycleProgressPercent: 0,
+              renewalDateFormatted: "",
+              resetCountdownText: "Unknown renewal",
               error: `HTTP ${res.status}: ${errText.slice(0, 80)}`,
             };
           }
@@ -232,6 +326,10 @@ export async function getApifyAccountBalance(options?: {
             exhaustedTokens.add(token);
           }
 
+          const cycleStartAt = data?.monthlyUsageCycle?.startAt || "";
+          const cycleEndAt = data?.monthlyUsageCycle?.endAt || "";
+          const cycleInfo = calculateTokenCycleInfo(cycleStartAt, cycleEndAt);
+
           return {
             index: idx + 1,
             token: masked,
@@ -242,8 +340,13 @@ export async function getApifyAccountBalance(options?: {
             monthlyUsageUsd,
             remainingUsd,
             usagePercent,
-            cycleStartAt: data?.monthlyUsageCycle?.startAt || "",
-            cycleEndAt: data?.monthlyUsageCycle?.endAt || "",
+            cycleStartAt,
+            cycleEndAt,
+            daysRemaining: cycleInfo.daysRemaining,
+            cycleDaysTotal: cycleInfo.cycleDaysTotal,
+            cycleProgressPercent: cycleInfo.cycleProgressPercent,
+            renewalDateFormatted: cycleInfo.renewalDateFormatted,
+            resetCountdownText: cycleInfo.resetCountdownText,
           };
         } catch (err: any) {
           return {
@@ -256,6 +359,11 @@ export async function getApifyAccountBalance(options?: {
             monthlyUsageUsd: 5,
             remainingUsd: 0,
             usagePercent: 100,
+            daysRemaining: null,
+            cycleDaysTotal: null,
+            cycleProgressPercent: 0,
+            renewalDateFormatted: "",
+            resetCountdownText: "Unknown renewal",
             error: err.message || "Network error",
           };
         }
@@ -282,6 +390,19 @@ export async function getApifyAccountBalance(options?: {
           )
         : 0;
 
+    // Cycle loop metrics:
+    // Determine the next key that will renew in the cycle loop.
+    // Check exhausted keys first (to know when scraping capacity revives),
+    // or fall back to earliest renewing key across all configured keys.
+    const exhaustedKeysWithCycle = keyStatuses
+      .filter((k) => k.isExhausted && typeof k.daysRemaining === "number")
+      .sort((a, b) => (a.daysRemaining ?? 999) - (b.daysRemaining ?? 999));
+    const allKeysWithCycle = [...keyStatuses]
+      .filter((k) => typeof k.daysRemaining === "number")
+      .sort((a, b) => (a.daysRemaining ?? 999) - (b.daysRemaining ?? 999));
+
+    const nextRenewingKey = exhaustedKeysWithCycle[0] || allKeysWithCycle[0] || null;
+
     const activeKey = keyStatuses[activeIdx];
     const result: ApifyBalanceInfo = {
       token: activeKey.token,
@@ -291,6 +412,13 @@ export async function getApifyAccountBalance(options?: {
       usagePercent: activeKey.usagePercent,
       cycleStartAt: activeKey.cycleStartAt || "",
       cycleEndAt: activeKey.cycleEndAt || "",
+      daysRemaining: activeKey.daysRemaining ?? null,
+      cycleDaysTotal: activeKey.cycleDaysTotal ?? null,
+      cycleProgressPercent: activeKey.cycleProgressPercent ?? 0,
+      renewalDateFormatted: activeKey.renewalDateFormatted || "",
+      resetCountdownText: activeKey.resetCountdownText || "",
+      nextRenewalDays: nextRenewingKey?.daysRemaining ?? null,
+      nextRenewalKeyIndex: nextRenewingKey?.index ?? null,
       activeTokenIndex: activeKey.index,
       totalTokensCount: tokens.length,
       totalPoolRemainingUsd,
