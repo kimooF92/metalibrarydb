@@ -507,9 +507,9 @@ async function runWorker() {
         `\n[Processing ${jobType.toUpperCase()} Job (Priority: ${queueJob.priority || 1})] ID: ${queueJob.id} | Target: "${targetDisplayName}"`
       );
 
-      // Acquire distributed scrape lock to synchronize with cloud workers
+      // Acquire distributed scrape lock to synchronize with cloud workers (Meta Ad Library scans only)
       let lockKey: string | null = null;
-      if (trackedPage) {
+      if (trackedPage && jobType !== "product_scrape") {
         lockKey = `lock:scrape:${trackedPage.id}`;
         const acquired = await acquireLock(lockKey, 180);
         if (!acquired) {
