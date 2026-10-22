@@ -40,6 +40,7 @@ import { useWorkspace } from "@/components/workspace-context";
 import { DiscoveryProductCard, type DiscoveryProductPreviewItem } from "@/components/discovery/discovery-product-card";
 import { DiscoverySecondSidebar } from "@/components/discovery/discovery-second-sidebar";
 import { DiscoveryProductThumbnailPopover } from "@/components/discovery/discovery-product-thumbnail-popover";
+import { NewScanModal } from "@/components/discovery/new-scan-modal";
 
 interface DiscoveryRun {
   id: string;
@@ -245,6 +246,7 @@ export default function DiscoveryPage() {
   const [isLoadingRuns, setIsLoadingRuns] = useState(true);
   const [isLoadingPages, setIsLoadingPages] = useState(false);
   const [isLaunchingScan, setIsLaunchingScan] = useState(false);
+  const [isNewScanModalOpen, setIsNewScanModalOpen] = useState(false);
 
   // Search Mode: "controls" (Existing Search Controls) vs "url" (Direct Meta Ad Library URL)
   const [searchMode, setSearchMode] = useState<"controls" | "url">("controls");
@@ -698,6 +700,7 @@ export default function DiscoveryPage() {
       const data = await res.json();
       if (data.success && data.runId) {
         setSelectedRunId(data.runId);
+        setIsNewScanModalOpen(false);
         const kwDisplay = parsed.query && parsed.query !== "\u200D" ? parsed.query : "Broad URL Search";
         setActionMessage(`Discovery scan launched from Meta URL (${parsed.country} - ${kwDisplay})! Worker is harvesting pages...`);
         await fetchRuns();
@@ -734,7 +737,7 @@ export default function DiscoveryPage() {
       setActiveDatePreset("custom");
     }
     handleSetSearchMode("controls");
-    setActionMessage("✓ Transferred URL parameters into Search Controls!");
+    setActionMessage("Transferred URL parameters into Search Controls.");
   };
 
   // Handle Launching New Country Discovery Scan from Controls
@@ -759,6 +762,7 @@ export default function DiscoveryPage() {
       const data = await res.json();
       if (data.success && data.runId) {
         setSelectedRunId(data.runId);
+        setIsNewScanModalOpen(false);
         setActionMessage(`Country discovery scan launched with keyword ${finalQuery === "\u200D" ? "ZWJ (Broad Search)" : finalQuery}! Worker is harvesting pages...`);
         await fetchRuns();
       } else {
@@ -1044,10 +1048,10 @@ export default function DiscoveryPage() {
 
       {/* Main Content Area (Independent Scrollable Canvas) */}
       <div className="flex-1 min-w-0 h-full overflow-y-auto p-4 md:px-6 md:py-5 flex flex-col space-y-4">
-        {/* Top Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800/40">
-        <div className="flex items-center space-x-3">
-          <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+      {/* Top Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800/60">
+        <div className="flex items-center space-x-3 flex-wrap gap-y-2">
+          <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0 shadow-xs">
             <Globe className="w-5 h-5" />
           </div>
           <div>
@@ -1058,25 +1062,65 @@ export default function DiscoveryPage() {
               </span>
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Scan Meta Ad Library by country to uncover e-commerce brands matching "Shop Now" & "Order Now"
+              Scan Meta Ad Library to uncover active e-commerce brands & winning products
             </p>
           </div>
+
+          {/* Integrated Run Selector */}
+          {runs.length > 0 && (
+            <div className="sm:ml-3 flex items-center space-x-2 bg-slate-100 dark:bg-slate-900/80 px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner">
+              {activeRun?.status === "running" ? (
+                <Loader2 className="w-3.5 h-3.5 text-indigo-500 animate-spin shrink-0" />
+              ) : (
+                <Layers className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+              )}
+              <select
+                value={selectedRunId || ""}
+                onChange={(e) => setSelectedRunId(e.target.value)}
+                className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer max-w-[220px] sm:max-w-[320px] truncate pr-1"
+                title="Switch active discovery run"
+              >
+                {runs.map((r) => {
+                  const kw = getRunKeywordDisplay(r);
+                  const dateStr = new Date(r.createdAt).toLocaleDateString([], { month: "short", day: "numeric" });
+                  const isRunning = r.status === "running" || r.status === "pending";
+                  return (
+                    <option key={r.id} value={r.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+                      {isRunning ? "[Active] " : ""}{r.country} · {kw} ({r.totalPagesDiscovered} brands, {r.totalAdsScanned} ads) — {dateStr}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
         </div>
 
-        <button
-          onClick={async () => {
-            await fetchRuns();
-            if (selectedRunId) {
-              await fetchPages(selectedRunId);
-            }
-          }}
-          disabled={isLoadingRuns || isLoadingPages}
-          title="Refresh Scans & Pages"
-          className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shrink-0 disabled:opacity-60"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoadingRuns || isLoadingPages ? "animate-spin text-indigo-500" : ""}`} />
-          <span>{isLoadingRuns || isLoadingPages ? "Refreshing..." : "Refresh"}</span>
-        </button>
+        {/* Action Controls */}
+        <div className="flex items-center space-x-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsNewScanModalOpen(true)}
+            className="flex items-center space-x-1.5 text-xs font-bold px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm shadow-indigo-600/30 transition-all cursor-pointer"
+          >
+            <Play className="w-3.5 h-3.5 fill-current" />
+            <span>New Discovery Scan</span>
+          </button>
+
+          <button
+            onClick={async () => {
+              await fetchRuns();
+              if (selectedRunId) {
+                await fetchPages(selectedRunId);
+              }
+            }}
+            disabled={isLoadingRuns || isLoadingPages}
+            title="Refresh Scans & Pages"
+            className="flex items-center space-x-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer disabled:opacity-60"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoadingRuns || isLoadingPages ? "animate-spin text-indigo-500" : ""}`} />
+            <span className="hidden sm:inline">{isLoadingRuns || isLoadingPages ? "Refreshing..." : "Refresh"}</span>
+          </button>
+        </div>
       </div>
 
       {/* Action Notification Banner */}
@@ -1095,582 +1139,26 @@ export default function DiscoveryPage() {
         </div>
       )}
 
-      {/* Discovery Scanner Controls Panel */}
-      <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3.5 sm:p-4 space-y-3 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-200 dark:border-slate-800/80 pb-2.5">
-          {/* Mode Switcher Tabs */}
-          <div className="flex items-center space-x-2">
-            <div className="flex items-center bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800 shadow-inner">
-              <button
-                type="button"
-                onClick={() => handleSetSearchMode("controls")}
-                className={`flex items-center space-x-1.5 px-3 py-1 rounded-md text-xs font-bold transition cursor-pointer ${
-                  searchMode === "controls"
-                    ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                }`}
-              >
-                <Filter className="w-3.5 h-3.5" />
-                <span>Search Controls</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSetSearchMode("url")}
-                className={`flex items-center space-x-1.5 px-3 py-1 rounded-md text-xs font-bold transition cursor-pointer ${
-                  searchMode === "url"
-                    ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                }`}
-              >
-                <Link2 className="w-3.5 h-3.5" />
-                <span>Direct Meta URL</span>
-              </button>
-            </div>
+      {/* Empty Runs State (if no runs created yet) */}
+      {runs.length === 0 && !isLoadingRuns && (
+        <div className="p-8 sm:p-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950/40 space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto">
+            <Globe className="w-6 h-6" />
           </div>
-
-          <div className="flex items-center space-x-2 flex-wrap gap-1">
-            {/* Quick Date Presets only visible in Search Controls mode */}
-            {searchMode === "controls" && (
-              <>
-                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mr-1">Presets:</span>
-                <button
-                  type="button"
-                  onClick={() => applyDatePreset("today")}
-                  className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition cursor-pointer ${
-                    activeDatePreset === "today"
-                      ? "bg-indigo-600 text-white border-indigo-600"
-                      : "bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-200 dark:hover:bg-slate-800"
-                  }`}
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyDatePreset("last7")}
-                  className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition cursor-pointer ${
-                    activeDatePreset === "last7"
-                      ? "bg-indigo-600 text-white border-indigo-600"
-                      : "bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-200 dark:hover:bg-slate-800"
-                  }`}
-                >
-                  Last 7 Days
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyDatePreset("last30")}
-                  className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition cursor-pointer ${
-                    activeDatePreset === "last30"
-                      ? "bg-indigo-600 text-white border-indigo-600"
-                      : "bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-200 dark:hover:bg-slate-800"
-                  }`}
-                >
-                  Last 30 Days
-                </button>
-              </>
-            )}
-
-            <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 px-2 py-0.5 rounded-md flex items-center gap-1 ml-auto sm:ml-2">
-              <ShieldCheck className="w-3 h-3" />
-              CTA Active: "Shop Now" & "Order Now"
-            </span>
+          <div className="space-y-1">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">No Discovery Scans Yet</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+              Harvest active Meta Ad Library ads in Tunisia or worldwide to automatically uncover e-commerce brands and candidate winning products.
+            </p>
           </div>
-        </div>
-
-        {/* Dedicated Scan Depth & Capacity Controls Bar */}
-        <div className="p-3 rounded-xl bg-gradient-to-r from-indigo-50/90 via-white to-slate-50 dark:from-indigo-950/40 dark:via-slate-900/60 dark:to-slate-900/40 border-2 border-indigo-200/80 dark:border-indigo-800/60 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs">
-          <div className="flex items-center space-x-2.5 flex-wrap gap-y-2">
-            <div className="flex items-center space-x-1.5 text-xs font-extrabold text-slate-800 dark:text-slate-100">
-              <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                <Sliders className="w-3.5 h-3.5" />
-              </div>
-              <span className="tracking-tight">Scan Depth Limit:</span>
-            </div>
-
-            <div className="inline-flex items-center bg-white dark:bg-slate-950 p-1 rounded-lg border border-slate-200 dark:border-slate-800 shadow-inner gap-1 flex-wrap">
-              <button
-                type="button"
-                onClick={() => setScanDepthPreset("quick")}
-                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  scanDepthPreset === "quick"
-                    ? "bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-500"
-                    : "text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900"
-                }`}
-                title="Quick: 300 ads / 30 scrolls (~30-60s rapid brand discovery)"
-              >
-                <span>⚡ Quick</span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-medium ${scanDepthPreset === "quick" ? "bg-indigo-700 text-indigo-100" : "bg-slate-100 dark:bg-slate-800 text-slate-500"}`}>
-                  300 ads / 30 scrolls
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setScanDepthPreset("balanced")}
-                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  scanDepthPreset === "balanced"
-                    ? "bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-500"
-                    : "text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900"
-                }`}
-                title="Balanced: 1,000 ads / 75 scrolls (Optimal speed vs market breadth)"
-              >
-                <span>🎯 Balanced</span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-medium ${scanDepthPreset === "balanced" ? "bg-indigo-700 text-indigo-100" : "bg-slate-100 dark:bg-slate-800 text-slate-500"}`}>
-                  1,000 ads / 75 scrolls
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setScanDepthPreset("deep")}
-                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  scanDepthPreset === "deep"
-                    ? "bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-500"
-                    : "text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900"
-                }`}
-                title="Deep: 2,500 ads / 150 scrolls (Exhaustive search)"
-              >
-                <span>🚀 Deep</span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-medium ${scanDepthPreset === "deep" ? "bg-indigo-700 text-indigo-100" : "bg-slate-100 dark:bg-slate-800 text-slate-500"}`}>
-                  2,500 ads / 150 scrolls
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setScanDepthPreset("custom")}
-                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  scanDepthPreset === "custom"
-                    ? "bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-500"
-                    : "text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900"
-                }`}
-                title="Custom: Configure custom ads limit and scroll attempts"
-              >
-                <span>⚙️ Custom</span>
-              </button>
-            </div>
-          </div>
-
-          {/* If Custom is selected, show numeric inputs for Target Ads and Max Scrolls */}
-          {scanDepthPreset === "custom" ? (
-            <div className="flex items-center space-x-2.5 animate-in fade-in duration-150 bg-white dark:bg-slate-950 p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 shadow-xs">
-              <div className="flex items-center space-x-1">
-                <span className="text-[11px] text-slate-600 dark:text-slate-300 font-bold">Max Ads:</span>
-                <input
-                  type="number"
-                  min="50"
-                  max="10000"
-                  step="50"
-                  value={customMaxAds}
-                  onChange={(e) => setCustomMaxAds(e.target.value)}
-                  className="w-20 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div className="flex items-center space-x-1">
-                <span className="text-[11px] text-slate-600 dark:text-slate-300 font-bold">Max Scrolls:</span>
-                <input
-                  type="number"
-                  min="5"
-                  max="500"
-                  step="5"
-                  value={customMaxScrolls}
-                  onChange={(e) => setCustomMaxScrolls(e.target.value)}
-                  className="w-16 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1.5 font-medium bg-white/80 dark:bg-slate-950/60 px-3 py-1 rounded-lg border border-slate-200/80 dark:border-slate-800">
-              <span>Active Target:</span>
-              <strong className="text-indigo-600 dark:text-indigo-400 font-extrabold">{effectiveTargetMaxAds.toLocaleString()} ads</strong>
-              <span>·</span>
-              <span>Max:</span>
-              <strong className="text-slate-800 dark:text-slate-100 font-bold">{effectiveMaxScrolls} scrolls</strong>
-            </div>
-          )}
-        </div>
-
-        {/* Mode 1: Direct Meta Ad Library URL Input */}
-        {searchMode === "url" ? (
-          <div className="space-y-3 pt-1">
-            <div className="flex flex-col sm:flex-row gap-2.5">
-              <div className="relative flex-1">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 dark:text-slate-500">
-                  <Link2 className="w-4 h-4 text-indigo-500" />
-                </div>
-                <input
-                  type="text"
-                  value={directUrlInput}
-                  onChange={(e) => setDirectUrlInput(e.target.value)}
-                  placeholder="Paste full Meta Ad Library URL (e.g. https://www.facebook.com/ads/library/?active_status=active&country=TN&q=...)"
-                  className="w-full pl-9 pr-8 py-2 text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-100 font-mono placeholder:font-sans placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 transition shadow-inner"
-                />
-                {directUrlInput && (
-                  <button
-                    type="button"
-                    onClick={() => setDirectUrlInput("")}
-                    className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                    title="Clear URL"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-
-              <button
-                onClick={handleLaunchUrlScan}
-                disabled={isLaunchingScan || !parsedUrlPreview?.isValid}
-                className="h-[38px] px-5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-md shadow-indigo-600/20 flex items-center justify-center space-x-2 transition disabled:opacity-50 cursor-pointer shrink-0"
-              >
-                {isLaunchingScan ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Launching...</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Launch URL Discovery ({effectiveTargetMaxAds.toLocaleString()} Ads)</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* Parsed Parameter Badges & Live Status */}
-            {directUrlInput.trim() ? (
-              parsedUrlPreview?.isValid ? (
-                <div className="p-3 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/50 flex flex-col md:flex-row md:items-center justify-between gap-2.5 text-xs animate-in fade-in duration-150">
-                  <div className="flex items-center flex-wrap gap-2 text-slate-700 dark:text-slate-300">
-                    <span className="font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1 text-[11px] bg-emerald-100/80 dark:bg-emerald-900/50 px-2 py-0.5 rounded-md">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                      Valid Meta Search URL
-                    </span>
-
-                    {/* Country Badge */}
-                    <span className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-2 py-0.5 rounded-md font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1">
-                      <Globe className="w-3 h-3 text-indigo-500" />
-                      Country: <strong className="text-indigo-600 dark:text-indigo-400">{parsedUrlPreview.country}</strong>
-                    </span>
-
-                    {/* Query / Keyword / Page ID */}
-                    <span className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-2 py-0.5 rounded-md font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1 max-w-[280px] truncate" title={parsedUrlPreview.query}>
-                      <Search className="w-3 h-3 text-indigo-500 shrink-0" />
-                      <span className="truncate">
-                        {parsedUrlPreview.query === "\u200D" || parsedUrlPreview.query === "%E2%80%8D"
-                          ? "Broad Search (ZWJ)"
-                          : parsedUrlPreview.query.startsWith("page:")
-                          ? `Advertiser ${parsedUrlPreview.query}`
-                          : `Query: ${parsedUrlPreview.query}`}
-                      </span>
-                    </span>
-
-                    {/* Media Format */}
-                    <span className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-2 py-0.5 rounded-md font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1">
-                      <Layers className="w-3 h-3 text-indigo-500" />
-                      Media: <span className="capitalize">{parsedUrlPreview.mediaType}</span>
-                    </span>
-
-                    {/* Date Range if present */}
-                    {(parsedUrlPreview.startDateMin || parsedUrlPreview.startDateMax) && (
-                      <span className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-2 py-0.5 rounded-md font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1">
-                        <Calendar className="w-3 h-3 text-indigo-500" />
-                        {parsedUrlPreview.startDateMin || "Start"} → {parsedUrlPreview.startDateMax || "Present"}
-                      </span>
-                    )}
-
-                    {/* Languages if present */}
-                    {parsedUrlPreview.languages.length > 0 && (
-                      <span className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-2 py-0.5 rounded-md text-[11px] text-slate-600 dark:text-slate-400">
-                        Langs: {parsedUrlPreview.languages.join(", ")}
-                      </span>
-                    )}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handlePopulateControlsFromUrl(parsedUrlPreview)}
-                    className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 underline underline-offset-2 shrink-0 cursor-pointer self-start md:self-auto"
-                  >
-                    Load into Search Controls ›
-                  </button>
-                </div>
-              ) : (
-                <div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-200 text-xs flex items-center space-x-2 animate-in fade-in duration-150">
-                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                  <span>{parsedUrlPreview?.error || "Please enter a valid Facebook Ad Library URL (e.g. https://www.facebook.com/ads/library/?...)"}</span>
-                </div>
-              )
-            ) : (
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5 pl-1">
-                <span>💡 Tip: In your browser, apply any custom keyword, country, or filter on Meta Ad Library, then paste the full URL here to scan directly.</span>
-              </div>
-            )}
-          </div>
-        ) : (
-          /* Mode 2: Existing Search Controls Grid */
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5 text-xs">
-            {/* Country Selection */}
-            <div className="space-y-1">
-              <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <Globe className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
-                Target Country
-              </label>
-              <select
-                value={country}
-                onChange={(e) => setCountry(e.target.value)}
-                className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:border-indigo-500 transition cursor-pointer"
-              >
-                <option value="TN">TN — Tunisia 🇹🇳</option>
-                <option value="FR">FR — France 🇫🇷</option>
-                <option value="US">US — United States 🇺🇸</option>
-                <option value="AE">AE — UAE 🇦🇪</option>
-                <option value="SA">SA — Saudi Arabia 🇸🇦</option>
-                <option value="MA">MA — Morocco 🇲🇦</option>
-                <option value="DZ">DZ — Algeria 🇩🇿</option>
-                <option value="EG">EG — Egypt 🇪🇬</option>
-              </select>
-            </div>
-
-            {/* Keyword Selection */}
-            <div className="space-y-1">
-              <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <Search className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
-                Target Keyword
-              </label>
-              {isCustomKeyword ? (
-                <div className="space-y-1">
-                  <div className="flex items-center space-x-1">
-                    <div className="relative flex-1">
-                      <input
-                        type="text"
-                        placeholder='e.g. "شحن مجاني"'
-                        value={customKeywordText}
-                        onChange={(e) => setCustomKeywordText(e.target.value)}
-                        className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-2.5 pr-7 py-1.5 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:border-indigo-500 text-xs"
-                      />
-                      {customKeywordText && (
-                        <button
-                          type="button"
-                          onClick={() => setCustomKeywordText("")}
-                          className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded-full cursor-pointer transition-colors"
-                          title="Clear keyword"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsCustomKeyword(false);
-                        setSelectedKeyword("\u200D");
-                      }}
-                      title="Back to Presets"
-                      className="px-2 py-1.5 text-[10px] font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shrink-0 cursor-pointer"
-                    >
-                      Presets
-                    </button>
-                  </div>
-                  {/* Intelligent detection of pasted Meta URL in custom keyword box */}
-                  {customKeywordText.includes("facebook.com/ads/library") && (
-                    <div className="flex items-center justify-between text-[10px] text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 p-1 px-1.5 rounded border border-indigo-200 dark:border-indigo-800/60 animate-in fade-in">
-                      <span>Detected Meta URL!</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDirectUrlInput(customKeywordText);
-                          handleSetSearchMode("url");
-                          setCustomKeywordText("");
-                        }}
-                        className="font-bold underline hover:text-indigo-700 dark:hover:text-indigo-300 cursor-pointer"
-                      >
-                        Switch to Direct URL
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <select
-                  value={selectedKeyword}
-                  onChange={(e) => {
-                    if (e.target.value === "__CUSTOM__") {
-                      setIsCustomKeyword(true);
-                    } else {
-                      setSelectedKeyword(e.target.value);
-                    }
-                  }}
-                  className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-2 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:border-indigo-500 transition cursor-pointer text-xs"
-                >
-                  {KEYWORD_GROUPS.map((group) => (
-                    <optgroup key={group.groupName} label={`— ${group.groupName} —`}>
-                      {group.options.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                  <optgroup label="— Custom —">
-                    <option value="__CUSTOM__">✏️ Custom Keyword...</option>
-                  </optgroup>
-                </select>
-              )}
-            </div>
-
-            {/* Start Date Min */}
-            <div className="space-y-1">
-              <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
-                Start Date Min
-              </label>
-              <input
-                type="date"
-                value={startDateMin}
-                onChange={(e) => {
-                  setStartDateMin(e.target.value);
-                  setActiveDatePreset("custom");
-                }}
-                className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-1.5 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:border-indigo-500 transition cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
-              />
-            </div>
-
-            {/* Start Date Max */}
-            <div className="space-y-1">
-              <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
-                Start Date Max
-              </label>
-              <input
-                type="date"
-                value={startDateMax}
-                onChange={(e) => {
-                  setStartDateMax(e.target.value);
-                  setActiveDatePreset("custom");
-                }}
-                className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-1.5 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:border-indigo-500 transition cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
-              />
-            </div>
-
-            {/* Media Type */}
-            <div className="space-y-1">
-              <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
-                Media Format
-              </label>
-              <select
-                value={mediaType}
-                onChange={(e) => setMediaType(e.target.value as "all" | "video" | "image")}
-                className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:border-indigo-500 transition cursor-pointer"
-              >
-                <option value="video">Video Ads Only</option>
-                <option value="image">Image Ads Only</option>
-                <option value="all">All Formats</option>
-              </select>
-            </div>
-
-            {/* Launch Scan Button */}
-            <div className="flex items-end">
-              <button
-                onClick={handleLaunchScan}
-                disabled={isLaunchingScan}
-                className="w-full h-[36px] bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg shadow-md shadow-indigo-600/20 flex items-center justify-center space-x-2 transition disabled:opacity-50 cursor-pointer"
-              >
-                {isLaunchingScan ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Launching...</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Launch Discovery ({effectiveTargetMaxAds.toLocaleString()} Ads)</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Discovery Runs Selector */}
-      {runs.length > 0 && (
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3 space-y-2.5 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-indigo-500" />
-              <span>Discovery Scan Runs ({runs.length})</span>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <label className="text-[11px] text-slate-500 dark:text-slate-400 font-bold shrink-0">Select Run:</label>
-              <select
-                value={selectedRunId || ""}
-                onChange={(e) => setSelectedRunId(e.target.value)}
-                className="w-full sm:w-auto bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold rounded-lg px-3 py-1.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-sm"
-              >
-                {runs.map((r) => {
-                  const kw = getRunKeywordDisplay(r);
-                  const dateStr = new Date(r.createdAt).toLocaleDateString([], { month: "short", day: "numeric" });
-                  const timeStr = new Date(r.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-                  return (
-                    <option key={r.id} value={r.id}>
-                      {r.country} — Keyword: {kw} ({r.totalPagesDiscovered} pages, {r.totalAdsScanned} ads) — {dateStr} {timeStr}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-            {runs.slice(0, 4).map((run) => {
-              const isSelected = run.id === selectedRunId;
-              const isRunning = run.status === "running" || run.status === "pending";
-              const kw = getRunKeywordDisplay(run);
-
-              return (
-                <button
-                  key={run.id}
-                  onClick={() => setSelectedRunId(run.id)}
-                  className={`flex items-center justify-between p-2.5 rounded-lg border text-left transition cursor-pointer ${isSelected
-                      ? "bg-indigo-50/80 dark:bg-indigo-950/70 border-indigo-500 text-slate-900 dark:text-white shadow-sm ring-1 ring-indigo-500/30"
-                      : "bg-slate-50/50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800/80 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-slate-900 dark:hover:text-slate-200"
-                    }`}
-                >
-                  <div className="flex items-center space-x-2 min-w-0">
-                    {isRunning ? (
-                      <Loader2 className="w-3.5 h-3.5 text-indigo-500 animate-spin shrink-0" />
-                    ) : run.status === "completed" ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                    ) : (
-                      <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                    )}
-                    <div className="min-w-0">
-                      <div className="font-bold text-xs flex items-center gap-1.5">
-                        <span>Country: {run.country}</span>
-                        {isSelected && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400 shrink-0" />
-                        )}
-                      </div>
-                      <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate" title={`Keyword: ${kw}`}>
-                        KW: {kw} · {run.totalPagesDiscovered} p · {run.totalAdsScanned}{run.targetMaxAds ? `/${run.targetMaxAds}` : ""} ads
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-[9px] text-slate-400 dark:text-slate-500 text-right shrink-0 pl-1.5">
-                    <div>
-                      {new Date(run.createdAt).toLocaleDateString([], {
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </div>
-                    <div>
-                      {new Date(run.createdAt).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+          <button
+            type="button"
+            onClick={() => setIsNewScanModalOpen(true)}
+            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/30 transition inline-flex items-center space-x-2 cursor-pointer"
+          >
+            <Play className="w-3.5 h-3.5 fill-current" />
+            <span>Launch Your First Discovery Scan</span>
+          </button>
         </div>
       )}
 
@@ -2248,6 +1736,50 @@ export default function DiscoveryPage() {
           )}
         </div>
       </div>
+      {/* New Discovery Scan Modal */}
+      <NewScanModal
+        isOpen={isNewScanModalOpen}
+        onClose={() => setIsNewScanModalOpen(false)}
+        searchMode={searchMode}
+        onSetSearchMode={handleSetSearchMode}
+        country={country}
+        onCountryChange={setCountry}
+        mediaType={mediaType}
+        onMediaTypeChange={setMediaType}
+        selectedKeyword={selectedKeyword}
+        onSelectedKeywordChange={setSelectedKeyword}
+        isCustomKeyword={isCustomKeyword}
+        onIsCustomKeywordChange={setIsCustomKeyword}
+        customKeywordText={customKeywordText}
+        onCustomKeywordTextChange={setCustomKeywordText}
+        startDateMin={startDateMin}
+        onStartDateMinChange={(val) => {
+          setStartDateMin(val);
+          setActiveDatePreset("custom");
+        }}
+        startDateMax={startDateMax}
+        onStartDateMaxChange={(val) => {
+          setStartDateMax(val);
+          setActiveDatePreset("custom");
+        }}
+        activeDatePreset={activeDatePreset}
+        onApplyDatePreset={applyDatePreset}
+        scanDepthPreset={scanDepthPreset}
+        onScanDepthPresetChange={setScanDepthPreset}
+        customMaxAds={customMaxAds}
+        onCustomMaxAdsChange={setCustomMaxAds}
+        customMaxScrolls={customMaxScrolls}
+        onCustomMaxScrollsChange={setCustomMaxScrolls}
+        effectiveTargetMaxAds={effectiveTargetMaxAds}
+        effectiveMaxScrolls={effectiveMaxScrolls}
+        directUrlInput={directUrlInput}
+        onDirectUrlInputChange={setDirectUrlInput}
+        parsedUrlPreview={parsedUrlPreview}
+        onPopulateControlsFromUrl={handlePopulateControlsFromUrl}
+        isLaunchingScan={isLaunchingScan}
+        onLaunchScan={handleLaunchScan}
+        onLaunchUrlScan={handleLaunchUrlScan}
+      />
     </div>
   </div>
   );
