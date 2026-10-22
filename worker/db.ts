@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { trackedPages, queue, scanHistory, workerState, creativeScans, discoveredPages, discoveryRuns, appSettings, scrapedProducts } from "../db/schema";
-import { eq, sql, inArray, and, isNotNull } from "drizzle-orm";
+import { eq, sql, inArray, and, isNotNull, desc } from "drizzle-orm";
 import { shouldArchiveZeroCount } from "../lib/ad-reconciliation";
 
 function isUuid(id?: string | null): boolean {
@@ -185,14 +185,20 @@ export async function enqueuePagesForCreativeScan(
   const latestDifferenceMap = new Map<string, number>();
   if (pagesNeedingHistory.length > 0) {
     const pageIds = pagesNeedingHistory.map((p) => p.id);
-    const historyRows = await db.execute(sql`
-      SELECT DISTINCT ON (tracked_page_id) tracked_page_id, difference
-      FROM scan_history
-      WHERE tracked_page_id = ANY(${pageIds}::uuid[])
-        AND checked_at >= NOW() - INTERVAL '30 days'
-      ORDER BY tracked_page_id, checked_at DESC
-    `);
-    const rows = (Array.isArray(historyRows) ? historyRows : (historyRows as any)?.rows || []) as any[];
+    const rows = await db
+      .selectDistinctOn([scanHistory.trackedPageId], {
+        tracked_page_id: scanHistory.trackedPageId,
+        difference: scanHistory.difference,
+      })
+      .from(scanHistory)
+      .where(
+        and(
+          inArray(scanHistory.trackedPageId, pageIds),
+          sql`${scanHistory.checkedAt} >= NOW() - INTERVAL '30 days'`
+        )
+      )
+      .orderBy(scanHistory.trackedPageId, desc(scanHistory.checkedAt));
+
     for (const r of rows) {
       latestDifferenceMap.set(String(r.tracked_page_id), Number(r.difference || 0));
     }
