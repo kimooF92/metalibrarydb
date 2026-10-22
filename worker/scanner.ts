@@ -53,26 +53,43 @@ export function parseResultCountFromText(bodyText: string): ScanOutcome {
     return { status: "success", results: 0 };
   }
 
-  const multiLangRegex =
-    /(\~?\s?\d[\d,\.\s\u00A0\u202F]*)\s*(?:results?|résultats?|resultados?|ergebnisse?|ads?|publicités?|anuncios?|anzeigen?)/i;
+  // 1. Prioritize authentic Meta Ad Library result counts (always prefixed with '~')
+  // e.g. "~209 results", "~190 résultats", "~381 resultados", "~1,200 ads"
+  const tildeRegex =
+    /~\s*(\d[\d,\.\s\u00A0\u202F]*)\s*(?:results?|résultats?|resultados?|ergebnisse?|ads?|publicités?|anuncios?|anzeigen?)/i;
 
-  const match = bodyText.match(multiLangRegex);
-
-  if (match && match[1]) {
-    const rawNumberStr = match[1]
-      .replace(/[\~\s\u00A0\u202F]/g, "")
+  const tildeMatch = bodyText.match(tildeRegex);
+  if (tildeMatch && tildeMatch[1]) {
+    const rawNumberStr = tildeMatch[1]
+      .replace(/[\s\u00A0\u202F]/g, "")
       .replace(/[,.]/g, "");
 
     const parsedNum = parseInt(rawNumberStr, 10);
-
     if (!isNaN(parsedNum)) {
       return { status: "success", results: parsedNum };
     }
   }
 
-  const secondaryMatch = bodyText.match(/(\d[\d,\.\s]*)\s+(?:active\s+)?(?:ads?|publicités?|anuncios?)/i);
+  // 2. Secondary fallback: matches without '~' only if no tilde count was found on page
+  const fallbackRegex =
+    /(\d[\d,\.\s\u00A0\u202F]*)\s*(?:results?|résultats?|resultados?|ergebnisse?)/i;
+
+  const fallbackMatch = bodyText.match(fallbackRegex);
+  if (fallbackMatch && fallbackMatch[1]) {
+    const rawNumberStr = fallbackMatch[1]
+      .replace(/[\s\u00A0\u202F]/g, "")
+      .replace(/[,.]/g, "");
+
+    const parsedNum = parseInt(rawNumberStr, 10);
+    if (!isNaN(parsedNum)) {
+      return { status: "success", results: parsedNum };
+    }
+  }
+
+  // 3. Tertiary fallback: explicit "active ads" phrasing
+  const secondaryMatch = bodyText.match(/(\d[\d,\.\s]*)\s+active\s+(?:ads?|publicités?|anuncios?)/i);
   if (secondaryMatch && secondaryMatch[1]) {
-    const parsedNum = parseInt(secondaryMatch[1].replace(/[\~\s\u00A0\u202F,.]/g, ""), 10);
+    const parsedNum = parseInt(secondaryMatch[1].replace(/[\s\u00A0\u202F,.]/g, ""), 10);
     if (!isNaN(parsedNum)) {
       return { status: "success", results: parsedNum };
     }
@@ -86,10 +103,16 @@ export function parseResultCountFromText(bodyText: string): ScanOutcome {
   };
 }
 
+export interface ScanPageOptions {
+  previousCount?: number | null;
+  brandName?: string | null;
+}
+
 export async function scanMetaAdPage(
   page: Page,
   url: string,
-  onProgress?: (step: string, label: string, percent: number) => Promise<void> | void
+  onProgress?: (step: string, label: string, percent: number) => Promise<void> | void,
+  options?: ScanPageOptions
 ): Promise<ScanOutcome> {
   const timeoutMs = parseInt(process.env.PAGE_TIMEOUT || "30000", 10);
 
@@ -127,7 +150,49 @@ export async function scanMetaAdPage(
       DELAY_CONFIG.beforeExtractMax
     );
 
-    return parseResultCountFromText(bodyText);
+    const rawOutcome = parseResultCountFromText(bodyText);
+
+    // If result was parsed successfully and previous count is known, check for ambiguity / spikes (+20 ads)
+    if (rawOutcome.status === "success" && options?.previousCount !== undefined && options.previousCount !== null) {
+      try {
+        const { detectAdCountDoubt, resolveAdCountWithSpanJev } = await import("../lib/ad-count-referee");
+        const doubt = detectAdCountDoubt({
+          scannedCount: rawOutcome.results,
+          previousCount: options.previousCount,
+          bodyText,
+          brandName: options.brandName,
+          url,
+          hasTilde: bodyText.includes(`~${rawOutcome.results}`) || bodyText.includes(`~ ${rawOutcome.results}`),
+        });
+
+        if (doubt.hasDoubt) {
+          if (onProgress) await onProgress("refereeing", "3b. Arbitrating ambiguous ad count with Span/Jev...", 85);
+          const refereeResult = await resolveAdCountWithSpanJev({
+            scannedCount: rawOutcome.results,
+            previousCount: options.previousCount,
+            bodyText,
+            brandName: options.brandName,
+            url,
+            hasTilde: bodyText.includes(`~${rawOutcome.results}`) || bodyText.includes(`~ ${rawOutcome.results}`),
+          });
+
+          if (refereeResult.wasRefereed && refereeResult.resolvedCount !== null) {
+            console.log(
+              `[Ad Count Referee] ⚖️ Ambiguity resolved by ${refereeResult.modelUsed}: ${rawOutcome.results} ➔ ${refereeResult.resolvedCount} (Confidence: ${refereeResult.confidence}, Reasons: ${refereeResult.doubtReasons.join("; ")})`
+            );
+            return {
+              status: "success",
+              results: refereeResult.resolvedCount,
+              note: `Refereed by ${refereeResult.modelUsed}: ${refereeResult.doubtReasons.join("; ")}`,
+            };
+          }
+        }
+      } catch (refErr: any) {
+        console.warn("[Ad Count Referee] Notice:", refErr?.message || refErr);
+      }
+    }
+
+    return rawOutcome;
   } catch (err: any) {
     console.error("Scan exception:", err);
     return { status: "failed", results: null, failureReason: "navigation_error" };

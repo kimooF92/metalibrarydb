@@ -624,9 +624,11 @@ async function runWorker() {
           );
           await handleFailure();
         }
-      } else if (trackedPage) {
         // Run Result Count scan for Tracked Page
-        const outcome = await scanMetaAdPage(page, trackedPage.url);
+        const outcome = await scanMetaAdPage(page, trackedPage.url, undefined, {
+          previousCount: trackedPage.currentResults,
+          brandName: trackedPage.displayName,
+        });
 
         if (outcome.status === "success" || outcome.status === "unclear") {
           console.log(

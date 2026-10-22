@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --env-file=.env.local --test lib/cache-service.test.ts lib/ad-reconciliation.test.ts lib/product-extraction.test.ts lib/doubt-detector.test.ts lib/b2-storage.test.ts lib/html-scraper.test.ts worker/circuit-breaker.test.ts lib/url-parser.test.ts lib/breakout-detector.test.ts",
+    "test": "tsx --env-file=.env.local --test lib/cache-service.test.ts lib/ad-reconciliation.test.ts lib/product-extraction.test.ts lib/doubt-detector.test.ts lib/b2-storage.test.ts lib/html-scraper.test.ts worker/circuit-breaker.test.ts lib/url-parser.test.ts lib/breakout-detector.test.ts lib/ad-count-referee.test.ts",
     "worker": "npx tsx worker/index.ts",
     "worker:head": "npx tsx worker/index.ts --headed",
     "worker:headless": "npx tsx worker/index.ts --headless",

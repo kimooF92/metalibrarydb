@@ -188,20 +188,28 @@ export const scanPageCountTask = task({
       const page = await context.newPage();
 
       // 3. Perform the scrape with live progress updates
-      const outcome = await scanMetaAdPage(page, targetUrl, async (step, label, pct) => {
-        await setCached(
-          `scan_step:${pageRecord.id}`,
-          {
-            pageId: pageRecord.id,
-            displayName: pageRecord.displayName || targetUrl,
-            step,
-            label,
-            percent: pct,
-            timestamp: Date.now(),
-          },
-          120
-        );
-      });
+      const outcome = await scanMetaAdPage(
+        page,
+        targetUrl,
+        async (step, label, pct) => {
+          await setCached(
+            `scan_step:${pageRecord.id}`,
+            {
+              pageId: pageRecord.id,
+              displayName: pageRecord.displayName || targetUrl,
+              step,
+              label,
+              percent: pct,
+              timestamp: Date.now(),
+            },
+            120
+          );
+        },
+        {
+          previousCount: pageRecord.currentResults,
+          brandName: pageRecord.displayName,
+        }
+      );
       logger.info(`Scrape outcome for ${pageRecord.displayName || targetUrl}: ${JSON.stringify(outcome)}`);
 
       await setCached(
