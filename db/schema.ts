@@ -282,6 +282,10 @@ export const ads = pgTable(
     index("idx_ads_media_hash").on(table.mediaHash),
     index("idx_ads_perceptual_hash").on(table.perceptualHash),
     index("idx_ads_creative_cluster_id").on(table.creativeClusterId),
+    index("idx_ads_link_url").on(table.linkUrl),
+    index("idx_ads_link_url_lower_trimmed").on(
+      sql`LOWER(TRIM(TRAILING '/' FROM ${table.linkUrl}))`
+    ),
   ]
 );
 

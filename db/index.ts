@@ -22,7 +22,7 @@ export const client =
     prepare: false,
     fetch_types: false,
     max: process.env.VERCEL ? 2 : 6,
-    idle_timeout: 20,
+    idle_timeout: 120, // 2 minutes: prevents rapid connect/disconnect churn in Supavisor
     connect_timeout: 10,
     max_lifetime: 60 * 30, // Recycle stale connections after 30 mins
     ssl: isLocal ? false : "require",

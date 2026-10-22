@@ -166,7 +166,9 @@ async function scrapeSingleUrlWithBrowser(browser: any, url: string, existingRec
       await db
         .update(ads)
         .set({ productId: saved.id })
-        .where(sql`${ads.productId} IS NULL AND ${ads.linkUrl} LIKE ${`%${url}%`}`);
+        .where(
+          sql`${ads.productId} IS NULL AND (${ads.linkUrl} = ${url} OR LOWER(TRIM(TRAILING '/' FROM ${ads.linkUrl})) = LOWER(TRIM(TRAILING '/' FROM ${url})))`
+        );
     }
 
     console.log(`  ✅ Extracted successfully via Local Browser:`);

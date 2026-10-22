@@ -173,6 +173,31 @@ export async function enqueuePagesForCreativeScan(
   // --- Collect eligible pages with their ad count and workspace for fair multi-workspace scheduling ---
   const eligiblePages: { id: string; currentResults: number; workspaceId: string | null }[] = [];
 
+  // Batch-fetch latest scanHistory differences to eliminate N+1 loop queries
+  const pagesNeedingHistory = allPages.filter((p) => {
+    if (p.status !== "success" || p.autoCreativeScan === false) return false;
+    if (p.holdStatus === "on_hold" || p.holdStatus === "inactive") return false;
+    if (!p.pageId || p.searchType === "keyword_exact_phrase") return false;
+    if (p.lastCreativeScan && p.lastCreativeScan > cutoff) return false;
+    return !!p.lastCreativeScan; // Only pages requiring subsequent history check
+  });
+
+  const latestDifferenceMap = new Map<string, number>();
+  if (pagesNeedingHistory.length > 0) {
+    const pageIds = pagesNeedingHistory.map((p) => p.id);
+    const historyRows = await db.execute(sql`
+      SELECT DISTINCT ON (tracked_page_id) tracked_page_id, difference
+      FROM scan_history
+      WHERE tracked_page_id = ANY(${pageIds}::uuid[])
+        AND checked_at >= NOW() - INTERVAL '30 days'
+      ORDER BY tracked_page_id, checked_at DESC
+    `);
+    const rows = (Array.isArray(historyRows) ? historyRows : (historyRows as any)?.rows || []) as any[];
+    for (const r of rows) {
+      latestDifferenceMap.set(String(r.tracked_page_id), Number(r.difference || 0));
+    }
+  }
+
   for (const page of allPages) {
     // 1. MUST be a verified successful count scan (not 'pending', 'scanning', or 'failed')
     if (page.status !== "success") {
@@ -209,12 +234,9 @@ export async function enqueuePagesForCreativeScan(
     } else {
       // Subsequent scan: strictly requires latest scanHistory difference >= minDifferenceThreshold (new ads added)
       const threshold = Math.max(1, minDifferenceThreshold);
-      const latestHistory = await db.query.scanHistory.findFirst({
-        where: eq(scanHistory.trackedPageId, page.id),
-        orderBy: [sql`${scanHistory.checkedAt} desc`],
-      });
+      const diff = latestDifferenceMap.get(page.id) ?? 0;
 
-      if (latestHistory && (latestHistory.difference || 0) >= threshold) {
+      if (diff >= threshold) {
         eligiblePages.push({ id: page.id, currentResults: page.currentResults || 0, workspaceId: page.workspaceId });
       }
     }

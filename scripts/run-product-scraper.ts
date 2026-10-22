@@ -170,11 +170,13 @@ async function runProductScraperBatch() {
         })
         .returning();
 
-      // Relink ads
+      // Relink ads using indexed canonical URL equality
       await db
         .update(ads)
         .set({ productId: saved.id })
-        .where(sql`${ads.productId} IS NULL AND ${ads.linkUrl} LIKE ${`%${targetUrl}%`}`);
+        .where(
+          sql`${ads.productId} IS NULL AND (${ads.linkUrl} = ${targetUrl} OR LOWER(TRIM(TRAILING '/' FROM ${ads.linkUrl})) = LOWER(TRIM(TRAILING '/' FROM ${targetUrl})))`
+        );
 
       console.log(`\n✅ [${engine} in ${elapsed}ms] Successfully Scraped & Saved!`);
       console.log(`Title:    "${res.data.title}"`);
@@ -519,7 +521,9 @@ async function runProductScraperBatch() {
           await db
             .update(ads)
             .set({ productId: saved.id })
-            .where(sql`${ads.productId} IS NULL AND ${ads.linkUrl} LIKE ${`%${item.url}%`}`);
+            .where(
+              sql`${ads.productId} IS NULL AND (${ads.linkUrl} = ${item.url} OR LOWER(TRIM(TRAILING '/' FROM ${ads.linkUrl})) = LOWER(TRIM(TRAILING '/' FROM ${item.url})))`
+            );
         }
 
         successCount++;

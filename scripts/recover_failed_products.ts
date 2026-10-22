@@ -66,7 +66,9 @@ async function main() {
         await db
           .update(ads)
           .set({ productId: item.id })
-          .where(sql`${ads.productId} IS NULL AND ${ads.linkUrl} LIKE ${`%${item.url}%`}`);
+          .where(
+          sql`${ads.productId} IS NULL AND (${ads.linkUrl} = ${item.url} OR LOWER(TRIM(TRAILING '/' FROM ${ads.linkUrl})) = LOWER(TRIM(TRAILING '/' FROM ${item.url})))`
+        );
 
         recovered++;
         console.log(`  ✓ Successfully scraped "${res.data.title}" (${res.data.current_price})`);
