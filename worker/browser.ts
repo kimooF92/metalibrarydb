@@ -66,6 +66,16 @@ export async function getBrowserSession(): Promise<{ context: BrowserContext; pa
 }
 
 export async function closeBrowserSession() {
+  if (singlePageInstance && !singlePageInstance.isClosed()) {
+    try {
+      await singlePageInstance.close();
+    } catch {
+      // Ignore page close error
+    } finally {
+      singlePageInstance = null;
+    }
+  }
+
   if (contextInstance) {
     try {
       await contextInstance.close();

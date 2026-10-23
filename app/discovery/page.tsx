@@ -248,8 +248,8 @@ export default function DiscoveryPage() {
   const [isLaunchingScan, setIsLaunchingScan] = useState(false);
   const [isNewScanModalOpen, setIsNewScanModalOpen] = useState(false);
 
-  // Search Mode: "controls" (Existing Search Controls) vs "url" (Direct Meta Ad Library URL)
-  const [searchMode, setSearchMode] = useState<"controls" | "url">("controls");
+  // Search Mode: "controls" (Existing Search Controls) vs "url" (Direct Meta Ad Library URL) vs "sequence" (Batch Sequence)
+  const [searchMode, setSearchMode] = useState<"controls" | "url" | "sequence">("controls");
   const [directUrlInput, setDirectUrlInput] = useState("");
 
   const parsedUrlPreview = useMemo(() => {
@@ -257,7 +257,7 @@ export default function DiscoveryPage() {
     return parseMetaAdLibraryDiscoveryUrl(directUrlInput.trim());
   }, [directUrlInput]);
 
-  const handleSetSearchMode = (mode: "controls" | "url") => {
+  const handleSetSearchMode = (mode: "controls" | "url" | "sequence") => {
     setSearchMode(mode);
     try {
       localStorage.setItem("discovery_search_mode", mode);
@@ -325,7 +325,7 @@ export default function DiscoveryPage() {
 
     try {
       const savedMode = localStorage.getItem("discovery_search_mode");
-      if (savedMode === "url" || savedMode === "controls") {
+      if (savedMode === "url" || savedMode === "controls" || savedMode === "sequence") {
         setSearchMode(savedMode);
       }
     } catch {}
@@ -775,6 +775,54 @@ export default function DiscoveryPage() {
     }
   };
 
+  // Handle Launching Sequence Discovery Request (Multi-URL or Multi-Keyword Batch)
+  const handleLaunchSequenceScan = async (payload: {
+    sequenceType: "urls" | "keywords";
+    urlsText?: string;
+    keywordsText?: string;
+    country?: string;
+    mediaType?: string;
+    startDateMin?: string;
+    startDateMax?: string;
+  }) => {
+    try {
+      setIsLaunchingScan(true);
+      setActionMessage(null);
+      const res = await fetch("/api/discovery/runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sequence: true,
+          sequenceType: payload.sequenceType,
+          ...(payload.sequenceType === "urls"
+            ? { urlsText: payload.urlsText }
+            : { keywordsText: payload.keywordsText }),
+          country: payload.country || country,
+          mediaType: payload.mediaType || mediaType,
+          startDateMin: payload.startDateMin || startDateMin,
+          startDateMax: payload.startDateMax || startDateMax,
+          targetMaxAds: effectiveTargetMaxAds,
+          maxScrolls: effectiveMaxScrolls,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.runIds && data.runIds.length > 0) {
+        setSelectedRunId(data.firstRunId || data.runIds[0]);
+        setIsNewScanModalOpen(false);
+        setActionMessage(
+          `Sequence queued! ${data.count} discovery scan(s) scheduled. Worker will scan 1-by-1 and close Chromium between runs to save RAM.`
+        );
+        await fetchRuns();
+      } else {
+        setActionMessage(`Error launching sequence: ${data.error || "Unknown error"}`);
+      }
+    } catch (err: any) {
+      setActionMessage(`Failed to launch sequence: ${err.message}`);
+    } finally {
+      setIsLaunchingScan(false);
+    }
+  };
+
   // Selection toggle handlers (operates on currently visible filtered pages)
   const toggleSelectAll = () => {
     const selectableIds = filteredPages.map((p) => p.id);
@@ -1084,9 +1132,11 @@ export default function DiscoveryPage() {
                   const kw = getRunKeywordDisplay(r);
                   const dateStr = new Date(r.createdAt).toLocaleDateString([], { month: "short", day: "numeric" });
                   const isRunning = r.status === "running" || r.status === "pending";
+                  const seqMatch = r.outcomeDetails?.match(/Sequence (\d+\/\d+)/);
+                  const seqBadge = seqMatch ? `[Seq ${seqMatch[1]}] ` : "";
                   return (
                     <option key={r.id} value={r.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
-                      {isRunning ? "[Active] " : ""}{r.country} · {kw} ({r.totalPagesDiscovered} brands, {r.totalAdsScanned} ads) — {dateStr}
+                      {isRunning ? `[${r.status === "running" ? "Active" : "Queued"}] ` : ""}{seqBadge}{r.country} · {kw} ({r.totalPagesDiscovered} brands, {r.totalAdsScanned} ads) — {dateStr}
                     </option>
                   );
                 })}
@@ -1779,6 +1829,7 @@ export default function DiscoveryPage() {
         isLaunchingScan={isLaunchingScan}
         onLaunchScan={handleLaunchScan}
         onLaunchUrlScan={handleLaunchUrlScan}
+        onLaunchSequenceScan={handleLaunchSequenceScan}
       />
     </div>
   </div>

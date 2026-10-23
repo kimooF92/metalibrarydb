@@ -1568,7 +1568,12 @@ export async function claimNextPendingDiscoveryRun() {
     WHERE id = (
       SELECT id FROM discovery_runs
       WHERE status = 'pending'
-      ORDER BY created_at ASC
+        AND NOT EXISTS (
+          SELECT 1 FROM discovery_runs
+          WHERE status = 'running'
+            AND (started_at IS NULL OR started_at >= NOW() - INTERVAL '45 minutes')
+        )
+      ORDER BY created_at ASC, id ASC
       FOR UPDATE SKIP LOCKED
       LIMIT 1
     )
@@ -1589,6 +1594,7 @@ export async function claimNextPendingDiscoveryRun() {
     targetMaxAds: row.target_max_ads ? Number(row.target_max_ads) : null,
     maxScrolls: row.max_scrolls ? Number(row.max_scrolls) : null,
     status: String(row.status || "running"),
+    outcomeDetails: row.outcome_details ? String(row.outcome_details) : null,
   };
 }
 

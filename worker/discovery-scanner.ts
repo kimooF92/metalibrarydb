@@ -295,8 +295,12 @@ export async function runDiscoveryScan(
   options?: {
     targetMaxAds?: number | null;
     maxScrolls?: number | null;
+    initialOutcomeDetails?: string | null;
   }
 ): Promise<DiscoveryScanOutcome> {
+  const seqMatch = options?.initialOutcomeDetails?.match(/Sequence \d+\/\d+ · Batch [a-zA-Z0-9_-]+/i);
+  const seqPrefix = seqMatch ? `${seqMatch[0]} — ` : "";
+
   const effectiveTargetMaxAds =
     typeof options?.targetMaxAds === "number" && options.targetMaxAds > 0
       ? options.targetMaxAds
@@ -926,7 +930,7 @@ export async function runDiscoveryScan(
         status: finalStatus,
         totalAdsScanned: scannedAdIds.size,
         totalPagesDiscovered: savedPagesCount,
-        outcomeDetails: `Successfully extracted ${savedPagesCount} unique pages from ${scannedAdIds.size} active ads.`,
+        outcomeDetails: `${seqPrefix}Successfully extracted ${savedPagesCount} unique pages from ${scannedAdIds.size} active ads.`,
         finishedAt,
       })
       .where(eq(discoveryRuns.id, runId));
@@ -949,7 +953,7 @@ export async function runDiscoveryScan(
       status: finalStatus,
       totalAdsScanned: scannedAdIds.size,
       totalPagesDiscovered: savedPagesCount,
-      outcomeDetails: `Extracted ${savedPagesCount} unique pages from ${scannedAdIds.size} active ads.`,
+      outcomeDetails: `${seqPrefix}Extracted ${savedPagesCount} unique pages from ${scannedAdIds.size} active ads.`,
     };
   } catch (err: any) {
     await db
@@ -957,7 +961,7 @@ export async function runDiscoveryScan(
       .set({
         status: "failed",
         failureReason: "timeout",
-        outcomeDetails: err.message || "Discovery scan failed unexpectedly",
+        outcomeDetails: `${seqPrefix}${err.message || "Discovery scan failed unexpectedly"}`,
         finishedAt: new Date(),
       })
       .where(eq(discoveryRuns.id, runId));
@@ -967,7 +971,7 @@ export async function runDiscoveryScan(
       totalAdsScanned: scannedAdIds.size,
       totalPagesDiscovered: collectedPages.size,
       failureReason: "timeout",
-      outcomeDetails: err.message || "Discovery scan failed",
+      outcomeDetails: `${seqPrefix}${err.message || "Discovery scan failed"}`,
     };
   } finally {
     page.off("response", handleResponse);

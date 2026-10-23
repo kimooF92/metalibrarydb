@@ -326,17 +326,55 @@ async function runWorker() {
           `\n[Processing DISCOVERY Job] ID: ${pendingDiscoveryRun.id} | Country: ${pendingDiscoveryRun.country}`
         );
         const discoveryStartTime = Date.now();
-        const { page } = await getBrowserSession();
-        const outcome = await runDiscoveryScan(
-          page,
-          pendingDiscoveryRun.id,
-          pendingDiscoveryRun.searchUrl,
-          pendingDiscoveryRun.country,
-          {
-            targetMaxAds: pendingDiscoveryRun.targetMaxAds,
-            maxScrolls: pendingDiscoveryRun.maxScrolls,
+        let outcome: any;
+        try {
+          const { page } = await getBrowserSession();
+          outcome = await runDiscoveryScan(
+            page,
+            pendingDiscoveryRun.id,
+            pendingDiscoveryRun.searchUrl,
+            pendingDiscoveryRun.country,
+            {
+              targetMaxAds: pendingDiscoveryRun.targetMaxAds,
+              maxScrolls: pendingDiscoveryRun.maxScrolls,
+              initialOutcomeDetails: pendingDiscoveryRun.outcomeDetails,
+            }
+          );
+        } catch (scanErr: any) {
+          console.error(`[Worker] Unhandled error during discovery scan ${pendingDiscoveryRun.id}:`, scanErr);
+          const seqMatch = pendingDiscoveryRun.outcomeDetails?.match(/Sequence \d+\/\d+ · Batch [a-zA-Z0-9_-]+/i);
+          const seqPrefix = seqMatch ? `${seqMatch[0]} — ` : "";
+          const errorMsg = scanErr?.message || "Browser launch or worker failure";
+          outcome = {
+            status: "failed",
+            totalAdsScanned: 0,
+            totalPagesDiscovered: 0,
+            failureReason: "timeout",
+            outcomeDetails: `${seqPrefix}${errorMsg}`,
+          };
+
+          // Guarantee database row is marked failed so it never remains stuck in 'running'
+          await db
+            .update(discoveryRuns)
+            .set({
+              status: "failed",
+              failureReason: "timeout",
+              outcomeDetails: outcome.outcomeDetails,
+              finishedAt: new Date(),
+            })
+            .where(eq(discoveryRuns.id, pendingDiscoveryRun.id))
+            .catch((dbErr) => console.error("[Worker] Failed to update discovery run status to failed in DB:", dbErr));
+        } finally {
+          // Mandatory RAM safeguard: Close Chromium between runs to reclaim 100% of memory
+          console.log(`[Worker] 🧹 Tearing down Chromium browser to reclaim 100% RAM memory after Discovery Run...`);
+          await closeBrowserSession().catch((e) => console.warn("[Worker] Error closing browser session:", e?.message));
+          if (typeof (global as any).gc === "function") {
+            try {
+              (global as any).gc();
+            } catch {}
           }
-        );
+        }
+
         console.log(
           `[Discovery Finished] Status: ${outcome.status} | Discovered: ${outcome.totalPagesDiscovered} pages from ${outcome.totalAdsScanned} ads`
         );
@@ -381,6 +419,15 @@ async function runWorker() {
             });
           } catch {}
         }
+
+        // Sequence Cooldown: Give OS memory and Meta rate-limits rest before next run (clamped between 5s and 120s)
+        const rawCooldown = parseInt(process.env.DISCOVERY_INTER_RUN_COOLDOWN_MS || "20000", 10);
+        const cooldownMs = Number.isFinite(rawCooldown)
+          ? Math.max(5000, Math.min(rawCooldown, 120000))
+          : 20000;
+        console.log(`[Worker] ⏳ Discovery Cooldown: Sleeping ${Math.round(cooldownMs / 1000)}s before next job to protect RAM and IP limits...`);
+        await randomDelay(cooldownMs, cooldownMs + 4000);
+
         ranJobs++;
         continue;
       }
