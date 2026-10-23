@@ -67,6 +67,17 @@ test("Key Resolution: Resolves OpenRouter key across all aliases, strips quotes 
     // Standard OpenAI key (sk-proj-...) is NOT treated as OpenRouter key
     process.env.OPENAI_API_KEY = "sk-proj-test-standard-openai";
     assert.equal(resolveOpenRouterApiKey(), null);
+    delete process.env.OPENAI_API_KEY;
+
+    // Test value signature scan: Any variable whose value starts with sk-or-
+    process.env.UNEXPECTED_SECRET_NAME = "sk-or-v1-any-custom-variable-name";
+    assert.equal(resolveOpenRouterApiKey(), "sk-or-v1-any-custom-variable-name");
+    delete process.env.UNEXPECTED_SECRET_NAME;
+
+    // Test fuzzy name scan: Any variable with "jev_key"
+    process.env.CUSTOM_JEV_KEY = "sk-jev-test-key";
+    assert.equal(resolveOpenRouterApiKey(), "sk-jev-test-key");
+    delete process.env.CUSTOM_JEV_KEY;
   } finally {
     process.env = originalEnv;
   }

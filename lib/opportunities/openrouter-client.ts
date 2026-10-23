@@ -41,10 +41,11 @@ export function extractCleanJsonString(rawText: string): string {
 }
 
 /**
- * Resolves the OpenRouter API key across all common environment variable aliases
- * and cleans up accidental surrounding quotes or whitespace from hosting providers (Vercel, Railway, etc.).
+ * Resolves the OpenRouter API key across all common environment variable aliases,
+ * dynamic value prefix signature matching (sk-or-*), and cleans up accidental surrounding quotes or whitespace.
  */
 export function resolveOpenRouterApiKey(): string | null {
+  // 1. Direct candidate checks
   const candidate =
     process.env.OPENROUTER_API_KEY ||
     process.env.OPEN_ROUTER_API_KEY ||
@@ -55,10 +56,39 @@ export function resolveOpenRouterApiKey(): string | null {
     process.env.NEXT_PUBLIC_OPENROUTER_API_KEY ||
     (process.env.OPENAI_API_KEY?.startsWith("sk-or-") ? process.env.OPENAI_API_KEY : undefined);
 
-  if (!candidate) return null;
+  if (candidate) {
+    const cleaned = candidate.trim().replace(/^["']|["']$/g, "").trim();
+    if (cleaned.length > 0) return cleaned;
+  }
 
-  const cleaned = candidate.trim().replace(/^["']|["']$/g, "").trim();
-  return cleaned.length > 0 ? cleaned : null;
+  // 2. Value signature scan: Any environment variable whose value begins with "sk-or-"
+  // (All OpenRouter keys begin with "sk-or-v1-", regardless of the variable name assigned in Vercel)
+  for (const [, val] of Object.entries(process.env)) {
+    if (typeof val === "string") {
+      const cleaned = val.trim().replace(/^["']|["']$/g, "").trim();
+      if (cleaned.startsWith("sk-or-")) {
+        return cleaned;
+      }
+    }
+  }
+
+  // 3. Fuzzy key scan: Any environment variable with "openrouter" or "span" / "jev" in the key name
+  for (const [key, val] of Object.entries(process.env)) {
+    if (typeof val !== "string") continue;
+    const lowerKey = key.toLowerCase();
+    if (
+      lowerKey.includes("openrouter") ||
+      lowerKey === "open_router" ||
+      lowerKey.startsWith("open_router_") ||
+      lowerKey.includes("jev_key") ||
+      lowerKey.includes("span_key")
+    ) {
+      const cleaned = val.trim().replace(/^["']|["']$/g, "").trim();
+      if (cleaned.length > 0) return cleaned;
+    }
+  }
+
+  return null;
 }
 
 /**

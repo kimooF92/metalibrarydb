@@ -342,8 +342,9 @@ export async function generateUnifiedOpportunityReport(
       throw new Error(`[${correlationId}] MiniMax AI analysis failed: ${allErrors}`);
     }
 
-    const firstErr = stage1Res.validationErrors[0] || stage2Res.validationErrors[0] || "AI analysis unavailable";
-    warnings.push(`AI generation fell back to deterministic rules: ${firstErr}`);
+    const rawErr = stage1Res.validationErrors[0] || stage2Res.validationErrors[0] || "AI analysis unavailable";
+    const cleanErr = rawErr.replace(/\[opp_[^\]]+\]\s*/g, "");
+    warnings.push(`AI generation fell back to deterministic rules: ${cleanErr}`);
     stage1Value = buildDeterministicStage1(telemetry);
     stage2Value = buildDeterministicStage2(seasonalityCtx);
     stage3Value = buildDeterministicStage3(seasonalityCtx, stage1Value);
