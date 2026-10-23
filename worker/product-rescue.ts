@@ -122,10 +122,12 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
       }
 
       const hasDirectImage = Boolean(extractionResult?.data?.main_image_url);
+      const directPriceNum = parseFloat(extractionResult?.data?.current_price?.replace(/[^0-9.]/g, "") || "0");
       const hasDirectPrice = Boolean(
         extractionResult?.data?.current_price &&
         extractionResult.data.current_price !== "0 DT" &&
-        extractionResult.data.current_price !== "0"
+        extractionResult.data.current_price !== "0" &&
+        directPriceNum >= 10
       );
 
       // 2. If direct HTML didn't get image or price, trigger local Playwright browser

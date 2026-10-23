@@ -133,7 +133,8 @@ export function harvestPriceCandidates(
 
     const isDelivery = /(?:livraison|delivery|توصيل|شحن|frais|exp[eé]dition)/i.test(snippet) && num <= 20;
     const isTotal = /(?:total|المجموع|sous-total|net [aà] payer|somme)/i.test(snippet);
-    const isOriginal = /(?:ancien|barr[eé]|original|prix initial|avant|regular|avant r[eé]duction|قبل الخصم)/i.test(snippet);
+    const isOriginal = /(?:ancien|barr[eé]|original|prix initial|avant|regular|avant r[eé]duction|قبل الخصم|old|compare|was|del|strike)/i.test(snippet);
+    const isQuantity = /(?:pack\s*(?:de)?|quantit[eé]|اشتري|احصل\s*على|قطعة|pi[eè]ce|lot\s*(?:de)?)\s*[0-9]/i.test(snippet) && num <= 5;
 
     const formattedValue = `${num} ${fallbackCurrencySymbol}`;
     if (!candidatesMap.has(formattedValue)) {
@@ -141,7 +142,7 @@ export function harvestPriceCandidates(
         value: formattedValue,
         context: snippet.slice(0, 70),
         num,
-        isDelivery,
+        isDelivery: isDelivery || isQuantity,
         isTotal,
         isOriginal,
       });
@@ -161,18 +162,27 @@ export function harvestPriceCandidates(
     recordCandidate(match[1], match.index, match[0].length);
   }
 
-  // 3. Structured HTML e-commerce price patterns if no explicit currency candidates found
-  if (candidatesMap.size === 0) {
-    const structuredRegexes = [
-      /(?:class|data-price|itemprop)=["'][^"']*(?:price|amount)[^"']*["'][^>]*>([0-9]+(?:[.,][0-9]+)?)/gi,
-      /<meta\s+property=["']product:price:amount["']\s+content=["']([0-9]+(?:[.,][0-9]+)?)["']/gi,
-      /"price":\s*"?([0-9]+(?:[.,][0-9]+)?)"?/gi,
-    ];
+  // 3. Structured HTML & DOM price patterns (always scanned, especially to rescue micro-prices < 10)
+  const structuredRegexes = [
+    // Spans with price / amount classes (WooCommerce, Shopify, YouCan, Stocki)
+    /<span[^>]*class=["'][^"']*(?:price|amount|valeur|current|regular|sale|prix)[^"']*["'][^>]*>[\s\S]*?([0-9]+(?:[.,][0-9]+)?)/gi,
+    // HTML5 data-price / itemprop attributes
+    /(?:class|data-price|itemprop)=["'][^"']*(?:price|amount)[^"']*["'][^>]*>([0-9]+(?:[.,][0-9]+)?)/gi,
+    // Hidden inputs in COD funnels
+    /<input[^>]+name=["'](?:price|prix|unit_price|amount)["'][^>]+value=["']([0-9]+(?:[.,][0-9]+)?)["']/gi,
+    /<input[^>]+value=["']([0-9]+(?:[.,][0-9]+)?)["'][^>]+name=["'](?:price|prix|unit_price|amount)["']/gi,
+    // Meta tags
+    /<meta\s+property=["']product:price:amount["']\s+content=["']([0-9]+(?:[.,][0-9]+)?)["']/gi,
+    /<meta\s+content=["']([0-9]+(?:[.,][0-9]+)?)["']\s+property=["']product:price:amount["']/gi,
+    // JSON-LD or script price properties
+    /"price":\s*"?([0-9]+(?:[.,][0-9]+)?)"?/gi,
+    // WooCommerce <bdi> tag
+    /<bdi>[^<]*(?:<span[^>]*>[^<]*<\/span>[^<]*)?([0-9]+(?:[.,][0-9]+)?)\s*<\/bdi>/gi,
+  ];
 
-    for (const sRegex of structuredRegexes) {
-      while ((match = sRegex.exec(content)) !== null) {
-        recordCandidate(match[1], match.index, match[0].length);
-      }
+  for (const sRegex of structuredRegexes) {
+    while ((match = sRegex.exec(content)) !== null) {
+      recordCandidate(match[1], match.index, match[0].length);
     }
   }
 
@@ -180,7 +190,8 @@ export function harvestPriceCandidates(
 }
 
 /**
- * When doubt is detected (e.g. price is 0 DT or suspicious), invokes TypeSafe Jev as a split-second referee.
+ * When doubt is detected (e.g. price is 0 DT or suspicious micro-price < 10),
+ * invokes TypeSafe Jev as a split-second referee or uses candidate heuristics.
  * Micro-token cost (~50-80 tokens), called ONLY on doubtful items.
  */
 export async function resolvePriceDoubtWithJev(params: {
@@ -191,17 +202,25 @@ export async function resolvePriceDoubtWithJev(params: {
   fallbackCurrencySymbol?: string;
 }): Promise<{ resolvedPrice: string; modelUsed: string; confidence: number } | null> {
   const currencySymbol = params.fallbackCurrencySymbol || "DT";
-  const allCandidates = harvestPriceCandidates(params.html, params.markdown, currencySymbol);
+  
+  // Combine HTML, markdown, and product title so title price mentions (e.g. "الثمن 49 دت") are harvested
+  const combinedContent = `${params.productTitle} ${params.markdown || ""} ${params.html || ""}`;
+  const allCandidates = harvestPriceCandidates(params.html, combinedContent, currencySymbol);
 
   if (allCandidates.length === 0) {
     return null;
   }
 
-  // Filter out pure delivery fees and totals if viable product price candidates exist
+  // Filter out pure delivery fees, totals, and quantity artifacts
   const nonDeliveryCandidates = allCandidates.filter((c) => !c.isDelivery && !c.isTotal);
-  const candidates = nonDeliveryCandidates.length > 0 ? nonDeliveryCandidates : allCandidates;
+  const baseCandidates = nonDeliveryCandidates.length > 0 ? nonDeliveryCandidates : allCandidates;
 
-  // Single candidate heuristic: if only 1 price candidate exists on page, it is the real price!
+  // Crucial Rule: In COD e-commerce, real products cost >= 10.
+  // If realistic candidates >= 10 exist, strictly exclude micro-numbers (< 10) which are delivery fees or quantity snippets.
+  const realisticCandidates = baseCandidates.filter((c) => c.num >= 10 && !c.isDelivery);
+  const candidates = realisticCandidates.length > 0 ? realisticCandidates : baseCandidates;
+
+  // Single candidate heuristic: if only 1 viable price candidate exists on page, it is the real price!
   if (candidates.length === 1) {
     const single = candidates[0];
     if (single.num > 0 && !single.isDelivery) {
@@ -229,7 +248,7 @@ export async function resolvePriceDoubtWithJev(params: {
       real_price: {
         type: "choice",
         instructions:
-          "Pick the active single-unit retail selling price (choose discounted selling price over regular/crossed-out price). Never pick delivery or checkout total sums.",
+          "Pick the active single-unit retail selling price (choose discounted selling price over regular/crossed-out price). Never pick delivery fees, pack counts, or amounts under 10 when real prices exist.",
         criteria: criteriaMap,
       },
     },
@@ -238,10 +257,13 @@ export async function resolvePriceDoubtWithJev(params: {
 
   const answer = response?.answers?.real_price as JevChoiceAnswer | undefined;
   if (!answer || answer.type !== "choice" || !answer.choice) {
-    // If Jev was unreachable, take the best candidate heuristic (lowest non-delivery candidate > 10 DT)
+    // If Jev was unreachable, take the best candidate heuristic:
+    // Filter non-original candidates >= 10, and pick the lowest retail price (discounted sale price)
     const valid = candidates.filter((c) => c.num >= 10);
     if (valid.length > 0) {
-      const best = valid.find((c) => !c.isOriginal) || valid[0];
+      const nonOriginal = valid.filter((c) => !c.isOriginal);
+      const sorted = (nonOriginal.length > 0 ? nonOriginal : valid).sort((a, b) => a.num - b.num);
+      const best = sorted[0];
       return {
         resolvedPrice: best.value,
         modelUsed: "price_heuristic_fallback",

@@ -126,7 +126,9 @@ export async function sweepAndResolveZeroPrices(limit = 8): Promise<number> {
           isNull(scrapedProducts.currentPrice),
           sql`TRIM(${scrapedProducts.currentPrice}) = ''`,
           sql`TRIM(${scrapedProducts.currentPrice}) ~* '^0+(\\.0+|,0+)?(\\s*(dt|dh|tnd|mad))?$'`,
-          sql`${scrapedProducts.currentPrice} = '0'`
+          sql`${scrapedProducts.currentPrice} = '0'`,
+          // Match suspicious prices under 10 (e.g. 1 DT, 5 DT, 7 DT, 1 DH, 9 DH)
+          sql`TRIM(${scrapedProducts.currentPrice}) ~* '^(dt|dh|tnd|mad)?\\s*[0-9]([.,][0-9]+)?(\\s*(dt|dh|tnd|mad))?$'`
         ),
         sql`EXISTS (
           SELECT 1 FROM ${ads}
@@ -145,7 +147,7 @@ export async function sweepAndResolveZeroPrices(limit = 8): Promise<number> {
     return 0;
   }
 
-  console.log(`[Jev Frequency Sweep] 💰 Found ${zeroItems.length} active products with 0 DT/missing price to resolve...`);
+  console.log(`[Jev Frequency Sweep] 💰 Found ${zeroItems.length} active products with 0 DT or suspicious micro-prices (< 10) to resolve...`);
   let resolvedCount = 0;
 
   for (const item of zeroItems) {
@@ -166,9 +168,10 @@ export async function sweepAndResolveZeroPrices(limit = 8): Promise<number> {
 
       const rawHtml = scrapeRes.rawHtml || "";
       const directPrice = scrapeRes.data?.current_price;
+      const directPriceNum = parseFloat(directPrice?.replace(/[^0-9.]/g, "") || "0");
 
-      // Check if direct scrape already found a valid non-zero price
-      if (directPrice && !directPrice.startsWith("0")) {
+      // Check if direct scrape found a valid realistic price (must be >= 10 to avoid delivery fees / quantity numbers)
+      if (directPrice && !directPrice.startsWith("0") && directPriceNum >= 10) {
         const finalPrice = formatPrice(directPrice, itemSym);
         await db
           .update(scrapedProducts)
@@ -187,41 +190,45 @@ export async function sweepAndResolveZeroPrices(limit = 8): Promise<number> {
         continue;
       }
 
-        let candidateHtml = rawHtml;
-        let candidateMarkdown = "";
+      let candidateHtml = rawHtml;
+      let candidateMarkdown = "";
 
-        // If direct HTML found no price candidates, invoke rendered extractor (Firecrawl / Playwright)
-        if (harvestPriceCandidates(rawHtml, "", itemSym).length === 0) {
-          try {
-            const { extractProductFromUrl } = await import("../lib/firecrawl");
-            const deepRes = await extractProductFromUrl(item.url);
-            if (deepRes.success && deepRes.data) {
-              candidateHtml = deepRes.raw?.html || deepRes.raw?.data?.html || "";
-              candidateMarkdown = deepRes.raw?.markdown || deepRes.raw?.data?.markdown || "";
+      // If direct HTML found no candidate >= 10, invoke rendered extractor (Firecrawl / Playwright)
+      const existingCandidates = harvestPriceCandidates(rawHtml, "", itemSym);
+      const hasRealisticCandidate = existingCandidates.some((c) => c.num >= 10 && !c.isDelivery);
 
-              if (deepRes.data.current_price && !deepRes.data.current_price.startsWith("0")) {
-                const finalPrice = formatPrice(deepRes.data.current_price, itemSym);
-                await db
-                  .update(scrapedProducts)
-                  .set({
-                    currentPrice: finalPrice,
-                    originalPrice: deepRes.data.original_price
-                      ? formatPrice(deepRes.data.original_price, itemSym)
-                      : item.originalPrice,
-                    updatedAt: new Date(),
-                  })
-                  .where(eq(scrapedProducts.id, item.id));
+      if (!hasRealisticCandidate) {
+        try {
+          const { extractProductFromUrl } = await import("../lib/firecrawl");
+          const deepRes = await extractProductFromUrl(item.url);
+          if (deepRes.success && deepRes.data) {
+            candidateHtml = deepRes.raw?.html || deepRes.raw?.data?.html || "";
+            candidateMarkdown = deepRes.raw?.markdown || deepRes.raw?.data?.markdown || "";
 
-                resolvedCount++;
-                resolvedThisItem = true;
-                console.log(`[Jev Frequency Sweep] 🚀 Rendered resolved price for "${item.title?.slice(0, 30)}": ${finalPrice}`);
-                continue;
-              }
+            const deepPriceNum = parseFloat(deepRes.data.current_price?.replace(/[^0-9.]/g, "") || "0");
+            if (deepRes.data.current_price && !deepRes.data.current_price.startsWith("0") && deepPriceNum >= 10) {
+              const finalPrice = formatPrice(deepRes.data.current_price, itemSym);
+              await db
+                .update(scrapedProducts)
+                .set({
+                  currentPrice: finalPrice,
+                  originalPrice: deepRes.data.original_price
+                    ? formatPrice(deepRes.data.original_price, itemSym)
+                    : item.originalPrice,
+                  updatedAt: new Date(),
+                })
+                .where(eq(scrapedProducts.id, item.id));
+
+              resolvedCount++;
+              resolvedThisItem = true;
+              console.log(`[Jev Frequency Sweep] 🚀 Rendered resolved price for "${item.title?.slice(0, 30)}": ${finalPrice}`);
+              continue;
             }
-          } catch (deepErr: any) {
-            // fallback error ignored
           }
+        } catch (deepErr: any) {
+          // fallback error ignored
         }
+      }
 
         // 2. If direct extraction couldn't parse cleanly, run Jev Price Referee on harvested candidates
         const resolved = await resolvePriceDoubtWithJev({

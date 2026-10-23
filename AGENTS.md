@@ -37,4 +37,21 @@ You MUST check and strictly adhere to these rules before implementing any featur
 - Whenever researching technical implementations, architectural patterns, library APIs, or technical best practices, use the `context7` MCP tools (`resolve-library-id` and `query-docs`) to query accurate, up-to-date documentation and best-practice patterns.
 <!-- END:context7-mcp-rules -->
 
+<!-- BEGIN:notion-workflow-sync-rules -->
+# Notion Workflow & Progress Synchronization Rules
+
+The workspace uses a Notion Coding Workflow OS connected via Notion MCP (Bot: `Agy-token`, Workspace: `Kareem Fezani's Notion`) to track projects, backlogs, technical specs, and daily progress:
+- **Coding System Root Page**: `https://app.notion.com/p/Coding-system-4022b9f29f2680198c45dfaa4be26363`
+- **Projects DB**: `4022b9f2-9f26-817d-960d-c4412a504877`
+- **Docs & Specs DB**: `4022b9f2-9f26-8194-9914-e25be2a87326`
+- **Tasks & Backlog DB**: `4022b9f2-9f26-81a1-9fd1-ca9c352fb56a`
+- **Dev Logs & Journal DB**: `4022b9f2-9f26-8197-a162-ec0527e1768d`
+
+### Mandatory Tracking Guidelines
+1. **Sync Work Items**: When starting work on a task, update its status in `Tasks & Backlog` to `In Progress`. When complete, mark it `Done`.
+2. **Decompose New Features**: Whenever a new significant feature or refactor is planned, document the architecture in `Docs & Specs` and decompose it into actionable items in `Tasks & Backlog` linked to the active project.
+3. **Log Significant Milestones & Discoveries**: Record daily progress, key debugging breakthroughs, or architectural decisions in `Dev Logs & Journal` so insights are preserved.
+4. **Preserve Relations**: Always associate new tasks and documents with their parent Project (`Meta Brand Result` or corresponding codebase) and relevant specs.
+<!-- END:notion-workflow-sync-rules -->
+
 

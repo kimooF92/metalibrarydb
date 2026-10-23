@@ -680,6 +680,25 @@ export function parseProductHtmlContent(
       }
     }
 
+    // 4i. Safeguard for micro-prices < 10: In North African COD, prices < 10 are almost always delivery fees or quantity snippets.
+    // Re-scan candidate spans, bdi tags, and inputs to locate a genuine price >= 10.
+    const currentPriceNum = currentPrice ? parseFloat(currentPrice.replace(/[^0-9.]/g, "") || "0") : 0;
+    if (currentPrice && currentPriceNum > 0 && currentPriceNum < 10) {
+      const spanPriceRegex = /<(?:span|bdi|p|div)[^>]*class=["'][^"']*(?:price|amount|valeur|current|regular|sale|prix)[^"']*["'][^>]*>[\s\S]*?(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت|دت|دinar|Dinar|MAD|DH|dh|د\.م|درهم)?/gi;
+      let spMatch;
+      while ((spMatch = spanPriceRegex.exec(html)) !== null) {
+        let numStr = spMatch[1].replace(",", ".");
+        let num = parseFloat(numStr);
+        if (currency === "TND" && num >= 1000 && (spMatch[1].includes(",000") || spMatch[1].includes(".000"))) {
+          num = Math.round(num / 1000);
+        }
+        if (num >= 10 && num <= 50000) {
+          currentPrice = `${num} ${currencySymbol}`;
+          break;
+        }
+      }
+    }
+
     // Extract Crossed-out / Regular Price if not already extracted
     if (!originalPrice) {
       const delPriceRegex = /<(?:del|s|span)[^>]*(?:class|id)=["'][^"']*(?:old|regular|compare|original|was)[^"']*["'][^>]*>[\s\S]*?(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت|دت|MAD|DH|dh|د\.م|درهم)?/gi;
