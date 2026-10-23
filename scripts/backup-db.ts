@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import zlib from "zlib";
 import postgres from "postgres";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 async function runBackup() {
   const url = process.env.DATABASE_URL;
@@ -107,12 +108,15 @@ async function runBackup() {
     const sizeMb = (stats.size / (1024 * 1024)).toFixed(2);
 
     console.log("\n==========================================");
-    console.log("✅ Backup Completed Successfully!");
+    console.log("✅ Local Backup Completed!");
     console.log(`📦 File: ${backupFileName}`);
     console.log(`📊 Total rows: ${totalRows.toLocaleString()}`);
     console.log(`💾 Compressed size: ${sizeMb} MB`);
     console.log(`⏱️ Duration: ${elapsedSec}s`);
     console.log("==========================================");
+
+    // Upload off-site to Backblaze B2
+    await uploadToB2(backupFilePath, backupFileName, stats.size);
   } catch (error) {
     console.error("❌ Backup failed:", error);
     if (fs.existsSync(backupFilePath)) {
@@ -126,4 +130,60 @@ async function runBackup() {
   }
 }
 
-runBackup();
+async function uploadToB2(filePath: string, fileName: string, sizeBytes: number) {
+  const keyId = process.env.B2_APPLICATION_KEY_ID?.trim() || process.env.B2_KEY_ID?.trim();
+  const appKey = process.env.B2_APPLICATION_KEY?.trim();
+  const bucketName = process.env.B2_BUCKET_NAME?.trim() || "meta-ad-media-feed";
+
+  if (!keyId || !appKey) {
+    console.log("ℹ️  Backblaze B2 credentials not found in env, skipping cloud upload.");
+    return;
+  }
+
+  const endpoint = process.env.B2_ENDPOINT?.trim() || "s3.eu-central-003.backblazeb2.com";
+  const region = process.env.B2_REGION?.trim() || "eu-central-003";
+  const formattedEndpoint = endpoint.startsWith("http") ? endpoint : `https://${endpoint}`;
+  const b2Key = `backups/${fileName}`;
+
+  console.log(`\n☁️  Uploading off-site backup to Backblaze B2 (${(sizeBytes / (1024 * 1024)).toFixed(2)} MB)...`);
+  console.log(`   Destination: b2://${bucketName}/${b2Key}`);
+
+  const s3 = new S3Client({
+    endpoint: formattedEndpoint,
+    region,
+    credentials: { accessKeyId: keyId, secretAccessKey: appKey },
+  });
+
+  const fileStream = fs.createReadStream(filePath);
+
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucketName,
+      Key: b2Key,
+      Body: fileStream,
+      ContentLength: sizeBytes,
+      ContentType: "application/gzip",
+    })
+  );
+
+  console.log("✅ Off-site cloud backup successfully stored in Backblaze B2!");
+}
+
+// Allow passing an existing file to upload with --upload-existing
+const uploadArgIdx = process.argv.indexOf("--upload-existing");
+if (uploadArgIdx !== -1 && process.argv[uploadArgIdx + 1]) {
+  const target = path.resolve(process.argv[uploadArgIdx + 1]);
+  if (!fs.existsSync(target)) {
+    console.error(`File not found: ${target}`);
+    process.exit(1);
+  }
+  const stats = fs.statSync(target);
+  uploadToB2(target, path.basename(target), stats.size)
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error("Upload failed:", err);
+      process.exit(1);
+    });
+} else {
+  runBackup();
+}
