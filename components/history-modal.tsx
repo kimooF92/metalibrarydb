@@ -12,6 +12,17 @@ interface HistoryModalProps {
 }
 
 // Pure SVG sparkline — no external dependencies
+function formatScanDate(dateValue: string | Date | null | undefined): string {
+  if (!dateValue) return "—";
+  const d = new Date(dateValue);
+  if (isNaN(d.getTime())) return "—";
+  const day = d.getDate();
+  const month = d.toLocaleDateString("en-US", { month: "short" });
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  return `${day} ${month}, ${hours}:${minutes}`;
+}
+
 function Sparkline({ data }: { data: (number | null)[] }) {
   const values = data.filter((v): v is number => v !== null);
   if (values.length < 2) return null;
@@ -140,7 +151,7 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
                     <span className="text-slate-300 dark:text-slate-700">•</span>
                     <span className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
                       <Sparkles className="w-3 h-3 shrink-0" />
-                      <span>Last Creative Scan: {new Date(page.lastCreativeScan).toLocaleString()}</span>
+                      <span>Last Creative Scan: {formatScanDate(page.lastCreativeScan)}</span>
                     </span>
                   </>
                 )}
@@ -248,14 +259,17 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
 
                       return (
                         <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-all">
-                          <td className="px-4 py-3 text-slate-700 dark:text-slate-300 font-mono">
-                            {new Date(item.checkedAt).toLocaleString()}
+                          <td className="px-4 py-3 text-slate-700 dark:text-slate-300 font-mono" title={new Date(item.checkedAt).toLocaleString()}>
+                            {formatScanDate(item.checkedAt)}
                           </td>
                           <td className="px-4 py-3 font-mono">
                             {item.creativeScannedAt ? (
-                              <span className="inline-flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 font-medium">
+                              <span
+                                className="inline-flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 font-medium"
+                                title={new Date(item.creativeScannedAt).toLocaleString()}
+                              >
                                 <Sparkles className="w-3 h-3 text-indigo-500 shrink-0" />
-                                <span>{new Date(item.creativeScannedAt).toLocaleString()}</span>
+                                <span>{formatScanDate(item.creativeScannedAt)}</span>
                               </span>
                             ) : (
                               <span className="text-slate-400 dark:text-slate-600">—</span>
