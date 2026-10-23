@@ -10,6 +10,7 @@
  */
 
 import { PRODUCT_CATEGORIES, ProductCategory, ProductClassificationResult } from "./product-classifier";
+import { resolveOpenRouterApiKey } from "./opportunities/openrouter-client";
 
 export interface JevChoiceQuestion {
   type: "choice";
@@ -130,12 +131,9 @@ export async function callJevDecisions(
     disableBackup?: boolean;
   }
 ): Promise<JevDecisionsResponse | null> {
-  const apiKey =
-    options?.apiKey ||
-    process.env.OPENROUTER_API_KEY ||
-    process.env.OPEN_ROUTER_API_KEY;
+  const apiKey = options?.apiKey || resolveOpenRouterApiKey();
 
-  if (!apiKey || apiKey.trim() === "") {
+  if (!apiKey) {
     return null;
   }
 

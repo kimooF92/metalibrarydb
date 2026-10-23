@@ -41,6 +41,27 @@ export function extractCleanJsonString(rawText: string): string {
 }
 
 /**
+ * Resolves the OpenRouter API key across all common environment variable aliases
+ * and cleans up accidental surrounding quotes or whitespace from hosting providers (Vercel, Railway, etc.).
+ */
+export function resolveOpenRouterApiKey(): string | null {
+  const candidate =
+    process.env.OPENROUTER_API_KEY ||
+    process.env.OPEN_ROUTER_API_KEY ||
+    process.env.OPENROUTER_KEY ||
+    process.env.OPENROUTER_API_TOKEN ||
+    process.env.OPENROUTER_TOKEN ||
+    process.env.OPEN_ROUTER_KEY ||
+    process.env.NEXT_PUBLIC_OPENROUTER_API_KEY ||
+    (process.env.OPENAI_API_KEY?.startsWith("sk-or-") ? process.env.OPENAI_API_KEY : undefined);
+
+  if (!candidate) return null;
+
+  const cleaned = candidate.trim().replace(/^["']|["']$/g, "").trim();
+  return cleaned.length > 0 ? cleaned : null;
+}
+
+/**
  * Strict OpenRouter client targeted exclusively to minimax/minimax-m3.1-flash.
  * Enforces JSON mode, timeouts, safe metadata capture, and single-retry on 429/5xx.
  */
@@ -61,8 +82,8 @@ export async function callMiniMaxStage(params: {
     timeoutMs = OPPORTUNITY_TIMEOUT_MS,
   } = params;
 
-  const apiKey = process.env.OPENROUTER_API_KEY || process.env.OPEN_ROUTER_API_KEY;
-  if (!apiKey || apiKey.trim() === "") {
+  const apiKey = resolveOpenRouterApiKey();
+  if (!apiKey) {
     throw new Error(
       `[${correlationId}] OpenRouter API key is not configured on the server. AI opportunity generation is unavailable.`
     );
