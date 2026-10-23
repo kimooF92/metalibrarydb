@@ -7,17 +7,13 @@ import {
   Copy,
   Check,
   ExternalLink,
-  Flame,
   TrendingUp,
   Video,
   Eye,
-  ShoppingBag,
-  Coins,
   MapPin,
   Users,
   Clock,
   Package,
-  Layers,
 } from "lucide-react";
 import { HighConvictionProductOpportunity } from "@/lib/opportunity-seeker";
 

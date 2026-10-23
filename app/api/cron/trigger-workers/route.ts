@@ -104,36 +104,34 @@ async function handleCronTrigger(req: NextRequest) {
       results.githubActionsDispatched.verifyFavorites = await dispatchWorkflow("verify-favorites.yml");
     }
 
-    // 4. Pre-warm / refresh AI Market Intelligence & Opportunities in background if target is 'all' or 'insights'
-    let aiRefreshStatus: { opportunities?: string; forecast?: string } = {};
+    // 4. Pre-warm / refresh AI Market Forecast in background if target is 'all' or 'insights'
+    // Note: Opportunities AI report generation is strictly on-demand (manual only) to prevent unwanted AI spend
+    let aiRefreshStatus: { opportunities?: string; forecast?: string } = {
+      opportunities: "manual_on_demand_only",
+    };
     if (target === "all" || target === "insights" || target === "ai") {
       try {
-        const { generateFullOpportunityReport } = await import("@/lib/opportunity-seeker");
         const { generateAiMarketForecast } = await import("@/lib/market-forecaster");
         const { appSettings } = await import("@/db/schema");
         const { eq } = await import("drizzle-orm");
 
-        const [oppReport, forecastReport] = await Promise.allSettled([
-          generateFullOpportunityReport(),
-          generateAiMarketForecast(),
-        ]);
+        const forecastReport = await generateAiMarketForecast().catch((e) => {
+          console.warn("[Cron Forecast Pre-warm Error]:", e);
+          return null;
+        });
 
-        const updateData: any = { updatedAt: new Date() };
-        if (oppReport.status === "fulfilled") {
-          updateData.savedOpportunityReport = oppReport.value;
-          aiRefreshStatus.opportunities = "refreshed";
-        }
-        if (forecastReport.status === "fulfilled") {
-          updateData.savedMarketForecast = forecastReport.value;
+        if (forecastReport) {
+          await db
+            .update(appSettings)
+            .set({
+              savedMarketForecast: forecastReport,
+              updatedAt: new Date(),
+            })
+            .where(eq(appSettings.id, "default"));
           aiRefreshStatus.forecast = "refreshed";
-        }
-
-        if (oppReport.status === "fulfilled" || forecastReport.status === "fulfilled") {
-          await db.update(appSettings).set(updateData).where(eq(appSettings.id, "default"));
         }
       } catch (aiErr: any) {
         console.warn("[Cron AI Pre-warm Notice]:", aiErr?.message || aiErr);
-        aiRefreshStatus.opportunities = "failed_gracefully";
       }
     }
 

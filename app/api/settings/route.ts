@@ -4,6 +4,7 @@ import { appSettings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { validateAdminRole } from "@/lib/api-guard";
 import { getApifyTokens } from "@/lib/apify";
+import { clearPersistedOpportunityReports } from "@/lib/opportunities";
 
 const DEFAULT_SETTINGS = {
   id: "default",
@@ -31,7 +32,7 @@ export async function GET(request: Request) {
         .values(DEFAULT_SETTINGS)
         .onConflictDoNothing()
         .returning();
-      settings = inserted || DEFAULT_SETTINGS as any;
+      settings = inserted || (DEFAULT_SETTINGS as unknown as typeof settings);
     }
 
     const apifyTokensConfigured = getApifyTokens().length;
@@ -90,6 +91,9 @@ export async function POST(request: Request) {
           updatedAt: new Date(),
         })
         .where(eq(appSettings.id, "default"));
+
+      // Also clear dedicated opportunity_reports table across workspaces
+      await clearPersistedOpportunityReports();
 
       return NextResponse.json({
         success: true,

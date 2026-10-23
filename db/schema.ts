@@ -489,3 +489,32 @@ export const appSettings = pgTable("app_settings", {
   savedMarketForecast: json("saved_market_forecast"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// 13. Opportunity Reports Table (Workspace-Scoped Dedicated Store)
+export const opportunityReports = pgTable(
+  "opportunity_reports",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .unique()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    reportJson: json("report_json").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    generationMode: text("generation_mode").notNull(), // 'ai' | 'offline'
+    requestedModel: text("requested_model").notNull(),
+    returnedModel: text("returned_model"),
+    generatedAt: timestamp("generated_at", { withTimezone: true }).notNull(),
+    telemetryStart: timestamp("telemetry_start", { withTimezone: true }).notNull(),
+    telemetryEnd: timestamp("telemetry_end", { withTimezone: true }).notNull(),
+    status: text("status").notNull(), // 'ready' | 'failed'
+    errorCode: text("error_code"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_opportunity_reports_workspace_id").on(table.workspaceId),
+    index("idx_opportunity_reports_status").on(table.status),
+    index("idx_opportunity_reports_generated_at").on(table.generatedAt.desc()),
+  ]
+);

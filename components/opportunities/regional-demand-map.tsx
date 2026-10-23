@@ -4,11 +4,6 @@ import { useState } from "react";
 import {
   MapPin,
   Truck,
-  TrendingUp,
-  CreditCard,
-  PhoneCall,
-  CheckCircle2,
-  Building,
   Compass,
 } from "lucide-react";
 import { Stage2SeasonalityAnalysis, TunisianSeasonalityContext } from "@/lib/opportunity-seeker";
@@ -87,7 +82,7 @@ export function RegionalDemandMap({
               <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
                 <strong className="text-slate-900 dark:text-white">Governorates: </strong>
                 {Array.isArray(strategy[selectedRegionIndex].targetGovernorates)
-                  ? (strategy[selectedRegionIndex].targetGovernorates as any).join(", ")
+                  ? (strategy[selectedRegionIndex].targetGovernorates as unknown as string[]).join(", ")
                   : strategy[selectedRegionIndex].targetGovernorates}
               </p>
             </div>

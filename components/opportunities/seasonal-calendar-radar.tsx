@@ -4,7 +4,6 @@ import {
   Calendar,
   Clock,
   Flame,
-  ArrowRight,
   Sparkles,
   Zap,
   ShoppingBag,

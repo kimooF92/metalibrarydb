@@ -1,16 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Layers,
-  Sparkles,
-  TrendingUp,
-  Flame,
-  CheckCircle2,
-  AlertTriangle,
-  ArrowUpDown,
-  Info,
-} from "lucide-react";
+import { Layers } from "lucide-react";
 import { NicheOpportunityScorecard } from "@/lib/opportunity-seeker";
 
 interface NicheMatrixProps {

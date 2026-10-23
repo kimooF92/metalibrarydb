@@ -3,17 +3,12 @@
 import {
   Sparkles,
   RefreshCw,
-  TrendingUp,
-  Activity,
-  Zap,
   Calendar,
-  Layers,
-  ShoppingBag,
   Flame,
-  CheckCircle2,
   AlertTriangle,
+  Clock,
 } from "lucide-react";
-import { UnifiedOpportunityReport } from "@/lib/opportunity-seeker";
+import { UnifiedOpportunityReport } from "@/lib/opportunities";
 
 interface OpportunityHeroProps {
   report: UnifiedOpportunityReport | null;
@@ -26,10 +21,23 @@ export function OpportunityHero({
   report,
   generating,
   onGenerate,
-  lastUpdated,
 }: OpportunityHeroProps) {
   const oppIndex = report?.marketOpportunityIndex ?? 82;
-  const isDeepSeek = report?.modelUsed?.toLowerCase().includes("deepseek");
+
+  const isAi =
+    report?.generationMeta?.generationMode === "ai" ||
+    (report?.modelUsed && report.modelUsed.toLowerCase().includes("minimax"));
+  const isOffline =
+    report?.generationMeta?.generationMode === "offline" ||
+    (report?.modelUsed && report.modelUsed.toLowerCase().includes("deterministic"));
+
+  const provenanceLabel = isAi
+    ? "MiniMax AI (m3.1-flash)"
+    : isOffline
+    ? "Offline Rules (AI Unavailable)"
+    : report?.modelUsed
+    ? report.modelUsed
+    : "On-Demand Intelligence";
 
   const scoreColor =
     oppIndex >= 75
@@ -37,6 +45,19 @@ export function OpportunityHero({
       : oppIndex >= 50
       ? "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20 ring-amber-500/20"
       : "text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/20 ring-rose-500/20";
+
+  const formattedGeneratedAt = report?.generatedAt
+    ? new Date(report.generatedAt).toLocaleString("fr-FR", {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+
+  const hasCoverageNotice =
+    report?.telemetrySnapshot?.coverage &&
+    !report.telemetrySnapshot.coverage.hasEnoughDataForInference;
 
   return (
     <div className="w-full rounded-2xl p-5 bg-gradient-to-br from-indigo-50/70 via-white to-purple-50/40 dark:from-slate-900/90 dark:via-slate-900/60 dark:to-indigo-950/30 border border-indigo-500/20 dark:border-indigo-500/30 backdrop-blur-xl shadow-xs space-y-4">
@@ -57,12 +78,24 @@ export function OpportunityHero({
               <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                 100% On-Demand
               </span>
-              <span className="px-2 py-0.5 text-[10px] font-mono font-bold rounded-full bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20">
-                {isDeepSeek ? "DeepSeek 3-Stage AI" : "Heuristic Rules"}
+              <span
+                className={`px-2 py-0.5 text-[10px] font-mono font-bold rounded-full border ${
+                  isAi
+                    ? "bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border-indigo-500/20"
+                    : "bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-500/20"
+                }`}
+              >
+                {provenanceLabel}
               </span>
+              {formattedGeneratedAt && (
+                <span className="flex items-center space-x-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                  <Clock className="w-3 h-3" />
+                  <span>{formattedGeneratedAt}</span>
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed max-w-3xl">
-              Continuous multi-prompt intelligence combining live creative scaling velocity, catalog price sweet-spots, Tunisian cultural seasonality (Ramadan, Eid, Summer, Rentrée), and regional COD buying dynamics.
+              Continuous multi-stage intelligence synthesizing live creative scaling velocity, catalog price sweet-spots, Tunisian cultural seasonality (Ramadan, Eid, Summer, Rentrée), and regional COD buying dynamics.
             </p>
           </div>
         </div>
@@ -92,10 +125,34 @@ export function OpportunityHero({
             title="Explicitly run multi-stage AI opportunity analysis on demand"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${generating ? "animate-spin" : ""}`} />
-            <span>{generating ? "Analyzing Live Market..." : report ? "Re-run Analysis (On-Demand)" : "Run AI Analysis (On-Demand)"}</span>
+            <span>
+              {generating
+                ? "Analyzing Live Market (MiniMax AI)..."
+                : report
+                ? "Re-run Analysis (On-Demand)"
+                : "Run AI Analysis (On-Demand)"}
+            </span>
           </button>
         </div>
       </div>
+
+      {/* Warnings & Coverage Banners */}
+      {hasCoverageNotice && (
+        <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 text-xs flex items-center space-x-2">
+          <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+          <span>
+            <strong>Low telemetry coverage:</strong> Limited active ad history in this workspace.
+            Market recommendations combine available telemetry with national baseline priors.
+          </span>
+        </div>
+      )}
+
+      {report?.generationMeta?.warnings && report.generationMeta.warnings.length > 0 && (
+        <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 text-xs flex items-center space-x-2">
+          <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+          <span>{report.generationMeta.warnings.join("; ")}</span>
+        </div>
+      )}
 
       {/* Live Telemetry Quick Summary Grid */}
       {report?.telemetrySnapshot && (
@@ -134,11 +191,15 @@ export function OpportunityHero({
                 Dominant Format
               </span>
               <span className="text-sm font-extrabold text-purple-600 dark:text-purple-400">
-                {report.telemetrySnapshot.videoPercent}% Video
+                {report.telemetrySnapshot.videoPercent !== null
+                  ? `${report.telemetrySnapshot.videoPercent}% Video`
+                  : "No Video Data"}
               </span>
             </div>
             <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-md">
-              {report.telemetrySnapshot.imagePercent}% Image
+              {report.telemetrySnapshot.imagePercent !== null
+                ? `${report.telemetrySnapshot.imagePercent}% Image`
+                : "No Image Data"}
             </span>
           </div>
 
@@ -148,7 +209,7 @@ export function OpportunityHero({
                 Active Phase
               </span>
               <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate max-w-[120px] block">
-                {report.seasonality?.currentSeasonalPhase || "Late Summer / Rentrée"}
+                {report.seasonality?.currentSeasonalPhase || "Standard Trading"}
               </span>
             </div>
             <Calendar className="w-4 h-4 text-indigo-500 shrink-0" />

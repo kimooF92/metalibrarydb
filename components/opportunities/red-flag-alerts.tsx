@@ -1,12 +1,9 @@
 "use client";
 
 import {
-  AlertTriangle,
   ShieldAlert,
   CheckCircle2,
   Zap,
-  Info,
-  Flame,
 } from "lucide-react";
 import { Stage1NicheAnalysis, Stage3ProductBlueprints } from "@/lib/opportunity-seeker";
 

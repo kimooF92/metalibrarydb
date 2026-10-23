@@ -141,6 +141,76 @@
       "when": 1790975183472,
       "tag": "0019_green_lady_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791500000000,
+      "tag": "0020_workspaces_engine",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791600000000,
+      "tag": "0021_add_search_trgm_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791700000000,
+      "tag": "0022_discovery_product_preview",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791800000000,
+      "tag": "0023_discovery_scan_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791900000000,
+      "tag": "0023_secure_storage_maintenance",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792000000000,
+      "tag": "0024_ad_products_junction",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792100000000,
+      "tag": "0025_optimize_ads_link_url_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1792200000000,
+      "tag": "0026_drop_ad_products_junction",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1792300000000,
+      "tag": "0027_add_creative_scanned_at_to_scan_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1792795000000,
+      "tag": "0028_opportunity_reports",
+      "breakpoints": true
     }
   ]
 }
