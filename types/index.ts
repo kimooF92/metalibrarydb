@@ -101,6 +101,7 @@ export interface ScanHistoryEntry {
   results: number | null;
   difference: number | null;
   checkedAt: string;
+  creativeScannedAt?: string | null;
   status: "success" | "failed" | "unclear";
   failureReason?: string | null;
 }

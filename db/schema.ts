@@ -128,12 +128,14 @@ export const scanHistory = pgTable(
     results: integer("results"),
     difference: integer("difference"),
     checkedAt: timestamp("checked_at", { withTimezone: true }).defaultNow(),
+    creativeScannedAt: timestamp("creative_scanned_at", { withTimezone: true }),
     status: text("status"), // success | failed | unclear
     failureReason: text("failure_reason"), // timeout | navigation_error | element_missing | pattern_not_found | captcha | rate_limited
   },
   (table) => [
     index("idx_scan_history_tracked_page_id").on(table.trackedPageId),
     index("idx_scan_history_checked_at").on(table.checkedAt),
+    index("idx_scan_history_creative_scanned_at").on(table.creativeScannedAt),
     index("idx_scan_history_page_checked_at").on(
       table.trackedPageId,
       table.checkedAt.desc()

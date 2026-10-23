@@ -54,4 +54,9 @@ The workspace uses a Notion Coding Workflow OS connected via Notion MCP (Bot: `A
 4. **Preserve Relations**: Always associate new tasks and documents with their parent Project (`Meta Brand Result` or corresponding codebase) and relevant specs.
 <!-- END:notion-workflow-sync-rules -->
 
+<!-- BEGIN:database-migration-backup-rules -->
+# MANDATORY PRE-MIGRATION BACKUP RULE
+- **High-Priority Backup Rule**: Before executing any risky, destructive, or structural database migration (e.g., dropping columns/tables, modifying column types, renaming fields, data backfills, or table rewrites), **ALWAYS create a full database backup via `pg_dump`** before proceeding. Because the project operates on Supabase Free Tier (which does not provide automatic daily backups or Point-In-Time Recovery), pre-migration `pg_dump` snapshots are strictly mandatory to guarantee full recoverability against data loss.
+<!-- END:database-migration-backup-rules -->
+
 

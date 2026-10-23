@@ -28,6 +28,8 @@
     "verify:pending": "npx tsx scripts/verify-favorite-ads.ts --pending",
     "db:maintenance": "npx tsx scripts/run-maintenance.ts",
     "db:vacuum": "npx tsx scripts/reclaim-disk-space.ts",
+    "db:backup": "npx tsx --env-file=.env.local scripts/backup-db.ts",
+    "db:restore": "npx tsx --env-file=.env.local scripts/restore-db.ts",
     "trigger:dev": "trigger dev",
     "trigger:deploy": "trigger deploy --prod"
   },

@@ -743,6 +743,7 @@ export async function markJobCompleted(
         results: null,
         difference: null,
         checkedAt: now,
+        creativeScannedAt: trackedPage?.lastCreativeScan || null,
         status: "unclear",
         failureReason: "circuit_breaker_meta_outage",
       });
@@ -810,6 +811,7 @@ export async function markJobCompleted(
     results,
     difference,
     checkedAt: now,
+    creativeScannedAt: trackedPage?.lastCreativeScan || null,
     status,
     failureReason: scanError,
   });
@@ -1399,6 +1401,7 @@ export async function markCreativeJobCompleted(
 
   const creativeScan = await db.query.creativeScans.findFirst({
     where: eq(creativeScans.id, creativeScanId),
+    columns: { id: true, trackedPageId: true },
   });
   if (creativeScan?.trackedPageId) {
     await db
@@ -1410,6 +1413,19 @@ export async function markCreativeJobCompleted(
         updatedAt: now,
       })
       .where(eq(trackedPages.id, creativeScan.trackedPageId));
+
+    // Update the latest scan_history entry so the creative scan date is immediately paired with the count check
+    const latestScan = await db.query.scanHistory.findFirst({
+      where: eq(scanHistory.trackedPageId, creativeScan.trackedPageId),
+      orderBy: [desc(scanHistory.checkedAt)],
+      columns: { id: true },
+    });
+    if (latestScan) {
+      await db
+        .update(scanHistory)
+        .set({ creativeScannedAt: now })
+        .where(eq(scanHistory.id, latestScan.id));
+    }
   }
 }
 
@@ -1420,12 +1436,18 @@ export async function markJobFailed(
 ) {
   const now = new Date();
 
+  const targetPage = await db.query.trackedPages.findFirst({
+    where: eq(trackedPages.id, pageId),
+    columns: { lastCreativeScan: true },
+  });
+
   // 1. Insert scan_history failure record
   await db.insert(scanHistory).values({
     trackedPageId: pageId,
     results: null,
     difference: null,
     checkedAt: now,
+    creativeScannedAt: targetPage?.lastCreativeScan || null,
     status: "failed",
     failureReason: reason,
   });

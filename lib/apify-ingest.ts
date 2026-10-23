@@ -877,6 +877,7 @@ export async function ingestApifyDatasetItems(
         results: activeAdCount,
         difference,
         checkedAt: now,
+        creativeScannedAt: now,
         status: "success",
       });
     }

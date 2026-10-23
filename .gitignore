@@ -25,6 +25,8 @@
 *.pem
 scratch/
 .data/
+backups/
+*.dump
 
 # debug
 npm-debug.log*

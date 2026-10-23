@@ -14,9 +14,18 @@ export async function GET(
       return NextResponse.json({ error: "Page ID is required" }, { status: 400 });
     }
 
-    // Verify tracked page exists
+    // Verify tracked page exists with lean projection (adheres to egress rules)
     const page = await db.query.trackedPages.findFirst({
       where: eq(trackedPages.id, id),
+      columns: {
+        id: true,
+        displayName: true,
+        url: true,
+        currentResults: true,
+        lastChecked: true,
+        lastCreativeScan: true,
+        status: true,
+      },
     });
 
     if (!page) {
@@ -25,6 +34,16 @@ export async function GET(
 
     const history = await db.query.scanHistory.findMany({
       where: eq(scanHistory.trackedPageId, id),
+      columns: {
+        id: true,
+        trackedPageId: true,
+        results: true,
+        difference: true,
+        checkedAt: true,
+        creativeScannedAt: true,
+        status: true,
+        failureReason: true,
+      },
       orderBy: [desc(scanHistory.checkedAt)],
       limit: 100,
     });

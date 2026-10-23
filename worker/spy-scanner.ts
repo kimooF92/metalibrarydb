@@ -419,6 +419,7 @@ export async function scanAdCreatives(
           results: liveResults,
           difference,
           checkedAt: now,
+          creativeScannedAt: now,
           status: "success",
         });
 

@@ -114,7 +114,7 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
           role="dialog"
           aria-modal="true"
           aria-labelledby="history-modal-title"
-          className="relative w-full max-w-2xl glass-panel rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+          className="relative w-full max-w-4xl glass-panel rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900/50">
@@ -133,9 +133,18 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
                   <ExternalLink className="w-3 h-3" />
                 </a>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                {page.displayName || page.url}
-              </p>
+              <div className="flex items-center flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400 mt-1">
+                <span>{page.displayName || page.url}</span>
+                {page.lastCreativeScan && (
+                  <>
+                    <span className="text-slate-300 dark:text-slate-700">•</span>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                      <Sparkles className="w-3 h-3 shrink-0" />
+                      <span>Last Creative Scan: {new Date(page.lastCreativeScan).toLocaleString()}</span>
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
 
             <div className="flex items-center space-x-2">
@@ -205,7 +214,8 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-50 dark:bg-slate-900/80 text-slate-500 dark:text-slate-400 uppercase font-semibold border-b border-slate-200 dark:border-slate-800">
                     <tr>
-                      <th className="px-4 py-3">Scan Date</th>
+                      <th className="px-4 py-3">Ad Count Date</th>
+                      <th className="px-4 py-3">Creative Scan Date</th>
                       <th className="px-4 py-3">Result Count</th>
                       <th className="px-4 py-3">Difference</th>
                       <th className="px-4 py-3">Status</th>
@@ -240,6 +250,16 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
                         <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-all">
                           <td className="px-4 py-3 text-slate-700 dark:text-slate-300 font-mono">
                             {new Date(item.checkedAt).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 font-mono">
+                            {item.creativeScannedAt ? (
+                              <span className="inline-flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 font-medium">
+                                <Sparkles className="w-3 h-3 text-indigo-500 shrink-0" />
+                                <span>{new Date(item.creativeScannedAt).toLocaleString()}</span>
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 dark:text-slate-600">—</span>
+                            )}
                           </td>
                           <td className="px-4 py-3 font-semibold text-slate-900 dark:text-slate-100">
                             {item.results !== null ? item.results.toLocaleString() : "—"}
