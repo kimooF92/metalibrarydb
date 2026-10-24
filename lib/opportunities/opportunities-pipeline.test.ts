@@ -10,7 +10,7 @@ import {
   Stage3ProductBlueprintsSchema,
   UnifiedOpportunityReportSchema,
 } from "./schemas";
-import { extractCleanJsonString, resolveOpenRouterApiKey } from "./openrouter-client";
+import { extractCleanJsonString } from "./openrouter-client";
 import {
   buildDeterministicStage1,
   buildDeterministicStage2,
@@ -22,65 +22,6 @@ import { MarketOpportunityTelemetry } from "./types";
 test("Constants: Single configured AI model is minimax/minimax-m3.1-flash", () => {
   assert.equal(OPPORTUNITY_AI_MODEL, "minimax/minimax-m3.1-flash");
   assert.equal(OPPORTUNITY_SCHEMA_VERSION, "opportunities.v2");
-});
-
-test("Key Resolution: Resolves OpenRouter key across all aliases, strips quotes and whitespace", () => {
-  const originalEnv = { ...process.env };
-  try {
-    // Clear all variants
-    delete process.env.OPENROUTER_API_KEY;
-    delete process.env.OPEN_ROUTER_API_KEY;
-    delete process.env.OPENROUTER_KEY;
-    delete process.env.OPENROUTER_API_TOKEN;
-    delete process.env.OPENROUTER_TOKEN;
-    delete process.env.OPEN_ROUTER_KEY;
-    delete process.env.NEXT_PUBLIC_OPENROUTER_API_KEY;
-    delete process.env.OPENAI_API_KEY;
-
-    assert.equal(resolveOpenRouterApiKey(), null);
-
-    // Test with double quotes and whitespace
-    process.env.OPENROUTER_API_KEY = '  "sk-or-v1-test-double-quotes"  ';
-    assert.equal(resolveOpenRouterApiKey(), "sk-or-v1-test-double-quotes");
-    delete process.env.OPENROUTER_API_KEY;
-
-    // Test with single quotes
-    process.env.OPENROUTER_KEY = "'sk-or-v1-test-single-quotes'";
-    assert.equal(resolveOpenRouterApiKey(), "sk-or-v1-test-single-quotes");
-    delete process.env.OPENROUTER_KEY;
-
-    // Test OPEN_ROUTER_API_KEY alias
-    process.env.OPEN_ROUTER_API_KEY = "sk-or-v1-test-underscore";
-    assert.equal(resolveOpenRouterApiKey(), "sk-or-v1-test-underscore");
-    delete process.env.OPEN_ROUTER_API_KEY;
-
-    // Test OPENROUTER_API_TOKEN alias
-    process.env.OPENROUTER_API_TOKEN = "sk-or-v1-test-token";
-    assert.equal(resolveOpenRouterApiKey(), "sk-or-v1-test-token");
-    delete process.env.OPENROUTER_API_TOKEN;
-
-    // Test OPENAI_API_KEY starting with sk-or-
-    process.env.OPENAI_API_KEY = "sk-or-v1-test-openai-prefix";
-    assert.equal(resolveOpenRouterApiKey(), "sk-or-v1-test-openai-prefix");
-    delete process.env.OPENAI_API_KEY;
-
-    // Standard OpenAI key (sk-proj-...) is NOT treated as OpenRouter key
-    process.env.OPENAI_API_KEY = "sk-proj-test-standard-openai";
-    assert.equal(resolveOpenRouterApiKey(), null);
-    delete process.env.OPENAI_API_KEY;
-
-    // Test value signature scan: Any variable whose value starts with sk-or-
-    process.env.UNEXPECTED_SECRET_NAME = "sk-or-v1-any-custom-variable-name";
-    assert.equal(resolveOpenRouterApiKey(), "sk-or-v1-any-custom-variable-name");
-    delete process.env.UNEXPECTED_SECRET_NAME;
-
-    // Test fuzzy name scan: Any variable with "jev_key"
-    process.env.CUSTOM_JEV_KEY = "sk-jev-test-key";
-    assert.equal(resolveOpenRouterApiKey(), "sk-jev-test-key");
-    delete process.env.CUSTOM_JEV_KEY;
-  } finally {
-    process.env = originalEnv;
-  }
 });
 
 test("Schemas: Stage 1 Niche Analysis strictly validates bounds and rejects duplicates", () => {

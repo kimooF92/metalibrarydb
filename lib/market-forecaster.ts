@@ -1,7 +1,6 @@
 import { db } from "@/db";
 import { ads, scrapedProducts, trackedPages, adObservations } from "@/db/schema";
 import { sql, desc, count, eq, and } from "drizzle-orm";
-import { resolveOpenRouterApiKey } from "./opportunities/openrouter-client";
 
 export interface MarketTelemetrySnapshot {
   totalActiveAds: number;
@@ -327,7 +326,7 @@ export async function extractMarketSignals(workspaceId?: string): Promise<Market
  */
 export async function generateAiMarketForecast(workspaceId?: string): Promise<MarketAnalysisData> {
   const telemetry = await extractMarketSignals(workspaceId);
-  const openRouterKey = resolveOpenRouterApiKey();
+  const openRouterKey = process.env.OPENROUTER_API_KEY || process.env.OPEN_ROUTER_API_KEY;
   const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   const groqKey = process.env.GROQ_API_KEY;
   const openAiKey = process.env.OPENAI_API_KEY;

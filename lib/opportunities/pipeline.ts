@@ -294,7 +294,7 @@ export async function generateUnifiedOpportunityReport(
 ): Promise<UnifiedOpportunityReport> {
   const pipelineStartTime = Date.now();
   const correlationId = `opp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-  const allowOffline = options?.allowOfflineFallback ?? (process.env.OPPORTUNITIES_ALLOW_OFFLINE_FALLBACK !== "false");
+  const allowOffline = options?.allowOfflineFallback ?? (process.env.OPPORTUNITIES_ALLOW_OFFLINE_FALLBACK === "true");
 
   // Step 1: Telemetry snapshot
   const telemetry = await extractMarketOpportunityTelemetry(workspaceId);
@@ -342,9 +342,7 @@ export async function generateUnifiedOpportunityReport(
       throw new Error(`[${correlationId}] MiniMax AI analysis failed: ${allErrors}`);
     }
 
-    const rawErr = stage1Res.validationErrors[0] || stage2Res.validationErrors[0] || "AI analysis unavailable";
-    const cleanErr = rawErr.replace(/\[opp_[^\]]+\]\s*/g, "");
-    warnings.push(`AI generation fell back to deterministic rules: ${cleanErr}`);
+    warnings.push("AI generation failed or validation failed; deterministic rules were used.");
     stage1Value = buildDeterministicStage1(telemetry);
     stage2Value = buildDeterministicStage2(seasonalityCtx);
     stage3Value = buildDeterministicStage3(seasonalityCtx, stage1Value);
