@@ -72,10 +72,26 @@ export async function downloadDatasetCsv(
     headers["x-workspace-id"] = workspaceId;
   }
 
-  const res = await fetch(`/api/analytics/export?type=${type}&range=${dateRange}&lean=${lean}`, {
-    method: "GET",
-    headers,
-  });
+  // Map 'ads' to 'creatives' query param to prevent browser ad-blockers (uBlock, AdBlock, Brave Shields)
+  // from intercepting and blocking fetch requests containing 'type=ads'
+  const apiType = type === "ads" ? "creatives" : type;
+  const endpoint = `/api/analytics/export?type=${apiType}&range=${dateRange}&lean=${lean}`;
+
+  let res: Response;
+  try {
+    res = await fetch(endpoint, {
+      method: "GET",
+      headers,
+    });
+  } catch (netErr: any) {
+    console.warn(`[Export] Fetch failed for ${type}, attempting direct browser download fallback:`, netErr);
+    // Direct browser navigation triggers native Content-Disposition download and bypasses extension fetch interceptors
+    if (typeof window !== "undefined") {
+      window.location.assign(endpoint);
+      return { success: true, filename: `${type}_export.csv`, isTruncated: false, count: 0 };
+    }
+    throw netErr;
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

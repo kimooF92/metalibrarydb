@@ -19,7 +19,7 @@ export const revalidate = 0;
 export const maxDuration = 60;
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-const VALID_TYPES = new Set(["brands", "products", "categories", "ads"]);
+const VALID_TYPES = new Set(["brands", "products", "categories", "ads", "creatives", "ad_creatives"]);
 const RANGE_MAP: Record<string, number> = {
   today: 1,
   "7d": 7,
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     if (!typeParam || !VALID_TYPES.has(typeParam)) {
       return NextResponse.json(
         {
-          error: "Invalid or missing 'type' parameter. Expected: brands | products | categories | ads",
+          error: "Invalid or missing 'type' parameter. Expected: brands | products | categories | ads | creatives",
         },
         { status: 400 }
       );
@@ -103,9 +103,12 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 5. Fetch Dataset
+    // 5. Fetch Dataset (creatives and ad_creatives are normalized to ads)
+    const normalizedType =
+      typeParam === "creatives" || typeParam === "ad_creatives" ? "ads" : typeParam;
+
     let dataset: CsvDataset;
-    switch (typeParam) {
+    switch (normalizedType) {
       case "brands":
         dataset = await getBrandsCsvData(targetWorkspaceId, rangeDays, isLean);
         break;
@@ -131,7 +134,7 @@ export async function GET(req: NextRequest) {
     // 7. Safe Filename
     const safeSlug = workspaceSlug.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
     const dateStamp = new Date().toISOString().split("T")[0];
-    const filename = `${safeSlug}_${typeParam}_${dateStamp}.csv`;
+    const filename = `${safeSlug}_${normalizedType}_${dateStamp}.csv`;
 
     // 8. Return Attachment Stream / Response with Truncation Signals
     const responseHeaders: Record<string, string> = {

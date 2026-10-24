@@ -170,6 +170,19 @@ test("Analytics CSV Export API Route Suite", async (t) => {
       "ad_id,brand_name,media_type,first_seen_at,days_active,has_arabic,has_french,has_free_delivery,has_discount"
     );
   });
+
+  await t.test("Returns 200 and valid ads CSV for creatives alias (ad-blocker defense)", async () => {
+    const req = createExportRequest("type=creatives&range=7d");
+    const res = await GET(req);
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.headers.get("Content-Type"), "text/csv; charset=utf-8");
+    assert.ok(res.headers.get("Content-Disposition")?.includes("_ads_"));
+
+    const buf = Buffer.from(await res.arrayBuffer());
+    assert.strictEqual(buf[0], 0xef);
+    const text = buf.toString("utf-8");
+    assert.ok(text.includes("ad_id,brand_name,media_type"));
+  });
 });
 
 test.after(async () => {
