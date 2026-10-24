@@ -127,7 +127,7 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
         extractionResult?.data?.current_price &&
         extractionResult.data.current_price !== "0 DT" &&
         extractionResult.data.current_price !== "0" &&
-        directPriceNum >= 10
+        directPriceNum >= 1
       );
 
       // 2. If direct HTML didn't get image or price, trigger local Playwright browser

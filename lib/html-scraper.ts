@@ -476,6 +476,8 @@ export function parseProductHtmlContent(
       options?.defaultCurrencySymbol ||
       (currency === "MAD" ? "DH" : "DT");
 
+    let isHighConfidencePrice = false;
+
     // 4a. Check Converty platform price
     if (convertyProduct) {
       const pVal =
@@ -494,6 +496,7 @@ export function parseProductHtmlContent(
 
       if (pVal !== undefined && pVal !== null) {
         currentPrice = `${pVal} ${currencySymbol}`;
+        isHighConfidencePrice = true;
       }
       if (compVal !== undefined && compVal !== null && Number(compVal) > Number(pVal)) {
         originalPrice = `${compVal} ${currencySymbol}`;
@@ -520,6 +523,7 @@ export function parseProductHtmlContent(
           }
         }
         currentPrice = `${priceNum} ${currencySymbol}`;
+        isHighConfidencePrice = true;
       }
       if (offer?.highPrice && parseFloat(offer.highPrice) > parseFloat(offer.price || "0")) {
         originalPrice = `${offer.highPrice} ${currencySymbol}`;
@@ -539,6 +543,7 @@ export function parseProductHtmlContent(
             num = Math.round(num / 1000);
           }
           currentPrice = `${num} ${currencySymbol}`;
+          isHighConfidencePrice = true;
         }
       }
     }
@@ -568,6 +573,7 @@ export function parseProductHtmlContent(
             }
           }
           currentPrice = `${num} ${currencySymbol}`;
+          isHighConfidencePrice = true;
         }
       }
     }
@@ -680,21 +686,29 @@ export function parseProductHtmlContent(
       }
     }
 
-    // 4i. Safeguard for micro-prices < 10: In North African COD, prices < 10 are almost always delivery fees or quantity snippets.
-    // Re-scan candidate spans, bdi tags, and inputs to locate a genuine price >= 10.
+    // 4i. Safeguard for micro-prices < 10 from generic unstructured text matches:
+    // If the price was NOT from structured data (JSON-LD, form input, meta tag) and is under 10,
+    // verify it wasn't a delivery fee (e.g. "Livraison: 7 DT") by checking for real price spans.
     const currentPriceNum = currentPrice ? parseFloat(currentPrice.replace(/[^0-9.]/g, "") || "0") : 0;
-    if (currentPrice && currentPriceNum > 0 && currentPriceNum < 10) {
-      const spanPriceRegex = /<(?:span|bdi|p|div)[^>]*class=["'][^"']*(?:price|amount|valeur|current|regular|sale|prix)[^"']*["'][^>]*>[\s\S]*?(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت|دت|دinar|Dinar|MAD|DH|dh|د\.م|درهم)?/gi;
+    if (!isHighConfidencePrice && currentPrice && currentPriceNum > 0 && currentPriceNum < 10) {
+      const spanPriceRegex = /<(?:span|bdi|p|div)[^>]*class=["'][^"']*(?:price|amount|valeur|current|regular|sale|prix)[^"']*["'][^>]*>([^<]+)<\/(?:span|bdi|p|div)>/gi;
       let spMatch;
       while ((spMatch = spanPriceRegex.exec(html)) !== null) {
-        let numStr = spMatch[1].replace(",", ".");
-        let num = parseFloat(numStr);
-        if (currency === "TND" && num >= 1000 && (spMatch[1].includes(",000") || spMatch[1].includes(".000"))) {
-          num = Math.round(num / 1000);
-        }
-        if (num >= 10 && num <= 50000) {
-          currentPrice = `${num} ${currencySymbol}`;
-          break;
+        const textContent = spMatch[1].trim();
+        // Ignore delivery fee or free shipping threshold text
+        if (/(?:livraison|delivery|توصيل|frais|d[eè]s|gratuit)/i.test(textContent)) continue;
+
+        const numMatch = textContent.match(/(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت|دت|دinar|Dinar|MAD|DH|dh|د\.م|درهم)/i);
+        if (numMatch && numMatch[1]) {
+          let numStr = numMatch[1].replace(",", ".");
+          let num = parseFloat(numStr);
+          if (currency === "TND" && num >= 1000 && (numMatch[1].includes(",000") || numMatch[1].includes(".000"))) {
+            num = Math.round(num / 1000);
+          }
+          if (num >= 10 && num <= 50000) {
+            currentPrice = `${num} ${currencySymbol}`;
+            break;
+          }
         }
       }
     }

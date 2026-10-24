@@ -96,3 +96,44 @@ test("detectExtractionDoubt flags USD prices caused by cloud scraper geo-switchi
   assert.equal(usdSuffix.hasDoubt, true);
   assert.equal(usdSuffix.needsPriceReferee, true);
 });
+
+test("harvestPriceCandidates handles legitimate prices under 10 and ignores CSS class numbers", () => {
+  const sampleHtml = `
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      "name": "ملصقات جدارية",
+      "offers": { "@type": "Offer", "price": 9, "priceCurrency": "TND" }
+    }
+    </script>
+    <div class="product-offre__prices flex flex-col items-end">
+      <div class="product-offre__price text-gray-700 font-medium">9.00 د.ت</div>
+      <div class="product-offre__old-price text-gray-600 line-through">20.00 د.ت</div>
+    </div>
+    <div class="delivery">Frais de livraison: 7 DT</div>
+    <div class="banner">LIVRAISON GRATUITE DÈS 200 DT</div>
+  `;
+
+  const candidates = harvestPriceCandidates(sampleHtml, "", "DT");
+  const values = candidates.map((c) => c.value);
+
+  // Must include the real 9 DT and original 20 DT
+  assert.ok(values.includes("9 DT"), "Must harvest genuine 9 DT");
+  assert.ok(values.includes("20 DT"), "Must harvest original 20 DT");
+
+  // Must NOT contain 700 DT (corrupted from text-gray-700)
+  assert.ok(!values.includes("700 DT"), "Must never match 700 from CSS class text-gray-700");
+
+  // Delivery 7 DT and Threshold 200 DT must be flagged as delivery
+  const cand7 = candidates.find((c) => c.value === "7 DT");
+  assert.ok(cand7?.isDelivery, "7 DT must be flagged as delivery");
+
+  const cand200 = candidates.find((c) => c.value === "200 DT");
+  assert.ok(cand200?.isDelivery, "200 DT must be flagged as delivery threshold");
+
+  // High confidence must be set on the JSON-LD candidate
+  const cand9 = candidates.find((c) => c.value === "9 DT");
+  assert.equal(cand9?.isHighConfidence, true, "9 DT must be high confidence from JSON-LD");
+});
+

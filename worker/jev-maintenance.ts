@@ -127,8 +127,8 @@ export async function sweepAndResolveZeroPrices(limit = 8): Promise<number> {
           sql`TRIM(${scrapedProducts.currentPrice}) = ''`,
           sql`TRIM(${scrapedProducts.currentPrice}) ~* '^0+(\\.0+|,0+)?(\\s*(dt|dh|tnd|mad))?$'`,
           sql`${scrapedProducts.currentPrice} = '0'`,
-          // Match suspicious prices under 10 (e.g. 1 DT, 5 DT, 7 DT, 1 DH, 9 DH)
-          sql`TRIM(${scrapedProducts.currentPrice}) ~* '^(dt|dh|tnd|mad)?\\s*[0-9]([.,][0-9]+)?(\\s*(dt|dh|tnd|mad))?$'`
+          // Match corrupted round 100 prices like 700 DT or 800 DT from previous regex bug
+          sql`TRIM(${scrapedProducts.currentPrice}) IN ('700 DT', '700 DH', '800 DT', '800 DH')`
         ),
         sql`EXISTS (
           SELECT 1 FROM ${ads}
@@ -147,7 +147,7 @@ export async function sweepAndResolveZeroPrices(limit = 8): Promise<number> {
     return 0;
   }
 
-  console.log(`[Jev Frequency Sweep] 💰 Found ${zeroItems.length} active products with 0 DT or suspicious micro-prices (< 10) to resolve...`);
+  console.log(`[Jev Frequency Sweep] 💰 Found ${zeroItems.length} active products with 0 DT or suspicious prices to resolve...`);
   let resolvedCount = 0;
 
   for (const item of zeroItems) {
@@ -170,8 +170,8 @@ export async function sweepAndResolveZeroPrices(limit = 8): Promise<number> {
       const directPrice = scrapeRes.data?.current_price;
       const directPriceNum = parseFloat(directPrice?.replace(/[^0-9.]/g, "") || "0");
 
-      // Check if direct scrape found a valid realistic price (must be >= 10 to avoid delivery fees / quantity numbers)
-      if (directPrice && !directPrice.startsWith("0") && directPriceNum >= 10) {
+      // Check if direct scrape found a valid realistic price (must be >= 1 to avoid 0 DT / delivery fees)
+      if (directPrice && !directPrice.startsWith("0") && directPriceNum >= 1) {
         const finalPrice = formatPrice(directPrice, itemSym);
         await db
           .update(scrapedProducts)
@@ -193,9 +193,9 @@ export async function sweepAndResolveZeroPrices(limit = 8): Promise<number> {
       let candidateHtml = rawHtml;
       let candidateMarkdown = "";
 
-      // If direct HTML found no candidate >= 10, invoke rendered extractor (Firecrawl / Playwright)
+      // If direct HTML found no candidate >= 1, invoke rendered extractor (Firecrawl / Playwright)
       const existingCandidates = harvestPriceCandidates(rawHtml, "", itemSym);
-      const hasRealisticCandidate = existingCandidates.some((c) => c.num >= 10 && !c.isDelivery);
+      const hasRealisticCandidate = existingCandidates.some((c) => c.num >= 1 && !c.isDelivery);
 
       if (!hasRealisticCandidate) {
         try {
@@ -206,7 +206,7 @@ export async function sweepAndResolveZeroPrices(limit = 8): Promise<number> {
             candidateMarkdown = deepRes.raw?.markdown || deepRes.raw?.data?.markdown || "";
 
             const deepPriceNum = parseFloat(deepRes.data.current_price?.replace(/[^0-9.]/g, "") || "0");
-            if (deepRes.data.current_price && !deepRes.data.current_price.startsWith("0") && deepPriceNum >= 10) {
+            if (deepRes.data.current_price && !deepRes.data.current_price.startsWith("0") && deepPriceNum >= 1) {
               const finalPrice = formatPrice(deepRes.data.current_price, itemSym);
               await db
                 .update(scrapedProducts)

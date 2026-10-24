@@ -95,6 +95,8 @@ export interface PriceCandidate {
   isDelivery?: boolean;
   isTotal?: boolean;
   isOriginal?: boolean;
+  isDiscount?: boolean;
+  isHighConfidence?: boolean;
 }
 
 /**
@@ -111,7 +113,12 @@ export function harvestPriceCandidates(
 
   const candidatesMap = new Map<string, PriceCandidate>();
 
-  const recordCandidate = (rawNumStr: string, matchIndex: number, matchLength: number) => {
+  const recordCandidate = (
+    rawNumStr: string,
+    matchIndex: number,
+    matchLength: number,
+    isHighConfidence = false
+  ) => {
     // Standardize commas to dots for parsing
     const cleanNumStr = rawNumStr.replace(/,/g, ".");
     let num = parseFloat(cleanNumStr);
@@ -127,62 +134,94 @@ export function harvestPriceCandidates(
     }
 
     // Grab surrounding 50 chars context
-    const startIdx = Math.max(0, matchIndex - 35);
-    const endIdx = Math.min(content.length, matchIndex + matchLength + 35);
+    const startIdx = Math.max(0, matchIndex - 45);
+    const endIdx = Math.min(content.length, matchIndex + matchLength + 45);
     const snippet = content.slice(startIdx, endIdx).replace(/\s+/g, " ").trim();
 
-    const isDelivery = /(?:livraison|delivery|توصيل|شحن|frais|exp[eé]dition)/i.test(snippet) && num <= 20;
+    const isFreeShippingThreshold = /(?:livraison\s+gratuite\s+d[eè]s|gratuit[e]?\s+d[eè]s|free\s+shipping\s+over|توصيل\s+مجاني\s+عند|شحن\s+مجاني\s+عند|d&#39;achat|d['']achat|d[eè]s\s+\d+\s*(?:dt|dh))/i.test(snippet);
+    const isDelivery = isFreeShippingThreshold || (/(?:livraison|delivery|توصيل|شحن|frais|exp[eé]dition)/i.test(snippet) && num <= 25);
+    const isDiscount = /(?:تخفيض|r[eé]duction|remise|rabais|discount|économie|économisez|save)\b/i.test(snippet);
     const isTotal = /(?:total|المجموع|sous-total|net [aà] payer|somme)/i.test(snippet);
-    const isOriginal = /(?:ancien|barr[eé]|original|prix initial|avant|regular|avant r[eé]duction|قبل الخصم|old|compare|was|del|strike)/i.test(snippet);
+    const isOriginal = /(?:ancien|barr[eé]|original|prix initial|avant|regular|avant r[eé]duction|قبل الخصم|old|compare|was|del|strike|line-through)/i.test(snippet);
     const isQuantity = /(?:pack\s*(?:de)?|quantit[eé]|اشتري|احصل\s*على|قطعة|pi[eè]ce|lot\s*(?:de)?)\s*[0-9]/i.test(snippet) && num <= 5;
 
     const formattedValue = `${num} ${fallbackCurrencySymbol}`;
     if (!candidatesMap.has(formattedValue)) {
       candidatesMap.set(formattedValue, {
         value: formattedValue,
-        context: snippet.slice(0, 70),
+        context: snippet.slice(0, 80),
         num,
-        isDelivery: isDelivery || isQuantity,
+        isDelivery,
         isTotal,
         isOriginal,
+        isDiscount,
+        isHighConfidence,
       });
     }
   };
 
-  // 1. Suffix currency match (e.g. "20 DT", "20.000 دت", "20,000 DT", "30 DH")
+  // 1. Structured JSON-LD Product Offer (highest confidence)
+  if (html) {
+    const jsonLdRegex = /<script\s+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    let jMatch: RegExpExecArray | null;
+    while ((jMatch = jsonLdRegex.exec(html)) !== null) {
+      try {
+        const parsed = JSON.parse(jMatch[1].trim());
+        const matchIdx = jMatch.index;
+        const checkOffer = (obj: any) => {
+          if (!obj) return;
+          const offer = obj.offers
+            ? (Array.isArray(obj.offers) ? obj.offers[0] : obj.offers)
+            : (obj["@type"] === "Offer" ? obj : null);
+          if (offer?.price) {
+            recordCandidate(String(offer.price), matchIdx, 10, true);
+          }
+        };
+        if (Array.isArray(parsed)) parsed.forEach(checkOffer);
+        else checkOffer(parsed);
+      } catch {}
+    }
+  }
+
+  // 2. Suffix currency match (e.g. "20 DT", "20.000 دت", "20,000 DT", "9.00 د.ت", "30 DH")
   const regexSuffix = /([0-9]+(?:[.,][0-9]+)?)\s*(?:DT|TND|dt|د\.ت|دت|DH|MAD|dh|د\.م|درهم)/gi;
   let match;
   while ((match = regexSuffix.exec(content)) !== null) {
     recordCandidate(match[1], match.index, match[0].length);
   }
 
-  // 2. Prefix currency match (e.g. "DT 20", "د.ت 20", "DH 250")
+  // 3. Prefix currency match (e.g. "DT 20", "د.ت 20", "DH 250")
   const regexPrefix = /(?:DT|TND|dt|د\.ت|دت|DH|MAD|dh|د\.م|درهم)\s*([0-9]+(?:[.,][0-9]+)?)/gi;
   while ((match = regexPrefix.exec(content)) !== null) {
     recordCandidate(match[1], match.index, match[0].length);
   }
 
-  // 3. Structured HTML & DOM price patterns (always scanned, especially to rescue micro-prices < 10)
-  const structuredRegexes = [
-    // Spans with price / amount classes (WooCommerce, Shopify, YouCan, Stocki)
-    /<span[^>]*class=["'][^"']*(?:price|amount|valeur|current|regular|sale|prix)[^"']*["'][^>]*>[\s\S]*?([0-9]+(?:[.,][0-9]+)?)/gi,
-    // HTML5 data-price / itemprop attributes
-    /(?:class|data-price|itemprop)=["'][^"']*(?:price|amount)[^"']*["'][^>]*>([0-9]+(?:[.,][0-9]+)?)/gi,
+  // 4. Structured DOM price patterns with strict inner text (avoiding class names like text-gray-700)
+  if (html) {
     // Hidden inputs in COD funnels
-    /<input[^>]+name=["'](?:price|prix|unit_price|amount)["'][^>]+value=["']([0-9]+(?:[.,][0-9]+)?)["']/gi,
-    /<input[^>]+value=["']([0-9]+(?:[.,][0-9]+)?)["'][^>]+name=["'](?:price|prix|unit_price|amount)["']/gi,
-    // Meta tags
-    /<meta\s+property=["']product:price:amount["']\s+content=["']([0-9]+(?:[.,][0-9]+)?)["']/gi,
-    /<meta\s+content=["']([0-9]+(?:[.,][0-9]+)?)["']\s+property=["']product:price:amount["']/gi,
-    // JSON-LD or script price properties
-    /"price":\s*"?([0-9]+(?:[.,][0-9]+)?)"?/gi,
-    // WooCommerce <bdi> tag
-    /<bdi>[^<]*(?:<span[^>]*>[^<]*<\/span>[^<]*)?([0-9]+(?:[.,][0-9]+)?)\s*<\/bdi>/gi,
-  ];
+    const inputRegex = /<input[^>]+(?:name|id)=["'](?:price|prix|unit_price|amount)["'][^>]+value=["']([0-9]+(?:[.,][0-9]+)?)["']/gi;
+    while ((match = inputRegex.exec(html)) !== null) {
+      recordCandidate(match[1], match.index, match[0].length, true);
+    }
+    const inputValRegex = /<input[^>]+value=["']([0-9]+(?:[.,][0-9]+)?)["'][^>]+(?:name|id)=["'](?:price|prix|unit_price|amount)["']/gi;
+    while ((match = inputValRegex.exec(html)) !== null) {
+      recordCandidate(match[1], match.index, match[0].length, true);
+    }
 
-  for (const sRegex of structuredRegexes) {
-    while ((match = sRegex.exec(content)) !== null) {
-      recordCandidate(match[1], match.index, match[0].length);
+    // Meta tags
+    const metaRegex = /<meta\s+[^>]*content=["']([0-9]+(?:[.,][0-9]+)?)["'][^>]*property=["'](?:product:price:amount|og:price:amount)["']/gi;
+    while ((match = metaRegex.exec(html)) !== null) {
+      recordCandidate(match[1], match.index, match[0].length, true);
+    }
+
+    // Spans with price / amount classes (strictly matching inner text between > and <)
+    const spanTextRegex = /<(?:span|bdi|p|div)[^>]*class=["'][^"']*(?:price|amount|valeur|current|regular|sale|prix)[^"']*["'][^>]*>([^<]+)<\/(?:span|bdi|p|div)>/gi;
+    while ((match = spanTextRegex.exec(html)) !== null) {
+      const text = match[1].trim();
+      const numMatch = text.match(/([0-9]+(?:[.,][0-9]+)?)\s*(?:DT|TND|dt|د\.ت|دت|DH|MAD|dh|د\.م|درهم)?/i);
+      if (numMatch && numMatch[1]) {
+        recordCandidate(numMatch[1], match.index, match[0].length);
+      }
     }
   }
 
@@ -211,18 +250,23 @@ export async function resolvePriceDoubtWithJev(params: {
     return null;
   }
 
-  // Filter out pure delivery fees, totals, and quantity artifacts
-  const nonDeliveryCandidates = allCandidates.filter((c) => !c.isDelivery && !c.isTotal);
+  // 1. Fast-path: If high-confidence structured metadata exists (JSON-LD offer / form price), resolve immediately
+  const structuredCandidate = allCandidates.find((c) => c.isHighConfidence && !c.isOriginal);
+  if (structuredCandidate) {
+    return {
+      resolvedPrice: structuredCandidate.value,
+      modelUsed: "high_confidence_structured",
+      confidence: 0.98,
+    };
+  }
+
+  // Filter out pure delivery fees, free shipping thresholds, totals, and discounts
+  const nonDeliveryCandidates = allCandidates.filter((c) => !c.isDelivery && !c.isTotal && !c.isDiscount);
   const baseCandidates = nonDeliveryCandidates.length > 0 ? nonDeliveryCandidates : allCandidates;
 
-  // Crucial Rule: In COD e-commerce, real products cost >= 10.
-  // If realistic candidates >= 10 exist, strictly exclude micro-numbers (< 10) which are delivery fees or quantity snippets.
-  const realisticCandidates = baseCandidates.filter((c) => c.num >= 10 && !c.isDelivery);
-  const candidates = realisticCandidates.length > 0 ? realisticCandidates : baseCandidates;
-
   // Single candidate heuristic: if only 1 viable price candidate exists on page, it is the real price!
-  if (candidates.length === 1) {
-    const single = candidates[0];
+  if (baseCandidates.length === 1) {
+    const single = baseCandidates[0];
     if (single.num > 0 && !single.isDelivery) {
       return {
         resolvedPrice: single.value,
@@ -231,6 +275,9 @@ export async function resolvePriceDoubtWithJev(params: {
       };
     }
   }
+
+  const pool = baseCandidates.filter((c) => !c.isOriginal);
+  const candidates = pool.length > 0 ? pool : baseCandidates;
 
   // Format compact criteria map for Jev
   const criteriaMap: Record<string, string> = {};
@@ -248,7 +295,7 @@ export async function resolvePriceDoubtWithJev(params: {
       real_price: {
         type: "choice",
         instructions:
-          "Pick the active single-unit retail selling price (choose discounted selling price over regular/crossed-out price). Never pick delivery fees, pack counts, or amounts under 10 when real prices exist.",
+          "Pick the active single-unit retail selling price (choose discounted single-unit selling price over regular/crossed-out price, pack bundle prices, discounts, or delivery fees).",
         criteria: criteriaMap,
       },
     },
@@ -258,10 +305,10 @@ export async function resolvePriceDoubtWithJev(params: {
   const answer = response?.answers?.real_price as JevChoiceAnswer | undefined;
   if (!answer || answer.type !== "choice" || !answer.choice) {
     // If Jev was unreachable, take the best candidate heuristic:
-    // Filter non-original candidates >= 10, and pick the lowest retail price (discounted sale price)
-    const valid = candidates.filter((c) => c.num >= 10);
+    // Filter non-original candidates >= 1, and pick the lowest retail price (discounted single-unit sale price)
+    const valid = candidates.filter((c) => c.num >= 1 && !c.isDelivery && !c.isTotal);
     if (valid.length > 0) {
-      const nonOriginal = valid.filter((c) => !c.isOriginal);
+      const nonOriginal = valid.filter((c) => !c.isOriginal && !c.isDiscount);
       const sorted = (nonOriginal.length > 0 ? nonOriginal : valid).sort((a, b) => a.num - b.num);
       const best = sorted[0];
       return {
