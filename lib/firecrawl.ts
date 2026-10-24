@@ -102,12 +102,14 @@ export async function extractProductFromUrl(
       };
     }
 
-    // If direct HTML successfully found a title AND (valid price OR valid image), return immediately (image is enough).
+    const hasProductSlug = /\/(?:products?|produits?|items?|item|p|dp)\//i.test(normalized);
+
+    // If direct HTML found a title AND valid price, or (valid image with product slug), return immediately.
     if (
       directResult?.success &&
       directResult.data &&
       directResult.data.title &&
-      (hasValidPrice || hasValidImage)
+      (hasValidPrice || (hasValidImage && hasProductSlug))
     ) {
       return {
         success: true,

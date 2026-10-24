@@ -459,10 +459,17 @@ export async function validateProductWithGatekeeper(
   // Layer 3 (Micro-tokens): Ambiguous edge-case (e.g. root domain, 0 price, or short title) -> Call Jev Noul
   const jevCheck = await filterJunkWithJev(cleanTitle);
   if (!jevCheck) {
-    // If Jev is offline or OpenRouter key missing, fallback safely
+    // If Jev is offline or OpenRouter key missing, fallback safely:
+    // If it has NO product slug and NO valid price, reject to prevent root domains from passing
+    if (!hasProductSlug && !hasValidPrice) {
+      return {
+        isProduct: false,
+        reason: "Ambiguous non-slug page without price; AI gatekeeper unavailable",
+      };
+    }
     return {
       isProduct: true,
-      reason: "Gatekeeper fallback pass (AI check unavailable)",
+      reason: "Gatekeeper fallback pass (product slug or price present, AI check unavailable)",
     };
   }
 

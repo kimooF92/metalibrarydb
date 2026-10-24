@@ -16,6 +16,7 @@ import { getCleanDomain } from "../lib/utils";
 import { normalizeProductUrl } from "../lib/firecrawl";
 import { trackedPages, adObservations } from "../db/schema";
 import { enhanceProductWithJev } from "../lib/product-enhancer";
+import { validateAndGatekeepProduct, resolveEffectiveScrapeStatus } from "../lib/product-validator";
 import { isPriceString } from "../lib/html-scraper";
 
 interface RunOptions {
@@ -113,6 +114,21 @@ async function runProductScraperBatch() {
         fallbackCurrencySymbol: "DT",
       });
 
+      const finalTitle = enhanced.title || res.data.title;
+      const finalImage = res.data.main_image_url;
+      const gateCheck = await validateAndGatekeepProduct({
+        url: targetUrl,
+        title: finalTitle,
+        rawPrice: enhanced.currentPrice || res.data.current_price,
+        mainImageUrl: finalImage,
+        html: rawHtml,
+      });
+
+      const { status: effectiveStatus, reason: effectiveReason } = resolveEffectiveScrapeStatus(
+        gateCheck,
+        enhanced
+      );
+
       const formattedOffers = (res.data.all_offers || []).map((o) => ({
         tierName: o.tier_name,
         price: o.price,
@@ -124,12 +140,12 @@ async function runProductScraperBatch() {
         .values({
           url: targetUrl,
           domain: resolvedDomain,
-          title: res.data.title,
+          title: finalTitle,
           currentPrice: enhanced.currentPrice,
           originalPrice: enhanced.originalPrice,
           currency: res.data.currency || "TND",
           discountOrOffer: res.data.discount_or_offer,
-          mainImageUrl: res.data.main_image_url,
+          mainImageUrl: finalImage,
           galleryImages: res.data.gallery_images || [],
           allOffers: formattedOffers,
           storePlatform: platform,
@@ -140,18 +156,19 @@ async function runProductScraperBatch() {
           category: enhanced.category,
           subCategory: enhanced.subCategory,
           targetAudience: enhanced.targetAudience,
-          scrapeStatus: "success",
+          scrapeStatus: effectiveStatus,
+          failureReason: effectiveReason,
           lastScrapedAt: new Date(),
         })
         .onConflictDoUpdate({
           target: scrapedProducts.url,
           set: {
-            title: res.data.title,
+            title: finalTitle,
             currentPrice: enhanced.currentPrice,
             originalPrice: enhanced.originalPrice,
             currency: res.data.currency || "TND",
             discountOrOffer: res.data.discount_or_offer,
-            mainImageUrl: res.data.main_image_url,
+            mainImageUrl: finalImage,
             galleryImages: res.data.gallery_images || [],
             allOffers: formattedOffers,
             storePlatform: platform,
@@ -162,8 +179,8 @@ async function runProductScraperBatch() {
             category: enhanced.category,
             subCategory: enhanced.subCategory,
             targetAudience: enhanced.targetAudience,
-            scrapeStatus: "success",
-            failureReason: null,
+            scrapeStatus: effectiveStatus,
+            failureReason: effectiveReason,
             lastScrapedAt: new Date(),
             updatedAt: new Date(),
           },
@@ -456,6 +473,21 @@ async function runProductScraperBatch() {
           fallbackCurrencySymbol: item.currency === "MAD" ? "DH" : "DT",
         });
 
+        const finalTitle = enhanced.title || res.data.title || item.title;
+        const finalImage = res.data.main_image_url || item.mainImageUrl;
+        const gateCheck = await validateAndGatekeepProduct({
+          url: targetUrl,
+          title: finalTitle,
+          rawPrice: enhanced.currentPrice || res.data.current_price || item.currentPrice,
+          mainImageUrl: finalImage,
+          html: rawHtml,
+        });
+
+        const { status: effectiveStatus, reason: effectiveReason } = resolveEffectiveScrapeStatus(
+          gateCheck,
+          enhanced
+        );
+
         const formattedOffers = (res.data.all_offers || []).map((o) => ({
           tierName: o.tier_name,
           price: o.price,
@@ -468,12 +500,12 @@ async function runProductScraperBatch() {
             url: targetUrl,
             domain: resolvedDomain || item.domain,
             pageId: (options as any).pageIdOverride || item.pageId,
-            title: res.data.title || item.title,
+            title: finalTitle,
             currentPrice: enhanced.currentPrice,
             originalPrice: enhanced.originalPrice,
             currency: res.data.currency || item.currency || "TND",
             discountOrOffer: res.data.discount_or_offer || item.discountOrOffer,
-            mainImageUrl: res.data.main_image_url || item.mainImageUrl,
+            mainImageUrl: finalImage,
             galleryImages: res.data.gallery_images && res.data.gallery_images.length > 0 ? res.data.gallery_images : item.galleryImages,
             allOffers: formattedOffers.length > 0 ? formattedOffers : item.allOffers,
             storePlatform: platform || item.storePlatform,
@@ -484,7 +516,8 @@ async function runProductScraperBatch() {
             category: enhanced.category,
             subCategory: enhanced.subCategory,
             targetAudience: enhanced.targetAudience,
-            scrapeStatus: "success",
+            scrapeStatus: effectiveStatus,
+            failureReason: effectiveReason,
             lastScrapedAt: new Date(),
           })
           .onConflictDoUpdate({
@@ -492,12 +525,12 @@ async function runProductScraperBatch() {
             set: {
               domain: resolvedDomain || item.domain,
               pageId: (options as any).pageIdOverride || item.pageId,
-              title: res.data.title || item.title,
+              title: finalTitle,
               currentPrice: enhanced.currentPrice,
               originalPrice: enhanced.originalPrice,
               currency: res.data.currency || item.currency || "TND",
               discountOrOffer: res.data.discount_or_offer || item.discountOrOffer,
-              mainImageUrl: res.data.main_image_url || item.mainImageUrl,
+              mainImageUrl: finalImage,
               galleryImages: res.data.gallery_images && res.data.gallery_images.length > 0 ? res.data.gallery_images : item.galleryImages,
               allOffers: formattedOffers.length > 0 ? formattedOffers : item.allOffers,
               storePlatform: platform || item.storePlatform,
@@ -508,8 +541,8 @@ async function runProductScraperBatch() {
               category: enhanced.category,
               subCategory: enhanced.subCategory,
               targetAudience: enhanced.targetAudience,
-              scrapeStatus: "success",
-              failureReason: null,
+              scrapeStatus: effectiveStatus,
+              failureReason: effectiveReason,
               lastScrapedAt: new Date(),
               updatedAt: new Date(),
             },

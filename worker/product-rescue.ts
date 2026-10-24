@@ -13,6 +13,7 @@ import {
 } from "../lib/network-extractor";
 import { formatPrice, formatDelivery } from "../lib/format-price";
 import { enhanceProductWithJev } from "../lib/product-enhancer";
+import { validateAndGatekeepProduct, resolveEffectiveScrapeStatus } from "../lib/product-validator";
 
 let isRescueRunning = false;
 let lastRescueAttemptTime = 0;
@@ -201,6 +202,21 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
           fallbackCurrencySymbol: itemSym,
         });
 
+        const finalTitle = enhanced.title || extracted.title || null;
+        const finalImage = extracted.main_image_url || null;
+        const gateCheck = await validateAndGatekeepProduct({
+          url: targetUrl,
+          title: finalTitle,
+          rawPrice: enhanced.currentPrice || extracted.current_price,
+          mainImageUrl: finalImage,
+          html: rawHtml,
+        });
+
+        const { status: effectiveStatus, reason: effectiveReason } = resolveEffectiveScrapeStatus(
+          gateCheck,
+          enhanced
+        );
+
         const finalPrice = enhanced.currentPrice;
         const finalOrigPrice = enhanced.originalPrice;
         const finalDelivery = delivery.label ? formatDelivery(delivery.label, itemSym) : null;
@@ -209,7 +225,7 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
           .update(scrapedProducts)
           .set({
             domain: resolvedDomain || null,
-            title: extracted.title || null,
+            title: finalTitle || null,
             currentPrice: finalPrice,
             originalPrice: finalOrigPrice,
             category: enhanced.category,
@@ -217,7 +233,7 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
             targetAudience: enhanced.targetAudience,
             currency: extracted.currency || itemCurrency,
             discountOrOffer: extracted.discount_or_offer || null,
-            mainImageUrl: extracted.main_image_url || null,
+            mainImageUrl: finalImage || null,
             galleryImages: extracted.gallery_images || [],
             allOffers: formattedOffers.length > 0 ? formattedOffers : null,
             storePlatform: platform || "other",
@@ -225,8 +241,8 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
             whatsappNumbers: wa.length > 0 ? wa : null,
             metaPixelIds: pixels.length > 0 ? pixels : null,
             deliveryCost: finalDelivery,
-            scrapeStatus: "success",
-            failureReason: null,
+            scrapeStatus: effectiveStatus,
+            failureReason: effectiveReason,
             lastScrapedAt: new Date(),
             updatedAt: new Date(),
           })

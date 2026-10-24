@@ -14,6 +14,7 @@ export interface ExtractionDoubtResult {
   reasons: string[];
   needsPriceReferee: boolean;
   needsTitleReferee: boolean;
+  isForeignCurrency?: boolean;
 }
 
 /**
@@ -28,6 +29,7 @@ export function detectExtractionDoubt(data: {
   const reasons: string[] = [];
   let needsPriceReferee = false;
   let needsTitleReferee = false;
+  let isForeignCurrency = false;
 
   const rawPriceStr = String(data.currentPrice || "").trim();
   const priceClean = rawPriceStr.replace(/[^0-9.]/g, "");
@@ -37,9 +39,10 @@ export function detectExtractionDoubt(data: {
   if (!rawPriceStr || isNaN(priceNum) || priceNum <= 0) {
     reasons.push("Price is 0, empty, or unparseable");
     needsPriceReferee = true;
-  } else if (rawPriceStr.includes("$") || /\bUSD\b/i.test(rawPriceStr)) {
-    reasons.push(`USD / foreign currency detected (${rawPriceStr}) - cloud proxy geo-switch artifact`);
+  } else if (/(?:\$|€|£|¥|\b(?:USD|EUR|GBP)\b)/i.test(rawPriceStr)) {
+    reasons.push(`USD / foreign currency detected (${rawPriceStr}) - cloud proxy geo-switch or international store artifact`);
     needsPriceReferee = true;
+    isForeignCurrency = true;
   } else if (priceNum <= 10) {
     // In COD e-commerce (Tunisia/Morocco), <= 10 DT/DH is almost always a delivery fee or placeholder
     reasons.push(`Suspiciously low price (${priceNum}) - likely delivery fee or accessory`);
@@ -85,6 +88,7 @@ export function detectExtractionDoubt(data: {
     reasons,
     needsPriceReferee,
     needsTitleReferee,
+    isForeignCurrency,
   };
 }
 
@@ -302,15 +306,26 @@ export async function resolvePriceDoubtWithJev(params: {
     { timeoutMs: 4000 }
   );
 
-  const answer = response?.answers?.real_price as JevChoiceAnswer | undefined;
-  if (!answer || answer.type !== "choice" || !answer.choice) {
-    // If Jev was unreachable, take the best candidate heuristic:
-    // Filter non-original candidates >= 1, and pick the lowest retail price (discounted single-unit sale price)
+  // Prioritized candidate selection fallback helper
+  const selectPrioritizedFallback = () => {
+    // 1. Structured candidate if available
+    const structured = candidates.find((c) => c.isHighConfidence && !c.isOriginal && !c.isDelivery);
+    if (structured) return structured;
+
+    // 2. Filter non-delivery, non-total, non-discount candidates
     const valid = candidates.filter((c) => c.num >= 1 && !c.isDelivery && !c.isTotal);
     if (valid.length > 0) {
       const nonOriginal = valid.filter((c) => !c.isOriginal && !c.isDiscount);
       const sorted = (nonOriginal.length > 0 ? nonOriginal : valid).sort((a, b) => a.num - b.num);
-      const best = sorted[0];
+      return sorted[0];
+    }
+    return null;
+  };
+
+  const answer = response?.answers?.real_price as JevChoiceAnswer | undefined;
+  if (!answer || answer.type !== "choice" || !answer.choice) {
+    const best = selectPrioritizedFallback();
+    if (best) {
       return {
         resolvedPrice: best.value,
         modelUsed: "price_heuristic_fallback",
@@ -320,8 +335,25 @@ export async function resolvePriceDoubtWithJev(params: {
     return null;
   }
 
+  // Phase 3.1: Strict validation that LLM answer is an actual candidate on the page
+  const chosenCandidate = candidates.find((c) => c.value === answer.choice);
+  if (!chosenCandidate) {
+    console.warn(
+      `[Jev Referee] Model returned non-candidate choice "${answer.choice}". Abstaining to prioritized fallback.`
+    );
+    const best = selectPrioritizedFallback();
+    if (best) {
+      return {
+        resolvedPrice: best.value,
+        modelUsed: "price_heuristic_fallback_unrecognized_choice",
+        confidence: 0.65,
+      };
+    }
+    return null;
+  }
+
   return {
-    resolvedPrice: answer.choice,
+    resolvedPrice: chosenCandidate.value,
     modelUsed: response?.model || DEFAULT_DECISION_MODEL,
     confidence: answer.confidence ?? 1.0,
   };

@@ -18,6 +18,7 @@ import {
   extractDeliveryInfo,
 } from "@/lib/network-extractor";
 import { enhanceProductWithJev } from "@/lib/product-enhancer";
+import { validateAndGatekeepProduct, resolveEffectiveScrapeStatus } from "@/lib/product-validator";
 import { deleteByPrefix } from "@/lib/cache-service";
 
 export const maxDuration = 60; // Allow sufficient time for batch scraping if needed
@@ -325,6 +326,21 @@ export async function POST(
           fallbackCurrencySymbol: effectiveCurrencySymbol,
         });
 
+        const finalTitle = enhanced.title || extracted.title || existingProduct?.title;
+        const finalImage = extracted.main_image_url || existingProduct?.mainImageUrl;
+        const gateCheck = await validateAndGatekeepProduct({
+          url: finalEffectiveUrl,
+          title: finalTitle,
+          rawPrice: enhanced.currentPrice || extracted.current_price,
+          mainImageUrl: finalImage,
+          html: rawHtml,
+        });
+
+        const { status: effectiveStatus, reason: effectiveReason } = resolveEffectiveScrapeStatus(
+          gateCheck,
+          enhanced
+        );
+
         let savedProduct;
         if (existingProduct) {
           const [updated] = await db
@@ -334,7 +350,7 @@ export async function POST(
               pageId: pageId || existingProduct.pageId,
               workspaceId: existingProduct.workspaceId || resolvedWorkspaceId,
               brandDomainId: existingProduct.brandDomainId || resolvedBrandDomainId,
-              title: extracted.title || existingProduct.title,
+              title: finalTitle || existingProduct.title,
               currentPrice: enhanced.currentPrice,
               originalPrice: enhanced.originalPrice,
               category: enhanced.category,
@@ -342,7 +358,7 @@ export async function POST(
               targetAudience: enhanced.targetAudience,
               currency: extracted.currency || existingProduct.currency,
               discountOrOffer: extracted.discount_or_offer || existingProduct.discountOrOffer,
-              mainImageUrl: extracted.main_image_url || existingProduct.mainImageUrl,
+              mainImageUrl: finalImage,
               galleryImages: extracted.gallery_images || existingProduct.galleryImages,
               allOffers: extracted.all_offers || existingProduct.allOffers,
               rawExtract: extractionResult.raw || existingProduct.rawExtract,
@@ -351,8 +367,8 @@ export async function POST(
               metaPixelIds: metaPixelIds.length > 0 ? metaPixelIds : existingProduct.metaPixelIds,
               storePlatform: storePlatform !== "other" ? storePlatform : existingProduct.storePlatform,
               deliveryCost: deliveryInfo.label || existingProduct.deliveryCost,
-              scrapeStatus: "success",
-              failureReason: null,
+              scrapeStatus: effectiveStatus,
+              failureReason: effectiveReason,
               lastScrapedAt: new Date(),
               updatedAt: new Date(),
             })
@@ -368,7 +384,7 @@ export async function POST(
               pageId: pageId || null,
               workspaceId: resolvedWorkspaceId,
               brandDomainId: resolvedBrandDomainId,
-              title: extracted.title || null,
+              title: finalTitle || null,
               currentPrice: enhanced.currentPrice,
               originalPrice: enhanced.originalPrice,
               category: enhanced.category,
@@ -376,7 +392,7 @@ export async function POST(
               targetAudience: enhanced.targetAudience,
               currency: extracted.currency || null,
               discountOrOffer: extracted.discount_or_offer || null,
-              mainImageUrl: extracted.main_image_url || null,
+              mainImageUrl: finalImage || null,
               galleryImages: extracted.gallery_images || [],
               allOffers: extracted.all_offers || null,
               rawExtract: extractionResult.raw || null,
@@ -385,7 +401,8 @@ export async function POST(
               metaPixelIds: metaPixelIds.length > 0 ? metaPixelIds : [],
               storePlatform: storePlatform || "other",
               deliveryCost: deliveryInfo.label || null,
-              scrapeStatus: "success",
+              scrapeStatus: effectiveStatus,
+              failureReason: effectiveReason,
               lastScrapedAt: new Date(),
             })
             .returning();

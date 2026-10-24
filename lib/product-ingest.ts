@@ -12,9 +12,11 @@ import {
   extractDeliveryInfo,
 } from "@/lib/network-extractor";
 import { formatPrice, formatDelivery } from "@/lib/format-price";
-import { validateProductWithGatekeeper, classifyProductWithJev } from "@/lib/typesafe-jev";
+import { classifyProductWithJev } from "@/lib/typesafe-jev";
+import { validateAndGatekeepProduct, resolveEffectiveScrapeStatus } from "@/lib/product-validator";
 import { classifyProductOffline } from "@/lib/product-classifier";
 import { detectExtractionDoubt, resolvePriceDoubtWithJev } from "@/lib/doubt-detector";
+import { enhanceProductWithJev } from "@/lib/product-enhancer";
 
 // In-flight URL scrape deduplication map to prevent redundant concurrent Firecrawl requests
 const inFlightScrapes = new Map<string, Promise<any>>();
@@ -418,11 +420,13 @@ export async function processProductExtraction(
     const resolvedDomain = getCleanDomain(finalEffectiveUrl);
 
     // Hybrid 0-Credit Noise Gatekeeper: drop policy, cart, legal, or non-product pages
-    const gateCheck = await validateProductWithGatekeeper(
-      extracted.title,
-      finalEffectiveUrl,
-      extracted.current_price
-    );
+    const gateCheck = await validateAndGatekeepProduct({
+      url: finalEffectiveUrl,
+      title: extracted.title,
+      rawPrice: extracted.current_price,
+      mainImageUrl: extracted.main_image_url,
+      html: rawHtml,
+    });
 
     if (!gateCheck.isProduct) {
       console.log(
@@ -434,13 +438,13 @@ export async function processProductExtraction(
           rawExtract: null,
           domain: resolvedDomain || undefined,
           title: extracted.title || normalizedUrl,
-          scrapeStatus: "ignored",
+          scrapeStatus: gateCheck.status,
           failureReason: gateCheck.reason || "Non-product item filtered by gatekeeper",
           lastScrapedAt: new Date(),
           updatedAt: new Date(),
         })
         .where(eq(scrapedProducts.id, productId));
-      return { success: true, status: "ignored" };
+      return { success: true, status: gateCheck.status };
     }
 
     const phoneNumbers = extractTunisianPhoneNumbers(rawHtml);
@@ -455,38 +459,23 @@ export async function processProductExtraction(
     );
     const deliveryCost = deliveryInfo?.label ? formatDelivery(deliveryInfo.label, fallbackCurrencySymbol) : null;
 
-    // High-speed Decision AI classification (Span/Jev model with AI cascade fallback)
-    let category: string | null = null;
-    let subCategory: string | null = null;
-    let targetAudience: string | null = null;
+    // Enhance product with TypeSafe Jev Decision Engine (currency hygiene, price referee, slug recovery, niche)
+    const enhanced = await enhanceProductWithJev({
+      title: extracted.title,
+      currentPrice: extracted.current_price,
+      originalPrice: extracted.original_price,
+      url: finalEffectiveUrl,
+      domain: resolvedDomain,
+      adText: options?.adCopy || null,
+      html: rawHtml,
+      markdown: extractionResult.raw?.markdown,
+      fallbackCurrencySymbol,
+    });
 
-    if (extracted.title) {
-      try {
-        const jevClassification = await classifyProductWithJev(extracted.title, {
-          domain: resolvedDomain,
-          url: finalEffectiveUrl,
-          adText: options?.adCopy || null,
-          allowGeneral: false,
-        });
-
-        if (jevClassification?.category && jevClassification.category !== "General & Other") {
-          category = jevClassification.category;
-          subCategory = jevClassification.subCategory;
-          targetAudience = jevClassification.targetAudience;
-        } else {
-          const fallback = classifyProductOffline(extracted.title);
-          category = fallback.category;
-          subCategory = fallback.subCategory;
-          targetAudience = fallback.targetAudience;
-        }
-      } catch (err: any) {
-        console.warn(`[Auto-Scraper] Decision AI classification error for "${extracted.title}":`, err?.message || err);
-        const fallback = classifyProductOffline(extracted.title);
-        category = fallback.category;
-        subCategory = fallback.subCategory;
-        targetAudience = fallback.targetAudience;
-      }
-    }
+    const { status: effectiveStatus, reason: effectiveReason } = resolveEffectiveScrapeStatus(
+      gateCheck,
+      enhanced
+    );
 
     const formattedOffers = (extracted.all_offers || []).map((offer) => ({
       tierName: offer.tier_name,
@@ -496,46 +485,14 @@ export async function processProductExtraction(
 
     const effectiveCurrency = extracted.currency || fallbackCurrency;
 
-    // 0-Cost Anomaly / Doubt Detector: triggers Jev referee ONLY on suspicious prices
-    const doubt = detectExtractionDoubt({
-      title: extracted.title,
-      currentPrice: extracted.current_price,
-      url: finalEffectiveUrl,
-    });
-
-    if (doubt.hasDoubt && doubt.needsPriceReferee) {
-      console.log(`[Auto-Scraper] Doubt flagged on "${extracted.title}": ${doubt.reasons.join(", ")}`);
-      try {
-        const resolved = await resolvePriceDoubtWithJev({
-          productTitle: extracted.title,
-          extractedPrice: extracted.current_price,
-          html: rawHtml,
-          markdown: extractionResult.raw?.markdown,
-          fallbackCurrencySymbol,
-        });
-
-        if (resolved?.resolvedPrice) {
-          console.log(
-            `[Auto-Scraper Jev Referee] Corrected price from "${extracted.current_price}" -> "${resolved.resolvedPrice}" (${(resolved.confidence * 100).toFixed(0)}% conf)`
-          );
-          extracted.current_price = resolved.resolvedPrice;
-        }
-      } catch (err: any) {
-        console.warn("[Auto-Scraper Jev Referee] Price resolution skipped:", err?.message || err);
-      }
-    }
-
     const isZeroPrice =
-      !extracted.current_price ||
-      /^0(\.0+)?\s*(dt|dh|mad|tnd|usd|eur|dinar)?$/i.test(extracted.current_price.trim()) ||
-      extracted.current_price.trim() === "0";
+      !enhanced.currentPrice ||
+      /^0(\.0+)?\s*(dt|dh|mad|tnd|usd|eur|dinar)?$/i.test(enhanced.currentPrice.trim()) ||
+      enhanced.currentPrice.trim() === "0";
 
-    const effectivePrice = !isZeroPrice
-      ? formatPrice(extracted.current_price, fallbackCurrencySymbol)
-      : null;
-    const effectiveOriginalPrice = extracted.original_price
-      ? formatPrice(extracted.original_price, fallbackCurrencySymbol)
-      : null;
+    const effectivePrice = !isZeroPrice ? enhanced.currentPrice : null;
+    const effectiveOriginalPrice = enhanced.originalPrice;
+    const effectiveTitle = enhanced.title || extracted.title;
 
     const isOutOfStock =
       /rupture\s*de\s*stock|out\s*of\s*stock|actuellement\s*en\s*rupture|غير\s*متوفر|نفذت\s*الكمية/i.test(
@@ -543,14 +500,16 @@ export async function processProductExtraction(
       );
     const failureReason = isOutOfStock && !effectivePrice
       ? "Produit en rupture de stock sur le site web"
-      : null;
+      : effectiveReason;
+
+    const finalScrapeStatus = isOutOfStock && !effectivePrice ? "failed" : effectiveStatus;
 
     const updateTime = new Date();
     await db
       .update(scrapedProducts)
       .set({
         domain: resolvedDomain || undefined,
-        title: extracted.title,
+        title: effectiveTitle,
         currentPrice: effectivePrice,
         originalPrice: effectiveOriginalPrice,
         currency: effectiveCurrency,
@@ -563,11 +522,11 @@ export async function processProductExtraction(
         metaPixelIds: metaPixelIds.length > 0 ? metaPixelIds : null,
         storePlatform: storePlatform || "other",
         deliveryCost: deliveryCost || null,
-        category,
-        subCategory,
-        targetAudience,
+        category: enhanced.category,
+        subCategory: enhanced.subCategory,
+        targetAudience: enhanced.targetAudience,
         rawExtract: extractionResult.raw || null,
-        scrapeStatus: "success",
+        scrapeStatus: finalScrapeStatus,
         failureReason: failureReason || null,
         lastScrapedAt: updateTime,
         updatedAt: updateTime,
