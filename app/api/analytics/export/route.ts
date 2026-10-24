@@ -59,9 +59,9 @@ export async function GET(req: NextRequest) {
     }
     const rangeDays = RANGE_MAP[rangeParam] ?? 7;
 
-    // Lean mode support (default true)
+    // Lean mode support (supported for lightweight checks; defaults to false so exported CSVs contain full metrics)
     const leanParam = searchParams.get("lean");
-    const isLean = leanParam === null || leanParam === "true" || leanParam === "1";
+    const isLean = leanParam === "true" || leanParam === "1";
 
     // 4. Strict Workspace Resolution & Authorization
     const role = (await getRoleFromRequest(req)) || "admin";

@@ -65,7 +65,7 @@ export async function downloadDatasetCsv(
   type: ExportType,
   dateRange: string,
   workspaceId?: string,
-  lean = true
+  lean = false
 ): Promise<{ success: boolean; filename: string; isTruncated: boolean; count: number }> {
   const headers: Record<string, string> = {};
   if (workspaceId) {

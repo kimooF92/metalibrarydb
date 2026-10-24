@@ -44,9 +44,9 @@ const MODEL_PREAMBLES: Record<LlmModelPreset, ModelPreamble> = {
   claude: {
     prefix:
       `<role_and_mission>\n` +
-      `You are the Chief COD Commerce Intelligence Officer and Frontier E-Commerce Strategist for North Africa.\n` +
-      `Your mission is to analyze the empirical Meta Ad Library and e-commerce store telemetry provided below in compact CSV format.\n` +
-      `You must identify genuine, high-conviction product and niche opportunities for Tunisian Cash-On-Delivery operators while aggressively discarding commoditized clone traps.\n` +
+      `You are the Managing Partner & Head of E-Commerce Arbitrage for North Africa COD.\n` +
+      `Your mission is NOT to generate a passive descriptive audit or academic report. Your objective is to extract an aggressive, executable COMMERCIAL MONEY-MAKING STRATEGY based on the empirical telemetry and attached CSV datasets.\n` +
+      `You must identify genuine, high-margin product opportunities and uncontested Blue Oceans for Tunisian Cash-On-Delivery operators while aggressively blacklisting commoditized clone traps.\n` +
       `</role_and_mission>\n\n`,
     suffix:
       `\n\n<final_output_instruction>\n` +
@@ -56,9 +56,10 @@ const MODEL_PREAMBLES: Record<LlmModelPreset, ModelPreamble> = {
   },
   chatgpt: {
     prefix:
-      `# SYSTEM DIRECTIVE: CHIEF E-COMMERCE INTELLIGENCE OFFICER (NORTH AFRICA COD)\n` +
-      `You have been supplied with raw empirical e-commerce telemetry in CSV tables below.\n` +
-      `Analyze the store density, active ad counts, and net delta trends. If running in Advanced Data Analysis / Python Code Interpreter, you may use pandas.read_csv to calculate statistical rankings.\n\n`,
+      `# SYSTEM DIRECTIVE: MANAGING PARTNER & HEAD OF E-COMMERCE ARBITRAGE (NORTH AFRICA COD)\n` +
+      `You are an elite, profit-driven e-commerce venture operator specializing in high-margin Cash-On-Delivery arbitrage in Tunisia.\n` +
+      `Your objective is NOT to generate a passive descriptive audit or academic report. Your objective is to extract an aggressive, executable COMMERCIAL MONEY-MAKING STRATEGY based on the empirical telemetry and attached CSV datasets.\n` +
+      `If running in Advanced Data Analysis / Python Code Interpreter, actively query the attached CSV files using pandas.read_csv to calculate statistical rankings, brand breakout momentum, and store saturation curves.\n\n`,
     suffix:
       `\n\n# OUTPUT FORMAT REQUIREMENT:\n` +
       `Provide the complete standalone interactive HTML file. Do not truncate JavaScript or CSS. Ensure the document begins with <!DOCTYPE html> and ends with </html>.`,
@@ -66,8 +67,8 @@ const MODEL_PREAMBLES: Record<LlmModelPreset, ModelPreamble> = {
   gemini: {
     prefix:
       `<system_instruction>\n` +
-      `You are an elite e-commerce market intelligence engine specializing in Cash-On-Delivery dynamics.\n` +
-      `Ingest the embedded empirical CSV tables and produce a comprehensive, interactive opportunity intelligence HTML dossier.\n` +
+      `You are an elite commercial growth strategist and product arbitrage hunter specializing in North Africa Cash-On-Delivery dynamics.\n` +
+      `Ingest the embedded empirical CSV tables and attached datasets to produce an aggressive, actionable, profit-generating interactive HTML dossier.\n` +
       `</system_instruction>\n\n`,
     suffix:
       `\n\n<output_directive>\n` +
@@ -76,8 +77,8 @@ const MODEL_PREAMBLES: Record<LlmModelPreset, ModelPreamble> = {
   },
   deepseek: {
     prefix:
-      `You are DeepSeek-R1 acting as a Senior E-Commerce Quant & Market Arbitrage Analyst.\n` +
-      `Use extensive Chain-of-Thought (CoT) reasoning to mathematically inspect price distributions, brand net deltas, and store saturation curves before distilling your final dossier into an interactive HTML application.\n\n`,
+      `You are DeepSeek-R1 acting as a Senior E-Commerce Arbitrage Operator & Commercial Growth Strategist.\n` +
+      `Use extensive Chain-of-Thought (CoT) reasoning to mathematically inspect price distributions, brand net deltas, and store saturation curves before distilling your money-making strategy into an interactive HTML application.\n\n`,
     suffix:
       `\n\nEnsure the final output contains the complete, executable HTML document (starting with <!DOCTYPE html>).`,
   },
@@ -381,11 +382,11 @@ export function buildFrontierPrompt(
   const prompt =
     `${modelPreamble.prefix}` +
     `## CORE OPERATIONAL INVARIANTS\n` +
-    `1. EMPIRICAL GROUNDING: Base all findings strictly on the provided ad counts, category velocity, pricing, and scaling signals in the telemetry block.\n` +
+    `1. EMPIRICAL GROUNDING: Base all findings strictly on the provided ad counts, category velocity, pricing, and scaling signals in the telemetry block and attached CSV datasets.\n` +
     `2. NO SYNTHETIC GEOGRAPHIC STEREOTYPES: Strictly avoid inventing fictional regional stereotypes or regional divide tropes (e.g. "Grand Tunis vs Sahel vs Sfax"). Evaluate product traction purely based on price point, creative hook, perceived utility, and national COD viability.\n` +
-    `3. COD FRICTION CONSTRAINTS & FORMULA:\n` +
+    `3. COD FRICTION CONSTRAINTS & CORRECTED UNIT ECONOMICS FORMULA:\n` +
     `   - Target Price Bands: ${targetBandsStr}\n` +
-    `   - Target Minimum Net Margin: ${cod.minUnitMarginTnd} TND / unit\n` +
+    `   - Target Minimum Net Margin: ${cod.minUnitMarginTnd} TND / delivered unit\n` +
     `   - Phone Confirmation Rate: ${cod.confirmationRatePct}%\n` +
     `   - Delivery Success Rate: ${cod.deliveryRatePct}%\n` +
     `   - Return Loss Buffer: ${cod.returnBufferTnd} TND per refused shipment\n` +
@@ -395,25 +396,33 @@ export function buildFrontierPrompt(
     `   - Baseline Unit Economics Formula:\n` +
     `     Gross Realized Revenue = Selling Price * (Confirmation% / 100) * (Delivery% / 100)\n` +
     `     Return Shipping Loss = (Confirmation% / 100) * (1 - (Delivery% / 100)) * ReturnBuffer\n` +
-    `     Est. Net Profit = Gross Realized Revenue - COGS - Est. AdCost - Return Shipping Loss\n\n` +
+    `     Est. Net Profit = Gross Realized Revenue - COGS - Est. AdCost - Return Shipping Loss\n` +
+    `   - REALIZED COD OPERATOR REALITY & BUNDLE ACCELERATOR:\n` +
+    `     * Accounting Realization: In actual COD execution, cancelled pre-shipment orders (35%) incur 0 COGS, and refused shipments are restocked into inventory (only return shipping fee is lost). Calculate realized net profit per delivered customer as: Realized Profit = Selling Price - Unit COGS - (CPA / (Conf% * Del%)) - Return Shipping Loss.\n` +
+    `     * High-AOV Bundle Play (Pack of 2 Strategy): To reliably achieve the > 25 - 35 TND net margin in Tunisian COD, structure an irresistible "Pack of 2" (e.g. 1 unit for 59 TND, Pack of 2 for 89-99 TND) which splits the single delivery and acquisition cost!\n\n` +
     `## MARKET TELEMETRY DATA\n` +
     `${telemetryXml}\n\n` +
     `## REQUIRED OUTPUT: STANDALONE INTERACTIVE HTML DOSSIER\n` +
-    `Generate a SINGLE, self-contained interactive HTML file.\n` +
+    `Generate a SINGLE, self-contained interactive HTML file representing an actionable commercial growth plan.\n` +
     `Theme: **${theme.name}** — ${theme.cssDirective}\n\n` +
     `### Dashboard Structure & Components:\n` +
-    `1. **Header & Executive KPI Badges**:\n` +
-    `   - Opportunity Index score, Market Scaling Pressure ratio (scaling vs descaling brands), Average Product Price.\n` +
-    `2. **Tab 1: Niche Opportunity Matrix**:\n` +
+    `1. **Header & Executive Commercial KPIs**:\n` +
+    `   - Opportunity Index score, Market Scaling Pressure ratio (scaling vs descaling brands), National Average Product Price, and High-Velocity Sweet Spot.\n` +
+    `2. **Tab 1: Niche Opportunity & Blue Ocean Scorecard**:\n` +
     `   - Ranked scorecard of analyzed categories based on store density, active ads velocity, and net new ad injection.\n` +
-    `3. **Tab 2: Top 3 Winning Product Test Blueprints**:\n` +
-    `   - For each product: Target Selling Price (TND), estimated supplier COGS (using 25%-35% baseline), projected net margin using the COD formula, target audience hook, Arabic Darija + French advertising angle, and a 3-second visual video storyboard blueprint.\n` +
+    `   - Identify Top 2 Blue Ocean sub-niches: High ad impression volume with low store competition (< 2 stores).\n` +
+    `3. **Tab 2: High-Conviction Cash-Cow Launch Blueprints (48-72h Execution)**:\n` +
+    `   - 3 specific, ready-to-test product blueprints:\n` +
+    `     * Product 1: **Immediate Cash-Cow Winner** (High-impulse mass-market appeal, 49-79 TND, low return risk).\n` +
+    `     * Product 2: **Blue Ocean Monopoly Play** (Untapped pain point, 0 clone stores, 79-129 TND, high perceived value).\n` +
+    `     * Product 3: **High-AOV Bundle Arbitrage** (Engineered Pack of 2 to crush delivery costs and yield >35 TND net margin).\n` +
+    `   - For each product: Target Selling Price (TND), supplier COGS target, complete COD net margin calculation (Single vs Bundle), target audience hook, bilingual Tunisian Darija (Arabic script) + French advertising angle, and a 3-second visual video storyboard blueprint.\n` +
     `4. **Tab 3: Red-Flag Commoditized Traps**:\n` +
-    `   - Specific saturated products with multi-store clone presence or sub-30 TND price wars that operators must avoid.\n` +
+    `   - Blacklist specific saturated products with multi-store clone presence (>= 2 stores) or sub-30 TND price wars that operators must immediately avoid.\n` +
     `5. **Tab 4: Scaling vs Descaling Brand Radar**:\n` +
-    `   - Contrast breakout scaling brands with descaling brands suffering creative fatigue or campaign cuts.\n` +
-    `6. **Tab 5: COD Operational Playbook**:\n` +
-    `   - Practical phone order confirmation script and packaging tips to maximize delivery rate.\n\n` +
+    `   - Deep-dive into breakout scaling brands from the telemetry (e.g. MeDay +420, Bio Tunis +410, TB SHOP +177). Deconstruct their scaling velocity, creative formats (video vs image), and creative hook psychology.\n` +
+    `6. **Tab 5: COD Conversion & Delivery Protection Playbook**:\n` +
+    `   - Word-for-word Tunisian Darija phone order confirmation script, WhatsApp tracking notification templates, packaging tips, and delivery dispatch tactics to push delivery rate above 78%.\n\n` +
     `### Technical Specifications for the HTML:\n` +
     `- Include complete, valid HTML5 with embedded CSS in a \`<style>\` tag.\n` +
     `- Implement a simple embedded JavaScript tab switcher in a \`<script>\` tag (zero external JS libraries/frameworks).\n` +

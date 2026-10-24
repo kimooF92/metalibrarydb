@@ -370,7 +370,7 @@ export async function getCategoryMatrixCsvData(
 export async function getAdsCsvData(
   workspaceId: string,
   rangeDays = 7,
-  isLean = true
+  isLean = false
 ): Promise<CsvDataset> {
   const headers = [
     "ad_id",
@@ -387,38 +387,72 @@ export async function getAdsCsvData(
   const windowDays = Math.max(1, Math.min(60, rangeDays));
   const queryLimit = EXPORT_ROW_LIMIT + 1;
 
-  // Filter ads where the LATEST observation is active (is_active = true) bounded within workspace and window
-  const query = sql`
-    WITH latest_obs AS (
-      SELECT DISTINCT ON (ao.ad_id)
-        ao.ad_id,
-        ao.tracked_page_id,
-        ao.is_active,
-        ao.observed_at
-      FROM ad_observations ao
-      INNER JOIN tracked_pages tp ON tp.id = ao.tracked_page_id
-      WHERE tp.workspace_id = ${workspaceId}::uuid
-        AND ao.observed_at >= NOW() - (${windowDays} || ' days')::interval
-      ORDER BY ao.ad_id, ao.observed_at DESC
-    )
-    SELECT
-      a.ad_archive_id AS ad_id,
-      COALESCE(a.page_name, tp.display_name, 'Unknown') AS brand_name,
-      COALESCE(a.media_type, 'image') AS media_type,
-      a.first_seen_at,
-      GREATEST(1, ROUND(EXTRACT(EPOCH FROM (lo.observed_at - COALESCE(a.started_running_on, a.first_seen_at, a.created_at))) / 86400)) AS days_active,
-      (LEFT(COALESCE(a.caption, ''), 200) ~ '[\u0600-\u06FF]') AS has_arabic,
-      (LOWER(LEFT(COALESCE(a.caption, ''), 200)) ~ '(livraison|gratuit|promo|commander|prix|solde|offre)') AS has_french,
-      (LOWER(LEFT(COALESCE(a.caption, ''), 200)) ~ '(livraison gratuite|\u062A\u0648\u0635\u064A\u0644 \u0645\u062C\u0627\u0646\u064A|\u062A\u0648\u0635\u064A\u0644 \u0628\u0644\u0627\u0634|free delivery|livraison 0)') AS has_free_delivery,
-      (LOWER(LEFT(COALESCE(a.caption, ''), 200)) ~ '(remise|\u062A\u062E\u0641\u064A\u0636|\u062E\u0635\u0645|promo|solde|%|\u0639\u0631\u0636)') AS has_discount
-    FROM latest_obs lo
-    INNER JOIN ads a ON a.id = lo.ad_id
-    INNER JOIN tracked_pages tp ON tp.id = lo.tracked_page_id
-    WHERE lo.is_active = true
-      AND (a.is_archived = false OR a.is_archived IS NULL)
-    ORDER BY lo.observed_at DESC
-    LIMIT ${queryLimit};
-  `;
+  let query;
+  if (isLean) {
+    // Lean mode: skips regex evaluations on captions, returning basic flags
+    query = sql`
+      WITH latest_obs AS (
+        SELECT DISTINCT ON (ao.ad_id)
+          ao.ad_id,
+          ao.is_active,
+          ao.observed_at,
+          COALESCE(tp.display_name, 'Unknown') AS brand_name
+        FROM ad_observations ao
+        INNER JOIN tracked_pages tp ON tp.id = ao.tracked_page_id
+        WHERE tp.workspace_id = ${workspaceId}::uuid
+          AND ao.observed_at >= NOW() - (${windowDays} || ' days')::interval
+        ORDER BY ao.ad_id, ao.observed_at DESC
+      )
+      SELECT
+        a.ad_archive_id AS ad_id,
+        COALESCE(a.page_name, lo.brand_name) AS brand_name,
+        COALESCE(a.media_type, 'image') AS media_type,
+        a.first_seen_at,
+        GREATEST(1, ROUND(EXTRACT(EPOCH FROM (lo.observed_at - COALESCE(a.started_running_on, a.first_seen_at, a.created_at))) / 86400)) AS days_active,
+        false AS has_arabic,
+        false AS has_french,
+        false AS has_free_delivery,
+        false AS has_discount
+      FROM latest_obs lo
+      INNER JOIN ads a ON a.id = lo.ad_id
+      WHERE lo.is_active = true
+        AND (a.is_archived = false OR a.is_archived IS NULL)
+      ORDER BY lo.observed_at DESC
+      LIMIT ${queryLimit};
+    `;
+  } else {
+    // Standard mode: evaluates creative psychology regexes directly in DB with single tracked_pages join
+    query = sql`
+      WITH latest_obs AS (
+        SELECT DISTINCT ON (ao.ad_id)
+          ao.ad_id,
+          ao.is_active,
+          ao.observed_at,
+          COALESCE(tp.display_name, 'Unknown') AS brand_name
+        FROM ad_observations ao
+        INNER JOIN tracked_pages tp ON tp.id = ao.tracked_page_id
+        WHERE tp.workspace_id = ${workspaceId}::uuid
+          AND ao.observed_at >= NOW() - (${windowDays} || ' days')::interval
+        ORDER BY ao.ad_id, ao.observed_at DESC
+      )
+      SELECT
+        a.ad_archive_id AS ad_id,
+        COALESCE(a.page_name, lo.brand_name) AS brand_name,
+        COALESCE(a.media_type, 'image') AS media_type,
+        a.first_seen_at,
+        GREATEST(1, ROUND(EXTRACT(EPOCH FROM (lo.observed_at - COALESCE(a.started_running_on, a.first_seen_at, a.created_at))) / 86400)) AS days_active,
+        (LEFT(COALESCE(a.caption, ''), 200) ~ '[\u0600-\u06FF]') AS has_arabic,
+        (LOWER(LEFT(COALESCE(a.caption, ''), 200)) ~ '(livraison|gratuit|promo|commander|prix|solde|offre)') AS has_french,
+        (LOWER(LEFT(COALESCE(a.caption, ''), 200)) ~ '(livraison gratuite|\u062A\u0648\u0635\u064A\u0644 \u0645\u062C\u0627\u0646\u064A|\u062A\u0648\u0635\u064A\u0644 \u0628\u0644\u0627\u0634|free delivery|livraison 0)') AS has_free_delivery,
+        (LOWER(LEFT(COALESCE(a.caption, ''), 200)) ~ '(remise|\u062A\u062E\u0641\u064A\u0636|\u062E\u0635\u0645|promo|solde|%|\u0639\u0631\u0636)') AS has_discount
+      FROM latest_obs lo
+      INNER JOIN ads a ON a.id = lo.ad_id
+      WHERE lo.is_active = true
+        AND (a.is_archived = false OR a.is_archived IS NULL)
+      ORDER BY lo.observed_at DESC
+      LIMIT ${queryLimit};
+    `;
+  }
 
   const result = await db.execute(query);
   const rowsArray = result as any[];
