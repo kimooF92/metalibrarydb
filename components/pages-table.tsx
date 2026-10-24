@@ -8,6 +8,7 @@ import { DeleteConfirmModal } from "./delete-confirm-modal";
 import { ScanRunnerModal } from "./scan-runner-modal";
 import { ResolveBrandModal } from "./resolve-brand-modal";
 import { ManageDomainModal } from "./manage-domain-modal";
+import { MoveWorkspaceModal } from "./move-workspace-modal";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import {
   Search,
@@ -45,6 +46,7 @@ import {
   Pause,
   HelpCircle,
   MoreVertical,
+  FolderSync,
 } from "lucide-react";
 import { useToast } from "@/components/toast-context";
 
@@ -429,6 +431,11 @@ export function PagesTable({
 
   const [resolveModalPageId, setResolveModalPageId] = useState<string | null>(null);
   const [manageDomainId, setManageDomainId] = useState<string | null>(null);
+
+  const [moveModalPage, setMoveModalPage] = useState<TrackedPage | null>(null);
+  const [moveModalPages, setMoveModalPages] = useState<TrackedPage[] | null>(null);
+  const [moveModalPageIds, setMoveModalPageIds] = useState<string[] | null>(null);
+  const [moveModalOpen, setMoveModalOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -890,6 +897,20 @@ export function PagesTable({
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>Extract Ad Spy ({selectedIds.length})</span>
+            </button>
+
+            <button
+              onClick={() => {
+                const targetPages = pages.filter((p) => selectedIds.includes(p.id));
+                setMoveModalPages(targetPages);
+                setMoveModalPageIds(selectedIds);
+                setMoveModalPage(null);
+                setMoveModalOpen(true);
+              }}
+              className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
+            >
+              <FolderSync className="w-3.5 h-3.5" />
+              <span>Move to Workspace ({selectedIds.length})</span>
             </button>
 
             {onBulkDelete && (
@@ -1708,6 +1729,21 @@ export function PagesTable({
                                       <span>Retry Scan</span>
                                     </button>
                                   )}
+                                  {/* Move to Workspace */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenMenuPageId(null);
+                                      setMoveModalPage(p);
+                                      setMoveModalPages(null);
+                                      setMoveModalPageIds([p.id]);
+                                      setMoveModalOpen(true);
+                                    }}
+                                    className="w-full px-2.5 py-1.5 text-left text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-2 cursor-pointer transition-colors"
+                                  >
+                                    <FolderSync className="w-3.5 h-3.5 text-indigo-500" />
+                                    <span>Move to Workspace</span>
+                                  </button>
                                 </div>
 
                                 <div className="py-0.5">
@@ -1937,6 +1973,24 @@ export function PagesTable({
         isOpen={Boolean(manageDomainId)}
         onClose={() => setManageDomainId(null)}
         onSuccess={() => onWatchlistToggle?.()}
+      />
+
+      {/* Move Page/Brand to Workspace Modal */}
+      <MoveWorkspaceModal
+        isOpen={moveModalOpen}
+        onClose={() => {
+          setMoveModalOpen(false);
+          setMoveModalPage(null);
+          setMoveModalPages(null);
+          setMoveModalPageIds(null);
+        }}
+        page={moveModalPage}
+        pages={moveModalPages || undefined}
+        pageIds={moveModalPageIds || (moveModalPage ? [moveModalPage.id] : undefined)}
+        onSuccess={() => {
+          setSelectedIds([]);
+          onWatchlistToggle?.();
+        }}
       />
     </div>
   );

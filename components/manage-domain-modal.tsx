@@ -15,8 +15,10 @@ import {
   AlertTriangle,
   Loader2,
   Eye,
+  FolderSync,
 } from "lucide-react";
 import { useToast } from "@/components/toast-context";
+import { MoveWorkspaceModal } from "@/components/move-workspace-modal";
 import type { TrackedPage } from "@/types";
 
 interface SisterPageInfo extends TrackedPage {
@@ -59,6 +61,7 @@ export function ManageDomainModal({
   const [isLinking, setIsLinking] = useState(false);
   const [isScanningAll, setIsScanningAll] = useState(false);
   const [processingPageId, setProcessingPageId] = useState<string | null>(null);
+  const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
 
   const fetchPortfolio = async () => {
     if (!domainOrId) return;
@@ -303,6 +306,17 @@ export function ManageDomainModal({
           </div>
 
           <div className="flex items-center gap-2">
+            {portfolio && (
+              <button
+                type="button"
+                onClick={() => setIsMoveModalOpen(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/80 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors cursor-pointer"
+                title="Move this brand portfolio and sister pages to another workspace"
+              >
+                <FolderSync className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Move to Workspace</span>
+              </button>
+            )}
             {portfolio?.domain && (
               <a
                 href={`https://${portfolio.domain}`}
@@ -507,6 +521,19 @@ export function ManageDomainModal({
           </button>
         </div>
       </div>
+
+      {/* Move Brand Portfolio to Workspace Modal */}
+      <MoveWorkspaceModal
+        isOpen={isMoveModalOpen}
+        onClose={() => setIsMoveModalOpen(false)}
+        brandDomainId={portfolio?.id}
+        brandDomainName={portfolio?.displayName || portfolio?.domain}
+        onSuccess={() => {
+          setIsMoveModalOpen(false);
+          onSuccess?.();
+          onClose();
+        }}
+      />
     </div>
   );
 }
