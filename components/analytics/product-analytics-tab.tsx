@@ -19,12 +19,16 @@ import {
   ChevronRight,
   Zap,
   Star,
+  FileSpreadsheet,
+  Loader2,
 } from "lucide-react";
 import { KPICard } from "./kpi-card";
 import { ProgressBarRow } from "./progress-bar-row";
 import { LeaderboardRow } from "./leaderboard-row";
 import { ProductDetailsModal } from "@/components/products/product-details-modal";
 import { useWorkspace } from "@/components/workspace-context";
+import { useToast } from "@/components/toast-context";
+import { downloadDatasetCsv } from "./export-dropdown";
 import { formatPrice } from "@/lib/format-price";
 import {
   ProductsAnalyticsData,
@@ -56,6 +60,33 @@ export function ProductAnalyticsTab({
   const [productSearch, setProductSearch] = useState<string>("");
   const [selectedProduct, setSelectedProduct] = useState<ScrapedProduct | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [exportingProducts, setExportingProducts] = useState(false);
+  const [exportingCategories, setExportingCategories] = useState(false);
+  const { showToast } = useToast();
+
+  const handleExportProducts = async () => {
+    try {
+      setExportingProducts(true);
+      const { filename } = await downloadDatasetCsv("products", dateRange, activeWorkspace?.id);
+      showToast({ type: "success", title: "Products Exported", message: `Downloaded ${filename}` });
+    } catch (err: any) {
+      showToast({ type: "error", title: "Export Failed", message: err.message || "Failed to export products" });
+    } finally {
+      setExportingProducts(false);
+    }
+  };
+
+  const handleExportCategories = async () => {
+    try {
+      setExportingCategories(true);
+      const { filename } = await downloadDatasetCsv("categories", dateRange, activeWorkspace?.id);
+      showToast({ type: "success", title: "Categories Exported", message: `Downloaded ${filename}` });
+    } catch (err: any) {
+      showToast({ type: "error", title: "Export Failed", message: err.message || "Failed to export categories" });
+    } finally {
+      setExportingCategories(false);
+    }
+  };
 
   const summary = data?.summary || {};
   const dataQuality = data?.dataQuality || {};
@@ -168,9 +199,24 @@ export function ProductAnalyticsTab({
                 Winner Niches & Profitability Matrix
               </h3>
             </div>
-            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-              Ranked by product density & market share
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium hidden md:inline">
+                Ranked by product density & market share
+              </span>
+              <button
+                onClick={handleExportCategories}
+                disabled={exportingCategories}
+                className="flex items-center space-x-1 px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-white/80 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition-all cursor-pointer disabled:opacity-50"
+                title="Export Category Density Matrix as CSV"
+              >
+                {exportingCategories ? (
+                  <Loader2 className="w-3 h-3 text-indigo-500 animate-spin" />
+                ) : (
+                  <FileSpreadsheet className="w-3 h-3 text-emerald-500" />
+                )}
+                <span>Export Categories</span>
+              </button>
+            </div>
           </div>
 
           <div className="space-y-3.5">
@@ -458,16 +504,32 @@ export function ProductAnalyticsTab({
             </span>
           </div>
 
-          {/* Search filter within top products */}
-          <div className="relative w-full sm:w-64">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search winning product or store..."
-              value={productSearch}
-              onChange={(e) => setProductSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            />
+          {/* Search filter & Export button */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="relative w-full sm:w-64">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search winning product or store..."
+                value={productSearch}
+                onChange={(e) => setProductSearch(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+            <button
+              onClick={handleExportProducts}
+              disabled={exportingProducts}
+              className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition-all cursor-pointer disabled:opacity-50 shrink-0 shadow-xs"
+              title="Export all catalog products and price tiers as CSV"
+            >
+              {exportingProducts ? (
+                <Loader2 className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-500" />
+              )}
+              <span className="hidden md:inline">Export Products</span>
+              <span className="md:hidden">CSV</span>
+            </button>
           </div>
         </div>
 

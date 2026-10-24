@@ -18,11 +18,16 @@ import {
   Award,
   Type,
   ChevronRight,
+  FileSpreadsheet,
+  Loader2,
 } from "lucide-react";
 import { KPICard } from "./kpi-card";
 import { ProgressBarRow } from "./progress-bar-row";
 import { LeaderboardRow } from "./leaderboard-row";
 import { DateRange, getDateRangeDescription } from "./date-range-filter";
+import { useWorkspace } from "@/components/workspace-context";
+import { useToast } from "@/components/toast-context";
+import { downloadDatasetCsv } from "./export-dropdown";
 import { AdsAnalyticsData, BreakoutAd, CTAStats, FormatEfficiency, LongevityCohort, TopAdvertiser } from "@/types";
 
 interface AdAnalyticsTabProps {
@@ -39,6 +44,21 @@ export function AdAnalyticsTab({
   dateRange = "7d",
 }: AdAnalyticsTabProps) {
   const [breakoutSearch, setBreakoutSearch] = useState<string>("");
+  const { activeWorkspace } = useWorkspace();
+  const { showToast } = useToast();
+  const [exportingAds, setExportingAds] = useState(false);
+
+  const handleExportAds = async () => {
+    try {
+      setExportingAds(true);
+      const { filename } = await downloadDatasetCsv("ads", dateRange, activeWorkspace?.id);
+      showToast({ type: "success", title: "Ads Exported", message: `Downloaded ${filename}` });
+    } catch (err: any) {
+      showToast({ type: "error", title: "Export Failed", message: err.message || "Failed to export ads" });
+    } finally {
+      setExportingAds(false);
+    }
+  };
 
   const summary = data?.summary || {};
   const cohorts: LongevityCohort[] = data?.longevityCohorts || [];
@@ -368,15 +388,31 @@ export function AdAnalyticsTab({
             </span>
           </div>
 
-          <div className="relative w-full sm:w-64">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search breakout brand or copy..."
-              value={breakoutSearch}
-              onChange={(e) => setBreakoutSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            />
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="relative w-full sm:w-64">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search breakout brand or copy..."
+                value={breakoutSearch}
+                onChange={(e) => setBreakoutSearch(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+            <button
+              onClick={handleExportAds}
+              disabled={exportingAds}
+              className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition-all cursor-pointer disabled:opacity-50 shrink-0 shadow-xs"
+              title="Export active ad creatives and promo metrics as CSV"
+            >
+              {exportingAds ? (
+                <Loader2 className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-500" />
+              )}
+              <span className="hidden md:inline">Export Ads</span>
+              <span className="md:hidden">CSV</span>
+            </button>
           </div>
         </div>
 

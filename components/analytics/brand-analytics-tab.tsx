@@ -26,6 +26,7 @@ import {
   ArrowDown,
 } from "lucide-react";
 import { KPICard } from "./kpi-card";
+import { serializeToCsv, downloadCsvInBrowser } from "@/lib/csv-utils";
 
 function MiniBar({
   value,
@@ -207,30 +208,21 @@ export function BrandAnalyticsTab({
           : "";
       return [
         idx + 1,
-        `"${(p.displayName || "Unknown").replace(/"/g, '""')}"`,
-        `"${(p.pageId || "").replace(/"/g, '""')}"`,
-        `"${p.searchType || "page"}"`,
+        p.displayName || "Unknown",
+        p.pageId || "",
+        p.searchType || "page",
         curr,
         prev,
         diff,
-        `"${pctChange}"`,
+        pctChange,
         p.isWatchlisted ? "Yes" : "No",
-        `"${p.url || ""}"`,
+        p.url || "",
       ];
     });
-    const csvContent =
-      "data:text/csv;charset=utf-8," +
-      [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute(
-      "download",
-      `page_velocity_${subTab}_${new Date().toISOString().slice(0, 10)}.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+
+    const csvContent = serializeToCsv(headers, rows);
+    const filename = `page_velocity_${subTab}_${new Date().toISOString().slice(0, 10)}.csv`;
+    downloadCsvInBrowser(filename, csvContent);
   };
 
   if (!isLoading && pages.length === 0) {
@@ -548,10 +540,11 @@ export function BrandAnalyticsTab({
               onClick={exportToCsv}
               disabled={sortedTablePages.length === 0}
               className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 disabled:opacity-40 transition-all cursor-pointer disabled:cursor-not-allowed shrink-0"
-              title="Export filtered table to CSV"
+              title={`Export current filtered "${subTab}" table view as CSV`}
             >
               <Download className="w-3.5 h-3.5 text-indigo-500" />
-              <span className="hidden sm:inline">Export CSV</span>
+              <span className="hidden sm:inline">Export Tab View (.csv)</span>
+              <span className="sm:hidden">Export</span>
             </button>
 
             <div className="relative w-full md:w-64">

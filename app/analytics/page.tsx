@@ -27,6 +27,7 @@ import {
   DateRange,
   DateRangeFilter,
 } from "@/components/analytics/date-range-filter";
+import { ExportDropdown } from "@/components/analytics/export-dropdown";
 import { useWorkspace } from "@/components/workspace-context";
 
 function getInitialTab(): MainAnalyticsTab {
@@ -462,6 +463,7 @@ export default function AnalyticsPage() {
             </span>
           )}
           <DateRangeFilter value={dateRange} onChange={handleDateRangeChange} />
+          <ExportDropdown dateRange={dateRange} />
           <button
             onClick={() => handleRefresh(false)}
             disabled={isCurrentTabLoading}
