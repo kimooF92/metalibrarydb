@@ -27,63 +27,82 @@ import {
 // ---------------------------------------------------------------------------
 
 const STAGE_1_SYSTEM_PROMPT = `You are a Principal E-Commerce Market Intelligence Analyst specializing strictly in the Tunisian COD (Cash-on-Delivery) consumer market.
-Your task is to analyze the provided bounded telemetry JSON to produce a niche opportunity scorecard and market opportunity index.
+CRITICAL: Respond ONLY with a single valid JSON object conforming to the template below. Start directly with '{'. Do NOT write any introduction, thinking process, reasoning steps, or commentary.
 
-OUTPUT INSTRUCTIONS:
-- You must respond with ONLY a valid, single JSON object conforming to the Stage1NicheAnalysis schema.
-- Do NOT wrap in markdown fences if possible, or use standard \`\`\`json.
-- No preamble, explanation, or commentary outside the JSON object.
+OUTPUT JSON TEMPLATE:
+{
+  "marketOpportunityIndex": 78,
+  "rankedNiches": [
+    {
+      "niche": "Automotive & Tools",
+      "opportunityScore": 84,
+      "competitionLevel": "Moderate Growth",
+      "scalabilityPotential": "High",
+      "saturationIndex": 48,
+      "sweetSpotPriceTND": "39 - 69 TND",
+      "velocitySignal": "985 new ads in 7 days across 2421 active ads signals 40.7% expansion velocity.",
+      "whyNowRationale": "Autumn-winter weather transition drives immediate demand for practical vehicle care."
+    }
+  ],
+  "redFlagNiches": [
+    {
+      "niche": "Generic Cloned Storage Boxes",
+      "riskReason": "Saturated across 4+ stores eroding margins.",
+      "descalingRateNote": "High price wars under 30 TND."
+    }
+  ]
+}
 
-SCHEMA REQUIREMENTS:
-- "marketOpportunityIndex": Integer from 0 to 100 representing overall market opportunity.
-- "rankedNiches": Array of 3 to 6 unique objects with:
-    "niche": Non-empty string (e.g. "Beauty, Health & Care", "Electronics & Tech", "Kids & Baby", "Home & Living"). Must not contain duplicates.
-    "opportunityScore": Integer from 0 to 100.
-    "competitionLevel": One of "Blue Ocean (Low)", "Moderate Growth", "Red Ocean (Saturated)".
-    "scalabilityPotential": One of "High", "Moderate", "Selective".
-    "saturationIndex": Integer from 0 to 100.
-    "sweetSpotPriceTND": Price range string (e.g. "39 - 69 TND").
-    "velocitySignal": Concise sentence on store/ad scaling signals.
-    "whyNowRationale": 1-2 sentences on buyer impulse in Tunisia.
-- "redFlagNiches": Array of 1 to 3 objects with:
-    "niche": String name of saturated/declining niche.
-    "riskReason": String explaining margin erosion or ad fatigue.
-    "descalingRateNote": String note on price wars or descaling rate.
-
-CRITICAL RULES:
+RULES:
+- Provide 3 to 6 unique ranked niches.
+- Provide 1 to 3 red flag niches.
+- "competitionLevel" must be one of: "Blue Ocean (Low)", "Moderate Growth", "Red Ocean (Saturated)".
+- "scalabilityPotential" must be one of: "High", "Moderate", "Selective".
 - Ground your analysis strictly in the provided telemetry numbers.
-- If signals are missing, reflect uncertainty by lower saturationIndex and broader sweet spots; never invent impossible statistics.
 `;
 
 const STAGE_2_SYSTEM_PROMPT = `You are a Strategic Cultural Seasonality & COD E-Commerce Planner for Tunisia.
-Your task is to analyze Tunisian seasonal timelines, Islamic calendar milestones, and regional purchasing powers across Tunisian governorates.
+CRITICAL: Respond ONLY with a single valid JSON object conforming to the template below. Start directly with '{'. Do NOT write any introduction, thinking process, reasoning steps, or commentary.
 
-OUTPUT INSTRUCTIONS:
-- You must respond with ONLY a valid, single JSON object conforming to the Stage2SeasonalityAnalysis schema.
-- No commentary outside the JSON object.
+OUTPUT JSON TEMPLATE:
+{
+  "currentSeasonalPhase": "Autumn Home Transition & BF Ramp",
+  "seasonalUrgency": "Immediate (Peak Wave)",
+  "seasonalRoadmap": {
+    "activeWaveThisWeek": "Test high-margin autumn home essentials and practical auto tools with video hooks.",
+    "next30DaysWave": "Scale Black Friday bundles (2+1, free delivery) targeting Grand Tunis & Sahel.",
+    "next60DaysWave": "Begin sourcing winter clothing accessories and initial Ramadan home prep."
+  },
+  "regionalDemandStrategy": [
+    {
+      "region": "Grand Tunis",
+      "targetGovernorates": "Tunis, Ariana, Ben Arous, Manouba",
+      "hotCategories": ["Beauty, Health & Care", "Electronics & Tech", "Fashion & Jewelry"],
+      "actionableDirective": "Offer 24h express delivery to maximize impulse COD delivery rates."
+    },
+    {
+      "region": "Sahel Coastal Strip",
+      "targetGovernorates": "Sousse, Monastir, Mahdia",
+      "hotCategories": ["Beauty, Health & Care", "Home, Kitchen & Living"],
+      "actionableDirective": "Target high purchasing power with multi-item bundles above 60 TND."
+    },
+    {
+      "region": "Sfax Hub & Central",
+      "targetGovernorates": "Sfax, Kairouan",
+      "hotCategories": ["Automotive & Tools", "Electronics & Tech"],
+      "actionableDirective": "Focus on high-utility tools with phone confirmation to reduce COD returns."
+    }
+  ]
+}
 
-SCHEMA REQUIREMENTS:
-- "currentSeasonalPhase": String naming the active phase (e.g. "Rentrée Scolaire Ramp", "Ramadan Preparation", "Autumn Home Transition").
-- "seasonalUrgency": One of "Immediate (Peak Wave)", "Ramping Up (Start Sourcing)", "Transition Window".
-- "seasonalRoadmap": Object with:
-    "activeWaveThisWeek": Actionable directive for this week's creative testing.
-    "next30DaysWave": Forecast directive for the next 30 days.
-    "next60DaysWave": Strategic sourcing roadmap for the next 60 days.
-- "regionalDemandStrategy": Array of 3 to 5 objects with distinct regions:
-    "region": Region name (e.g. "Grand Tunis", "Sahel Coastal Strip", "Cap Bon", "Sfax Hub", "Interior & South").
-    "targetGovernorates": Comma-separated list of governorates.
-    "hotCategories": Array of 2 to 4 high-demand category names.
-    "actionableDirective": Concise operational tip addressing COD confirmation or logistics.
+RULES:
+- "seasonalUrgency" must be one of: "Immediate (Peak Wave)", "Ramping Up (Start Sourcing)", "Transition Window".
 `;
 
 const STAGE_3_SYSTEM_PROMPT = `You are a Direct-Response E-Commerce Creative Director & Product Blueprint Architect specializing in Tunisian Cash-on-Delivery (COD).
-Your task is to synthesize the validated Stage 1 niche scores and Stage 2 seasonality into 3 to 4 high-conviction product test blueprints.
+CRITICAL: Respond ONLY with a single valid JSON object conforming to the template below. Start directly with '{'. Do NOT write any introduction, thinking process, reasoning steps, or commentary.
 
-OUTPUT INSTRUCTIONS:
-- You must respond with ONLY a valid, single JSON object conforming to the Stage3ProductBlueprints schema.
-- No commentary outside the JSON object.
-
-CRITICAL JSON STRUCTURE (Do NOT put product fields at the root of the JSON. Every product MUST be a complete object inside the highConvictionProducts array):
+OUTPUT JSON TEMPLATE:
 {
   "highConvictionProducts": [
     {
@@ -133,12 +152,26 @@ export async function runStage1MiniMax(
       userJsonPayload: JSON.stringify(input),
       stageName: "stage1_niche_analysis",
       correlationId,
+      maxTokens: 1500,
     });
+
+    // Normalize any model variance in scalabilityPotential before schema parsing
+    if (response.rawJson && typeof response.rawJson === "object") {
+      const rawObj = response.rawJson as Record<string, unknown>;
+      if (Array.isArray(rawObj.rankedNiches)) {
+        for (const item of rawObj.rankedNiches) {
+          if (item && typeof item === "object" && (item as Record<string, unknown>).scalabilityPotential === "Low") {
+            (item as Record<string, unknown>).scalabilityPotential = "Selective";
+          }
+        }
+      }
+    }
 
     const parsed = Stage1NicheAnalysisSchema.safeParse(response.rawJson);
     if (!parsed.success) {
       const errMsgs = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
       console.warn(`[${correlationId}] Stage 1 validation errors:`, errMsgs);
+      console.warn(`[${correlationId}] Stage 1 raw payload was:`, JSON.stringify(response.rawJson).slice(0, 500));
       return {
         ok: false,
         value: null,
@@ -180,12 +213,14 @@ export async function runStage2MiniMax(
       userJsonPayload: JSON.stringify(input),
       stageName: "stage2_seasonality_analysis",
       correlationId,
+      maxTokens: 1200,
     });
 
     const parsed = Stage2SeasonalityAnalysisSchema.safeParse(response.rawJson);
     if (!parsed.success) {
       const errMsgs = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
       console.warn(`[${correlationId}] Stage 2 validation errors:`, errMsgs);
+      console.warn(`[${correlationId}] Stage 2 raw payload was:`, JSON.stringify(response.rawJson).slice(0, 500));
       return {
         ok: false,
         value: null,
@@ -245,6 +280,7 @@ export async function runStage3MiniMax(
       userJsonPayload: JSON.stringify(input),
       stageName: "stage3_product_blueprints",
       correlationId,
+      maxTokens: 2000,
       timeoutMs,
     });
 

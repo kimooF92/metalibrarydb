@@ -13,7 +13,10 @@ export const NicheOpportunityScorecardSchema = z.object({
     "Moderate Growth",
     "Red Ocean (Saturated)",
   ]),
-  scalabilityPotential: z.enum(["High", "Moderate", "Selective"]),
+  scalabilityPotential: z.preprocess(
+    (val) => (val === "Low" ? "Selective" : val),
+    z.enum(["High", "Moderate", "Selective"])
+  ),
   saturationIndex: z.number().int().min(0).max(100),
   sweetSpotPriceTND: z.string().trim().min(1).max(80),
   velocitySignal: z.string().trim().min(1).max(1000),

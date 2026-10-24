@@ -36,6 +36,15 @@ export function extractCleanJsonString(rawText: string): string {
   if (cleaned.endsWith("```")) {
     cleaned = cleaned.slice(0, -3);
   }
+  cleaned = cleaned.trim();
+
+  // Robust boundary extraction: isolate the outermost JSON object braces { ... }
+  // to safely strip any model chain-of-thought, thinking tokens, or preamble notes.
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+  }
 
   return cleaned.trim();
 }
@@ -61,8 +70,9 @@ export async function callMiniMaxStage(params: {
     timeoutMs = OPPORTUNITY_TIMEOUT_MS,
   } = params;
 
-  const apiKey = process.env.OPENROUTER_API_KEY || process.env.OPEN_ROUTER_API_KEY;
-  if (!apiKey || apiKey.trim() === "") {
+  const rawApiKey = process.env.OPENROUTER_API_KEY || process.env.OPEN_ROUTER_API_KEY || "";
+  const apiKey = rawApiKey.replace(/^["']|["']$/g, "").trim();
+  if (!apiKey) {
     throw new Error(
       `[${correlationId}] OpenRouter API key is not configured on the server. AI opportunity generation is unavailable.`
     );
@@ -76,7 +86,8 @@ export async function callMiniMaxStage(params: {
       { role: "user", content: userJsonPayload },
     ],
     response_format: { type: "json_object" },
-    temperature: 0.15,
+    reasoning: { effort: "low", exclude: true },
+    temperature: 0.1,
     max_tokens: maxTokens,
     stream: false,
   };
@@ -104,10 +115,9 @@ export async function callMiniMaxStage(params: {
         signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
-
       // Handle transient errors with 1 fast retry
       if ((response.status === 429 || response.status >= 500) && attempts < maxAttempts) {
+        clearTimeout(timeoutId);
         console.warn(
           `[${correlationId}] OpenRouter transient HTTP ${response.status} on stage ${stageName}. Retrying in 1s...`
         );
@@ -117,12 +127,15 @@ export async function callMiniMaxStage(params: {
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => "");
+        clearTimeout(timeoutId);
         throw new Error(
           `OpenRouter API error (HTTP ${response.status}) on stage ${stageName}: ${errorText.slice(0, 200)}`
         );
       }
 
+      // Keep timeoutId active during body reading so slow streams are strictly bounded by timeoutMs
       const json = await response.json();
+      clearTimeout(timeoutId);
       const choice = json.choices?.[0];
       if (!choice || !choice.message?.content) {
         throw new Error(`OpenRouter returned empty choices/content on stage ${stageName}`);
