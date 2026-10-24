@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { TrackedPage, DashboardStats, SearchTabCounts } from "@/types";
 import { HistoryModal } from "./history-modal";
@@ -47,6 +48,7 @@ import {
   HelpCircle,
   MoreVertical,
   FolderSync,
+  FolderInput,
 } from "lucide-react";
 import { useToast } from "@/components/toast-context";
 
@@ -339,21 +341,69 @@ export function PagesTable({
     }
   }, [showFilterPopover]);
 
+  const [mounted, setMounted] = useState(false);
   const [openMenuPageId, setOpenMenuPageId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{
+    top?: number;
+    bottom?: number;
+    right: number;
+  } | null>(null);
   const rowMenuRef = useRef<HTMLDivElement | null>(null);
 
-  // Close row actions menu on click outside
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Close row actions menu on click outside, scroll, or resize
+  useEffect(() => {
+    if (!openMenuPageId) return;
+
     function handleClickOutside(e: MouseEvent) {
-      if (rowMenuRef.current && !rowMenuRef.current.contains(e.target as Node)) {
-        setOpenMenuPageId(null);
+      if (rowMenuRef.current && rowMenuRef.current.contains(e.target as Node)) {
+        return;
       }
+      if ((e.target as HTMLElement)?.closest?.(`[data-menu-trigger="${openMenuPageId}"]`)) {
+        return;
+      }
+      setOpenMenuPageId(null);
+      setMenuPos(null);
     }
-    if (openMenuPageId) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
+
+    function handleScrollOrResize() {
+      setOpenMenuPageId(null);
+      setMenuPos(null);
     }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("scroll", handleScrollOrResize, true);
+    window.addEventListener("resize", handleScrollOrResize);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("scroll", handleScrollOrResize, true);
+      window.removeEventListener("resize", handleScrollOrResize);
+    };
   }, [openMenuPageId]);
+
+  const handleToggleMenu = (e: React.MouseEvent<HTMLButtonElement>, pageId: string) => {
+    e.stopPropagation();
+    if (openMenuPageId === pageId) {
+      setOpenMenuPageId(null);
+      setMenuPos(null);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUpwards = spaceBelow < 220;
+      setMenuPos({
+        top: openUpwards ? undefined : rect.bottom + 4,
+        bottom: openUpwards ? window.innerHeight - rect.top + 4 : undefined,
+        right: Math.max(8, window.innerWidth - rect.right),
+      });
+      setOpenMenuPageId(pageId);
+    }
+  };
+
+  const activeMenuPage = openMenuPageId ? pages.find((p) => p.id === openMenuPageId) : null;
 
   useEffect(() => {
     setWatchlisted(Object.fromEntries(pages.map((p) => [p.id, p.isWatchlisted ?? false])));
@@ -1652,14 +1702,12 @@ export function PagesTable({
                             <Sparkles className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
                           </button>
 
-                          {/* 3. Three-dots More Menu */}
-                          <div className="relative inline-block text-left" ref={openMenuPageId === p.id ? rowMenuRef : undefined}>
+                          {/* 3. Three-dots More Menu Trigger */}
+                          <div className="relative inline-block text-left">
                             <button
                               type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setOpenMenuPageId(openMenuPageId === p.id ? null : p.id);
-                              }}
+                              data-menu-trigger={p.id}
+                              onClick={(e) => handleToggleMenu(e, p.id)}
                               className={`p-1 rounded-md transition-all cursor-pointer ${
                                 openMenuPageId === p.id
                                   ? "text-slate-900 dark:text-white bg-slate-200 dark:bg-slate-800"
@@ -1670,98 +1718,6 @@ export function PagesTable({
                             >
                               <MoreVertical className="w-3.5 h-3.5" />
                             </button>
-
-                            {openMenuPageId === p.id && (
-                              <div className="absolute right-0 top-full mt-1 w-36 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 text-left divide-y divide-slate-100 dark:divide-slate-800">
-                                <div className="py-0.5">
-                                  {/* Rename Brand */}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setOpenMenuPageId(null);
-                                      startEditing(p);
-                                    }}
-                                    className="w-full px-2.5 py-1.5 text-left text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-2 cursor-pointer transition-colors"
-                                  >
-                                    <Pencil className="w-3.5 h-3.5 text-indigo-500" />
-                                    <span>Rename</span>
-                                  </button>
-
-                                  {/* View History */}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setOpenMenuPageId(null);
-                                      openHistory(p);
-                                    }}
-                                    className="w-full px-2.5 py-1.5 text-left text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-2 cursor-pointer transition-colors"
-                                  >
-                                    <History className="w-3.5 h-3.5 text-blue-500" />
-                                    <span>History</span>
-                                  </button>
-
-                                  {/* Notes */}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setOpenMenuPageId(null);
-                                      setEditingNotes(p.id);
-                                      setEditingNotesValue((p as any).notes || "");
-                                    }}
-                                    className="w-full px-2.5 py-1.5 text-left text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-2 cursor-pointer transition-colors"
-                                  >
-                                    <StickyNote className={`w-3.5 h-3.5 ${(p as any).notes ? "text-yellow-500" : "text-slate-400"}`} />
-                                    <span>{(p as any).notes ? "Edit Note" : "Add Note"}</span>
-                                  </button>
-
-                                  {/* Retry if failed */}
-                                  {p.status === "failed" && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setOpenMenuPageId(null);
-                                        handleRowRetry(p.id);
-                                      }}
-                                      disabled={retryingPageIds.has(p.id)}
-                                      className="w-full px-2.5 py-1.5 text-left text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 flex items-center gap-2 cursor-pointer transition-colors disabled:opacity-50"
-                                    >
-                                      <RotateCcw className={`w-3.5 h-3.5 ${retryingPageIds.has(p.id) ? "animate-spin" : ""}`} />
-                                      <span>Retry Scan</span>
-                                    </button>
-                                  )}
-                                  {/* Move to Workspace */}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setOpenMenuPageId(null);
-                                      setMoveModalPage(p);
-                                      setMoveModalPages(null);
-                                      setMoveModalPageIds([p.id]);
-                                      setMoveModalOpen(true);
-                                    }}
-                                    className="w-full px-2.5 py-1.5 text-left text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-2 cursor-pointer transition-colors"
-                                  >
-                                    <FolderSync className="w-3.5 h-3.5 text-indigo-500" />
-                                    <span>Move to Workspace</span>
-                                  </button>
-                                </div>
-
-                                <div className="py-0.5">
-                                  {/* Delete */}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setOpenMenuPageId(null);
-                                      setPageToDelete(p);
-                                    }}
-                                    className="w-full px-2.5 py-1.5 text-left text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 flex items-center gap-2 cursor-pointer transition-colors"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                    <span>Delete</span>
-                                  </button>
-                                </div>
-                              </div>
-                            )}
                           </div>
                         </div>
 
@@ -1992,6 +1948,116 @@ export function PagesTable({
           onWatchlistToggle?.();
         }}
       />
+
+      {/* 3-Dots Floating Actions Portal */}
+      {mounted && openMenuPageId && menuPos && activeMenuPage && createPortal(
+        <div
+          ref={rowMenuRef}
+          style={{
+            position: "fixed",
+            top: menuPos.top !== undefined ? `${menuPos.top}px` : undefined,
+            bottom: menuPos.bottom !== undefined ? `${menuPos.bottom}px` : undefined,
+            right: `${menuPos.right}px`,
+          }}
+          className="w-36 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl py-1 z-[100] animate-in fade-in zoom-in-95 text-left divide-y divide-slate-100 dark:divide-slate-800"
+        >
+          <div className="py-0.5">
+            {/* Rename Brand */}
+            <button
+              type="button"
+              onClick={() => {
+                setOpenMenuPageId(null);
+                setMenuPos(null);
+                startEditing(activeMenuPage);
+              }}
+              className="w-full px-2.5 py-1.5 text-left text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <Pencil className="w-3.5 h-3.5 shrink-0 text-indigo-500" />
+              <span>Rename</span>
+            </button>
+
+            {/* View History */}
+            <button
+              type="button"
+              onClick={() => {
+                setOpenMenuPageId(null);
+                setMenuPos(null);
+                openHistory(activeMenuPage);
+              }}
+              className="w-full px-2.5 py-1.5 text-left text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <History className="w-3.5 h-3.5 shrink-0 text-blue-500" />
+              <span>History</span>
+            </button>
+
+            {/* Notes */}
+            <button
+              type="button"
+              onClick={() => {
+                setOpenMenuPageId(null);
+                setMenuPos(null);
+                setEditingNotes(activeMenuPage.id);
+                setEditingNotesValue((activeMenuPage as any).notes || "");
+              }}
+              className="w-full px-2.5 py-1.5 text-left text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <StickyNote className={`w-3.5 h-3.5 shrink-0 ${(activeMenuPage as any).notes ? "text-yellow-500" : "text-slate-400"}`} />
+              <span>{(activeMenuPage as any).notes ? "Edit Note" : "Add Note"}</span>
+            </button>
+
+            {/* Retry if failed */}
+            {activeMenuPage.status === "failed" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenMenuPageId(null);
+                  setMenuPos(null);
+                  handleRowRetry(activeMenuPage.id);
+                }}
+                disabled={retryingPageIds.has(activeMenuPage.id)}
+                className="w-full px-2.5 py-1.5 text-left text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 flex items-center gap-2 cursor-pointer transition-colors disabled:opacity-50"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 shrink-0 ${retryingPageIds.has(activeMenuPage.id) ? "animate-spin" : ""}`} />
+                <span>Retry Scan</span>
+              </button>
+            )}
+
+            {/* Move to Workspace */}
+            <button
+              type="button"
+              onClick={() => {
+                setOpenMenuPageId(null);
+                setMenuPos(null);
+                setMoveModalPage(activeMenuPage);
+                setMoveModalPages(null);
+                setMoveModalPageIds([activeMenuPage.id]);
+                setMoveModalOpen(true);
+              }}
+              className="w-full px-2.5 py-1.5 text-left text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <FolderInput className="w-3.5 h-3.5 shrink-0 text-indigo-500 dark:text-indigo-400" />
+              <span>Move to</span>
+            </button>
+          </div>
+
+          <div className="py-0.5">
+            {/* Delete */}
+            <button
+              type="button"
+              onClick={() => {
+                setOpenMenuPageId(null);
+                setMenuPos(null);
+                setPageToDelete(activeMenuPage);
+              }}
+              className="w-full px-2.5 py-1.5 text-left text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5 shrink-0" />
+              <span>Delete</span>
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
