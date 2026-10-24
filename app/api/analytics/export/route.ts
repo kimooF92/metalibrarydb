@@ -23,6 +23,7 @@ const VALID_TYPES = new Set(["brands", "products", "categories", "ads"]);
 const RANGE_MAP: Record<string, number> = {
   today: 1,
   "7d": 7,
+  "14d": 14,
   "15d": 15,
   "30d": 30,
 };
@@ -51,7 +52,7 @@ export async function GET(req: NextRequest) {
     if (rangeParam && !(rangeParam in RANGE_MAP)) {
       return NextResponse.json(
         {
-          error: "Invalid 'range' parameter. Expected: today | 7d | 15d | 30d",
+          error: "Invalid 'range' parameter. Expected: today | 7d | 14d | 15d | 30d",
         },
         { status: 400 }
       );

@@ -76,6 +76,18 @@ export function formatCsvCell(value: unknown): string {
 }
 
 /**
+ * Formats a dataset (headers + rows) into a clean RFC 4180 compliant CSV string without BOM (ideal for LLM prompt embedding).
+ */
+export function formatCsv(
+  headers: string[],
+  rows: (unknown)[][]
+): string {
+  const headerLine = headers.map(formatCsvCell).join(",");
+  const rowLines = rows.map((row) => row.map(formatCsvCell).join(","));
+  return [headerLine, ...rowLines].join("\n");
+}
+
+/**
  * Serializes a dataset (headers + rows) into an RFC 4180 compliant CSV string with UTF-8 BOM.
  */
 export function serializeToCsv(

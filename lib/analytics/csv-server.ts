@@ -185,8 +185,7 @@ export async function getProductsCsvData(
       FROM scraped_products sp
       LEFT JOIN product_store_counts psc ON LOWER(TRIM(sp.title)) = psc.norm_title
       WHERE sp.workspace_id = ${workspaceId}::uuid
-        AND sp.created_at >= NOW() - (${windowDays} || ' days')::interval
-      ORDER BY sp.created_at DESC
+      ORDER BY sp.updated_at DESC
       LIMIT ${queryLimit};
     `;
   }
@@ -252,18 +251,19 @@ export async function getCategoryMatrixCsvData(
   rangeDays = 7,
   isLean = true
 ): Promise<CsvDataset> {
+  const windowDays = Math.max(1, Math.min(60, rangeDays));
+  const newAdsHeader = rangeDays === 7 ? "new_ads_7d_count" : `new_ads_${windowDays}d_count`;
   const headers = [
     "category",
     "product_count",
     "store_count",
     "active_ads_count",
-    "new_ads_7d_count",
+    newAdsHeader,
     "avg_price_tnd",
     "min_price_tnd",
     "max_price_tnd",
   ];
 
-  const windowDays = Math.max(1, Math.min(60, rangeDays));
   const queryLimit = EXPORT_ROW_LIMIT + 1;
 
   let query;
@@ -278,10 +278,9 @@ export async function getCategoryMatrixCsvData(
         MIN(CASE WHEN NULLIF(SUBSTRING(REPLACE(sp.current_price, ',', '.') FROM '([0-9]+(?:\\.[0-9]+)?)'), '')::numeric > 0 THEN NULLIF(SUBSTRING(REPLACE(sp.current_price, ',', '.') FROM '([0-9]+(?:\\.[0-9]+)?)'), '')::numeric END) AS min_price,
         MAX(CASE WHEN NULLIF(SUBSTRING(REPLACE(sp.current_price, ',', '.') FROM '([0-9]+(?:\\.[0-9]+)?)'), '')::numeric > 0 THEN NULLIF(SUBSTRING(REPLACE(sp.current_price, ',', '.') FROM '([0-9]+(?:\\.[0-9]+)?)'), '')::numeric END) AS max_price,
         0 AS active_ads_count,
-        0 AS new_ads_7d_count
+        0 AS new_ads_window_count
       FROM scraped_products sp
       WHERE sp.workspace_id = ${workspaceId}::uuid
-        AND sp.created_at >= NOW() - (${windowDays} || ' days')::interval
       GROUP BY COALESCE(NULLIF(sp.category, ''), 'General & Other')
       ORDER BY product_count DESC
       LIMIT ${queryLimit};
@@ -297,20 +296,22 @@ export async function getCategoryMatrixCsvData(
           NULLIF(SUBSTRING(REPLACE(sp.current_price, ',', '.') FROM '([0-9]+(?:\\.[0-9]+)?)'), '')::numeric AS price
         FROM scraped_products sp
         WHERE sp.workspace_id = ${workspaceId}::uuid
-          AND sp.created_at >= NOW() - (${windowDays} || ' days')::interval
       ),
       latest_active_obs AS (
         SELECT DISTINCT ON (ao.ad_id)
           ao.ad_id,
           ao.is_active
         FROM ad_observations ao
+        INNER JOIN tracked_pages tp ON tp.id = ao.tracked_page_id
+        WHERE tp.workspace_id = ${workspaceId}::uuid
+          AND ao.observed_at >= NOW() - (${windowDays} || ' days')::interval
         ORDER BY ao.ad_id, ao.observed_at DESC
       ),
       category_ads AS (
         SELECT 
           cp.cat_name,
           COUNT(DISTINCT a.id) AS active_ads_count,
-          COUNT(DISTINCT CASE WHEN a.first_seen_at >= NOW() - INTERVAL '7 days' THEN a.id END) AS new_ads_7d_count
+          COUNT(DISTINCT CASE WHEN a.first_seen_at >= NOW() - (${windowDays} || ' days')::interval THEN a.id END) AS new_ads_window_count
         FROM category_products cp
         INNER JOIN ads a ON a.product_id = cp.product_id
         INNER JOIN latest_active_obs lab ON lab.ad_id = a.id
@@ -326,10 +327,10 @@ export async function getCategoryMatrixCsvData(
         MIN(CASE WHEN cp.price > 0 THEN cp.price END) AS min_price,
         MAX(CASE WHEN cp.price > 0 THEN cp.price END) AS max_price,
         COALESCE(ca.active_ads_count, 0) AS active_ads_count,
-        COALESCE(ca.new_ads_7d_count, 0) AS new_ads_7d_count
+        COALESCE(ca.new_ads_window_count, 0) AS new_ads_window_count
       FROM category_products cp
       LEFT JOIN category_ads ca ON ca.cat_name = cp.cat_name
-      GROUP BY cp.cat_name, ca.active_ads_count, ca.new_ads_7d_count
+      GROUP BY cp.cat_name, ca.active_ads_count, ca.new_ads_window_count
       ORDER BY product_count DESC
       LIMIT ${queryLimit};
     `;
@@ -345,7 +346,7 @@ export async function getCategoryMatrixCsvData(
     Number(r.product_count) || 0,
     Number(r.store_count) || 0,
     Number(r.active_ads_count) || 0,
-    Number(r.new_ads_7d_count) || 0,
+    Number(r.new_ads_window_count ?? r.new_ads_7d_count) || 0,
     r.avg_price !== null ? Number(r.avg_price) : "",
     r.min_price !== null ? Number(r.min_price) : "",
     r.max_price !== null ? Number(r.max_price) : "",
@@ -386,7 +387,7 @@ export async function getAdsCsvData(
   const windowDays = Math.max(1, Math.min(60, rangeDays));
   const queryLimit = EXPORT_ROW_LIMIT + 1;
 
-  // Filter ads where the LATEST observation is active (is_active = true)
+  // Filter ads where the LATEST observation is active (is_active = true) bounded within workspace and window
   const query = sql`
     WITH latest_obs AS (
       SELECT DISTINCT ON (ao.ad_id)
@@ -395,6 +396,9 @@ export async function getAdsCsvData(
         ao.is_active,
         ao.observed_at
       FROM ad_observations ao
+      INNER JOIN tracked_pages tp ON tp.id = ao.tracked_page_id
+      WHERE tp.workspace_id = ${workspaceId}::uuid
+        AND ao.observed_at >= NOW() - (${windowDays} || ' days')::interval
       ORDER BY ao.ad_id, ao.observed_at DESC
     )
     SELECT
@@ -405,15 +409,13 @@ export async function getAdsCsvData(
       GREATEST(1, ROUND(EXTRACT(EPOCH FROM (lo.observed_at - COALESCE(a.started_running_on, a.first_seen_at, a.created_at))) / 86400)) AS days_active,
       (LEFT(COALESCE(a.caption, ''), 200) ~ '[\u0600-\u06FF]') AS has_arabic,
       (LOWER(LEFT(COALESCE(a.caption, ''), 200)) ~ '(livraison|gratuit|promo|commander|prix|solde|offre)') AS has_french,
-      (LOWER(LEFT(COALESCE(a.caption, ''), 200)) ~ '(livraison gratuite|توصيل مجاني|free delivery|livraison 0)') AS has_free_delivery,
-      (LOWER(LEFT(COALESCE(a.caption, ''), 200)) ~ '(remise|تخفيض|promo|solde|%|خصم)') AS has_discount
+      (LOWER(LEFT(COALESCE(a.caption, ''), 200)) ~ '(livraison gratuite|\u062A\u0648\u0635\u064A\u0644 \u0645\u062C\u0627\u0646\u064A|\u062A\u0648\u0635\u064A\u0644 \u0628\u0644\u0627\u0634|free delivery|livraison 0)') AS has_free_delivery,
+      (LOWER(LEFT(COALESCE(a.caption, ''), 200)) ~ '(remise|\u062A\u062E\u0641\u064A\u0636|\u062E\u0635\u0645|promo|solde|%|\u0639\u0631\u0636)') AS has_discount
     FROM latest_obs lo
     INNER JOIN ads a ON a.id = lo.ad_id
     INNER JOIN tracked_pages tp ON tp.id = lo.tracked_page_id
-    WHERE tp.workspace_id = ${workspaceId}::uuid
-      AND lo.is_active = true
+    WHERE lo.is_active = true
       AND (a.is_archived = false OR a.is_archived IS NULL)
-      AND lo.observed_at >= NOW() - (${windowDays} || ' days')::interval
     ORDER BY lo.observed_at DESC
     LIMIT ${queryLimit};
   `;
