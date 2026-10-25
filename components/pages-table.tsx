@@ -628,25 +628,131 @@ export function PagesTable({
     );
   };
 
-  const [editingNotes, setEditingNotes] = useState<string | null>(null);
-  const [editingNotesValue, setEditingNotesValue] = useState("");
+  const [notePopoverPage, setNotePopoverPage] = useState<TrackedPage | null>(null);
+  const [notePopoverPos, setNotePopoverPos] = useState<{
+    top?: number;
+    bottom?: number;
+    left?: number;
+    right?: number;
+  } | null>(null);
+  const [notePopoverValue, setNotePopoverValue] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
+  const notePopoverRef = useRef<HTMLDivElement | null>(null);
 
-  const saveNotes = async (id: string) => {
+  // Close note popover on click outside, scroll, or resize
+  useEffect(() => {
+    if (!notePopoverPage) return;
+
+    function handleClickOutside(e: MouseEvent) {
+      if (notePopoverRef.current && notePopoverRef.current.contains(e.target as Node)) {
+        return;
+      }
+      if ((e.target as HTMLElement)?.closest?.(`[data-note-trigger="${notePopoverPage?.id}"]`)) {
+        return;
+      }
+      setNotePopoverPage(null);
+      setNotePopoverPos(null);
+    }
+
+    function handleScrollOrResize() {
+      setNotePopoverPage(null);
+      setNotePopoverPos(null);
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("scroll", handleScrollOrResize, true);
+    window.addEventListener("resize", handleScrollOrResize);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("scroll", handleScrollOrResize, true);
+      window.removeEventListener("resize", handleScrollOrResize);
+    };
+  }, [notePopoverPage]);
+
+  const openNotePopoverFromElement = (page: TrackedPage, triggerEl: HTMLElement) => {
+    const rect = triggerEl.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUpwards = spaceBelow < 250;
+
+    let leftPos: number | undefined = undefined;
+    let rightPos: number | undefined = undefined;
+
+    if (rect.left + 328 <= window.innerWidth) {
+      leftPos = Math.max(8, rect.left);
+    } else {
+      rightPos = Math.max(8, window.innerWidth - rect.right);
+    }
+
+    setNotePopoverPos({
+      top: openUpwards ? undefined : rect.bottom + 6,
+      bottom: openUpwards ? window.innerHeight - rect.top + 6 : undefined,
+      left: leftPos,
+      right: rightPos,
+    });
+    setNotePopoverPage(page);
+    setNotePopoverValue((page as any).notes || "");
+    setOpenMenuPageId(null);
+    setMenuPos(null);
+  };
+
+  const openNotePopoverFromMenu = (page: TrackedPage) => {
+    if (menuPos) {
+      const right = Math.max(8, Math.min(menuPos.right, window.innerWidth - 328));
+      setNotePopoverPos({
+        top: menuPos.top,
+        bottom: menuPos.bottom,
+        right,
+      });
+    } else {
+      setNotePopoverPos({
+        top: 100,
+        right: 16,
+      });
+    }
+    setOpenMenuPageId(null);
+    setMenuPos(null);
+    setNotePopoverPage(page);
+    setNotePopoverValue((page as any).notes || "");
+  };
+
+  const saveNotes = async (id: string, customValue?: string) => {
+    const valueToSave = customValue !== undefined ? customValue : notePopoverValue;
+    const trimmed = valueToSave.trim() || null;
     setSavingNotes(true);
     try {
       const res = await fetch(`/api/page/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes: editingNotesValue }),
+        body: JSON.stringify({ notes: trimmed }),
       });
       if (res.ok) {
         const target = pages.find((p) => p.id === id);
-        if (target) (target as any).notes = editingNotesValue;
-        setEditingNotes(null);
+        if (target) (target as any).notes = trimmed;
+        setNotePopoverPage(null);
+        setNotePopoverPos(null);
+        showToast({
+          title: trimmed ? "Note Saved" : "Note Cleared",
+          message: trimmed
+            ? `Note saved for ${target?.displayName || "page"}`
+            : `Note removed for ${target?.displayName || "page"}`,
+          type: "success",
+        });
+        onWatchlistToggle?.();
+      } else {
+        showToast({
+          title: "Save Failed",
+          message: "Failed to update note",
+          type: "error",
+        });
       }
     } catch (err) {
       console.error("Failed to save notes", err);
+      showToast({
+        title: "Error",
+        message: "An unexpected error occurred while saving the note",
+        type: "error",
+      });
     } finally {
       setSavingNotes(false);
     }
@@ -1235,6 +1341,8 @@ export function PagesTable({
                   const isOnHold = p.holdStatus === "on_hold";
                   const isDimmed = !isOnHold && (p.currentResults === 0 || p.status === "unclear");
                   const isSelected = selectedIds.includes(p.id);
+                  const isRefreshing = refreshingPageIds.has(p.id);
+                  const isScanning = p.status === "scanning" || p.status === "pending" || isRefreshing;
 
                   return (
                     <tr
@@ -1361,6 +1469,23 @@ export function PagesTable({
                                   <Copy className="w-3 h-3" />
                                 </button>
                               )}
+
+                              {/* Note Indicator Badge (if note exists) */}
+                              {Boolean((p as any).notes) && (
+                                <button
+                                  type="button"
+                                  data-note-trigger={p.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openNotePopoverFromElement(p, e.currentTarget);
+                                  }}
+                                  className="inline-flex items-center text-amber-500 hover:text-amber-600 dark:text-amber-400 dark:hover:text-amber-300 p-0.5 rounded hover:bg-amber-500/10 transition-colors cursor-pointer shrink-0"
+                                  title={`Note: ${(p as any).notes}\n(Click to view / edit)`}
+                                  aria-label="View or edit note"
+                                >
+                                  <StickyNote className="w-3 h-3 fill-amber-500/20" />
+                                </button>
+                              )}
                             </div>
 
                             {/* Subline: ONLY if multi page! */}
@@ -1408,7 +1533,17 @@ export function PagesTable({
                       <td className="px-2.5 md:px-3.5 xl:px-4 py-2.5">
                         <div className="flex items-center gap-3">
                           <div className="flex items-baseline gap-1.5 shrink-0 min-w-[60px]">
-                            {isOnHold && p.lastKnownValidResults ? (
+                            {isScanning ? (
+                              <div
+                                className="flex items-center gap-1.5 py-0.5"
+                                title="Scanning Meta Ad Library for live count..."
+                              >
+                                {/* Ad Count Skeleton */}
+                                <div className="h-4 w-9 rounded-md bg-slate-200/80 dark:bg-slate-800/80 animate-pulse" />
+                                {/* Delta Skeleton */}
+                                <div className="h-3.5 w-6 rounded-md bg-slate-200/50 dark:bg-slate-800/50 animate-pulse" />
+                              </div>
+                            ) : isOnHold && p.lastKnownValidResults ? (
                               <span
                                 className="text-[11px] font-mono text-amber-500 font-bold"
                                 title={`Account hold — was ${p.lastKnownValidResults} ads. Under grace period (${p.consecutiveZeroScans ?? 1}/3 scans).`}
@@ -1442,7 +1577,7 @@ export function PagesTable({
                             )}
 
                             {/* Clean Delta text */}
-                            {diff !== null && diff !== undefined && diff !== 0 && (
+                            {!isScanning && diff !== null && diff !== undefined && diff !== 0 && (
                               <span
                                 className={`inline-flex items-center text-[10px] font-extrabold ${
                                   diff > 0
@@ -1720,39 +1855,6 @@ export function PagesTable({
                             </button>
                           </div>
                         </div>
-
-                        {/* Inline Notes Editor */}
-                        {editingNotes === p.id && (
-                          <div className="mt-1.5 flex items-start space-x-1.5 justify-end">
-                            <textarea
-                              value={editingNotesValue}
-                              onChange={(e) => setEditingNotesValue(e.target.value)}
-                              rows={2}
-                              placeholder="Add a note..."
-                              className="bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-white px-2 py-1 rounded border border-yellow-500/40 focus:outline-none resize-none w-48"
-                              autoFocus
-                              disabled={savingNotes}
-                            />
-                            <div className="flex flex-col gap-1">
-                              <button
-                                onClick={() => saveNotes(p.id)}
-                                disabled={savingNotes}
-                                className="p-1 text-emerald-500 dark:text-emerald-400 hover:text-emerald-400 dark:hover:text-emerald-300 transition-colors"
-                                title="Save note"
-                              >
-                                {savingNotes ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                              </button>
-                              <button
-                                onClick={() => setEditingNotes(null)}
-                                disabled={savingNotes}
-                                className="p-1 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-                                title="Cancel"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        )}
                       </td>
                     </tr>
                   );
@@ -1993,15 +2095,14 @@ export function PagesTable({
             {/* Notes */}
             <button
               type="button"
-              onClick={() => {
-                setOpenMenuPageId(null);
-                setMenuPos(null);
-                setEditingNotes(activeMenuPage.id);
-                setEditingNotesValue((activeMenuPage as any).notes || "");
+              data-note-trigger={activeMenuPage.id}
+              onClick={(e) => {
+                e.stopPropagation();
+                openNotePopoverFromMenu(activeMenuPage);
               }}
               className="w-full px-2.5 py-1.5 text-left text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-2 cursor-pointer transition-colors"
             >
-              <StickyNote className={`w-3.5 h-3.5 shrink-0 ${(activeMenuPage as any).notes ? "text-yellow-500" : "text-slate-400"}`} />
+              <StickyNote className={`w-3.5 h-3.5 shrink-0 ${(activeMenuPage as any).notes ? "text-amber-500" : "text-slate-400"}`} />
               <span>{(activeMenuPage as any).notes ? "Edit Note" : "Add Note"}</span>
             </button>
 
@@ -2054,6 +2155,114 @@ export function PagesTable({
               <Trash2 className="w-3.5 h-3.5 shrink-0" />
               <span>Delete</span>
             </button>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Floating Notes Popover Portal */}
+      {mounted && notePopoverPage && notePopoverPos && createPortal(
+        <div
+          ref={notePopoverRef}
+          style={{
+            position: "fixed",
+            top: notePopoverPos.top !== undefined ? `${notePopoverPos.top}px` : undefined,
+            bottom: notePopoverPos.bottom !== undefined ? `${notePopoverPos.bottom}px` : undefined,
+            left: notePopoverPos.left !== undefined ? `${notePopoverPos.left}px` : undefined,
+            right: notePopoverPos.right !== undefined ? `${notePopoverPos.right}px` : undefined,
+          }}
+          className="w-80 rounded-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 shadow-2xl p-3 z-[110] animate-in fade-in zoom-in-95 text-left"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 dark:border-slate-800/80">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <StickyNote className="w-3.5 h-3.5 text-amber-500 fill-amber-500/20 shrink-0" />
+              <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
+                Notes
+              </span>
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate font-mono">
+                • {notePopoverPage.displayName || notePopoverPage.pageId || "Brand"}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setNotePopoverPage(null);
+                setNotePopoverPos(null);
+              }}
+              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              aria-label="Close notes popover"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Textarea */}
+          <textarea
+            value={notePopoverValue}
+            onChange={(e) => setNotePopoverValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.stopPropagation();
+                setNotePopoverPage(null);
+                setNotePopoverPos(null);
+              } else if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                e.preventDefault();
+                saveNotes(notePopoverPage.id);
+              }
+            }}
+            rows={3}
+            placeholder="Write a note about this brand..."
+            className="w-full bg-slate-50 dark:bg-slate-950 text-xs text-slate-900 dark:text-white px-2.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700/80 focus:border-amber-500/80 focus:ring-1 focus:ring-amber-500/80 focus:outline-none resize-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600"
+            autoFocus
+            disabled={savingNotes}
+          />
+
+          {/* Footer */}
+          <div className="mt-2.5 flex items-center justify-between pt-1">
+            <div>
+              {Boolean((notePopoverPage as any).notes) && (
+                <button
+                  type="button"
+                  onClick={() => saveNotes(notePopoverPage.id, "")}
+                  disabled={savingNotes}
+                  className="text-[11px] text-rose-500 hover:text-rose-600 dark:text-rose-400 dark:hover:text-rose-300 font-medium hover:underline flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Clear</span>
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-slate-400 hidden sm:inline mr-1">
+                ⌘+Enter
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setNotePopoverPage(null);
+                  setNotePopoverPos(null);
+                }}
+                disabled={savingNotes}
+                className="px-2.5 py-1 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => saveNotes(notePopoverPage.id)}
+                disabled={savingNotes}
+                className="px-3 py-1 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-semibold rounded-md shadow-xs shadow-amber-500/20 flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {savingNotes ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Check className="w-3 h-3" />
+                )}
+                <span>Save</span>
+              </button>
+            </div>
           </div>
         </div>,
         document.body
