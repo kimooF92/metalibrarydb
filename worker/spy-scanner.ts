@@ -862,6 +862,7 @@ export async function scanAdCreatives(
     const pageCountry = (trackedPageRecord as any)?.country || country || "ALL";
     const shouldUpdateProfilePic =
       Boolean(resolvedProfilePicUrl) &&
+      resolvedProfilePicUrl !== trackedPageRecord?.profilePicUrl &&
       (!trackedPageRecord?.profilePicUrl ||
         trackedPageRecord.profilePicUrl.includes("fbcdn.net") ||
         trackedPageRecord.profilePicUrl.includes("facebook.com"));

@@ -684,8 +684,12 @@ export async function markJobCompleted(
     where: eq(trackedPages.id, pageId),
   });
 
-  // If a Meta profile picture was extracted and page doesn't have an authentic store logo, save it as fallback
-  if (options?.profilePicUrl && (!trackedPage?.profilePicUrl || trackedPage.profilePicUrl.includes("fbcdn.net"))) {
+  // If a Meta profile picture was extracted and page doesn't have an authentic store logo, save it as fallback (skips if already identical)
+  if (
+    options?.profilePicUrl &&
+    options.profilePicUrl !== trackedPage?.profilePicUrl &&
+    (!trackedPage?.profilePicUrl || trackedPage.profilePicUrl.includes("fbcdn.net"))
+  ) {
     try {
       await db
         .update(trackedPages)

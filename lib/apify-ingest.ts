@@ -671,6 +671,7 @@ export async function ingestApifyDatasetItems(
 
   const shouldUpdateProfilePic =
     Boolean(detectedProfilePicUrl) &&
+    detectedProfilePicUrl !== pageRecord?.profilePicUrl &&
     (!pageRecord?.profilePicUrl ||
       pageRecord.profilePicUrl.includes("fbcdn.net") ||
       pageRecord.profilePicUrl.includes("facebook.com"));
