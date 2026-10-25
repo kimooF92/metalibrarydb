@@ -107,24 +107,26 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ success: true, message: "Marked all notifications as read." });
     }
 
+    const targetReadStatus = typeof body.isRead === "boolean" ? body.isRead : true;
+
     if (Array.isArray(ids) && ids.length > 0) {
       await db
         .update(activityNotifications)
-        .set({ isRead: true })
+        .set({ isRead: targetReadStatus })
         .where(inArray(activityNotifications.id, ids));
 
       await deleteCached(`cache:notifications:summary:${activeWorkspace.id}`);
-      return NextResponse.json({ success: true, message: `Marked ${ids.length} notifications as read.` });
+      return NextResponse.json({ success: true, message: `Marked ${ids.length} notifications as ${targetReadStatus ? "read" : "unread"}.` });
     }
 
     if (id) {
       await db
         .update(activityNotifications)
-        .set({ isRead: true })
+        .set({ isRead: targetReadStatus })
         .where(eq(activityNotifications.id, id));
 
       await deleteCached(`cache:notifications:summary:${activeWorkspace.id}`);
-      return NextResponse.json({ success: true, message: "Notification marked as read." });
+      return NextResponse.json({ success: true, message: `Notification marked as ${targetReadStatus ? "read" : "unread"}.` });
     }
 
     return NextResponse.json({ error: "Missing id, ids, or action" }, { status: 400 });

@@ -177,6 +177,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
       if (res.ok) {
         setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
         setUnreadCount(0);
+        if (sharedSummaryCache) sharedSummaryCache.count = 0;
         showToast({ type: "success", title: "Marked all notifications as read" });
       }
     } catch {
@@ -184,18 +185,27 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
     }
   };
 
-  const handleMarkSingleRead = async (id: string) => {
+  const handleMarkSingleRead = async (id: string, isRead = true) => {
+    // Optimistic UI update: immediately remove dot and decrement count
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, isRead } : n))
+    );
+    setUnreadCount((prev) => {
+      const next = isRead ? Math.max(0, prev - 1) : prev + 1;
+      if (sharedSummaryCache) sharedSummaryCache.count = next;
+      return next;
+    });
+
     try {
       await fetch("/api/notifications", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, isRead: true }),
+        body: JSON.stringify({ id, isRead }),
+        keepalive: true,
       });
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
-      );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
-    } catch {}
+    } catch (err) {
+      console.warn("[NotificationCenter] Failed to update read status:", err);
+    }
   };
 
   const handleClearAll = async () => {
@@ -208,6 +218,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
       if (res.ok) {
         setNotifications([]);
         setUnreadCount(0);
+        if (sharedSummaryCache) sharedSummaryCache.count = 0;
         setConfirmClearAll(false);
         showToast({ type: "info", title: "Cleared notification history" });
       }
@@ -678,10 +689,21 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                       )}
                     </div>
 
-                    {/* Right indicator column: unread dot and subtle hover chevron */}
+                    {/* Right indicator column: unread dot button and subtle hover chevron */}
                     <div className="flex items-center self-center shrink-0 pl-1">
                       {!n.isRead && (
-                        <span className="w-2 h-2 rounded-full bg-indigo-500 ring-2 ring-white dark:ring-slate-900 shadow-xs mr-0.5 group-hover:scale-110 transition-transform" />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMarkSingleRead(n.id, true);
+                          }}
+                          title="Mark as read"
+                          aria-label="Mark as read"
+                          className="p-1 -m-1 rounded-full hover:bg-indigo-50 dark:hover:bg-indigo-950/60 transition-colors cursor-pointer group/dot flex items-center justify-center mr-1"
+                        >
+                          <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 ring-2 ring-white dark:ring-slate-900 shadow-xs group-hover/dot:scale-125 transition-transform" />
+                        </button>
                       )}
                       <ChevronRight className="w-3.5 h-3.5 text-slate-400/60 dark:text-slate-500 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100" />
                     </div>
