@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { ads, adObservations, creativeScans, trackedPages } from "@/db/schema";
-import { eq, and, sql, desc, ne } from "drizzle-orm";
+import { ads, adObservations, creativeScans, trackedPages, brandDomains } from "@/db/schema";
+import { eq, and, sql, desc, ne, isNull, or } from "drizzle-orm";
 import { uploadMediaWithHashing, isB2Configured } from "@/lib/b2-storage";
 import { linkAndAutoScrapeProduct } from "@/lib/product-ingest";
 import { checkAndRecordBreakout } from "@/lib/breakout-detector";
@@ -231,6 +231,10 @@ export function extractPageInfo(item: any): {
     item.node?.page_profile_picture_url,
     item.profile_picture_url,
     item.snapshot?.profile_picture_url,
+    item.page_profile_picture_uri,
+    item.snapshot?.page_profile_picture_uri,
+    item.publisherPlatformPageProfilePictureUrl,
+    item.snapshot?.publisherPlatformPageProfilePictureUrl,
   ];
 
   let resolvedProfilePicUrl: string | null = null;
@@ -665,6 +669,12 @@ export async function ingestApifyDatasetItems(
   // Multi-Page vs Single-Page Brand Resolution
   const candidatePages = Array.from(discoveredPagesMap.values());
 
+  const shouldUpdateProfilePic =
+    Boolean(detectedProfilePicUrl) &&
+    (!pageRecord?.profilePicUrl ||
+      pageRecord.profilePicUrl.includes("fbcdn.net") ||
+      pageRecord.profilePicUrl.includes("facebook.com"));
+
   // Initialize tracked page updates object
   const pageUpdates: any = {
     status: (pageRecord?.holdStatus === "on_hold" || pageRecord?.holdStatus === "inactive") && extractedCount === 0
@@ -674,9 +684,28 @@ export async function ingestApifyDatasetItems(
       ? { holdStatus: "active", consecutiveZeroScans: 0, lastKnownValidResults: null }
       : {}),
     lastCreativeScan: now,
-    ...(detectedProfilePicUrl && !pageRecord?.profilePicUrl ? { profilePicUrl: detectedProfilePicUrl } : {}),
+    ...(shouldUpdateProfilePic ? { profilePicUrl: detectedProfilePicUrl } : {}),
     updatedAt: now,
   };
+
+  if (shouldUpdateProfilePic && pageRecord?.brandDomainId) {
+    try {
+      await db
+        .update(brandDomains)
+        .set({ profilePicUrl: detectedProfilePicUrl, updatedAt: now })
+        .where(
+          and(
+            eq(brandDomains.id, pageRecord.brandDomainId),
+            or(
+              isNull(brandDomains.profilePicUrl),
+              eq(brandDomains.profilePicUrl, ""),
+              sql`${brandDomains.profilePicUrl} LIKE '%fbcdn.net%'`,
+              sql`${brandDomains.profilePicUrl} LIKE '%facebook.com%'`
+            )
+          )
+        );
+    } catch {}
+  }
 
   if (candidatePages.length > 1 && pageRecord && pageRecord.searchType !== "page") {
     pageUpdates.discoveredPagesCount = candidatePages.length;

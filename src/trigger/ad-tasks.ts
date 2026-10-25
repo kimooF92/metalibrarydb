@@ -325,6 +325,7 @@ export const scanPageCountTask = task({
           {
             failureReason: outcome.failureReason,
             page,
+            profilePicUrl: outcome.profilePicUrl,
           }
         );
 

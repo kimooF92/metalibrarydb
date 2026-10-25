@@ -1,6 +1,6 @@
 import { db } from "../db";
-import { trackedPages, queue, scanHistory, workerState, creativeScans, discoveredPages, discoveryRuns, appSettings, scrapedProducts } from "../db/schema";
-import { eq, sql, inArray, and, isNotNull, desc } from "drizzle-orm";
+import { trackedPages, queue, scanHistory, workerState, creativeScans, discoveredPages, discoveryRuns, appSettings, scrapedProducts, brandDomains } from "../db/schema";
+import { eq, sql, inArray, and, isNotNull, isNull, or, desc } from "drizzle-orm";
 import { shouldArchiveZeroCount } from "../lib/ad-reconciliation";
 
 function isUuid(id?: string | null): boolean {
@@ -669,6 +669,7 @@ export async function markJobCompleted(
     failureReason?: string | null;
     scanQuality?: "complete" | "partial" | "unclear";
     page?: any;
+    profilePicUrl?: string | null;
   }
 ) {
   const now = new Date();
@@ -682,6 +683,34 @@ export async function markJobCompleted(
   const trackedPage = await db.query.trackedPages.findFirst({
     where: eq(trackedPages.id, pageId),
   });
+
+  // If a Meta profile picture was extracted and page doesn't have an authentic store logo, save it as fallback
+  if (options?.profilePicUrl && (!trackedPage?.profilePicUrl || trackedPage.profilePicUrl.includes("fbcdn.net"))) {
+    try {
+      await db
+        .update(trackedPages)
+        .set({ profilePicUrl: options.profilePicUrl, updatedAt: now })
+        .where(eq(trackedPages.id, pageId));
+
+      if (trackedPage?.brandDomainId) {
+        await db
+          .update(brandDomains)
+          .set({ profilePicUrl: options.profilePicUrl, updatedAt: now })
+          .where(
+            and(
+              eq(brandDomains.id, trackedPage.brandDomainId),
+              or(
+                isNull(brandDomains.profilePicUrl),
+                eq(brandDomains.profilePicUrl, ""),
+                sql`${brandDomains.profilePicUrl} LIKE '%fbcdn.net%'`
+              )
+            )
+          );
+      }
+    } catch (picErr) {
+      console.warn("[Count Scan] Non-fatal error updating profilePicUrl:", picErr);
+    }
+  }
 
   let mostRecentSuccessfulPositiveScan = null;
   if (!trackedPage?.lastKnownValidResults && trackedPage?.holdStatus !== "inactive") {

@@ -1,7 +1,7 @@
 import { Page, Response } from "playwright";
 import { db } from "../db";
-import { ads, adObservations, trackedPages, scanHistory } from "../db/schema";
-import { eq, sql, and, desc, ne } from "drizzle-orm";
+import { ads, adObservations, trackedPages, scanHistory, brandDomains } from "../db/schema";
+import { eq, sql, and, desc, ne, isNull, or } from "drizzle-orm";
 import { checkAndRecordBreakout } from "../lib/breakout-detector";
 import { cacheThumbnail } from "./thumbnail-cache";
 import { extractAdsFromDOM, extractPageIdsFromPage } from "./dom-scanner";
@@ -453,7 +453,7 @@ export async function scanAdCreatives(
     // 3. Query tracked page record to get the official numeric pageId if present
     const trackedPageRecord = await db.query.trackedPages.findFirst({
       where: eq(trackedPages.id, trackedPageId),
-      columns: { pageId: true, displayName: true, searchType: true, landingPage: true, country: true, workspaceId: true },
+      columns: { pageId: true, displayName: true, searchType: true, landingPage: true, country: true, workspaceId: true, profilePicUrl: true, brandDomainId: true },
     });
     const fallbackNumericPageId = (trackedPageRecord?.pageId && trackedPageRecord.pageId !== "0" && !trackedPageRecord.pageId.includes("-"))
       ? trackedPageRecord.pageId
@@ -860,13 +860,38 @@ export async function scanAdCreatives(
     }
 
     const pageCountry = (trackedPageRecord as any)?.country || country || "ALL";
+    const shouldUpdateProfilePic =
+      Boolean(resolvedProfilePicUrl) &&
+      (!trackedPageRecord?.profilePicUrl ||
+        trackedPageRecord.profilePicUrl.includes("fbcdn.net") ||
+        trackedPageRecord.profilePicUrl.includes("facebook.com"));
+
     const pageUpdates: any = {
       status: "success",
       lastCreativeScan: now,
       lastSuccessAt: now,
-      ...(resolvedProfilePicUrl ? { profilePicUrl: resolvedProfilePicUrl } : {}),
+      ...(shouldUpdateProfilePic ? { profilePicUrl: resolvedProfilePicUrl } : {}),
       updatedAt: now,
     };
+
+    if (shouldUpdateProfilePic && trackedPageRecord?.brandDomainId) {
+      try {
+        await db
+          .update(brandDomains)
+          .set({ profilePicUrl: resolvedProfilePicUrl, updatedAt: now })
+          .where(
+            and(
+              eq(brandDomains.id, trackedPageRecord.brandDomainId),
+              or(
+                isNull(brandDomains.profilePicUrl),
+                eq(brandDomains.profilePicUrl, ""),
+                sql`${brandDomains.profilePicUrl} LIKE '%fbcdn.net%'`,
+                sql`${brandDomains.profilePicUrl} LIKE '%facebook.com%'`
+              )
+            )
+          );
+      } catch {}
+    }
 
     if (resolvedPageId && resolvedPageId !== "0") {
       let targetDomain: string | null = null;

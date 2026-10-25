@@ -11,6 +11,7 @@ export interface ScanOutcome {
     | "captcha"
     | "rate_limited";
   note?: string;
+  profilePicUrl?: string | null;
 }
 
 export function parseResultCountFromText(bodyText: string): ScanOutcome {
@@ -180,6 +181,59 @@ export async function scanMetaAdPage(
 
     const rawOutcome = parseResultCountFromText(bodyText);
 
+    // Extract Meta profile picture / avatar from Meta Ad Library header or ad cards
+    let extractedProfilePicUrl: string | null = null;
+    try {
+      extractedProfilePicUrl = await page.evaluate(() => {
+        // 1. Check DOM img elements for Meta avatar / profile picture patterns
+        const imgs = Array.from(document.querySelectorAll<HTMLImageElement>("img"));
+        for (const img of imgs) {
+          const src = img.getAttribute("src") || img.src || "";
+          if (
+            src.includes("fbcdn.net") &&
+            (src.includes("30808-1") ||
+              src.includes("18169-1") ||
+              src.includes("p148x148") ||
+              src.includes("p100x100") ||
+              src.includes("p50x50") ||
+              src.includes("p60x60") ||
+              src.includes("s148x148"))
+          ) {
+            return src;
+          }
+        }
+
+        // 2. Scan inline JSON script blocks for page profile picture URLs
+        const scripts = Array.from(document.querySelectorAll("script:not([src])"));
+        for (const s of scripts) {
+          const text = s.textContent || "";
+          if (text.includes("profile_picture") || text.includes("page_profile_picture_url")) {
+            const match = text.match(/"(?:page_profile_picture_url|profile_picture_url|pageProfilePictureUrl)":\s*"([^"]+)"/i);
+            if (match && match[1]) {
+              const unescaped = match[1].replace(/\\\//g, "/");
+              if (unescaped.startsWith("http") && unescaped.includes("fbcdn.net")) {
+                return unescaped;
+              }
+            }
+          }
+        }
+
+        // 3. Fallback: check any fbcdn image with dst-jpg
+        for (const img of imgs) {
+          const src = img.getAttribute("src") || img.src || "";
+          if (src.includes("fbcdn.net") && !src.includes("static.xx") && !src.includes("rsrc.php") && src.includes("dst-jpg")) {
+            return src;
+          }
+        }
+
+        return null;
+      });
+    } catch {}
+
+    if (extractedProfilePicUrl) {
+      rawOutcome.profilePicUrl = extractedProfilePicUrl;
+    }
+
     // If result was parsed successfully and previous count is known, check for ambiguity / spikes (+20 ads)
     if (rawOutcome.status === "success" && options?.previousCount !== undefined && options.previousCount !== null) {
       try {
@@ -212,6 +266,7 @@ export async function scanMetaAdPage(
               status: "success",
               results: refereeResult.resolvedCount,
               note: `Refereed by ${refereeResult.modelUsed}: ${refereeResult.doubtReasons.join("; ")}`,
+              profilePicUrl: extractedProfilePicUrl,
             };
           }
         }
