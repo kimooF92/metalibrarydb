@@ -14,6 +14,7 @@ import {
 import { formatPrice, formatDelivery } from "../lib/format-price";
 import { enhanceProductWithJev } from "../lib/product-enhancer";
 import { validateAndGatekeepProduct, resolveEffectiveScrapeStatus } from "../lib/product-validator";
+import { isCategoryUrl } from "../lib/url-parser";
 
 let isRescueRunning = false;
 let lastRescueAttemptTime = 0;
@@ -76,7 +77,10 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
           sql`COALESCE(${scrapedProducts.failureReason}, '') NOT LIKE '%ERR_NAME_NOT_RESOLVED%'`,
           sql`COALESCE(${scrapedProducts.failureReason}, '') NOT LIKE '%ENOTFOUND%'`,
           sql`COALESCE(${scrapedProducts.failureReason}, '') NOT LIKE '%ECONNREFUSED%'`,
-          sql`COALESCE(${scrapedProducts.failureReason}, '') NOT LIKE '%ERR_CONNECTION_REFUSED%'`
+          sql`COALESCE(${scrapedProducts.failureReason}, '') NOT LIKE '%ERR_CONNECTION_REFUSED%'`,
+          // 4b. Never rescue or scrape category URLs
+          sql`LOWER(${scrapedProducts.url}) NOT LIKE '%/category%'`,
+          sql`LOWER(${scrapedProducts.url}) NOT LIKE '%/categories%'`
         )
       )
       // 5. Fair rotation: items never rescued locally first, then oldest attempts
@@ -93,6 +97,21 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
     for (const item of failedItems) {
       const targetUrl = item.url;
       if (!targetUrl || !targetUrl.startsWith("http")) continue;
+
+      if (isCategoryUrl(targetUrl)) {
+        console.warn(`[Local Rescue] 🛑 Skipping category URL: ${targetUrl}. Flagging as ignored.`);
+        await db
+          .update(scrapedProducts)
+          .set({
+            rawExtract: null,
+            scrapeStatus: "ignored",
+            failureReason: "Category URL ignored",
+            lastScrapedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(scrapedProducts.id, item.id));
+        continue;
+      }
 
       console.log(`[Local Rescue] Attempting local recovery for: ${targetUrl}`);
 

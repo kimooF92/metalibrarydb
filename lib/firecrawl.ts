@@ -1,8 +1,8 @@
 import FirecrawlApp from "@mendable/firecrawl-js";
 import { resolveDestinationUrl } from "./utils";
 import { scrapeProductDirectHtml, parseProductHtmlContent } from "./html-scraper";
-import { normalizeProductUrl } from "./url-parser";
-export { normalizeProductUrl };
+import { normalizeProductUrl, isCategoryUrl } from "./url-parser";
+export { normalizeProductUrl, isCategoryUrl };
 
 /**
  * JSON Schema for Firecrawl structured LLM extraction
@@ -82,6 +82,14 @@ export async function extractProductFromUrl(
     return {
       success: false,
       error: "Invalid or empty destination URL.",
+    };
+  }
+
+  // Never scrape category / collection listing pages
+  if (isCategoryUrl(url) || isCategoryUrl(normalized)) {
+    return {
+      success: false,
+      error: `[Ignored] Category URL detected: "${url}". Category listing pages are excluded from product scraping.`,
     };
   }
 

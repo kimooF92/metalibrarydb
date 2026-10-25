@@ -2,9 +2,10 @@ import { db } from "../db";
 import { scrapedProducts, ads } from "../db/schema";
 import { sql, eq, and, or, isNull, inArray } from "drizzle-orm";
 import { classifyProductWithJev } from "../lib/typesafe-jev";
-import { resolvePriceDoubtWithJev, detectExtractionDoubt, harvestPriceCandidates } from "../lib/doubt-detector";
+import { resolvePriceDoubtWithJev } from "../lib/doubt-detector";
 import { formatPrice } from "../lib/format-price";
 import { scrapeProductDirectHtml } from "../lib/html-scraper";
+import { isCategoryUrl } from "../lib/url-parser";
 
 let isJevMaintenanceRunning = false;
 
@@ -50,7 +51,9 @@ export async function sweepAndClassifyGeneralProducts(limit = 10): Promise<numbe
           SELECT 1 FROM ${ads}
           WHERE ${ads.productId} = ${scrapedProducts.id}
           AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
-        )`
+        )`,
+        sql`LOWER(${scrapedProducts.url}) NOT LIKE '%/category%'`,
+        sql`LOWER(${scrapedProducts.url}) NOT LIKE '%/categories%'`
       )
     )
     .orderBy(
@@ -68,6 +71,18 @@ export async function sweepAndClassifyGeneralProducts(limit = 10): Promise<numbe
 
   for (const item of items) {
     if (!item.title) continue;
+
+    if (item.url && isCategoryUrl(item.url)) {
+      await db
+        .update(scrapedProducts)
+        .set({
+          scrapeStatus: "ignored",
+          failureReason: "Category URL ignored - not a product page",
+          updatedAt: new Date(),
+        })
+        .where(eq(scrapedProducts.id, item.id));
+      continue;
+    }
 
     try {
       const result = await classifyProductWithJev(item.title, {
@@ -134,7 +149,9 @@ export async function sweepAndResolveZeroPrices(limit = 8): Promise<number> {
           SELECT 1 FROM ${ads}
           WHERE ${ads.productId} = ${scrapedProducts.id}
           AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
-        )`
+        )`,
+        sql`LOWER(${scrapedProducts.url}) NOT LIKE '%/category%'`,
+        sql`LOWER(${scrapedProducts.url}) NOT LIKE '%/categories%'`
       )
     )
     .orderBy(
@@ -152,6 +169,18 @@ export async function sweepAndResolveZeroPrices(limit = 8): Promise<number> {
 
   for (const item of zeroItems) {
     if (!item.url) continue;
+
+    if (isCategoryUrl(item.url)) {
+      await db
+        .update(scrapedProducts)
+        .set({
+          scrapeStatus: "ignored",
+          failureReason: "Category URL ignored - not a product page",
+          updatedAt: new Date(),
+        })
+        .where(eq(scrapedProducts.id, item.id));
+      continue;
+    }
 
     const isMorocco =
       item.workspaceId === "00000000-0000-0000-0000-000000000002" ||

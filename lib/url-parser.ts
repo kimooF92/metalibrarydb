@@ -119,6 +119,30 @@ export function normalizeProductUrl(rawUrl: string | null | undefined): string |
   }
 }
 
+/**
+ * Detects if a URL points to a category, collection, or catalog listing page rather than a single product.
+ * Strictly blocks any URL containing /category (e.g. /category/, /category/something, /shop/category/, /categories/).
+ */
+export function isCategoryUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  const raw = url.trim();
+  const lower = raw.toLowerCase();
+  if (lower.includes("/category") || lower.includes("/categories")) {
+    return true;
+  }
+  try {
+    const parsed = new URL(raw.match(/^https?:\/\//i) ? raw : `https://${raw}`);
+    const pathname = parsed.pathname.toLowerCase();
+    return (
+      pathname.includes("/category") ||
+      pathname.includes("/categories") ||
+      /\/(?:category|categories|collection|collections|rayon|rayons|categorie|categories)\b/i.test(pathname)
+    );
+  } catch {
+    return false;
+  }
+}
+
 export interface UrlMetadata {
   url: string;
   pageId: string | null;

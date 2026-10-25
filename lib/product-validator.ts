@@ -16,6 +16,7 @@
  */
 
 import { filterJunkWithJev } from "./typesafe-jev";
+import { isCategoryUrl } from "./url-parser";
 
 export interface ProductValidationInput {
   url: string;
@@ -50,6 +51,16 @@ export async function validateAndGatekeepProduct(
   const hasAnyPrice = Boolean(!isZeroPrice);
   const hasValidImage = Boolean(input.mainImageUrl && input.mainImageUrl.trim() !== "");
   const hasProductSlug = /\/(?:products?|produits?|items?|item|p|dp)\//i.test(urlLower);
+
+  // 0. Deterministic rejection for category, collection, and catalog listing URLs
+  if (isCategoryUrl(input.url) || urlLower.includes("/category")) {
+    return {
+      isProduct: false,
+      status: "ignored",
+      reason: "Category / collection listing URL excluded from product scraping",
+      confidence: 1.0,
+    };
+  }
 
   // 1. Layer 1 ($0 tokens): Deterministic rejection for policies, cart, account, and navigation junk
   const isObviousJunk =

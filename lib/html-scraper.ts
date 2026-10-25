@@ -1,5 +1,6 @@
 import type { ExtractedProductData } from "@/types";
 import net from "net";
+import { isCategoryUrl } from "./url-parser";
 
 /**
  * Extracts JSON-LD schema objects from HTML content.
@@ -1278,6 +1279,13 @@ export async function scrapeProductDirectHtml(
     return {
       success: false,
       error: "Scrape deadline exceeded before fetch completed",
+    };
+  }
+
+  if (isCategoryUrl(url)) {
+    return {
+      success: false,
+      error: `[Ignored] Category URL detected: ${url}. Category listing pages are excluded from product scraping.`,
     };
   }
 

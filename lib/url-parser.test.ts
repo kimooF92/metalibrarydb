@@ -7,6 +7,7 @@ import {
   buildMetaAdLibrarySearchUrl,
   isSocialDomain,
   extractStoreDomain,
+  isCategoryUrl,
 } from "./url-parser";
 import { isValidMetaAdLibraryUrl, addProductUrlSchema } from "./validators";
 
@@ -140,5 +141,28 @@ test("detectPlatformBadge correctly classifies store platforms", async () => {
   assert.equal(detectPlatformBadge("https://mystore.stocki.tn").name, "Stocki COD");
   assert.equal(detectPlatformBadge("https://custombrand.com/products/test", "product_url").name, "Product Landing Page");
   assert.equal(detectPlatformBadge("https://custombrand.com").name, "Store Website");
+});
+
+test("isCategoryUrl detects category, collection, and catalog listing URLs", () => {
+  // Direct /category paths
+  assert.equal(isCategoryUrl("https://fofana.tn/category/revetement-plafond"), true);
+  assert.equal(isCategoryUrl("https://www.dokani.tn/shop/category/arts-de-table-337"), true);
+  assert.equal(isCategoryUrl("https://nova-store-14.converty.shop/category/rangement"), true);
+  assert.equal(isCategoryUrl("https://store.tn/categories/fashion"), true);
+
+  // Collections and rayons
+  assert.equal(isCategoryUrl("https://store.tn/collections/all"), true);
+  assert.equal(isCategoryUrl("https://store.tn/collection/summer"), true);
+  assert.equal(isCategoryUrl("https://store.tn/categorie/maison"), true);
+  assert.equal(isCategoryUrl("https://store.tn/rayon/bricolage"), true);
+
+  // Non-category product pages
+  assert.equal(isCategoryUrl("https://store.tn/products/montre-connectee"), false);
+  assert.equal(isCategoryUrl("https://store.tn/p/chemise-bleue"), false);
+  assert.equal(isCategoryUrl("https://boutique.youcan.shop/item/phone-case"), false);
+  assert.equal(isCategoryUrl("https://nike.com/produit/chaussure-air"), false);
+  assert.equal(isCategoryUrl(null), false);
+  assert.equal(isCategoryUrl(undefined), false);
+  assert.equal(isCategoryUrl(""), false);
 });
 

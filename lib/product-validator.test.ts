@@ -81,3 +81,25 @@ test("validateAndGatekeepProduct does not auto-pass micro-prices (<=10) or forei
   // Foreign prices must not pass Layer 2 as local confirmed success
   assert.notEqual(foreignCheck.reason, "Confirmed genuine product (confident local price, product slug, image, descriptive title)");
 });
+
+test("validateAndGatekeepProduct strictly rejects category and collection listing URLs at Layer 0 ($0 tokens)", async () => {
+  const catCheck1 = await validateAndGatekeepProduct({
+    url: "https://fofana.tn/category/revetement-plafond",
+    title: "Revêtement Plafond - Fofana",
+    rawPrice: "45 DT",
+    mainImageUrl: "https://fofana.tn/cat.jpg",
+  });
+  assert.equal(catCheck1.isProduct, false);
+  assert.equal(catCheck1.status, "ignored");
+  assert.match(catCheck1.reason || "", /Category \/ collection listing URL excluded/i);
+
+  const catCheck2 = await validateAndGatekeepProduct({
+    url: "https://www.dokani.tn/shop/category/electromenager-280",
+    title: "Électroménager",
+    rawPrice: "199 DT",
+    mainImageUrl: "https://dokani.tn/cat.jpg",
+  });
+  assert.equal(catCheck2.isProduct, false);
+  assert.equal(catCheck2.status, "ignored");
+  assert.match(catCheck2.reason || "", /Category \/ collection listing URL excluded/i);
+});

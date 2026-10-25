@@ -14,6 +14,7 @@ import { scanAdCreatives } from "./spy-scanner";
 import { runDiscoveryScan } from "./discovery-scanner";
 import { mergeExactMatchWithPageId } from "../actions/merge-pages";
 import { isValidPageId } from "../lib/utils";
+import { isCategoryUrl } from "../lib/url-parser";
 import { eq, and, asc, desc, sql } from "drizzle-orm";
 import {
   getNextPendingJob,
@@ -621,6 +622,39 @@ async function runWorker() {
             .update(queue)
             .set({ status: "completed", finishedAt: new Date() })
             .where(eq(queue.id, queueJob.id));
+          ranJobs++;
+          continue;
+        }
+
+        if (targetProduct.url && isCategoryUrl(targetProduct.url)) {
+          console.log(`[Product Scrape Job] Skipping category URL: ${targetProduct.url}. Marking ignored.`);
+          await db
+            .update(scrapedProducts)
+            .set({
+              scrapeStatus: "ignored",
+              failureReason: "Category URL ignored - not a product page",
+              lastScrapedAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(eq(scrapedProducts.id, targetProduct.id));
+
+          await db
+            .update(queue)
+            .set({ status: "completed", finishedAt: new Date() })
+            .where(eq(queue.id, queueJob.id));
+
+          if (queueJob.failureReason?.startsWith("product:")) {
+            await db
+              .update(queue)
+              .set({ status: "completed", finishedAt: new Date() })
+              .where(
+                and(
+                  eq(queue.jobType, "product_scrape"),
+                  eq(queue.status, "pending"),
+                  eq(queue.failureReason, queueJob.failureReason)
+                )
+              );
+          }
           ranJobs++;
           continue;
         }

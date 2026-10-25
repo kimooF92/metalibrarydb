@@ -1,4 +1,5 @@
 import { parseProductHtmlContent } from "./html-scraper";
+import { isCategoryUrl } from "./url-parser";
 import type { ExtractedProductData } from "@/types";
 
 let localBrowserContext: any = null;
@@ -17,6 +18,13 @@ export async function scrapeUrlWithLocalPlaywright(
   rawHtml?: string;
   engine?: string;
 }> {
+  if (isCategoryUrl(url)) {
+    return {
+      success: false,
+      error: `[Ignored] Category URL detected: ${url}. Category listing pages are excluded from product scraping.`,
+    };
+  }
+
   // If running in a serverless environment (e.g. Vercel), Playwright local binary is not available
   if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
     return {

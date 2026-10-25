@@ -2,7 +2,7 @@ import { db } from "@/db";
 import { ads, scrapedProducts, trackedPages, brandDomains, adObservations, workspaces, queue } from "@/db/schema";
 import { eq, sql, and, or, isNull } from "drizzle-orm";
 import { getActiveWorkspace } from "@/lib/workspace-server";
-import { normalizeProductUrl, extractProductFromUrl } from "@/lib/firecrawl";
+import { normalizeProductUrl, extractProductFromUrl, isCategoryUrl } from "@/lib/firecrawl";
 import { getCleanDomain, isValidPageId } from "@/lib/utils";
 import {
   extractTunisianPhoneNumbers,
@@ -109,6 +109,11 @@ export async function linkAndAutoScrapeProduct({
 
   const normalizedUrl = normalizeProductUrl(linkUrl);
   if (!normalizedUrl) return { productId: null, isNew: false };
+
+  // Never scrape category or collection listing URLs
+  if (isCategoryUrl(linkUrl) || isCategoryUrl(normalizedUrl)) {
+    return { productId: null, isNew: false };
+  }
 
   // Skip pure social media profile links
   const socialDomains = [
@@ -356,6 +361,21 @@ export async function processProductExtraction(
   }
 ): Promise<{ success: boolean; status: string; error?: string }> {
   try {
+    // Never scrape category or collection listing pages
+    if (isCategoryUrl(normalizedUrl)) {
+      console.log(`[Auto-Scraper] Excluding category URL: ${normalizedUrl}`);
+      await db
+        .update(scrapedProducts)
+        .set({
+          scrapeStatus: "ignored",
+          failureReason: "Category URL ignored - not a product page",
+          lastScrapedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(scrapedProducts.id, productId));
+      return { success: false, status: "ignored", error: "Category URL excluded" };
+    }
+
     // 1. Atomic claim check: ensure another worker or process is not already extracting this product
     const claimed = await db
       .update(scrapedProducts)
