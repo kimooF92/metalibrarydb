@@ -1431,12 +1431,12 @@ export function PagesTable({
                             </button>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-2 min-w-0">
+                          <div className="flex items-center gap-2.5 min-w-0">
                             <Link
                               href={`/spy/brand/${encodeURIComponent(p.pageId || p.landingPage || p.displayName || "")}`}
-                              className="shrink-0"
+                              className="shrink-0 transition-transform active:scale-95"
                               tabIndex={-1}
-                              title={`View ${p.displayName || "brand"} logo`}
+                              title={`Open ${p.displayName || "brand"} Analytics`}
                             >
                               <BrandLogo
                                 name={p.displayName}
@@ -1444,7 +1444,6 @@ export function PagesTable({
                                 domain={p.canonicalDomain || p.landingPage || (p.displayName?.includes(".") ? p.displayName : null)}
                                 pageId={p.pageId}
                                 size="sm"
-                                showHoverPreview={true}
                               />
                             </Link>
 

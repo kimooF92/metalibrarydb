@@ -14,10 +14,10 @@ interface BrandLogoProps {
 
 const SIZE_MAP = {
   xs: { container: "w-5 h-5 min-w-5 rounded-md", text: "text-[9px]", padding: "p-0.5" },
-  sm: { container: "w-6 h-6 min-w-6 rounded-md", text: "text-[10px]", padding: "p-0.5" },
+  sm: { container: "w-7 h-7 min-w-7 rounded-lg", text: "text-[10px]", padding: "p-1" },
   md: { container: "w-8 h-8 min-w-8 rounded-lg", text: "text-xs", padding: "p-1" },
-  lg: { container: "w-12 h-12 min-w-12 rounded-xl", text: "text-base font-bold", padding: "p-1.5" },
-  xl: { container: "w-16 h-16 min-w-16 rounded-2xl", text: "text-xl font-bold", padding: "p-2" },
+  lg: { container: "w-11 h-11 min-w-11 rounded-xl", text: "text-base font-bold", padding: "p-1.5" },
+  xl: { container: "w-14 h-14 min-w-14 rounded-2xl", text: "text-xl font-bold", padding: "p-2" },
 };
 
 // Deterministic vibrant gradient palettes for fallback letter avatars
@@ -41,16 +41,68 @@ function getGradient(name: string): string {
   return GRADIENTS[index];
 }
 
+type LogoTone = "unknown" | "light" | "dark" | "balanced";
+
+/**
+ * Samples non-transparent pixels from an image to detect if the graphic
+ * is predominantly light (e.g. white text/icon) or dark (e.g. black text/icon).
+ */
+function analyzeImageLuminance(img: HTMLImageElement): LogoTone {
+  try {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return "unknown";
+
+    canvas.width = 16;
+    canvas.height = 16;
+    ctx.drawImage(img, 0, 0, 16, 16);
+
+    const { data } = ctx.getImageData(0, 0, 16, 16);
+    let totalLuminance = 0;
+    let nonTransparentCount = 0;
+
+    for (let i = 0; i < data.length; i += 4) {
+      const alpha = data[i + 3];
+      // Only count non-transparent pixels (alpha > 30 out of 255)
+      if (alpha > 30) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        // Standard perceived luminance formula (ITU-R BT.601)
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+        totalLuminance += lum;
+        nonTransparentCount++;
+      }
+    }
+
+    if (nonTransparentCount === 0) return "unknown";
+    const avgLuminance = totalLuminance / nonTransparentCount;
+
+    // Predominantly white / light graphic (needs dark background in light mode)
+    if (avgLuminance > 180) {
+      return "light";
+    }
+
+    // Predominantly black / dark graphic (needs white background in dark mode)
+    if (avgLuminance < 100) {
+      return "dark";
+    }
+
+    return "balanced";
+  } catch {
+    return "unknown";
+  }
+}
+
 export function BrandLogo({
   name,
   url,
   domain,
   size = "sm",
   className = "",
-  showHoverPreview = false,
 }: BrandLogoProps) {
   const [imgFailed, setImgFailed] = useState<boolean>(false);
-  const [isHovered, setIsHovered] = useState(false);
+  const [logoTone, setLogoTone] = useState<LogoTone>("unknown");
 
   const cleanUrl = useMemo(() => {
     if (!url || typeof url !== "string") return null;
@@ -77,10 +129,33 @@ export function BrandLogo({
     return cleaned;
   }, [domain]);
 
-  // Reset error state if url changes
+  // Reset state if url changes
   useEffect(() => {
     setImgFailed(false);
+    setLogoTone("unknown");
   }, [cleanUrl]);
+
+  const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const currentImg = e.currentTarget;
+    try {
+      const tone = analyzeImageLuminance(currentImg);
+      if (tone !== "unknown") {
+        setLogoTone(tone);
+        return;
+      }
+    } catch {}
+
+    // If direct canvas read was blocked by cross-origin, attempt via CORS Image object
+    try {
+      const testImg = new window.Image();
+      testImg.crossOrigin = "anonymous";
+      testImg.onload = () => {
+        const tone = analyzeImageLuminance(testImg);
+        if (tone !== "unknown") setLogoTone(tone);
+      };
+      testImg.src = currentImg.currentSrc || currentImg.src;
+    } catch {}
+  };
 
   const sizeCfg = SIZE_MAP[size] || SIZE_MAP.sm;
   const initial = (name || cleanDomain || "B").trim().charAt(0).toUpperCase();
@@ -88,17 +163,31 @@ export function BrandLogo({
 
   const hasImage = Boolean(cleanUrl && !imgFailed);
 
+  // Adaptive background:
+  // - If logo is white/light: in Light Mode add dark background (bg-slate-900), in Dark Mode natural dark
+  // - If logo is black/dark: in Dark Mode add white background (dark:bg-white), in Light Mode natural light
+  // - Otherwise: clean soft neutral adaptive background
+  const toneBgClass = useMemo(() => {
+    if (!hasImage) return "";
+
+    if (logoTone === "light") {
+      return "bg-slate-900 dark:bg-slate-900/60 text-white";
+    }
+
+    if (logoTone === "dark") {
+      return "bg-slate-100/70 dark:bg-white text-slate-900";
+    }
+
+    return "bg-slate-100/70 dark:bg-slate-800/70 text-slate-900 dark:text-white";
+  }, [hasImage, logoTone]);
+
   return (
     <div
       className={`relative inline-flex shrink-0 select-none ${className}`}
-      onMouseEnter={() => showHoverPreview && setIsHovered(true)}
-      onMouseLeave={() => showHoverPreview && setIsHovered(false)}
     >
-      {/* Main Avatar Badge Tile */}
+      {/* Borderless Avatar Badge Tile */}
       <div
-        className={`${sizeCfg.container} overflow-hidden border border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-slate-800 flex items-center justify-center shadow-2xs transition-transform duration-150 ${
-          showHoverPreview ? "hover:scale-105 cursor-pointer" : ""
-        }`}
+        className={`${sizeCfg.container} overflow-hidden ${hasImage ? toneBgClass : ""} flex items-center justify-center transition-all duration-150`}
         title={name || cleanDomain || "Brand logo"}
       >
         {hasImage ? (
@@ -108,6 +197,7 @@ export function BrandLogo({
             alt={name ? `${name} logo` : "Brand logo"}
             className={`w-full h-full object-contain ${sizeCfg.padding} rounded-[inherit]`}
             loading="lazy"
+            onLoad={handleImageLoad}
             onError={() => setImgFailed(true)}
           />
         ) : (
@@ -118,79 +208,6 @@ export function BrandLogo({
           </div>
         )}
       </div>
-
-      {/* Enlarged Hover Popover with Dual Dark/Light Background Preview for Transparent Logos */}
-      {showHoverPreview && isHovered && (hasImage || name) && (
-        <div className="absolute left-0 bottom-full mb-2 z-50 pointer-events-none animate-in fade-in zoom-in-95 duration-100">
-          <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl flex flex-col gap-2.5 min-w-[180px] max-w-[280px]">
-            {/* Dual Background Previews for Transparent Logos (Dark & Light) */}
-            <div className="flex items-center gap-2">
-              {/* Light Background Preview Tile */}
-              <div
-                className="w-12 h-12 rounded-lg border border-slate-200/90 bg-white p-1 overflow-hidden flex flex-col items-center justify-center shrink-0 shadow-2xs relative group/light"
-                title="Preview on Light Background"
-              >
-                {hasImage ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={cleanUrl!}
-                    alt={name || "Brand logo"}
-                    className="w-full h-full object-contain"
-                  />
-                ) : (
-                  <div
-                    className={`w-full h-full rounded-md bg-linear-to-br ${gradientClass} flex items-center justify-center font-black text-lg`}
-                  >
-                    {initial}
-                  </div>
-                )}
-                <span className="absolute bottom-0 inset-x-0 bg-slate-900/70 text-[7px] text-white font-semibold text-center py-0.2 tracking-wider uppercase">
-                  Light
-                </span>
-              </div>
-
-              {/* Dark Background Preview Tile */}
-              <div
-                className="w-12 h-12 rounded-lg border border-slate-700 bg-slate-950 p-1 overflow-hidden flex flex-col items-center justify-center shrink-0 shadow-2xs relative group/dark"
-                title="Preview on Dark Background"
-              >
-                {hasImage ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={cleanUrl!}
-                    alt={name || "Brand logo"}
-                    className="w-full h-full object-contain"
-                  />
-                ) : (
-                  <div
-                    className={`w-full h-full rounded-md bg-linear-to-br ${gradientClass} flex items-center justify-center font-black text-lg`}
-                  >
-                    {initial}
-                  </div>
-                )}
-                <span className="absolute bottom-0 inset-x-0 bg-white/20 text-[7px] text-white font-semibold text-center py-0.2 tracking-wider uppercase backdrop-blur-xs">
-                  Dark
-                </span>
-              </div>
-
-              {/* Brand Metadata */}
-              <div className="min-w-0 flex-1 pl-1">
-                <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                  {name || "Brand"}
-                </div>
-                {cleanDomain && (
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate">
-                    {cleanDomain}
-                  </div>
-                )}
-                <div className="text-[9px] text-indigo-600 dark:text-indigo-400 font-medium mt-0.5">
-                  {hasImage ? "Store Logo" : "Initial Badge"}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
