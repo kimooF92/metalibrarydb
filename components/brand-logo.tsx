@@ -13,11 +13,11 @@ interface BrandLogoProps {
 }
 
 const SIZE_MAP = {
-  xs: { container: "w-5 h-5 min-w-5 rounded-md", text: "text-[9px]", padding: "p-0.5" },
-  sm: { container: "w-7 h-7 min-w-7 rounded-lg", text: "text-[10px]", padding: "p-1" },
-  md: { container: "w-8 h-8 min-w-8 rounded-lg", text: "text-xs", padding: "p-1" },
-  lg: { container: "w-11 h-11 min-w-11 rounded-xl", text: "text-base font-bold", padding: "p-1.5" },
-  xl: { container: "w-14 h-14 min-w-14 rounded-2xl", text: "text-xl font-bold", padding: "p-2" },
+  xs: { container: "w-5 h-5 min-w-5 rounded-md", text: "text-[9px]" },
+  sm: { container: "w-7 h-7 min-w-7 rounded-lg", text: "text-[10px]" },
+  md: { container: "w-8 h-8 min-w-8 rounded-lg", text: "text-xs" },
+  lg: { container: "w-11 h-11 min-w-11 rounded-xl", text: "text-base font-bold" },
+  xl: { container: "w-14 h-14 min-w-14 rounded-2xl", text: "text-xl font-bold" },
 };
 
 // Deterministic vibrant gradient palettes for fallback letter avatars
@@ -195,7 +195,7 @@ export function BrandLogo({
           <img
             src={cleanUrl!}
             alt={name ? `${name} logo` : "Brand logo"}
-            className={`w-full h-full object-contain ${sizeCfg.padding} rounded-[inherit]`}
+            className="w-full h-full object-cover rounded-[inherit]"
             loading="lazy"
             onLoad={handleImageLoad}
             onError={() => setImgFailed(true)}
