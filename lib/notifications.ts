@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { activityNotifications, trackedPages } from "@/db/schema";
 import { eq, desc, and, inArray, gte } from "drizzle-orm";
+import { stripEmojis } from "@/lib/utils";
 
 export type NotificationType =
   | "count_scan"
@@ -46,12 +47,15 @@ export const getBrandActionUrl = (pageId?: string | null, brandName?: string | n
  */
 export async function createNotification(params: CreateNotificationParams) {
   try {
+    const cleanTitle = stripEmojis(params.title);
+    const cleanMessage = stripEmojis(params.message);
+
     // Deduplication window: 6 hours for queued local scan notifications to avoid repeat spam, 5 minutes for general notifications
     const dedupWindowMs = params.metadata?.queuedForLocalScan ? 6 * 60 * 60 * 1000 : 5 * 60 * 1000;
     const windowStart = new Date(Date.now() - dedupWindowMs);
     const conditions = [
       eq(activityNotifications.type, params.type),
-      eq(activityNotifications.title, params.title),
+      eq(activityNotifications.title, cleanTitle),
       gte(activityNotifications.createdAt, windowStart),
     ];
 
@@ -86,8 +90,8 @@ export async function createNotification(params: CreateNotificationParams) {
       .insert(activityNotifications)
       .values({
         type: params.type,
-        title: params.title,
-        message: params.message,
+        title: cleanTitle,
+        message: cleanMessage,
         severity: params.severity || "info",
         trackedPageId: params.trackedPageId || null,
         workspaceId,
@@ -131,8 +135,8 @@ export async function logCountScanNotification(params: {
   if (status !== "success") {
     return createNotification({
       type: "count_scan",
-      title: "Count Scan Warning",
-      message: `Count check for "${brandName}" finished with status: ${status}.`,
+      title: `Count Check Incomplete: ${brandName}`,
+      message: `Could not verify active ads. Will retry shortly.`,
       severity: "warning",
       trackedPageId,
       actionUrl: `/?search=${encodeURIComponent(brandName)}`,
@@ -150,8 +154,8 @@ export async function logCountScanNotification(params: {
     }
     return createNotification({
       type: "count_scan",
-      title: `🚨 Brand Went Dark: ${brandName}`,
-      message: `"${brandName}" paused all active ads (${Math.abs(diffNum)} ads turned off, 0 active ads remaining).`,
+      title: `All Ads Stopped: ${brandName}`,
+      message: `All ${Math.abs(diffNum)} ads were turned off (0 active).`,
       severity: "warning",
       trackedPageId,
       actionUrl: brandPath,
@@ -163,8 +167,8 @@ export async function logCountScanNotification(params: {
   if (isMegaBrand && diffNum > 0) {
     return createNotification({
       type: "count_scan",
-      title: `👑 Mega-Brand: ${brandName} (+${diffNum} Ads | ${currentResults} Total)`,
-      message: `"${brandName}" is running a massive catalog of ${currentResults} active ads (+${diffNum} new). High-priority Apify cloud scan auto-triggered.`,
+      title: `Large Brand Scaling: ${brandName}`,
+      message: `${currentResults} active ads running (+${diffNum} new today).`,
       severity: "success",
       trackedPageId,
       actionUrl: brandPath,
@@ -176,8 +180,8 @@ export async function logCountScanNotification(params: {
   if (diffNum >= 5) {
     return createNotification({
       type: "count_scan",
-      title: `🚀 Ad Scaling Surge: +${diffNum} Ads on ${brandName}!`,
-      message: `"${brandName}" aggressively launched +${diffNum} new ad creatives! Total active ads: ${currentResults ?? 0}. Apify cloud scan auto-triggered.`,
+      title: `Scaling Up: ${brandName} (+${diffNum} Ads)`,
+      message: `Running ${currentResults ?? 0} active ads (+${diffNum} new today).`,
       severity: "success",
       trackedPageId,
       actionUrl: brandPath,
@@ -198,8 +202,8 @@ export async function logHoldDetectedNotification(params: {
 }) {
   return createNotification({
     type: "count_scan",
-    title: `⏸️ Account Hold Detected: ${params.brandName}`,
-    message: `"${params.brandName}" scanned 0 ads (was ${params.prevResults ?? "?"} ads). Entering 3-scan grace period before archiving. May be a billing pause or Meta glitch.`,
+    title: `Ads Inactive: ${params.brandName}`,
+    message: `No active ads detected. Monitoring for a restart.`,
     severity: "warning",
     trackedPageId: params.trackedPageId,
     actionUrl: getBrandActionUrl(params.pageId, params.brandName, params.trackedPageId),
@@ -217,10 +221,8 @@ export async function logHoldLiftedNotification(params: {
   const isRelaunch = params.isRelaunch ?? false;
   return createNotification({
     type: "count_scan",
-    title: isRelaunch ? `🚀 Brand Relaunched Ads: ${params.brandName}` : `🟢 Account Hold Lifted: ${params.brandName}`,
-    message: isRelaunch
-      ? `"${params.brandName}" is advertising again with ${params.recoveredResults} active ad(s). Urgent creative scan queued.`
-      : `"${params.brandName}" is advertising again with ${params.recoveredResults} active ad(s). Account hold lifted.`,
+    title: `Ads Resumed: ${params.brandName}`,
+    message: `Back on air with ${params.recoveredResults} active ads.`,
     severity: "success",
     trackedPageId: params.trackedPageId,
     actionUrl: getBrandActionUrl(params.pageId, params.brandName, params.trackedPageId),
@@ -251,12 +253,15 @@ export async function logAdSpyNotification(params: {
   const brandPath = getBrandActionUrl(pageId, brandName, trackedPageId);
 
   if (extractedCount > 0 || newProductsCount > 0) {
-    let title = `✨ Ingested ${extractedCount} New Ad(s): ${brandName}`;
-    let message = `Extracted and stored ${extractedCount} new creative media assets & ad archive records for "${brandName}".`;
+    let title = `New Ads Added: ${brandName} (+${extractedCount})`;
+    let message = `${extractedCount} new ads ready to view.`;
 
-    if (newProductsCount > 0) {
-      title = `✨ Ingested ${extractedCount} Ad(s) & ${newProductsCount} New Product(s): ${brandName}`;
-      message = `Extracted ${extractedCount} ad creative(s) and discovered ${newProductsCount} new product landing page(s) for "${brandName}".`;
+    if (newProductsCount > 0 && extractedCount > 0) {
+      title = `New Ads & Products: ${brandName}`;
+      message = `${extractedCount} new ads and ${newProductsCount} product page${newProductsCount === 1 ? "" : "s"} added.`;
+    } else if (newProductsCount > 0) {
+      title = `New Products Added: ${brandName}`;
+      message = `${newProductsCount} new product page${newProductsCount === 1 ? "" : "s"} added.`;
     }
 
     return createNotification({
@@ -273,8 +278,8 @@ export async function logAdSpyNotification(params: {
   if (archivedCount && archivedCount > 0) {
     return createNotification({
       type: "ad_spy",
-      title: `📦 Archived ${archivedCount} Inactive Ad(s): ${brandName}`,
-      message: `Marked ${archivedCount} ad(s) as archived (no longer seen in active library).`,
+      title: `Ads Inactive: ${brandName} (${archivedCount})`,
+      message: `${archivedCount} ads ended and moved to archive.`,
       severity: "info",
       trackedPageId,
       actionUrl: brandPath,
@@ -333,46 +338,36 @@ export async function logBatchSummaryNotification(params: LogBatchSummaryParams)
   }
 
   const shardPrefix = shardInfo ? `[${shardInfo}] ` : "";
-  let title = `${shardPrefix}🏁 Scan Round Complete`;
+  let title = `${shardPrefix}Catalog Sync Complete`;
   let message = "";
   let severity: NotificationSeverity = "info";
 
   if (runnerType === "apify_spy") {
-    title = `${shardPrefix}⚡ Apify Spy Sync (${totalScanned} Brands)`;
+    title = `${shardPrefix}Catalog Sync Complete`;
     if (newAdsCount > 0 || newProductsCount > 0) {
       severity = "success";
-      const moverSummary = movers.slice(0, 3).map((m) => {
-        const adCount = m.extractedCount || m.diff || 0;
-        const prodCount = m.newProductsCount || 0;
-        if (adCount > 0 && prodCount > 0) {
-          return `${m.name} (+${adCount} ads, +${prodCount} prods)`;
-        } else if (prodCount > 0) {
-          return `${m.name} (+${prodCount} prods)`;
-        }
-        return `${m.name} (+${adCount || 1})`;
-      }).join(", ");
-
-      const productPart = newProductsCount > 0 ? ` and ${newProductsCount} new product landing page(s)` : "";
-      message = `Ingested ${newAdsCount} new ad creatives${productPart} across ${movers.length} active advertiser(s): ${moverSummary}${movers.length > 3 ? ` +${movers.length - 3} more` : ""}.`;
+      const parts: string[] = [];
+      if (newAdsCount > 0) parts.push(`${newAdsCount} new ads`);
+      if (newProductsCount > 0) parts.push(`${newProductsCount} product pages`);
+      message = `Added ${parts.join(" and ")} across ${movers.length} active brands.`;
     } else {
-      message = `All ${totalScanned} advertiser catalogs up to date (no new creatives detected).`;
+      message = `All ${totalScanned} brand catalogs are up to date.`;
     }
   } else if (runnerType === "count_worker") {
-    title = `${shardPrefix}🏁 Count Check (${totalScanned} Brands)`;
+    title = `${shardPrefix}Daily Count Check Complete`;
     if (movers.length > 0) {
       severity = "success";
-      const moverSummary = movers.slice(0, 3).map((m) => `${m.name} (+${m.diff})`).join(", ");
-      message = `🚀 ${movers.length} brand(s) scaled new ads: ${moverSummary}${movers.length > 3 ? ` +${movers.length - 3} more` : ""}. (${unchangedCount} unchanged)`;
+      message = `${movers.length} brands scaled new ads today (${unchangedCount} unchanged).`;
     } else {
-      message = `Verified ${totalScanned} tracked pages.`;
+      message = `Verified ${totalScanned} tracked brands.`;
     }
   } else {
-    title = `${shardPrefix}🌐 Discovery Round Complete (${totalScanned} Pages)`;
-    message = `Processed discovery scan across ${totalScanned} candidates.`;
+    title = `${shardPrefix}Brand Discovery Complete`;
+    message = `Checked ${totalScanned} candidate brands.`;
   }
 
   if (failedCount > 0) {
-    message += ` • ⚠️ ${failedCount} error(s)`;
+    message += ` • ${failedCount} error(s)`;
     if (movers.length === 0) severity = "warning";
   }
 
@@ -437,15 +432,15 @@ export async function logDiscoverySummaryNotification(params: LogDiscoverySummar
     runId,
   } = params;
 
-  const title = `🌐 Discovery Complete: ${totalPagesDiscovered} Brands in ${country}`;
-  let message = `Scanned ${totalAdsScanned} live ads across ${country} and discovered ${totalPagesDiscovered} active brand pages.`;
+  const title = `Brand Discovery: ${country}`;
+  let message = `Discovered ${totalPagesDiscovered} new active brands (${totalAdsScanned} ads scanned).`;
 
   if (topBrands.length > 0) {
     const topSummary = topBrands
       .slice(0, 3)
       .map((b) => `${b.name} (${b.adCount} ads)`)
       .join(", ");
-    message += ` Top advertisers: ${topSummary}${topBrands.length > 3 ? ` +${topBrands.length - 3} more` : ""}.`;
+    message += ` Top: ${topSummary}${topBrands.length > 3 ? ` +${topBrands.length - 3} more` : ""}.`;
   }
 
   if (durationSeconds > 0) {
@@ -484,8 +479,8 @@ export async function logPageMergedNotification(params: {
 }) {
   return createNotification({
     type: "page_merged",
-    title: `🔗 Brand Auto-Merged: ${params.resolvedPageName}`,
-    message: `Exact match "${params.originalName}" was resolved and upgraded to official Page ID "${params.resolvedPageName}" (${params.resolvedPageId}).`,
+    title: `Brand Linked: ${params.resolvedPageName}`,
+    message: `Matched "${params.originalName}" to official Facebook Page.`,
     severity: "success",
     trackedPageId: params.trackedPageId,
     actionUrl: `/?search=${encodeURIComponent(params.resolvedPageName)}`,
@@ -508,8 +503,8 @@ export async function logMultiPageDetectedNotification(params: {
   const count = params.candidatePages.length;
   return createNotification({
     type: "multi_page_detected",
-    title: `⚠️ ${count} Facebook Pages Found`,
-    message: `Found ${count} candidate Facebook Pages running ads for "${params.domainName}". Review and assign the primary brand page.`,
+    title: `Multiple Pages Found: ${params.domainName}`,
+    message: `Found ${count} Facebook pages running ads. Select the main page.`,
     severity: "warning",
     trackedPageId: params.trackedPageId,
     actionUrl: `/?search=${encodeURIComponent(params.domainName)}&resolveModal=${params.trackedPageId}`,
@@ -532,8 +527,8 @@ export async function logDomainPortfolioLinkedNotification(params: {
 }) {
   return createNotification({
     type: "domain_portfolio_linked",
-    title: `🌐 Domain Portfolio Linked: ${params.domainName}`,
-    message: `${params.pageCount} Facebook Pages are now grouped under "${params.domainName}". Flagship: "${params.primaryPageName}".`,
+    title: `Brands Grouped: ${params.domainName}`,
+    message: `Grouped ${params.pageCount} pages under ${params.domainName} (Main: ${params.primaryPageName}).`,
     severity: "success",
     trackedPageId: params.trackedPageId,
     actionUrl: `/spy/brand/${encodeURIComponent(params.domainName)}`,
@@ -581,10 +576,9 @@ export async function logBreakoutNotification(params: {
     productId,
   } = params;
 
-  const title = `Breakout Detected: ${brandName} (${prevDuplication} ➔ ${currentDuplication} copies)`;
-  const productText = productTitle ? `"${productTitle}"` : "Ad creative";
-  const daysText = daysRunning === 0 ? "today" : daysRunning === 1 ? "yesterday" : `${daysRunning}d ago`;
-  const message = `${productText} on "${brandName}" jumped to ${currentDuplication} active copies (launched ${daysText})! Winner score: ${winnerScore}/100.`;
+  const title = `Breakout Winner: ${brandName}`;
+  const productText = productTitle ? `"${productTitle}"` : "Ad";
+  const message = `${productText} scaled to ${currentDuplication} active ads (Winner score: ${winnerScore}/100).`;
 
   const fallbackAction = actionUrl || `/fresh-winners?highlight=${encodeURIComponent(adId || adArchiveId)}`;
 

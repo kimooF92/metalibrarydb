@@ -134,8 +134,8 @@ export async function dispatchCreativeScanForBrand(
       const { createNotification } = await import("@/lib/notifications");
       await createNotification({
         type: "ad_spy",
-        title: "⚡ Apify Scan Started",
-        message: `Started creative extraction for "${brandDisplayName}" (+${delta} ads)...`,
+        title: "Ad Fetch Started",
+        message: `Fetching new ads for "${brandDisplayName}"...`,
         severity: "info",
         trackedPageId: page.id,
         actionUrl: `/spy?trackedPageId=${page.id}`,
@@ -203,8 +203,8 @@ export async function dispatchCreativeScanForBrand(
         const { createNotification } = await import("@/lib/notifications");
         await createNotification({
           type: "system_alert",
-          title: "⚠️ Apify Launch Failed",
-          message: `Failed to launch Apify scan for "${brandDisplayName}": ${apifyErr?.message}`,
+          title: `Ad Fetch Failed: ${brandDisplayName}`,
+          message: "Could not start ad download. Will retry shortly.",
           severity: "error",
           trackedPageId: page.id,
         }).catch(() => {});

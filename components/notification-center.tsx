@@ -22,8 +22,10 @@ import {
   Globe,
   Crown,
   Rocket,
+  ShoppingBag,
 } from "lucide-react";
 import { useToast } from "@/components/toast-context";
+import { stripEmojis } from "@/lib/utils";
 
 export interface ActivityNotification {
   id: string;
@@ -498,30 +500,29 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                 const newProductsCount = (n.metadata?.newProductsCount as number) || 0;
 
                 const getActionLabel = () => {
-                  if (isBreakout) return "View in Fresh Winners →";
+                  if (isBreakout) return "View Winner →";
                   const runnerType = n.metadata?.runnerType as string | undefined;
                   const newAdsCount = n.metadata?.newAdsCount as number | undefined;
                   const moversCount = movers.length;
 
                   if (n.type === "batch_summary" && runnerType === "apify_spy") {
                     if (newAdsCount && newProductsCount) {
-                      return `⚡ Explore ${newAdsCount} Creatives & ${newProductsCount} Products →`;
+                      return `View ${newAdsCount} Ads & ${newProductsCount} Products →`;
                     }
-                    if (newAdsCount) return `⚡ Explore ${newAdsCount} Creatives →`;
-                    if (newProductsCount) return `🛍️ Explore ${newProductsCount} New Products →`;
-                    return "⚡ Explore Synced Feed →";
+                    if (newAdsCount) return `View ${newAdsCount} New Ads →`;
+                    if (newProductsCount) return `View ${newProductsCount} Products →`;
+                    return "View Synced Feed →";
                   }
                   if (n.type === "batch_summary" && runnerType === "count_worker") {
-                    return moversCount > 0 ? `🚀 View ${moversCount} Movers on Dashboard →` : "📊 View Dashboard →";
+                    return moversCount > 0 ? `View ${moversCount} Movers →` : "View Dashboard →";
                   }
                   if (n.type === "batch_summary" && runnerType === "discovery") {
-                    return "🌐 Review Discovered Brands →";
+                    return "View Brands →";
                   }
-                  if (isWentDark) return "🚨 Inspect Brand History →";
-                  if (isMegaBrand) return "👑 Open Brand Profile →";
-                  if (isSurge) return "🚀 View Brand Surge →";
-                  if (isQueued) return "⚡ Open Brand Profile →";
-                  return "Open Brand Profile →";
+                  if (isWentDark) return "View Brand →";
+                  if (isMegaBrand) return "View Profile →";
+                  if (isSurge) return "View Brand →";
+                  return "View Brand →";
                 };
 
                 return (
@@ -560,7 +561,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                               n.isRead ? "text-slate-700 dark:text-slate-300" : "text-slate-900 dark:text-white"
                             }`}
                           >
-                            {n.title.replace(/^🔥\s*/, "")}
+                            {stripEmojis(n.title)}
                           </h4>
                           {isBreakout && (
                             <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-gradient-to-r from-pink-500 to-rose-600 text-white shrink-0 shadow-xs shadow-rose-500/20">
@@ -568,8 +569,9 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                             </span>
                           )}
                           {newProductsCount > 0 && (
-                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 shrink-0 border border-indigo-500/30">
-                              🛍️ +{newProductsCount} {newProductsCount === 1 ? "Product" : "Products"}
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 shrink-0 border border-indigo-500/30 inline-flex items-center gap-1">
+                              <ShoppingBag className="w-2.5 h-2.5 shrink-0" />
+                              <span>+{newProductsCount} {newProductsCount === 1 ? "Product" : "Products"}</span>
                             </span>
                           )}
                           {isWentDark && (
@@ -578,8 +580,9 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                             </span>
                           )}
                           {isMegaBrand && (
-                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-purple-500/20 text-purple-600 dark:text-purple-400 shrink-0 border border-purple-500/30">
-                              👑 MEGA 50+
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-purple-500/20 text-purple-600 dark:text-purple-400 shrink-0 border border-purple-500/30 inline-flex items-center gap-1">
+                              <Crown className="w-2.5 h-2.5 shrink-0" />
+                              <span>MEGA 50+</span>
                             </span>
                           )}
                           {isSurge && !isMegaBrand && (
@@ -599,7 +602,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                       </div>
 
                       <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed break-words">
-                        {n.message}
+                        {stripEmojis(n.message)}
                       </p>
 
                       {/* Breakout Velocity Indicators */}
@@ -646,8 +649,9 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                                   +{m.extractedCount || m.diff || 1}
                                 </span>
                                 {m.newProductsCount && m.newProductsCount > 0 ? (
-                                  <span className="text-indigo-600 dark:text-indigo-400 font-extrabold text-[9.5px]">
-                                    🛍️+{m.newProductsCount}
+                                  <span className="text-indigo-600 dark:text-indigo-400 font-extrabold text-[9.5px] inline-flex items-center gap-0.5">
+                                    <ShoppingBag className="w-2.5 h-2.5 shrink-0" />
+                                    <span>+{m.newProductsCount}</span>
                                   </span>
                                 ) : null}
                               </Link>
@@ -694,7 +698,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                             }}
                             className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 text-[10px] font-bold border border-amber-500/20 transition-all active:scale-95 cursor-pointer"
                           >
-                            <span>Review Brand Pages</span>
+                            <span>Select Page</span>
                             <ExternalLink className="w-2.5 h-2.5" />
                           </button>
                         )}

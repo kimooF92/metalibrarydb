@@ -264,8 +264,8 @@ export async function checkZeroAdAnomaly(
       const { createNotification } = await import("../lib/notifications");
       await createNotification({
         type: "system_alert",
-        title: "🛑 Meta Ad Library Outage Guard Triggered",
-        message: `${count} distinct brands reported 0 ads within ${config.windowMinutes}m. System declared a Meta Ad Library incident. Worker paused for ${config.cooldownMinutes}m and zero-counts quarantined to prevent false ad archiving.`,
+        title: "Ad Library Slowdown",
+        message: "Facebook Ad Library is currently slow. Checks paused temporarily to keep data accurate.",
         severity: "error",
         actionUrl: "/?holdStatus=on_hold",
       });

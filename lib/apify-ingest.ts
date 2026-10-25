@@ -280,8 +280,8 @@ export async function ingestApifyDatasetItems(
     const { createNotification } = await import("@/lib/notifications");
     await createNotification({
       type: "system_alert",
-      title: "⚠️ Apify Scan Failed",
-      message,
+      title: "Ad Fetch Incomplete",
+      message: "Could not download newest ads. Will retry automatically.",
       severity: "error",
       trackedPageId,
       actionUrl: `/spy?trackedPageId=${trackedPageId}`,

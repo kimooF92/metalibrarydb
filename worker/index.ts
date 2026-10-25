@@ -412,8 +412,8 @@ async function runWorker() {
             const { createNotification } = await import("../lib/notifications");
             await createNotification({
               type: "system_alert",
-              title: `⚠️ Discovery Scan Failed (${pendingDiscoveryRun.country})`,
-              message: `Discovery run ended with status: ${outcome.status}. Reason: ${outcome.failureReason || outcome.outcomeDetails || "Scan error"}.`,
+              title: `Discovery Check Incomplete (${pendingDiscoveryRun.country})`,
+              message: `Could not complete scan for ${pendingDiscoveryRun.country}. Will retry automatically.`,
               severity: "warning",
               actionUrl: `/discovery?country=${encodeURIComponent(pendingDiscoveryRun.country)}`,
             });
@@ -441,8 +441,8 @@ async function runWorker() {
             const { createNotification } = await import("../lib/notifications");
             await createNotification({
               type: "system_alert",
-              title: "⏸️ Scraper Backoff Active",
-              message: backoff.reason || "Worker paused temporarily due to rate detection.",
+              title: "Scan Paused Briefly",
+              message: "Scanning paused briefly to stay within safe speed limits. Resuming shortly.",
               severity: "warning",
             });
           } catch {}
@@ -466,8 +466,8 @@ async function runWorker() {
             const { createNotification } = await import("../lib/notifications");
             await createNotification({
               type: "system_alert",
-              title: "🛑 Daily / Hourly Scan Cap Reached",
-              message: caps.reason || "Worker reached safety limits. Scanning will resume in next window.",
+              title: "Daily Scan Limit Reached",
+              message: "Reached daily limit. Automatic scanning will resume in the next window.",
               severity: "info",
             });
           } catch {}
@@ -924,8 +924,8 @@ async function runWorker() {
       const { createNotification } = await import("../lib/notifications");
       await createNotification({
         type: "system_alert",
-        title: "🚨 Worker Process Stopped",
-        message: `Worker encountered an unexpected error: ${err?.message || "Unknown error"}. Restarting worker is recommended.`,
+        title: "Scanner Stopped",
+        message: "Background scanner stopped unexpectedly and will restart automatically.",
         severity: "error",
       });
     } catch {}
@@ -941,8 +941,8 @@ process.on("uncaughtException", async (err) => {
     const { createNotification } = await import("../lib/notifications");
     await createNotification({
       type: "system_alert",
-      title: "🚨 Worker Crash (Uncaught Exception)",
-      message: `Fatal error: ${err?.message || "Unknown exception"}. Worker is halting.`,
+      title: "Scanner Interrupted",
+      message: "Background scanner encountered an issue and will restart.",
       severity: "error",
     });
   } catch {}
@@ -957,8 +957,8 @@ process.on("unhandledRejection", async (reason: any) => {
     const { createNotification } = await import("../lib/notifications");
     await createNotification({
       type: "system_alert",
-      title: "⚠️ Worker Unhandled Rejection",
-      message: `Asynchronous error: ${reason?.message || String(reason) || "Unknown promise rejection"}.`,
+      title: "Scan Warning",
+      message: "Encountered a temporary issue while processing ads.",
       severity: "warning",
     });
   } catch {}

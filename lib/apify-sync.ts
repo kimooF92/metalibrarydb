@@ -159,8 +159,8 @@ export async function syncApifyRuns(): Promise<{ syncedCount: number; checkedCou
         const { createNotification } = await import("@/lib/notifications");
         await createNotification({
           type: "system_alert",
-          title: "⚠️ Apify Scan Failed",
-          message: `Apify Cloud run for scan ${scan.id.slice(0, 8)} ended with status: ${status}.`,
+          title: "Ad Fetch Incomplete",
+          message: "Could not download newest ads. Will retry automatically.",
           severity: "error",
           trackedPageId: scan.trackedPageId,
         });
@@ -245,8 +245,8 @@ export function pollApifyRunUntilDone(
           const { createNotification } = await import("@/lib/notifications");
           await createNotification({
             type: "system_alert",
-            title: "⚠️ Apify Scan Failed",
-            message: `Apify run ended with status: ${status}.`,
+            title: "Ad Fetch Incomplete",
+            message: "Could not download newest ads. Will retry automatically.",
             severity: "error",
             trackedPageId: actualTrackedPageId,
             actionUrl: actualTrackedPageId ? `/spy?trackedPageId=${actualTrackedPageId}` : "/spy",
@@ -277,8 +277,8 @@ export function pollApifyRunUntilDone(
           const { createNotification } = await import("@/lib/notifications");
           await createNotification({
             type: "system_alert",
-            title: "⏱️ Apify Polling Timeout",
-            message: `Apify run is still processing after ${Math.round((maxAttempts * intervalMs) / 1000)}s. Sync will finalize once complete.`,
+            title: "Ad Fetch Taking Longer",
+            message: "Ad download is still processing and will finalize shortly.",
             severity: "warning",
             trackedPageId: actualTrackedPageId,
             actionUrl: actualTrackedPageId ? `/spy?trackedPageId=${actualTrackedPageId}` : "/spy",

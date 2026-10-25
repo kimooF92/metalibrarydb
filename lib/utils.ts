@@ -65,3 +65,16 @@ export function isValidPageId(pageId?: string | null): boolean {
   return Boolean(clean && /^\d{5,25}$/.test(clean) && clean !== "0");
 }
 
+/**
+ * Strips emoji characters, pictographs, and variation selectors
+ * from a string while collapsing redundant spaces.
+ */
+export function stripEmojis(str?: string | null): string {
+  if (!str) return "";
+  return str
+    .replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "")
+    .replace(/[\u2600-\u27BF]/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
