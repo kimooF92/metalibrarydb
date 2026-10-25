@@ -74,6 +74,45 @@ export function isPriceString(str: string): boolean {
 }
 
 /**
+ * Detects if a candidate title string is actually an urgency marquee, countdown banner,
+ * promotional ticker, stock alert, or call-to-action widget rather than a real product title.
+ * Examples: "فرصة ما تتفوّتش! تبقّى فقط 9 قطع في المخزون", "سارع بالطلب الآن! الكمية محدودة", "عرض سريع! المخزون يوشك على النفاد"
+ */
+export function isUrgencyOrPromoBanner(str: string): boolean {
+  if (!str) return false;
+  const s = str.trim().toLowerCase();
+
+  // Arabic urgency, countdown, stock, delivery, and CTA patterns
+  if (
+    /فرصة ما تتفو|لا تفوت الفرصة|تبق[ىت] فقط|بق[يي] فقط|باقي فقط|قطع[ة]? في المخزون|الكمية محدودة|كمية محدودة|سارع بالطلب|سارع قبل|سارع الآن|عرض سريع|عرض خاص|عرض محدود|المخزون يوشك|أ?طلب الآن|اطلب الان|الدفع عند ال?إ?ستلام|التوصيل مجاني|توصيل مجاني|توصيل سريع|اختر من بين عروضنا|عروضنا الخاصة|منتجات قد تعجبك|قد يعجبك ايضا/i.test(
+      s
+    )
+  ) {
+    return true;
+  }
+
+  // French urgency, stock, delivery, and CTA patterns
+  if (
+    /ne ratez pas|ne manquez pas|plus que \d+ pi[èe]ces?|pi[èe]ces? en stock|quantit[ée] limit[ée]e|stock limit[ée]|stock [ée]puis[ée]|d[ée]p[êe]chez-vous|commandez vite|commandez maintenant|offre sp[ée]ciale|offre limit[ée]e|vente flash|livraison gratuite|paiement [àa] la livraison|produits similaires|vous aimerez aussi/i.test(
+      s
+    )
+  ) {
+    return true;
+  }
+
+  // English urgency, stock, delivery, and CTA patterns
+  if (
+    /don'?t miss out|hurry up|limited (?:stock|quantity)|only \d+ left|special offer|flash sale|free shipping|cash on delivery|you may also like|related products/i.test(
+      s
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Checks whether an image URL or tag corresponds to an ad tracker, conversion pixel, or invisible beacon.
  */
 export function isTrackingBeacon(src: string, tag?: string): boolean {
@@ -117,9 +156,25 @@ export function isTrackingBeacon(src: string, tag?: string): boolean {
 export function extractImageUrl(img: any): string | null {
   if (!img) return null;
   if (typeof img === "string") {
-    const s = img.trim();
+    let s = img.trim();
     if (s.includes("[[") || s.includes("{{") || s.length < 5) return null;
     if (isTrackingBeacon(s)) return null;
+
+    // Decode HTML entities if encoded in attribute
+    s = decodeHtmlEntities(s);
+
+    // Unwrap Next.js image optimizer URL: /_next/image?url=https%3A%2F%2F... or https://domain/_next/image?url=...
+    const nextImgMatch = s.match(/\/_next\/image\/?\?url=([^&]+)/i);
+    if (nextImgMatch && nextImgMatch[1]) {
+      try {
+        const decoded = decodeURIComponent(nextImgMatch[1]);
+        if (decoded.startsWith("http") || decoded.startsWith("/")) {
+          s = decoded;
+        }
+      } catch {}
+    }
+
+    if (s.toLowerCase().endsWith(".svg") || s.toLowerCase().includes("shape.svg")) return null;
     return s;
   }
   if (typeof img === "object") {
@@ -443,11 +498,11 @@ export function parseProductHtmlContent(
     // 2. Extract Title
     let title: string | null = null;
 
-    if (jsonLdProduct?.name && !isPriceString(String(jsonLdProduct.name))) {
+    if (jsonLdProduct?.name && !isPriceString(String(jsonLdProduct.name)) && !isUrgencyOrPromoBanner(String(jsonLdProduct.name))) {
       title = String(jsonLdProduct.name).trim();
-    } else if (convertyProduct?.name && !isPriceString(String(convertyProduct.name))) {
+    } else if (convertyProduct?.name && !isPriceString(String(convertyProduct.name)) && !isUrgencyOrPromoBanner(String(convertyProduct.name))) {
       title = String(convertyProduct.name).trim();
-    } else if ((nextDataProduct?.title || nextDataProduct?.name) && !isPriceString(String(nextDataProduct.title || nextDataProduct.name))) {
+    } else if ((nextDataProduct?.title || nextDataProduct?.name) && !isPriceString(String(nextDataProduct.title || nextDataProduct.name)) && !isUrgencyOrPromoBanner(String(nextDataProduct.title || nextDataProduct.name))) {
       title = String(nextDataProduct.title || nextDataProduct.name).trim();
     }
 
@@ -456,29 +511,31 @@ export function parseProductHtmlContent(
       const formNameMatch =
         html.match(/<input[^>]+name=["'](?:name|product_name|nom_produit|item_name|titre)["'][^>]+value=["']([^"']+)["']/i) ||
         html.match(/<input[^>]+value=["']([^"']+)["'][^>]+name=["'](?:name|product_name|nom_produit|item_name|titre)["']/i);
-      if (formNameMatch && formNameMatch[1] && !isPriceString(formNameMatch[1])) {
+      if (formNameMatch && formNameMatch[1] && !isPriceString(formNameMatch[1]) && !isUrgencyOrPromoBanner(formNameMatch[1])) {
         title = formNameMatch[1].trim();
       }
     }
 
     if (!title) {
       const ogTitle = extractMeta(html, "og:title") || extractMeta(html, "twitter:title");
-      if (ogTitle && !isPriceString(ogTitle)) {
+      if (ogTitle && !isPriceString(ogTitle) && !isUrgencyOrPromoBanner(ogTitle)) {
         title = ogTitle;
       }
     }
 
-    if (!title) {
-      const h1Match = /<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(html);
-      if (h1Match) {
-        const candidate = h1Match[1].replace(/<[^>]*>/g, "").trim();
-        if (!isPriceString(candidate)) {
+    // Iterate through all h1 headings to bypass scrolling promotional tickers, stock alerts, or urgency banners
+    if (!title && html) {
+      const h1Matches = [...html.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/gi)];
+      for (const m of h1Matches) {
+        const candidate = m[1].replace(/<[^>]*>/g, "").trim();
+        if (candidate.length >= 3 && !isPriceString(candidate) && !isUrgencyOrPromoBanner(candidate)) {
           title = candidate;
+          break;
         }
       }
     }
 
-    // Fallback to h2 / h3 headings if h1 was absent or was just a price badge
+    // Fallback to h2 / h3 headings if h1 was absent or was just a price badge / urgency banner
     if (!title && html) {
       const headingMatches = [...html.matchAll(/<(?:h2|h3)[^>]*>([\s\S]*?)<\/(?:h2|h3)>/gi)];
       for (const hm of headingMatches) {
@@ -486,6 +543,7 @@ export function parseProductHtmlContent(
         if (
           candidate.length >= 3 &&
           !isPriceString(candidate) &&
+          !isUrgencyOrPromoBanner(candidate) &&
           !/^(?:avis|review|livraison|shipping|connexion|login|panier|cart|contact|menu)/i.test(candidate)
         ) {
           title = candidate;
@@ -498,7 +556,7 @@ export function parseProductHtmlContent(
       const titleTagMatch = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);
       if (titleTagMatch) {
         const candidate = titleTagMatch[1].replace(/<[^>]*>/g, "").trim();
-        if (!isPriceString(candidate)) {
+        if (!isPriceString(candidate) && !isUrgencyOrPromoBanner(candidate)) {
           title = candidate;
         }
       }
@@ -509,7 +567,13 @@ export function parseProductHtmlContent(
       const headingMatches = [...markdown.matchAll(/^#{1,3}\s+(.+)$/gm)];
       for (const hm of headingMatches) {
         const hTitle = hm[1].trim();
-        if (hTitle.length >= 3 && !isPriceString(hTitle) && !hTitle.toLowerCase().includes("store") && !hTitle.toLowerCase().includes("boutique")) {
+        if (
+          hTitle.length >= 3 &&
+          !isPriceString(hTitle) &&
+          !isUrgencyOrPromoBanner(hTitle) &&
+          !hTitle.toLowerCase().includes("store") &&
+          !hTitle.toLowerCase().includes("boutique")
+        ) {
           if (!title || title.length < 3 || title.toLowerCase().includes("store") || title.toLowerCase().includes("boutique")) {
             title = hTitle;
             break;
@@ -620,18 +684,32 @@ export function parseProductHtmlContent(
 
     // Markdown/HTML image fallback for dynamic DOMs
     if (!mainImageUrl && markdown) {
-      const mdImgMatch = markdown.match(/!\[([^\]]*)\]\((https?:\/\/[^\s\)]+)\)/i);
-      if (mdImgMatch && mdImgMatch[2]) {
-        mainImageUrl = extractImageUrl(mdImgMatch[2]);
+      const mdImgMatches = [...markdown.matchAll(/!\[([^\]]*)\]\((https?:\/\/[^\s\)]+)\)/gi)];
+      for (const m of mdImgMatches) {
+        const candidate = extractImageUrl(m[2]);
+        if (candidate && !candidate.endsWith(".svg") && !candidate.includes("shape.svg") && !candidate.includes("logo")) {
+          mainImageUrl = candidate;
+          break;
+        }
       }
     }
 
     if (!mainImageUrl && html) {
-      const imgRegex = /<img\s+[^>]*src=["']([^"']+)["'][^>]*>/gi;
+      const imgRegex = /<img\s+([^>]+)>/gi;
       let imgMatch;
       while ((imgMatch = imgRegex.exec(html)) !== null) {
         const fullTag = imgMatch[0];
-        const src = extractImageUrl(imgMatch[1]);
+        const srcAttr = fullTag.match(/src=["']([^"']+)["']/i)?.[1] || "";
+        const dataSrcAttr = fullTag.match(/data-src=["']([^"']+)["']/i)?.[1] || "";
+        const srcsetAttr = fullTag.match(/srcset=["']([^"']+)["']/i)?.[1] || "";
+
+        let rawCandidate = srcAttr || dataSrcAttr;
+        if ((!rawCandidate || rawCandidate.startsWith("data:")) && srcsetAttr) {
+          const firstSrcset = srcsetAttr.split(",")[0].trim().split(/\s+/)[0];
+          if (firstSrcset) rawCandidate = firstSrcset;
+        }
+
+        const src = extractImageUrl(rawCandidate);
         if (!src) continue;
 
         const preContext = html.slice(Math.max(0, imgMatch.index - 200), imgMatch.index);
@@ -886,7 +964,43 @@ export function parseProductHtmlContent(
       }
     }
 
-    // 4g. Try HTML DOM regex patterns (WooCommerce, YouCan, Shopify, Stocki, COD funnels)
+    // 4g. Price container with separate currency elements (e.g. Addy: <span class="...price..."><span class="currency...">د.ت</span>49.000 </span>)
+    if (!currentPrice && html) {
+      const priceContainerRegex =
+        /class=["'][^"']*\b(?:price|product-price|current-price|amount)\b[^"']*["'][^>]*>(?:<[^>]+>|[^\d<])*?(\d{1,4}(?:[.,]\d{1,3})?)/gi;
+      let pcMatch;
+      while ((pcMatch = priceContainerRegex.exec(html)) !== null) {
+        let numStr = pcMatch[1].replace(",", ".");
+        let num = parseFloat(numStr);
+        if (currency === "TND" && num >= 1000 && (pcMatch[1].includes(",000") || pcMatch[1].includes(".000"))) {
+          num = Math.round(num / 1000);
+        }
+        if (num > 0 && num <= 50000) {
+          currentPrice = `${num} ${currencySymbol}`;
+          isHighConfidencePrice = true;
+          break;
+        }
+      }
+
+      if (!currentPrice) {
+        const prefixCurrencyRegex =
+          /(?:&#x62f;\.&#x62a;|د\.ت|دت|د\.م|درهم|DH|MAD|DT|TND)\s*(?:<\/[^>]+>\s*)*(\d{1,4}(?:[.,]\d{1,3})?)/i;
+        const prefMatch = prefixCurrencyRegex.exec(html);
+        if (prefMatch && prefMatch[1]) {
+          let numStr = prefMatch[1].replace(",", ".");
+          let num = parseFloat(numStr);
+          if (currency === "TND" && num >= 1000 && (prefMatch[1].includes(",000") || prefMatch[1].includes(".000"))) {
+            num = Math.round(num / 1000);
+          }
+          if (num > 0 && num <= 50000) {
+            currentPrice = `${num} ${currencySymbol}`;
+            isHighConfidencePrice = true;
+          }
+        }
+      }
+    }
+
+    // 4h. Try HTML DOM regex patterns (WooCommerce, YouCan, Shopify, Stocki, COD funnels)
     if (!currentPrice) {
       const regionPriceRegex = /(?:class|id|data-[^=]*)?["'][^"']*(?:price|current|sale|amount|total)[^"']*["'][^>]*>[\s\S]*?(?:^|\s|>)(?:‎|\s)*(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:TND|DT|dt|د\.ت|دت|دinar|Dinar|MAD|DH|dh|د\.م|درهم)/i;
       const regMatch = regionPriceRegex.exec(html);

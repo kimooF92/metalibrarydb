@@ -8,6 +8,7 @@
  */
 
 import { callJevDecisions, JevChoiceAnswer, DEFAULT_DECISION_MODEL } from "./typesafe-jev";
+import { isUrgencyOrPromoBanner } from "./html-scraper";
 
 export interface ExtractionDoubtResult {
   hasDoubt: boolean;
@@ -70,6 +71,9 @@ export function detectExtractionDoubt(data: {
 
   if (title.length < 10) {
     reasons.push(`Suspiciously short title: "${title}"`);
+    needsTitleReferee = true;
+  } else if (isUrgencyOrPromoBanner(title)) {
+    reasons.push(`Title is an urgency marquee or promotional banner: "${title}"`);
     needsTitleReferee = true;
   } else if (
     /(?:accueil|boutique|livraison|promo|pack|panier|store|bienvenue|offre sp[eé]ciale|nos produits|menu)/i.test(

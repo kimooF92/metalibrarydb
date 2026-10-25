@@ -2,6 +2,7 @@ import { detectExtractionDoubt, resolvePriceDoubtWithJev, harvestPriceCandidates
 import { classifyProductWithJev } from "./typesafe-jev";
 import { classifyProductOffline } from "./product-classifier";
 import { formatPrice } from "./format-price";
+import { isUrgencyOrPromoBanner } from "./html-scraper";
 
 export interface EnhanceProductInput {
   title?: string | null;
@@ -58,6 +59,7 @@ export async function enhanceProductWithJev(
   if (initialDoubt.needsTitleReferee && params.url) {
     const isGenericNav =
       /^(?:accueil|boutique|panier|store|bienvenue|home)\b/i.test(finalTitle) ||
+      isUrgencyOrPromoBanner(finalTitle) ||
       finalTitle.length < 8;
 
     if (isGenericNav) {

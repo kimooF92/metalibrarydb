@@ -631,6 +631,19 @@ async function runWorker() {
             .update(queue)
             .set({ status: "completed", finishedAt: new Date() })
             .where(eq(queue.id, queueJob.id));
+
+          if (queueJob.failureReason?.startsWith("product:")) {
+            await db
+              .update(queue)
+              .set({ status: "completed", finishedAt: new Date() })
+              .where(
+                and(
+                  eq(queue.jobType, "product_scrape"),
+                  eq(queue.status, "pending"),
+                  eq(queue.failureReason, queueJob.failureReason)
+                )
+              );
+          }
           ranJobs++;
           continue;
         }
@@ -641,14 +654,33 @@ async function runWorker() {
           workspaceId: targetProduct.workspaceId || queueJob.workspaceId || null,
         });
 
+        const finishDate = new Date();
+        const finishStatus = res.success ? "completed" : "failed";
         await db
           .update(queue)
           .set({
-            status: res.success ? "completed" : "failed",
-            finishedAt: new Date(),
-            failureReason: res.error || null,
+            status: finishStatus,
+            finishedAt: finishDate,
+            failureReason: res.error || queueJob.failureReason,
           })
           .where(eq(queue.id, queueJob.id));
+
+        if (queueJob.failureReason?.startsWith("product:")) {
+          await db
+            .update(queue)
+            .set({
+              status: finishStatus,
+              finishedAt: finishDate,
+              failureReason: res.error || queueJob.failureReason,
+            })
+            .where(
+              and(
+                eq(queue.jobType, "product_scrape"),
+                eq(queue.status, "pending"),
+                eq(queue.failureReason, queueJob.failureReason)
+              )
+            );
+        }
 
         ranJobs++;
         continue;
