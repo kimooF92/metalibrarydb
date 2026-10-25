@@ -10,6 +10,7 @@ import { ScanRunnerModal } from "./scan-runner-modal";
 import { ResolveBrandModal } from "./resolve-brand-modal";
 import { ManageDomainModal } from "./manage-domain-modal";
 import { MoveWorkspaceModal } from "./move-workspace-modal";
+import { BrandLogo } from "./brand-logo";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import {
   Search,
@@ -1430,15 +1431,32 @@ export function PagesTable({
                             </button>
                           </div>
                         ) : (
-                          <div className="flex flex-col gap-0.5 min-w-0">
-                            <div className="flex items-center space-x-1.5 min-w-0">
-                              <Link
-                                href={`/spy/brand/${encodeURIComponent(p.pageId || p.landingPage || p.displayName || "")}`}
-                                title={`Open ${p.displayName || "brand"} Analytics${p.pageId ? ` (ID: ${p.pageId})` : ""}`}
-                                className="font-bold text-[11px] text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 underline-offset-2 hover:underline transition-colors truncate min-w-0"
-                              >
-                                {p.displayName || "Meta Ad Search"}
-                              </Link>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Link
+                              href={`/spy/brand/${encodeURIComponent(p.pageId || p.landingPage || p.displayName || "")}`}
+                              className="shrink-0"
+                              tabIndex={-1}
+                              title={`View ${p.displayName || "brand"} logo`}
+                            >
+                              <BrandLogo
+                                name={p.displayName}
+                                url={p.profilePicUrl}
+                                domain={p.canonicalDomain || p.landingPage || p.displayName}
+                                pageId={p.pageId}
+                                size="sm"
+                                showHoverPreview={true}
+                              />
+                            </Link>
+
+                            <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                              <div className="flex items-center space-x-1.5 min-w-0">
+                                <Link
+                                  href={`/spy/brand/${encodeURIComponent(p.pageId || p.landingPage || p.displayName || "")}`}
+                                  title={`Open ${p.displayName || "brand"} Analytics${p.pageId ? ` (ID: ${p.pageId})` : ""}`}
+                                  className="font-bold text-[11px] text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 underline-offset-2 hover:underline transition-colors truncate min-w-0"
+                                >
+                                  {p.displayName || "Meta Ad Search"}
+                                </Link>
                               <a
                                 href={p.url}
                                 target="_blank"
@@ -1526,7 +1544,8 @@ export function PagesTable({
                               </div>
                             )}
                           </div>
-                        )}
+                        </div>
+                      )}
                       </td>
 
                       {/* Active Ads, Delta & Sparkline (Combined Unified Cell) */}

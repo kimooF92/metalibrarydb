@@ -9,6 +9,7 @@ import { calculateWinnerScore } from "@/lib/winner-score";
 import { ImagePreviewModal } from "./image-preview-modal";
 import { ProductClusterModal } from "./product-cluster-modal";
 import { CreativeClusterModal } from "./creative-cluster-modal";
+import { BrandLogo } from "@/components/brand-logo";
 import { useToast } from "@/components/toast-context";
 import { useWorkspace } from "@/components/workspace-context";
 import { formatPrice } from "@/lib/format-price";
@@ -304,15 +305,29 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
       <div>
         {/* Brand Name & Status Badges */}
         <div className="flex items-start justify-between gap-2 mb-2.5">
-          <div className="flex flex-col min-w-0">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <Link
-                href={`/spy/brand/${encodeURIComponent((currentAd.pageId && currentAd.pageId !== "0" && !currentAd.pageId.includes("-")) ? currentAd.pageId : currentAd.pageName || "")}`}
-                className="text-xs font-bold text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline transition-colors truncate"
-                title={`Open ${currentAd.pageName || currentAd.pageId} Analytics & Ad Library`}
-              >
-                {currentAd.pageName || `Page ${currentAd.pageId}`}
-              </Link>
+          <div className="flex items-center gap-2 min-w-0">
+            <Link
+              href={`/spy/brand/${encodeURIComponent((currentAd.pageId && currentAd.pageId !== "0" && !currentAd.pageId.includes("-")) ? currentAd.pageId : currentAd.pageName || "")}`}
+              className="shrink-0"
+              tabIndex={-1}
+            >
+              <BrandLogo
+                name={currentAd.pageName}
+                domain={currentAd.linkUrl || currentAd.pageName}
+                pageId={currentAd.pageId}
+                size="xs"
+              />
+            </Link>
+
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Link
+                  href={`/spy/brand/${encodeURIComponent((currentAd.pageId && currentAd.pageId !== "0" && !currentAd.pageId.includes("-")) ? currentAd.pageId : currentAd.pageName || "")}`}
+                  className="text-xs font-bold text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline transition-colors truncate"
+                  title={`Open ${currentAd.pageName || currentAd.pageId} Analytics & Ad Library`}
+                >
+                  {currentAd.pageName || `Page ${currentAd.pageId}`}
+                </Link>
               {currentAd.brandProductCount && currentAd.brandProductCount > 1 && (
                 <span
                   title={`Brand tested ${currentAd.brandProductCount} distinct products (${currentAd.productSharePercent || 100}% creatives dedicated to this product)`}
@@ -336,8 +351,9 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
               ID: {currentAd.adArchiveId}
             </span>
           </div>
+        </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
             {isArchived ? (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-600 dark:text-purple-400 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full">
                 <Archive className="w-3 h-3" /> Archived

@@ -24,6 +24,7 @@ export interface ExtractedAdData {
   mediaType: "image" | "video" | "carousel" | "unknown";
   mediaUrls: string[];
   thumbnailUrl: string | null;
+  profilePicUrl?: string | null;
   duplicationCount: number;
   collationId: string | null;
   isActive: boolean;
@@ -155,6 +156,7 @@ function parseAdGraphQLNode(node: any): ExtractedAdData | null {
       mediaType,
       mediaUrls,
       thumbnailUrl: thumbnailUrl ? String(thumbnailUrl) : null,
+      profilePicUrl: pageInfo.profilePicUrl || null,
       duplicationCount: typeof collationCount === "number" ? collationCount : 1,
       collationId: collationId ? String(collationId) : null,
       isActive: Boolean(isActive),
@@ -849,11 +851,20 @@ export async function scanAdCreatives(
       }
     }
 
+    let resolvedProfilePicUrl: string | null = null;
+    for (const ad of collectedAds.values()) {
+      if (ad.profilePicUrl) {
+        resolvedProfilePicUrl = ad.profilePicUrl;
+        break;
+      }
+    }
+
     const pageCountry = (trackedPageRecord as any)?.country || country || "ALL";
     const pageUpdates: any = {
       status: "success",
       lastCreativeScan: now,
       lastSuccessAt: now,
+      ...(resolvedProfilePicUrl ? { profilePicUrl: resolvedProfilePicUrl } : {}),
       updatedAt: now,
     };
 

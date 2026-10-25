@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { TrackedPage, ScanHistoryEntry } from "@/types";
 import { X, Calendar, Loader2, ExternalLink, ArrowUpRight, ArrowDownRight, Minus, ChevronUp, ChevronDown, Sparkles } from "lucide-react";
 import { ExportDossierModal } from "@/components/export-dossier-modal";
+import { BrandLogo } from "@/components/brand-logo";
 
 interface HistoryModalProps {
   page: TrackedPage | null;
@@ -129,7 +130,15 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
         >
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900/50">
-            <div>
+            <div className="flex items-center gap-3">
+              <BrandLogo
+                name={page.displayName}
+                url={page.profilePicUrl}
+                domain={page.canonicalDomain || page.landingPage || page.displayName}
+                pageId={page.pageId}
+                size="md"
+              />
+              <div>
               <div className="flex items-center space-x-2">
                 <h2 id="history-modal-title" className="text-base font-bold text-slate-900 dark:text-slate-100">
                   Scan History
@@ -157,8 +166,9 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
                 )}
               </div>
             </div>
+          </div>
 
-            <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2">
               <button
                 onClick={() => setShowDossierModal(true)}
                 className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800/80 text-xs font-semibold transition-all cursor-pointer shadow-2xs"

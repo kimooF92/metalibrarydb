@@ -8,6 +8,7 @@ import { calculateWinnerScore } from "@/lib/winner-score";
 import { ImagePreviewModal } from "./image-preview-modal";
 import { ProductClusterModal } from "./product-cluster-modal";
 import { CreativeClusterModal } from "./creative-cluster-modal";
+import { BrandLogo } from "@/components/brand-logo";
 import { useToast } from "@/components/toast-context";
 import { useWorkspace } from "@/components/workspace-context";
 import { formatPrice } from "@/lib/format-price";
@@ -312,7 +313,19 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
         <div className="flex flex-col min-w-0 flex-1 gap-1">
           {/* Header Row: Page Name, Winner Score, Status */}
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Link
+                href={`/spy/brand/${encodeURIComponent((currentAd.pageId && currentAd.pageId !== "0" && !currentAd.pageId.includes("-")) ? currentAd.pageId : currentAd.pageName || "")}`}
+                className="shrink-0"
+                tabIndex={-1}
+              >
+                <BrandLogo
+                  name={currentAd.pageName}
+                  domain={currentAd.linkUrl || currentAd.pageName}
+                  pageId={currentAd.pageId}
+                  size="xs"
+                />
+              </Link>
               <Link
                 href={`/spy/brand/${encodeURIComponent((currentAd.pageId && currentAd.pageId !== "0" && !currentAd.pageId.includes("-")) ? currentAd.pageId : currentAd.pageName || "")}`}
                 className="text-xs font-bold text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline transition-colors truncate"

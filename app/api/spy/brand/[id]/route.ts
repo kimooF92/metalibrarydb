@@ -22,6 +22,7 @@ const TRACKED_PAGE_COLUMNS = {
   id: true,
   pageId: true,
   displayName: true,
+  profilePicUrl: true,
   url: true,
   country: true,
   landingPage: true,
@@ -43,6 +44,7 @@ const BRAND_DOMAIN_COLUMNS = {
   id: true,
   domain: true,
   displayName: true,
+  profilePicUrl: true,
 } as const;
 
 export async function GET(
@@ -759,6 +761,7 @@ export async function GET(
         id: trackedPage?.id || null,
         pageId: pageId,
         displayName: displayName,
+        profilePicUrl: trackedPage?.profilePicUrl || brandDomain?.profilePicUrl || null,
         url: trackedPage?.url || `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&view_all_page_id=${pageId}&search_type=page&media_type=all`,
         country: trackedPage?.country || null,
         landingPage: trackedPage?.landingPage || null,

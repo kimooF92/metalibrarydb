@@ -154,7 +154,11 @@ export function parseAdStartDate(item: any): Date | null {
  * Strictly extracts real numeric Meta Page IDs (e.g. 104829104820) and clean display names.
  * NEVER returns UUIDs or dummy placeholder strings.
  */
-export function extractPageInfo(item: any): { pageId: string | null; pageName: string | null } {
+export function extractPageInfo(item: any): {
+  pageId: string | null;
+  pageName: string | null;
+  profilePicUrl: string | null;
+} {
   const isNumericPageId = (str: any) => typeof str === "string" && /^\d{6,25}$/.test(str.trim());
 
   // Check all candidate keys in Apify dataset item & GraphQL nodes
@@ -218,9 +222,29 @@ export function extractPageInfo(item: any): { pageId: string | null; pageName: s
     }
   }
 
+  const candidatePics = [
+    item.snapshot?.page_profile_picture_url,
+    item.page_profile_picture_url,
+    item.pageProfilePictureUrl,
+    item.snapshot?.pageProfilePictureUrl,
+    item.node?.snapshot?.page_profile_picture_url,
+    item.node?.page_profile_picture_url,
+    item.profile_picture_url,
+    item.snapshot?.profile_picture_url,
+  ];
+
+  let resolvedProfilePicUrl: string | null = null;
+  for (const cpic of candidatePics) {
+    if (typeof cpic === "string" && cpic.startsWith("http")) {
+      resolvedProfilePicUrl = cpic.trim();
+      break;
+    }
+  }
+
   return {
     pageId: resolvedPageId,
     pageName: resolvedPageName,
+    profilePicUrl: resolvedProfilePicUrl,
   };
 }
 
@@ -294,6 +318,7 @@ export async function ingestApifyDatasetItems(
   let newProductsCount = 0;
   let detectedPageId: string | null = null;
   let detectedPageName: string | null = null;
+  let detectedProfilePicUrl: string | null = null;
   const discoveredPagesMap = new Map<string, { pageId: string; pageName: string | null; adCount: number }>();
 
   const isNumericString = (str?: string | null) => Boolean(str && /^\d{6,25}$/.test(str.trim()));
@@ -302,7 +327,10 @@ export async function ingestApifyDatasetItems(
     const adArchiveId = extractAdArchiveId(item);
     if (!adArchiveId || adArchiveId === "0") continue;
 
-    const { pageId: itemPageId, pageName: itemPageName } = extractPageInfo(item);
+    const { pageId: itemPageId, pageName: itemPageName, profilePicUrl: itemProfilePicUrl } = extractPageInfo(item);
+    if (itemProfilePicUrl && !detectedProfilePicUrl) {
+      detectedProfilePicUrl = itemProfilePicUrl;
+    }
 
     // Never fallback to a database UUID!
     const pageId =
@@ -646,6 +674,7 @@ export async function ingestApifyDatasetItems(
       ? { holdStatus: "active", consecutiveZeroScans: 0, lastKnownValidResults: null }
       : {}),
     lastCreativeScan: now,
+    ...(detectedProfilePicUrl && !pageRecord?.profilePicUrl ? { profilePicUrl: detectedProfilePicUrl } : {}),
     updatedAt: now,
   };
 

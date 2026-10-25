@@ -262,6 +262,7 @@ export async function GET(request: Request) {
               id: true,
               url: true,
               displayName: true,
+              profilePicUrl: true,
               searchType: true,
               pageId: true,
               currentResults: true,

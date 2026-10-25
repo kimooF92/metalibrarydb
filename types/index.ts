@@ -21,6 +21,7 @@ export interface BrandDomain {
   id: string;
   domain: string;
   displayName: string;
+  profilePicUrl?: string | null;
   category?: string | null;
   storePlatform?: string | null;
   notes?: string | null;
@@ -61,6 +62,7 @@ export interface TrackedPage {
   createdAt: string;
   updatedAt: string;
   // Extended fields
+  profilePicUrl?: string | null;
   country?: string | null;
   landingPage?: string | null;
   failureReason?: string | null;

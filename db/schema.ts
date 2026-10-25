@@ -41,6 +41,7 @@ export const brandDomains = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     domain: text("domain").notNull().unique(), // e.g. "tuni-go.com" or "mystore.youcan.shop"
     displayName: text("display_name").notNull(),
+    profilePicUrl: text("profile_pic_url"),
     category: text("category"),
     storePlatform: text("store_platform"),
     notes: text("notes"),
@@ -73,6 +74,7 @@ export const trackedPages = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 
     // Future-proof fields (nullable, reserved for future expansion — PRD §23)
+    profilePicUrl: text("profile_pic_url"),
     country: text("country"),
     landingPage: text("landing_page"),
     adCount: integer("ad_count"),

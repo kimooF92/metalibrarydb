@@ -11,6 +11,7 @@ import { resolveProductForRefresh } from "@/lib/product-extraction";
 import { ProductDetailsModal } from "@/components/products/product-details-modal";
 import { ExportDossierModal } from "@/components/export-dossier-modal";
 import { ManageDomainModal } from "@/components/manage-domain-modal";
+import { BrandLogo } from "@/components/brand-logo";
 import { useToast } from "@/components/toast-context";
 import { getSupabase } from "@/lib/supabase";
 import { Ad, ScrapedProduct } from "@/types";
@@ -65,6 +66,7 @@ interface BrandAnalyticsData {
     id: string | null;
     pageId: string;
     displayName: string;
+    profilePicUrl?: string | null;
     url: string;
     country: string | null;
     landingPage: string | null;
@@ -777,6 +779,16 @@ export default function BrandDeepDivePage({
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
+
+            {/* Brand Logo Avatar */}
+            <BrandLogo
+              name={brand.displayName}
+              url={brand.profilePicUrl}
+              domain={brand.landingPage || brand.displayName}
+              pageId={brand.pageId}
+              size="lg"
+              className="mt-0.5 shrink-0"
+            />
 
             <div className="min-w-0">
               <div className="flex items-center gap-2.5 flex-wrap">
