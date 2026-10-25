@@ -58,7 +58,20 @@ export function BrandLogo({
   // Clean the domain if provided (e.g. https://zara.com/tn -> zara.com)
   const cleanDomain = useMemo(() => {
     if (!domain) return null;
-    return resolveTrackableDomain(domain) || domain.replace(/^https?:\/\//i, "").split("/")[0];
+    const raw = resolveTrackableDomain(domain) || domain.replace(/^https?:\/\//i, "").split("/")[0].split("?")[0];
+    const cleaned = raw.replace(/^www\./i, "").trim().toLowerCase();
+    // Exclude social networks and strings without a valid domain TLD dot
+    if (
+      !cleaned ||
+      cleaned.includes("facebook.com") ||
+      cleaned.includes("fb.me") ||
+      cleaned.includes("instagram.com") ||
+      !cleaned.includes(".") ||
+      cleaned.includes(" ")
+    ) {
+      return null;
+    }
+    return cleaned;
   }, [domain]);
 
   // Reset stage if url or domain changes
@@ -70,9 +83,9 @@ export function BrandLogo({
   const initial = (name || cleanDomain || "B").trim().charAt(0).toUpperCase();
   const gradientClass = useMemo(() => getGradient(name || cleanDomain || "Brand"), [name, cleanDomain]);
 
-  // Compute favicon URL
+  // Compute favicon URL (with default_icon=404 so Google doesn't return the generic blue globe)
   const faviconUrl = cleanDomain
-    ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(cleanDomain)}&sz=128`
+    ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(cleanDomain)}&sz=128&default_icon=404`
     : null;
 
   // Determine active image source

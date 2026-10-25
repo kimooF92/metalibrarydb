@@ -1441,7 +1441,7 @@ export function PagesTable({
                               <BrandLogo
                                 name={p.displayName}
                                 url={p.profilePicUrl}
-                                domain={p.canonicalDomain || p.landingPage || p.displayName}
+                                domain={p.canonicalDomain || p.landingPage || (p.displayName?.includes(".") ? p.displayName : null)}
                                 pageId={p.pageId}
                                 size="sm"
                                 showHoverPreview={true}

@@ -321,7 +321,7 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
               >
                 <BrandLogo
                   name={currentAd.pageName}
-                  domain={currentAd.linkUrl || currentAd.pageName}
+                  domain={currentAd.linkUrl || (currentAd.pageName?.includes(".") ? currentAd.pageName : null)}
                   pageId={currentAd.pageId}
                   size="xs"
                 />

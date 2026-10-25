@@ -784,7 +784,7 @@ export default function BrandDeepDivePage({
             <BrandLogo
               name={brand.displayName}
               url={brand.profilePicUrl}
-              domain={brand.landingPage || brand.displayName}
+              domain={brand.landingPage || (brand.displayName?.includes(".") ? brand.displayName : null)}
               pageId={brand.pageId}
               size="lg"
               className="mt-0.5 shrink-0"

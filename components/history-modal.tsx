@@ -134,7 +134,7 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
               <BrandLogo
                 name={page.displayName}
                 url={page.profilePicUrl}
-                domain={page.canonicalDomain || page.landingPage || page.displayName}
+                domain={page.canonicalDomain || page.landingPage || (page.displayName?.includes(".") ? page.displayName : null)}
                 pageId={page.pageId}
                 size="md"
               />
