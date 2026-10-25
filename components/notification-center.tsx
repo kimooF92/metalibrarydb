@@ -23,6 +23,7 @@ import {
   Crown,
   Rocket,
   ShoppingBag,
+  ChevronRight,
 } from "lucide-react";
 import { useToast } from "@/components/toast-context";
 import { stripEmojis } from "@/lib/utils";
@@ -499,66 +500,45 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                 const isQueued = n.metadata?.queuedForLocalScan === true;
                 const newProductsCount = (n.metadata?.newProductsCount as number) || 0;
 
-                const getActionLabel = () => {
-                  if (isBreakout) return "View Winner →";
-                  const runnerType = n.metadata?.runnerType as string | undefined;
-                  const newAdsCount = n.metadata?.newAdsCount as number | undefined;
-                  const moversCount = movers.length;
-
-                  if (n.type === "batch_summary" && runnerType === "apify_spy") {
-                    if (newAdsCount && newProductsCount) {
-                      return `View ${newAdsCount} Ads & ${newProductsCount} Products →`;
-                    }
-                    if (newAdsCount) return `View ${newAdsCount} New Ads →`;
-                    if (newProductsCount) return `View ${newProductsCount} Products →`;
-                    return "View Synced Feed →";
-                  }
-                  if (n.type === "batch_summary" && runnerType === "count_worker") {
-                    return moversCount > 0 ? `View ${moversCount} Movers →` : "View Dashboard →";
-                  }
-                  if (n.type === "batch_summary" && runnerType === "discovery") {
-                    return "View Brands →";
-                  }
-                  if (isWentDark) return "View Brand →";
-                  if (isMegaBrand) return "View Profile →";
-                  if (isSurge) return "View Brand →";
-                  return "View Brand →";
-                };
-
                 return (
                   <div
                     key={n.id}
                     onClick={() => {
                       if (!n.isRead) handleMarkSingleRead(n.id);
-                      if (n.actionUrl && n.type !== "multi_page_detected") {
+                      if (n.type === "multi_page_detected" && n.trackedPageId) {
+                        setIsOpen(false);
+                        onOpenResolveModal?.(n.trackedPageId);
+                      } else if (n.actionUrl) {
                         setIsOpen(false);
                         router.push(n.actionUrl);
                       }
                     }}
-                    className={`relative p-3.5 flex items-start space-x-3 transition-colors cursor-pointer group ${
+                    className={`relative py-2.5 px-3.5 flex items-start space-x-3 transition-all cursor-pointer group active:scale-[0.99] ${
                       n.isRead
-                        ? "bg-transparent hover:bg-slate-50/50 dark:hover:bg-slate-800/30 opacity-75 hover:opacity-100"
+                        ? "bg-transparent hover:bg-slate-100/70 dark:hover:bg-slate-800/50 opacity-75 hover:opacity-100"
                         : isBreakout
-                        ? "bg-gradient-to-r from-rose-500/[0.08] via-pink-500/[0.06] to-amber-500/[0.08] hover:from-rose-500/[0.12] hover:to-amber-500/[0.12]"
+                        ? "bg-gradient-to-r from-rose-500/[0.08] via-pink-500/[0.06] to-amber-500/[0.08] hover:from-rose-500/[0.14] hover:to-amber-500/[0.14]"
                         : isWentDark
-                        ? "bg-rose-500/[0.06] dark:bg-rose-500/[0.1] hover:bg-rose-500/[0.09]"
+                        ? "bg-rose-500/[0.06] dark:bg-rose-500/[0.1] hover:bg-rose-500/[0.12]"
                         : isMegaBrand
-                        ? "bg-purple-500/[0.08] dark:bg-purple-500/[0.14] hover:bg-purple-500/[0.12]"
+                        ? "bg-purple-500/[0.08] dark:bg-purple-500/[0.14] hover:bg-purple-500/[0.15]"
                         : isSurge
-                        ? "bg-amber-500/[0.06] dark:bg-amber-500/[0.1] hover:bg-amber-500/[0.09]"
+                        ? "bg-amber-500/[0.06] dark:bg-amber-500/[0.1] hover:bg-amber-500/[0.12]"
                         : isQueued
-                        ? "bg-emerald-500/[0.05] dark:bg-emerald-500/[0.08] hover:bg-emerald-500/[0.1]"
-                        : "bg-indigo-500/[0.04] dark:bg-indigo-500/[0.07] hover:bg-indigo-500/[0.08] dark:hover:bg-indigo-500/[0.12]"
+                        ? "bg-emerald-500/[0.05] dark:bg-emerald-500/[0.08] hover:bg-emerald-500/[0.12]"
+                        : "bg-indigo-500/[0.04] dark:bg-indigo-500/[0.07] hover:bg-indigo-500/[0.1] dark:hover:bg-indigo-500/[0.15]"
                     }`}
                   >
                     {getNotificationIcon(n)}
 
-                    <div className="flex-1 min-w-0 space-y-1.5">
+                    <div className="flex-1 min-w-0 space-y-1">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 truncate">
                           <h4
-                            className={`text-xs font-bold truncate ${
-                              n.isRead ? "text-slate-700 dark:text-slate-300" : "text-slate-900 dark:text-white"
+                            className={`text-xs font-bold truncate transition-colors ${
+                              n.isRead
+                                ? "text-slate-700 dark:text-slate-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
+                                : "text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
                             }`}
                           >
                             {stripEmojis(n.title)}
@@ -596,12 +576,12 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                             </span>
                           )}
                         </div>
-                        <span className="text-[10px] text-slate-400 shrink-0">
+                        <span className="text-[10px] text-slate-400 shrink-0 group-hover:text-slate-500 dark:group-hover:text-slate-300 transition-colors">
                           {formatRelativeTime(n.createdAt)}
                         </span>
                       </div>
 
-                      <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed break-words">
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug break-words">
                         {stripEmojis(n.message)}
                       </p>
 
@@ -687,42 +667,24 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                         </div>
                       )}
 
-                      {/* Action Buttons */}
-                      <div className="flex items-center gap-2 pt-0.5">
-                        {n.type === "multi_page_detected" && n.trackedPageId && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setIsOpen(false);
-                              onOpenResolveModal?.(n.trackedPageId!);
-                            }}
-                            className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 text-[10px] font-bold border border-amber-500/20 transition-all active:scale-95 cursor-pointer"
-                          >
+                      {/* Multi-page conflict hint */}
+                      {n.type === "multi_page_detected" && n.trackedPageId && (
+                        <div className="pt-0.5">
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold border border-amber-500/20">
                             <span>Select Page</span>
                             <ExternalLink className="w-2.5 h-2.5" />
-                          </button>
-                        )}
-
-                        {n.actionUrl && n.type !== "multi_page_detected" && (
-                          <Link
-                            href={n.actionUrl}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setIsOpen(false);
-                              if (!n.isRead) handleMarkSingleRead(n.id);
-                            }}
-                            className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 hover:bg-slate-200 dark:hover:bg-slate-700/80 text-[10px] font-semibold border border-slate-200 dark:border-slate-700/80 transition-all active:scale-95 shadow-2xs"
-                          >
-                            <span>{getActionLabel()}</span>
-                            <ExternalLink className="w-2.5 h-2.5 opacity-70" />
-                          </Link>
-                        )}
-                      </div>
+                          </span>
+                        </div>
+                      )}
                     </div>
 
-                    {!n.isRead && (
-                      <span className="w-2 h-2 rounded-full bg-indigo-500 ring-2 ring-white dark:ring-slate-900 shrink-0 mt-1 shadow-xs" />
-                    )}
+                    {/* Right indicator column: unread dot and subtle hover chevron */}
+                    <div className="flex items-center self-center shrink-0 pl-1">
+                      {!n.isRead && (
+                        <span className="w-2 h-2 rounded-full bg-indigo-500 ring-2 ring-white dark:ring-slate-900 shadow-xs mr-0.5 group-hover:scale-110 transition-transform" />
+                      )}
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400/60 dark:text-slate-500 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100" />
+                    </div>
                   </div>
                 );
               })
