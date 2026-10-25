@@ -131,6 +131,259 @@ export function extractImageUrl(img: any): string | null {
 }
 
 /**
+ * Extracts the official brand/store logo from an e-commerce website HTML.
+ * Priority:
+ * 1. JSON-LD Schema: Organization, Brand, Store, or WebSite publisher logo
+ * 2. High-res Apple Touch Icons (<link rel="apple-touch-icon" ...>)
+ * 3. OpenGraph / Twitter logo metadata (<meta property="og:logo">)
+ * 4. Primary Navbar / Header Logo (<img class/id/alt="*logo*">)
+ * 5. High-res Favicons (<link rel="icon" sizes="..." ...>)
+ *
+ * Normalizes relative URLs using baseUrl, verifies protocol, and filters out tracking beacons and payment badges.
+ */
+export function extractStoreLogoFromHtml(html: string, baseUrl: string): string | null {
+  if (!html || typeof html !== "string") return null;
+
+  const isTrackerOrBeacon = (url: string): boolean => {
+    const s = url.toLowerCase();
+    return (
+      s.includes("facebook.com/tr") ||
+      s.includes("connect.facebook.net") ||
+      s.includes("analytics.tiktok") ||
+      s.includes("google-analytics") ||
+      s.includes("googletagmanager") ||
+      s.includes("doubleclick.net") ||
+      s.includes("bat.bing.com") ||
+      s.includes("snapchat.com") ||
+      s.includes("pixel") ||
+      s.includes("1x1") ||
+      s.includes("blank.gif") ||
+      s.includes("spacer.gif")
+    );
+  };
+
+  const resolveUrl = (rel: string | null | undefined): string | null => {
+    if (!rel || typeof rel !== "string") return null;
+    const trimmed = rel.trim();
+    if (!trimmed || trimmed.startsWith("data:") || trimmed.length < 5) return null;
+    if (isTrackerOrBeacon(trimmed)) return null;
+
+    try {
+      if (trimmed.startsWith("//")) {
+        return `https:${trimmed}`;
+      }
+      if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+        return trimmed;
+      }
+      if (baseUrl) {
+        return new URL(trimmed, baseUrl).href;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const isBadLogoCandidate = (url: string, contextTag?: string): boolean => {
+    const s = url.toLowerCase();
+    const tag = (contextTag || "").toLowerCase();
+
+    // Reject payment badges, credit cards, social icons, flags, rating stars, carts, banners
+    if (
+      s.includes("visa") ||
+      s.includes("mastercard") ||
+      s.includes("paypal") ||
+      s.includes("stripe") ||
+      s.includes("cmi") ||
+      s.includes("edinar") ||
+      s.includes("sobflous") ||
+      s.includes("payment") ||
+      s.includes("badge") ||
+      s.includes("trust") ||
+      s.includes("guarantee") ||
+      s.includes("flag") ||
+      s.includes("star") ||
+      s.includes("rating") ||
+      s.includes("cart") ||
+      s.includes("bag") ||
+      s.includes("social") ||
+      s.includes("facebook") ||
+      s.includes("instagram") ||
+      s.includes("tiktok") ||
+      s.includes("youtube") ||
+      s.includes("twitter") ||
+      s.includes("whatsapp") ||
+      s.includes("banner") ||
+      s.includes("hero") ||
+      s.includes("slider") ||
+      s.includes("blank.gif") ||
+      s.includes("spacer.gif") ||
+      s.includes("defaultstorelogo") ||
+      s.includes("default_logo") ||
+      s.includes("default-logo") ||
+      s.includes("placeholder") ||
+      s.includes("no-logo") ||
+      s.includes("nologo") ||
+      s.includes("dummy")
+    ) {
+      return true;
+    }
+
+    if (
+      tag.includes("payment") ||
+      tag.includes("credit-card") ||
+      (tag.includes("footer") && !tag.includes("logo"))
+    ) {
+      return true;
+    }
+
+    return false;
+  };
+
+  // 1. Check JSON-LD for Organization, Brand, Store, or WebSite publisher logo
+  try {
+    const jsonLdList = extractJsonLd(html);
+    for (const item of jsonLdList) {
+      const candidates = [item];
+      if (Array.isArray(item["@graph"])) {
+        candidates.push(...item["@graph"]);
+      }
+
+      for (const c of candidates) {
+        if (!c || typeof c !== "object") continue;
+        const type = String(c["@type"] || "").toLowerCase();
+        if (
+          type.includes("organization") ||
+          type.includes("brand") ||
+          type.includes("store") ||
+          type.includes("onlinestore") ||
+          type.includes("localbusiness") ||
+          type.includes("website")
+        ) {
+          const rawLogo = c.logo || (type !== "website" ? c.image : null);
+          const logoCandidate = extractImageUrl(rawLogo);
+          const resolved = resolveUrl(logoCandidate);
+          if (resolved && !isBadLogoCandidate(resolved)) {
+            return resolved;
+          }
+        }
+      }
+    }
+  } catch {}
+
+  // 2. High-res Apple Touch Icon (<link rel="apple-touch-icon" href="...">)
+  // Standard 180x180 or 512x512 official brand app icons across Shopify, WooCommerce, YouCan
+  const appleTouchMatch =
+    html.match(/<link\s+[^>]*rel=["'](?:apple-touch-icon|apple-touch-icon-precomposed)["'][^>]*href=["']([^"']+)["']/i) ||
+    html.match(/<link\s+[^>]*href=["']([^"']+)["'][^>]*rel=["'](?:apple-touch-icon|apple-touch-icon-precomposed)["']/i);
+  if (appleTouchMatch && appleTouchMatch[1]) {
+    const resolved = resolveUrl(appleTouchMatch[1]);
+    if (resolved && !isBadLogoCandidate(resolved)) {
+      return resolved;
+    }
+  }
+
+  // 3. OpenGraph / Meta logo
+  const ogLogo =
+    extractMeta(html, "og:logo") ||
+    extractMeta(html, "og:image:logo") ||
+    extractMeta(html, "twitter:image:src");
+  if (ogLogo) {
+    const resolved = resolveUrl(ogLogo);
+    if (resolved && !isBadLogoCandidate(resolved)) {
+      return resolved;
+    }
+  }
+
+  // 4. Header or Navbar wrapper logo image
+  // Check container elements with class/id containing logo e.g. <div class="*logo*">...<img src="...">
+  const containerRegex =
+    /<(?:div|header|nav|a|span|figure)[^>]*?(?:class|id)=["'][^"']*(?:menu__logo|header__logo|site-logo|site-branding|navbar-brand|brand-logo|logo)[^"']*["'][^>]*?>([\s\S]*?)<\/(?:div|header|nav|a|span|figure)>/gi;
+  let containerMatch;
+  while ((containerMatch = containerRegex.exec(html)) !== null) {
+    const innerHtml = containerMatch[1];
+    const innerImgMatch = /<img\s+([^>]*?)>/i.exec(innerHtml);
+    if (innerImgMatch) {
+      const attrs = innerImgMatch[1];
+      const srcMatch = attrs.match(/(?:src|data-src)=["']([^"']+)["']/i);
+      if (srcMatch && srcMatch[1]) {
+        const resolved = resolveUrl(srcMatch[1]);
+        if (resolved && !isBadLogoCandidate(resolved, attrs)) {
+          return resolved;
+        }
+      }
+    }
+  }
+
+  // 4b. Direct <img> tags with logo in class, id, alt, or src
+  const imgRegex = /<img\s+([^>]*?)>/gi;
+  let match;
+  let bestHeaderLogo: string | null = null;
+
+  while ((match = imgRegex.exec(html)) !== null) {
+    const attrs = match[1];
+    const srcMatch = attrs.match(/(?:src|data-src)=["']([^"']+)["']/i);
+    if (!srcMatch || !srcMatch[1]) continue;
+
+    const rawSrc = srcMatch[1];
+    const resolved = resolveUrl(rawSrc);
+    if (!resolved || isBadLogoCandidate(resolved, attrs)) continue;
+
+    const hasLogoInAttr =
+      /(?:class|id|alt)=["'][^"']*(?:logo|brand|site-title|header__logo)[^"']*["']/i.test(attrs);
+    const hasLogoInSrc = /(?:logo|brand)[^/]*\.(?:png|jpg|jpeg|webp|svg)/i.test(resolved);
+
+    // If both attr and src indicate logo, high confidence match
+    if (hasLogoInAttr && hasLogoInSrc) {
+      return resolved;
+    }
+
+    if (hasLogoInAttr && !bestHeaderLogo) {
+      bestHeaderLogo = resolved;
+    } else if (hasLogoInSrc && !bestHeaderLogo) {
+      bestHeaderLogo = resolved;
+    }
+  }
+
+  if (bestHeaderLogo) {
+    return bestHeaderLogo;
+  }
+
+  // 5. Large high-res Favicons (<link rel="icon" sizes="192x192|180x180|512x512|32x32" ...>)
+  const iconMatches = [...html.matchAll(/<link\s+[^>]*rel=["'](?:shortcut\s+)?icon["'][^>]*>/gi)];
+  let fallbackIcon: string | null = null;
+  let maxIconSize = 0;
+
+  for (const m of iconMatches) {
+    const tag = m[0];
+    const hrefMatch = tag.match(/href=["']([^"']+)["']/i);
+    if (!hrefMatch || !hrefMatch[1]) continue;
+
+    const resolved = resolveUrl(hrefMatch[1]);
+    if (!resolved || isBadLogoCandidate(resolved)) continue;
+
+    const sizesMatch = tag.match(/sizes=["'](\d+)x(\d+)["']/i);
+    if (sizesMatch) {
+      const size = parseInt(sizesMatch[1], 10);
+      if (size > maxIconSize) {
+        maxIconSize = size;
+        fallbackIcon = resolved;
+      }
+    } else if (!fallbackIcon && !resolved.endsWith(".ico")) {
+      fallbackIcon = resolved;
+    } else if (!fallbackIcon) {
+      fallbackIcon = resolved;
+    }
+  }
+
+  if (fallbackIcon) {
+    return fallbackIcon;
+  }
+
+  return null;
+}
+
+/**
  * Parses product data from raw or rendered HTML (and optional markdown).
  */
 export function parseProductHtmlContent(
@@ -802,6 +1055,8 @@ export function parseProductHtmlContent(
       };
     }
 
+    const storeLogoUrl = extractStoreLogoFromHtml(html, url);
+
     return {
       success: true,
       data: {
@@ -815,6 +1070,7 @@ export function parseProductHtmlContent(
         gallery_images: galleryImages.length > 0 ? galleryImages : undefined,
         all_offers: allOffers.length > 0 ? allOffers : undefined,
         resolved_url: url,
+        store_logo_url: storeLogoUrl || undefined,
       },
     };
   } catch (err: any) {
@@ -1110,5 +1366,39 @@ export async function scrapeProductDirectHtml(
     };
   } finally {
     clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Fetches landing page or homepage HTML with timeout and safe URL checks,
+ * and extracts the store logo.
+ */
+export async function extractStoreLogoFromUrl(
+  storeUrl: string,
+  timeoutMs: number = 8000
+): Promise<string | null> {
+  if (!storeUrl || !isSafePublicUrl(storeUrl)) return null;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    const res = await fetch(storeUrl, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      },
+      redirect: "follow",
+    });
+
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+
+    const html = await res.text();
+    return extractStoreLogoFromHtml(html, res.url || storeUrl);
+  } catch {
+    return null;
   }
 }

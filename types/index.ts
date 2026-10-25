@@ -378,6 +378,7 @@ export interface ExtractedProductData {
     price: string;
     savings?: string;
   }>;
+  store_logo_url?: string;
 }
 
 export interface BreakoutAlertMetadata {

@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
 import { db, client } from "../db";
-import { scrapedProducts, ads } from "../db/schema";
+import { scrapedProducts, ads, brandDomains } from "../db/schema";
 import { eq, or, and, isNull, inArray, sql, desc } from "drizzle-orm";
 import { extractProductFromUrl } from "../lib/firecrawl";
 import {
@@ -557,6 +557,47 @@ async function runProductScraperBatch() {
             .where(
               sql`${ads.productId} IS NULL AND (${ads.linkUrl} = ${item.url} OR LOWER(TRIM(TRAILING '/' FROM ${ads.linkUrl})) = LOWER(TRIM(TRAILING '/' FROM ${item.url})))`
             );
+        }
+
+        // Persist store logo to brandDomains and trackedPages
+        const storeLogoUrl = res.data.store_logo_url;
+        if (storeLogoUrl && resolvedDomain) {
+          try {
+            await db
+              .update(brandDomains)
+              .set({ profilePicUrl: storeLogoUrl, updatedAt: new Date() })
+              .where(
+                and(
+                  eq(brandDomains.domain, resolvedDomain),
+                  or(
+                    isNull(brandDomains.profilePicUrl),
+                    eq(brandDomains.profilePicUrl, ""),
+                    sql`${brandDomains.profilePicUrl} LIKE '%fbcdn.net%'`,
+                    sql`${brandDomains.profilePicUrl} LIKE '%facebook.com%'`
+                  )
+                )
+              );
+          } catch {}
+
+          try {
+            await db
+              .update(trackedPages)
+              .set({ profilePicUrl: storeLogoUrl, updatedAt: new Date() })
+              .where(
+                and(
+                  or(
+                    eq(trackedPages.canonicalDomain, resolvedDomain),
+                    sql`LOWER(${trackedPages.landingPage}) LIKE ${'%' + resolvedDomain.toLowerCase() + '%'}`
+                  ),
+                  or(
+                    isNull(trackedPages.profilePicUrl),
+                    eq(trackedPages.profilePicUrl, ""),
+                    sql`${trackedPages.profilePicUrl} LIKE '%fbcdn.net%'`,
+                    sql`${trackedPages.profilePicUrl} LIKE '%facebook.com%'`
+                  )
+                )
+              );
+          } catch {}
         }
 
         successCount++;

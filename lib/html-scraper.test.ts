@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isPriceString, isTrackingBeacon, parseProductHtmlContent } from "./html-scraper";
+import {
+  isPriceString,
+  isTrackingBeacon,
+  parseProductHtmlContent,
+  extractStoreLogoFromHtml,
+} from "./html-scraper";
 
 test("isPriceString correctly identifies prices vs actual titles", () => {
   // Price patterns that should be flagged
@@ -200,5 +205,77 @@ test("parseProductHtmlContent rejects header/menu logos and prioritizes WooComme
   );
   // Price should not be defaulted to fake 0 DT
   assert.equal(res.data?.current_price, "");
+  // Store logo should be extracted from the header menu logo
+  assert.equal(
+    res.data?.store_logo_url,
+    "https://yallashopping.tn/wp-content/uploads/2025/06/Untitled-design-2.png"
+  );
+});
+
+test("extractStoreLogoFromHtml extracts JSON-LD Organization logo", () => {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <script type="application/ld+json">
+          {
+            "@context": "https://schema.org",
+            "@type": "Organization",
+            "name": "Baya Store",
+            "url": "https://bayastore.tn",
+            "logo": "https://bayastore.tn/assets/baya-logo.png"
+          }
+        </script>
+      </head>
+      <body></body>
+    </html>
+  `;
+  const logo = extractStoreLogoFromHtml(html, "https://bayastore.tn");
+  assert.equal(logo, "https://bayastore.tn/assets/baya-logo.png");
+});
+
+test("extractStoreLogoFromHtml extracts Apple Touch Icon with relative URL", () => {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <link rel="apple-touch-icon" sizes="180x180" href="/cdn/shop/files/apple-touch-icon.png">
+      </head>
+      <body></body>
+    </html>
+  `;
+  const logo = extractStoreLogoFromHtml(html, "https://mon-store.com/products/sac");
+  assert.equal(logo, "https://mon-store.com/cdn/shop/files/apple-touch-icon.png");
+});
+
+test("extractStoreLogoFromHtml rejects payment badges and selects valid navbar logo", () => {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head></head>
+      <body>
+        <header>
+          <img src="/img/visa-mastercard-badge.png" class="payment-badge" alt="Visa">
+          <img src="//cdn.shopify.com/s/files/1/0001/files/brand-logo.png" class="header__heading-logo" alt="My Brand">
+        </header>
+      </body>
+    </html>
+  `;
+  const logo = extractStoreLogoFromHtml(html, "https://brand.com");
+  assert.equal(logo, "https://cdn.shopify.com/s/files/1/0001/files/brand-logo.png");
+});
+
+test("extractStoreLogoFromHtml extracts OpenGraph logo", () => {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta property="og:logo" content="https://coolbrand.com/images/cool-logo.svg">
+      </head>
+      <body></body>
+    </html>
+  `;
+  const logo = extractStoreLogoFromHtml(html, "https://coolbrand.com");
+  assert.equal(logo, "https://coolbrand.com/images/cool-logo.svg");
 });
 

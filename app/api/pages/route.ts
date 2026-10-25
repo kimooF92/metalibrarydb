@@ -314,6 +314,7 @@ export async function GET(request: Request) {
         id: string;
         domain: string;
         displayName: string;
+        profilePicUrl?: string | null;
         category?: string | null;
         storePlatform?: string | null;
         linkedPagesCount: number;
@@ -404,6 +405,7 @@ export async function GET(request: Request) {
                 id: brandDomains.id,
                 domain: brandDomains.domain,
                 displayName: brandDomains.displayName,
+                profilePicUrl: brandDomains.profilePicUrl,
                 category: brandDomains.category,
                 storePlatform: brandDomains.storePlatform,
               })
@@ -554,6 +556,7 @@ export async function GET(request: Request) {
               id: d.id,
               domain: d.domain,
               displayName: d.displayName,
+              profilePicUrl: d.profilePicUrl,
               category: d.category,
               storePlatform: d.storePlatform,
               linkedPagesCount: sisterMap[d.id]?.count || 1,
@@ -584,6 +587,7 @@ export async function GET(request: Request) {
 
       return {
         ...p,
+        profilePicUrl: p.profilePicUrl || (p.brandDomainId && domainMap[p.brandDomainId]?.profilePicUrl ? domainMap[p.brandDomainId].profilePicUrl : null),
         previousResults: prev,
         difference,
         windowDelta: Object.prototype.hasOwnProperty.call(windowDeltaMap, p.id)

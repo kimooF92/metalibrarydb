@@ -547,6 +547,51 @@ export async function processProductExtraction(
         )
       );
 
+    // Persist official store logo to brand domains and tracked pages
+    const storeLogoUrl = extracted.store_logo_url;
+    if (storeLogoUrl && resolvedDomain) {
+      try {
+        await db
+          .update(brandDomains)
+          .set({ profilePicUrl: storeLogoUrl, updatedAt: updateTime })
+          .where(
+            and(
+              eq(brandDomains.domain, resolvedDomain),
+              or(
+                isNull(brandDomains.profilePicUrl),
+                eq(brandDomains.profilePicUrl, ""),
+                sql`${brandDomains.profilePicUrl} LIKE '%fbcdn.net%'`,
+                sql`${brandDomains.profilePicUrl} LIKE '%facebook.com%'`
+              )
+            )
+          );
+      } catch (logoErr) {
+        console.warn("[Auto-Scraper] Non-fatal brandDomain logo update warning:", logoErr);
+      }
+
+      try {
+        await db
+          .update(trackedPages)
+          .set({ profilePicUrl: storeLogoUrl, updatedAt: updateTime })
+          .where(
+            and(
+              or(
+                eq(trackedPages.canonicalDomain, resolvedDomain),
+                sql`LOWER(${trackedPages.landingPage}) LIKE ${'%' + resolvedDomain.toLowerCase() + '%'}`
+              ),
+              or(
+                isNull(trackedPages.profilePicUrl),
+                eq(trackedPages.profilePicUrl, ""),
+                sql`${trackedPages.profilePicUrl} LIKE '%fbcdn.net%'`,
+                sql`${trackedPages.profilePicUrl} LIKE '%facebook.com%'`
+              )
+            )
+          );
+      } catch (logoErr) {
+        console.warn("[Auto-Scraper] Non-fatal trackedPages logo update warning:", logoErr);
+      }
+    }
+
     // Complete any pending queue jobs for this product
     await db
       .update(queue)
