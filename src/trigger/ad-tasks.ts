@@ -21,7 +21,7 @@ export interface ScanPageCountPayload {
  */
 export const scanPageCountTask = task({
   id: "scan-page-count",
-  machine: "medium-2x", // 2 vCPU, 4 GB RAM (prevents Playwright TASK_PROCESS_OOM_KILLED crashes)
+  machine: "medium-1x", // 1 vCPU, 2 GB RAM (balances memory for Playwright with cost efficiency)
   retry: {
     maxAttempts: 2,
     factor: 2,

@@ -1342,7 +1342,7 @@ export function PagesTable({
                   const isDimmed = !isOnHold && (p.currentResults === 0 || p.status === "unclear");
                   const isSelected = selectedIds.includes(p.id);
                   const isRefreshing = refreshingPageIds.has(p.id);
-                  const isScanning = p.status === "scanning" || p.status === "pending" || isRefreshing;
+                  const isScanning = p.status === "scanning" || isRefreshing;
 
                   return (
                     <tr
@@ -1596,7 +1596,14 @@ export function PagesTable({
                             )}
                           </div>
 
-                          <InlineSparkline points={p.historyPoints} difference={p.difference} />
+                          {isScanning ? (
+                            <div
+                              className="w-13 h-4 rounded bg-slate-200/60 dark:bg-slate-800/60 animate-pulse shrink-0"
+                              title="Updating trendline..."
+                            />
+                          ) : (
+                            <InlineSparkline points={p.historyPoints} difference={p.difference} />
+                          )}
                         </div>
                       </td>
 
@@ -1620,7 +1627,7 @@ export function PagesTable({
                       <td className="px-2.5 md:px-3.5 xl:px-4 py-2.5 hidden md:table-cell whitespace-nowrap">
                         <div className="flex items-center gap-2 flex-nowrap">
                           {/* 1. Status Indicator Badge (rounded badge with background) */}
-                          {p.status === "scanning" ? (
+                          {p.status === "scanning" || isRefreshing ? (
                             <span
                               title="Scan in progress"
                               className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shrink-0"
@@ -1658,7 +1665,12 @@ export function PagesTable({
                           )}
 
                           {/* 2. Pattern Badge / Special State with trailing pause indicator */}
-                          {isOnHold ? (
+                          {isScanning ? (
+                            <div
+                              className="h-5 w-20 rounded-md bg-slate-200/70 dark:bg-slate-800/70 animate-pulse shrink-0"
+                              title="Analyzing scaling pattern..."
+                            />
+                          ) : isOnHold ? (
                             <span
                               className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 shrink-0"
                               title={`Account hold detected — was ${p.lastKnownValidResults ?? "?"} ads. Grace period verification scan ${p.consecutiveZeroScans ?? 1}/3.`}
@@ -1778,17 +1790,26 @@ export function PagesTable({
 
                       {/* Last Checked (Relative Timestamps) */}
                       <td className="px-2.5 md:px-3.5 xl:px-4 py-2.5 text-slate-500 dark:text-slate-400 text-[11px] whitespace-nowrap">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-medium text-[11px] text-slate-700 dark:text-slate-300" title={p.lastChecked ? `Ad count checked: ${new Date(p.lastChecked).toLocaleString()}` : "Never checked"}>
-                            {formatRelativeTime(p.lastChecked)}
-                          </span>
-                          {p.lastCreativeScan && (
-                            <span className="text-[10px] text-purple-600 dark:text-purple-400 flex items-center gap-0.5" title={`Ad Spy scan: ${new Date(p.lastCreativeScan).toLocaleString()}`}>
-                              <Sparkles className="w-2.5 h-2.5 shrink-0" />
-                              {formatRelativeTime(p.lastCreativeScan)}
+                        {isScanning ? (
+                          <div className="flex flex-col gap-1 py-0.5" title="Updating scan timestamp...">
+                            <div className="h-3.5 w-14 rounded bg-slate-200/80 dark:bg-slate-800/80 animate-pulse" />
+                            {p.lastCreativeScan && (
+                              <div className="h-3 w-10 rounded bg-slate-200/40 dark:bg-slate-800/40 animate-pulse" />
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-medium text-[11px] text-slate-700 dark:text-slate-300" title={p.lastChecked ? `Ad count checked: ${new Date(p.lastChecked).toLocaleString()}` : "Never checked"}>
+                              {formatRelativeTime(p.lastChecked)}
                             </span>
-                          )}
-                        </div>
+                            {p.lastCreativeScan && (
+                              <span className="text-[10px] text-purple-600 dark:text-purple-400 flex items-center gap-0.5" title={`Ad Spy scan: ${new Date(p.lastCreativeScan).toLocaleString()}`}>
+                                <Sparkles className="w-2.5 h-2.5 shrink-0" />
+                                {formatRelativeTime(p.lastCreativeScan)}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
 
                       {/* Actions */}
