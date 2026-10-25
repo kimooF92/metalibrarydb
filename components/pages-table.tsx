@@ -40,7 +40,7 @@ import {
   Clock,
   CheckCircle2,
   Package,
-  Globe,
+  Store,
   TrendingUp,
   TrendingDown,
   FlaskConical,
@@ -1519,7 +1519,7 @@ export function PagesTable({
                                     className="inline-flex items-center gap-1 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer group/domain truncate max-w-[200px]"
                                     title={`Part of ${p.brandDomain.domain} portfolio (${p.brandDomain.linkedPagesCount} pages, ${p.brandDomain.totalCombinedAds} combined ads). Click to manage.`}
                                   >
-                                    <Globe className="w-2.5 h-2.5 shrink-0 opacity-60 group-hover/domain:opacity-100" />
+                                    <Store className="w-2.5 h-2.5 shrink-0 opacity-60 group-hover/domain:opacity-100" />
                                     <span className="truncate">{p.brandDomain.domain}</span>
                                     <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
                                       ({p.brandDomain.linkedPagesCount} pages)

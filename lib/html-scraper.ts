@@ -224,7 +224,9 @@ export function extractStoreLogoFromHtml(html: string, baseUrl: string): string 
       s.includes("placeholder") ||
       s.includes("no-logo") ||
       s.includes("nologo") ||
-      s.includes("dummy")
+      s.includes("dummy") ||
+      s.includes("google.com/s2/favicons") ||
+      s.includes("globe")
     ) {
       return true;
     }

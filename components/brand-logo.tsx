@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import Image from "next/image";
-import { resolveTrackableDomain } from "@/lib/url-parser";
 
 interface BrandLogoProps {
   name?: string | null;
@@ -15,14 +13,14 @@ interface BrandLogoProps {
 }
 
 const SIZE_MAP = {
-  xs: { container: "w-5 h-5 min-w-5 rounded-md", text: "text-[9px]", icon: 20 },
-  sm: { container: "w-6 h-6 min-w-6 rounded-md", text: "text-[10px]", icon: 24 },
-  md: { container: "w-8 h-8 min-w-8 rounded-lg", text: "text-xs", icon: 32 },
-  lg: { container: "w-12 h-12 min-w-12 rounded-xl", text: "text-base font-bold", icon: 48 },
-  xl: { container: "w-16 h-16 min-w-16 rounded-2xl", text: "text-xl font-bold", icon: 64 },
+  xs: { container: "w-5 h-5 min-w-5 rounded-md", text: "text-[9px]", padding: "p-0.5" },
+  sm: { container: "w-6 h-6 min-w-6 rounded-md", text: "text-[10px]", padding: "p-0.5" },
+  md: { container: "w-8 h-8 min-w-8 rounded-lg", text: "text-xs", padding: "p-1" },
+  lg: { container: "w-12 h-12 min-w-12 rounded-xl", text: "text-base font-bold", padding: "p-1.5" },
+  xl: { container: "w-16 h-16 min-w-16 rounded-2xl", text: "text-xl font-bold", padding: "p-2" },
 };
 
-// Deterministic gradient palettes for fallback initial avatars
+// Deterministic vibrant gradient palettes for fallback letter avatars
 const GRADIENTS = [
   "from-indigo-500 to-purple-600 text-white",
   "from-blue-500 to-indigo-600 text-white",
@@ -51,58 +49,44 @@ export function BrandLogo({
   className = "",
   showHoverPreview = false,
 }: BrandLogoProps) {
-  // Stage 0: url (if provided), Stage 1: domain favicon, Stage 2: letter fallback
-  const [stage, setStage] = useState<number>(0);
+  const [imgFailed, setImgFailed] = useState<boolean>(false);
   const [isHovered, setIsHovered] = useState(false);
 
-  // Clean the domain if provided (e.g. https://zara.com/tn -> zara.com)
+  const cleanUrl = useMemo(() => {
+    if (!url || typeof url !== "string") return null;
+    const trimmed = url.trim();
+    if (!trimmed || trimmed === "null" || trimmed === "undefined") return null;
+    // Reject any Google Favicon URL that could return a generic globe
+    if (trimmed.includes("google.com/s2/favicons")) return null;
+    return trimmed;
+  }, [url]);
+
+  // Clean domain for display / initial fallback
   const cleanDomain = useMemo(() => {
     if (!domain) return null;
-    const raw = resolveTrackableDomain(domain) || domain.replace(/^https?:\/\//i, "").split("/")[0].split("?")[0];
-    const cleaned = raw.replace(/^www\./i, "").trim().toLowerCase();
-    // Exclude social networks and strings without a valid domain TLD dot
-    if (
-      !cleaned ||
-      cleaned.includes("facebook.com") ||
-      cleaned.includes("fb.me") ||
-      cleaned.includes("instagram.com") ||
-      !cleaned.includes(".") ||
-      cleaned.includes(" ")
-    ) {
+    const cleaned = domain
+      .replace(/^https?:\/\//i, "")
+      .replace(/^www\./i, "")
+      .split("/")[0]
+      .split("?")[0]
+      .trim()
+      .toLowerCase();
+    if (!cleaned || cleaned.includes("facebook.com") || cleaned.includes("instagram.com")) {
       return null;
     }
     return cleaned;
   }, [domain]);
 
-  // Reset stage if url or domain changes
+  // Reset error state if url changes
   useEffect(() => {
-    setStage(0);
-  }, [url, cleanDomain]);
+    setImgFailed(false);
+  }, [cleanUrl]);
 
   const sizeCfg = SIZE_MAP[size] || SIZE_MAP.sm;
   const initial = (name || cleanDomain || "B").trim().charAt(0).toUpperCase();
   const gradientClass = useMemo(() => getGradient(name || cleanDomain || "Brand"), [name, cleanDomain]);
 
-  // Compute favicon URL (with default_icon=404 so Google doesn't return the generic blue globe)
-  const faviconUrl = cleanDomain
-    ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(cleanDomain)}&sz=128&default_icon=404`
-    : null;
-
-  // Determine active image source
-  let activeSrc: string | null = null;
-  if (stage === 0 && url) {
-    activeSrc = url;
-  } else if ((stage <= 1 && faviconUrl) || (!url && stage === 0 && faviconUrl)) {
-    activeSrc = faviconUrl;
-  }
-
-  const handleImageError = () => {
-    if (stage === 0 && faviconUrl && activeSrc !== faviconUrl) {
-      setStage(1); // Try favicon next
-    } else {
-      setStage(2); // Fallback to initial badge
-    }
-  };
+  const hasImage = Boolean(cleanUrl && !imgFailed);
 
   return (
     <div
@@ -110,20 +94,21 @@ export function BrandLogo({
       onMouseEnter={() => showHoverPreview && setIsHovered(true)}
       onMouseLeave={() => showHoverPreview && setIsHovered(false)}
     >
+      {/* Main Avatar Badge Tile */}
       <div
-        className={`${sizeCfg.container} overflow-hidden border border-slate-200/80 dark:border-slate-800/80 bg-slate-100 dark:bg-slate-900 flex items-center justify-center shadow-2xs transition-transform duration-150 ${
+        className={`${sizeCfg.container} overflow-hidden border border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-slate-800 flex items-center justify-center shadow-2xs transition-transform duration-150 ${
           showHoverPreview ? "hover:scale-105 cursor-pointer" : ""
         }`}
         title={name || cleanDomain || "Brand logo"}
       >
-        {activeSrc && stage < 2 ? (
+        {hasImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={activeSrc}
+            src={cleanUrl!}
             alt={name ? `${name} logo` : "Brand logo"}
-            className="w-full h-full object-cover rounded-[inherit]"
+            className={`w-full h-full object-contain ${sizeCfg.padding} rounded-[inherit]`}
             loading="lazy"
-            onError={handleImageError}
+            onError={() => setImgFailed(true)}
           />
         ) : (
           <div
@@ -134,35 +119,74 @@ export function BrandLogo({
         )}
       </div>
 
-      {/* Optional Enlarged Hover Popover */}
-      {showHoverPreview && isHovered && (activeSrc || name) && (
+      {/* Enlarged Hover Popover with Dual Dark/Light Background Preview for Transparent Logos */}
+      {showHoverPreview && isHovered && (hasImage || name) && (
         <div className="absolute left-0 bottom-full mb-2 z-50 pointer-events-none animate-in fade-in zoom-in-95 duration-100">
-          <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl flex items-center gap-2.5 min-w-[140px] max-w-[240px]">
-            <div className="w-12 h-12 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 overflow-hidden flex items-center justify-center shrink-0">
-              {activeSrc && stage < 2 ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={activeSrc}
-                  alt={name || "Brand logo"}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div
-                  className={`w-full h-full bg-linear-to-br ${gradientClass} flex items-center justify-center font-black text-lg`}
-                >
-                  {initial}
-                </div>
-              )}
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                {name || "Brand"}
+          <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl flex flex-col gap-2.5 min-w-[180px] max-w-[280px]">
+            {/* Dual Background Previews for Transparent Logos (Dark & Light) */}
+            <div className="flex items-center gap-2">
+              {/* Light Background Preview Tile */}
+              <div
+                className="w-12 h-12 rounded-lg border border-slate-200/90 bg-white p-1 overflow-hidden flex flex-col items-center justify-center shrink-0 shadow-2xs relative group/light"
+                title="Preview on Light Background"
+              >
+                {hasImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={cleanUrl!}
+                    alt={name || "Brand logo"}
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  <div
+                    className={`w-full h-full rounded-md bg-linear-to-br ${gradientClass} flex items-center justify-center font-black text-lg`}
+                  >
+                    {initial}
+                  </div>
+                )}
+                <span className="absolute bottom-0 inset-x-0 bg-slate-900/70 text-[7px] text-white font-semibold text-center py-0.2 tracking-wider uppercase">
+                  Light
+                </span>
               </div>
-              {cleanDomain && (
-                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate">
-                  {cleanDomain}
+
+              {/* Dark Background Preview Tile */}
+              <div
+                className="w-12 h-12 rounded-lg border border-slate-700 bg-slate-950 p-1 overflow-hidden flex flex-col items-center justify-center shrink-0 shadow-2xs relative group/dark"
+                title="Preview on Dark Background"
+              >
+                {hasImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={cleanUrl!}
+                    alt={name || "Brand logo"}
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  <div
+                    className={`w-full h-full rounded-md bg-linear-to-br ${gradientClass} flex items-center justify-center font-black text-lg`}
+                  >
+                    {initial}
+                  </div>
+                )}
+                <span className="absolute bottom-0 inset-x-0 bg-white/20 text-[7px] text-white font-semibold text-center py-0.2 tracking-wider uppercase backdrop-blur-xs">
+                  Dark
+                </span>
+              </div>
+
+              {/* Brand Metadata */}
+              <div className="min-w-0 flex-1 pl-1">
+                <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                  {name || "Brand"}
                 </div>
-              )}
+                {cleanDomain && (
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate">
+                    {cleanDomain}
+                  </div>
+                )}
+                <div className="text-[9px] text-indigo-600 dark:text-indigo-400 font-medium mt-0.5">
+                  {hasImage ? "Store Logo" : "Initial Badge"}
+                </div>
+              </div>
             </div>
           </div>
         </div>
