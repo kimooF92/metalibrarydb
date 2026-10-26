@@ -27,7 +27,7 @@ import {
   Rocket,
   Tag,
   Layers,
-  Code2,
+  MapPin,
 } from "lucide-react";
 import { ModalTab, generateAIProductPrompt, generateCleanMarkdown } from "./modal-types";
 import { getNicheDisplayLabel, getSubNicheDisplayLabel } from "@/lib/niches-taxonomy";
@@ -50,7 +50,8 @@ interface ModalHeaderProps {
   isQueueingVerify: boolean;
   onRefresh?: () => Promise<void>;
   isRefreshing: boolean;
-  onExtractJsonLd?: () => void;
+  onQueueLocalRescan?: () => void;
+  isQueueingLocalRescan?: boolean;
   onDelete?: (productId: string) => Promise<void>;
   onClose: () => void;
   currentIndex?: number;
@@ -76,7 +77,8 @@ export function ModalHeader({
   isQueueingVerify,
   onRefresh,
   isRefreshing,
-  onExtractJsonLd,
+  onQueueLocalRescan,
+  isQueueingLocalRescan = false,
   onDelete,
   onClose,
   currentIndex = -1,
@@ -587,20 +589,32 @@ export function ModalHeader({
                       </button>
                     )}
 
-                    {/* Extract JSON-LD */}
-                    {onExtractJsonLd && product.url && (
+                    {/* Queue Local Price Extraction */}
+                    {onQueueLocalRescan && product.url && (
                       <button
                         type="button"
                         onClick={() => {
                           setShowActionsMenu(false);
-                          onExtractJsonLd();
+                          onQueueLocalRescan();
                         }}
-                        className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-amber-50 dark:hover:bg-amber-950/60 hover:text-amber-600 dark:hover:text-amber-400 flex items-center gap-2 transition-colors cursor-pointer"
+                        disabled={isQueueingLocalRescan || product.scrapeStatus === "pending"}
+                        className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 hover:text-emerald-600 dark:hover:text-emerald-400 flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-60"
                       >
-                        <Code2 className="w-3.5 h-3.5 text-amber-500" />
-                        <div>
-                          <div className="font-semibold text-slate-900 dark:text-slate-100">Extract JSON-LD</div>
-                          <div className="text-[10px] text-slate-400">Inspect & extract structured schema</div>
+                        <MapPin className={`w-3.5 h-3.5 text-emerald-500 shrink-0 ${isQueueingLocalRescan ? "animate-spin" : ""}`} />
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-slate-900 dark:text-slate-100 flex items-center justify-between gap-1">
+                            <span>Queue Local Price Extraction</span>
+                            {product.scrapeStatus === "pending" && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold border border-amber-500/20">
+                                Pending
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-400 truncate">
+                            {product.scrapeStatus === "pending"
+                              ? "Awaiting local residential worker pickup"
+                              : "Set pending for local worker to extract true price"}
+                          </div>
                         </div>
                       </button>
                     )}

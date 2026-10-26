@@ -72,6 +72,7 @@ export function ProductDetailsModal({
   const [loadingNetwork, setLoadingNetwork] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isQueueingVerify, setIsQueueingVerify] = useState(false);
+  const [isQueueingLocalRescan, setIsQueueingLocalRescan] = useState(false);
   const [lightboxAd, setLightboxAd] = useState<Ad | null>(null);
   const [showJsonLdModal, setShowJsonLdModal] = useState(false);
 
@@ -229,6 +230,43 @@ export function ProductDetailsModal({
     }
   };
 
+  const handleQueueLocalRescan = async () => {
+    if (!currentProduct?.id || isQueueingLocalRescan) return;
+    setIsQueueingLocalRescan(true);
+    try {
+      const res = await fetch(`/api/products/${currentProduct.id}/queue-rescan`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to queue local price extraction");
+      }
+
+      const updated: ScrapedProduct = {
+        ...currentProduct,
+        scrapeStatus: "pending",
+        failureReason: "Queued for local worker residential price extraction",
+      };
+      setCurrentProduct(updated);
+      onProductUpdate?.(updated);
+
+      showToast({
+        type: "success",
+        title: "Queued for Local Price Extraction",
+        message: "Status set to Pending. Your local residential worker will scrape and validate the authentic store price.",
+      });
+    } catch (err: any) {
+      console.error("Failed to queue local rescan:", err);
+      showToast({
+        type: "error",
+        title: "Queue Failed",
+        message: err.message || "Network error queueing product for local extraction.",
+      });
+    } finally {
+      setIsQueueingLocalRescan(false);
+    }
+  };
+
   const allImages = [
     ...(currentProduct.mainImageUrl ? [currentProduct.mainImageUrl] : []),
     ...(currentProduct.galleryImages || []),
@@ -281,7 +319,8 @@ export function ProductDetailsModal({
           isQueueingVerify={isQueueingVerify}
           onRefresh={onRefresh ? handleRefresh : undefined}
           isRefreshing={isRefreshing}
-          onExtractJsonLd={() => setShowJsonLdModal(true)}
+          onQueueLocalRescan={handleQueueLocalRescan}
+          isQueueingLocalRescan={isQueueingLocalRescan}
           onDelete={onDelete}
           onClose={onClose}
           currentIndex={currentIndex}
