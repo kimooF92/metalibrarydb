@@ -563,32 +563,25 @@ async function runWorker() {
         const lockResult = await acquireLockDetailed(lockKey, 180);
         if (!lockResult.acquired) {
           if (lockResult.reason === "unavailable") {
-            console.warn(
-              `[Worker] ⚠️ Redis lock unavailable for "${targetDisplayName}". Retaining queue job for retry.`
+            console.log(
+              `[Worker] ℹ️ Redis lock unavailable (unconfigured or unreachable) for "${targetDisplayName}". Proceeding with local database queue lease.`
+            );
+          } else {
+            console.log(
+              `[Worker] 🔒 Page "${targetDisplayName}" is already locked by cloud or another worker. Skipping duplicate scrape.`
             );
             if (queueJob.id) {
               await db
                 .update(queue)
-                .set({ status: "pending", startedAt: null })
+                .set({ status: "completed", finishedAt: new Date() })
                 .where(eq(queue.id, queueJob.id))
                 .catch(() => {});
             }
             continue;
           }
-
-          console.log(
-            `[Worker] 🔒 Page "${targetDisplayName}" is already locked by cloud or another worker. Skipping duplicate scrape.`
-          );
-          if (queueJob.id) {
-            await db
-              .update(queue)
-              .set({ status: "completed", finishedAt: new Date() })
-              .where(eq(queue.id, queueJob.id))
-              .catch(() => {});
-          }
-          continue;
+        } else {
+          lockToken = lockResult.token;
         }
-        lockToken = lockResult.token;
       }
 
       // Handle durable background product scraping job (Task 2.1)

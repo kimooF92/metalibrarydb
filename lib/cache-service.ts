@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import { redis } from "./redis";
+import { redis, isRedisAvailable } from "./redis";
 
 interface MemoryEntry {
   value: any;
@@ -268,6 +268,9 @@ export async function acquireLockDetailed(
   ttlSeconds = 120,
   ownerToken?: string
 ): Promise<AcquireLockResult> {
+  if (!redis) {
+    isRedisAvailable();
+  }
   if (!redis) return { acquired: false, reason: "unavailable" };
 
   const token =
