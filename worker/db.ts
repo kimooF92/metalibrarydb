@@ -1220,9 +1220,53 @@ interface ApifyDeltaTask {
 
 const apifyDeltaQueue: ApifyDeltaTask[] = [];
 let isProcessingApifyQueue = false;
+const deltaDrainListeners: Array<() => void> = [];
+
+function checkDeltaDrainNotification() {
+  if (!isProcessingApifyQueue && apifyDeltaQueue.length === 0) {
+    while (deltaDrainListeners.length > 0) {
+      const listener = deltaDrainListeners.shift();
+      listener?.();
+    }
+  }
+}
+
+export function hasActiveApifyDeltaTasks(): boolean {
+  return isProcessingApifyQueue || apifyDeltaQueue.length > 0;
+}
+
+/**
+ * Awaits until all queued background Apify delta scans complete or until timeout expires.
+ */
+export async function waitForApifyDeltaQueueDrain(timeoutMs: number = 60000): Promise<{ drained: boolean }> {
+  if (!hasActiveApifyDeltaTasks()) {
+    return { drained: true };
+  }
+
+  return new Promise((resolve) => {
+    let resolved = false;
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        resolve({ drained: false });
+      }
+    }, timeoutMs);
+
+    deltaDrainListeners.push(() => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        resolve({ drained: true });
+      }
+    });
+  });
+}
 
 async function processNextApifyDelta() {
-  if (isProcessingApifyQueue || apifyDeltaQueue.length === 0) return;
+  if (isProcessingApifyQueue || apifyDeltaQueue.length === 0) {
+    checkDeltaDrainNotification();
+    return;
+  }
   isProcessingApifyQueue = true;
 
   const nextTask = apifyDeltaQueue.shift();
@@ -1233,6 +1277,7 @@ async function processNextApifyDelta() {
       console.error("[Apify Auto-Trigger Queue] Task error:", err);
     } finally {
       isProcessingApifyQueue = false;
+      checkDeltaDrainNotification();
       // 2-second cooldown between consecutive Apify actor runs
       setTimeout(() => {
         processNextApifyDelta();
@@ -1240,6 +1285,7 @@ async function processNextApifyDelta() {
     }
   } else {
     isProcessingApifyQueue = false;
+    checkDeltaDrainNotification();
   }
 }
 

@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { creativeScans, trackedPages } from "@/db/schema";
-import { eq, inArray, desc, and } from "drizzle-orm";
+import { eq, inArray, desc, and, or, lt, isNull } from "drizzle-orm";
 import { getApifyTokens, fetchApifyDatasetItems } from "@/lib/apify";
 import { ingestApifyDatasetItems } from "@/lib/apify-ingest";
 
@@ -88,7 +88,7 @@ export async function syncApifyRuns(): Promise<{ syncedCount: number; checkedCou
 
   try {
     const runningScans = await db.query.creativeScans.findMany({
-      where: eq(creativeScans.status, "running"),
+      where: inArray(creativeScans.status, ["running", "ingesting"]),
       orderBy: [desc(creativeScans.createdAt)],
       limit: 50,
     });
@@ -127,11 +127,26 @@ export async function syncApifyRuns(): Promise<{ syncedCount: number; checkedCou
 
       const status = runDetails?.status || "RUNNING";
       if (status === "SUCCEEDED" && datasetId) {
-        // Atomic claim: only proceed if scan is still in status 'running'
+        // Atomic claim: only proceed if scan is still 'running' or stalled 'ingesting' (> 2m ago)
+        const twoMinsAgo = new Date(Date.now() - 2 * 60 * 1000);
         const [claimed] = await db
           .update(creativeScans)
-          .set({ status: "ingesting", outcomeDetails: "Ingesting Apify dataset items..." })
-          .where(and(eq(creativeScans.id, scan.id), eq(creativeScans.status, "running")))
+          .set({ status: "ingesting", outcomeDetails: "Ingesting Apify dataset items...", startedAt: new Date() })
+          .where(
+            and(
+              eq(creativeScans.id, scan.id),
+              or(
+                eq(creativeScans.status, "running"),
+                and(
+                  eq(creativeScans.status, "ingesting"),
+                  or(
+                    isNull(creativeScans.startedAt),
+                    lt(creativeScans.startedAt, twoMinsAgo)
+                  )
+                )
+              )
+            )
+          )
           .returning();
 
         if (!claimed) {
@@ -139,10 +154,24 @@ export async function syncApifyRuns(): Promise<{ syncedCount: number; checkedCou
           continue;
         }
 
-        console.log(`[Apify Sync] Scan ${scan.id} finished on Apify! Fetching dataset ${datasetId}...`);
-        const items = await fetchApifyDatasetItems(datasetId);
-        await ingestApifyDatasetItems(scan.id, items);
-        syncedCount++;
+        try {
+          console.log(`[Apify Sync] Scan ${scan.id} finished on Apify! Fetching dataset ${datasetId}...`);
+          const items = await fetchApifyDatasetItems(datasetId);
+          await ingestApifyDatasetItems(scan.id, items);
+          syncedCount++;
+        } catch (ingestErr: any) {
+          console.error(`[Apify Sync] Ingest error for scan ${scan.id}:`, ingestErr);
+          await db
+            .update(creativeScans)
+            .set({
+              status: "failed",
+              failureReason: "ingest_error",
+              outcomeDetails: `Failed during dataset ingestion: ${ingestErr?.message || ingestErr}`,
+              finishedAt: new Date(),
+            })
+            .where(eq(creativeScans.id, scan.id));
+          await resetTrackedPageFromScan(scan.id);
+        }
       } else if (status === "FAILED" || status === "ABORTED" || status === "TIMED-OUT") {
         console.warn(`[Apify Sync] Scan ${scan.id} failed on Apify with status ${status}.`);
         await db
@@ -217,9 +246,24 @@ export function pollApifyRunUntilDone(
           }
 
           console.log(`[Apify Poller] ⚡ Run ${runId} SUCCEEDED on attempt #${attempts}! Ingesting dataset ${targetDatasetId}...`);
-          const items = await fetchApifyDatasetItems(targetDatasetId);
-          await ingestApifyDatasetItems(creativeScanId, items);
-          resolve(true);
+          try {
+            const items = await fetchApifyDatasetItems(targetDatasetId);
+            await ingestApifyDatasetItems(creativeScanId, items);
+            resolve(true);
+          } catch (ingestErr: any) {
+            console.error(`[Apify Poller] Ingest error for run ${runId}:`, ingestErr);
+            await db
+              .update(creativeScans)
+              .set({
+                status: "failed",
+                failureReason: "ingest_error",
+                outcomeDetails: `Failed during dataset ingestion: ${ingestErr?.message || ingestErr}`,
+                finishedAt: new Date(),
+              })
+              .where(eq(creativeScans.id, creativeScanId));
+            await resetTrackedPageFromScan(creativeScanId);
+            resolve(false);
+          }
           return;
         }
 

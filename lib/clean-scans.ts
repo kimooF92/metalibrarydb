@@ -21,15 +21,15 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 3): Promise<{
   let fixedQueue = 0;
   let fixedDiscoveryRuns = 0;
 
-  // 1. Reset orphaned creative_scans
+  // 1. Reset orphaned creative_scans (both running and abandoned ingesting)
   const stuckScans = timeoutMinutes === 0
     ? await db.query.creativeScans.findMany({
-        where: eq(creativeScans.status, "running"),
+        where: inArray(creativeScans.status, ["running", "ingesting"]),
         columns: { id: true },
       })
     : await db.query.creativeScans.findMany({
         where: and(
-          eq(creativeScans.status, "running"),
+          inArray(creativeScans.status, ["running", "ingesting"]),
           or(
             isNull(creativeScans.startedAt),
             lt(creativeScans.startedAt, cutoff),

@@ -542,6 +542,13 @@ async function runWorker() {
         }
 
         if (isSingleRun) {
+          try {
+            const { hasActiveApifyDeltaTasks, waitForApifyDeltaQueueDrain } = await import("./db");
+            if (hasActiveApifyDeltaTasks()) {
+              console.log("[Single Run] Queue is empty, but background Apify delta scans are in flight. Awaiting completion...");
+              await waitForApifyDeltaQueueDrain(90000);
+            }
+          } catch {}
           console.log("[Single Run] Queue is empty. Exiting worker cleanly.");
           process.exit(0);
         }
