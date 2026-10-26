@@ -16,9 +16,11 @@ import { UserRole } from "@/lib/auth";
 
 export function AppShell({
   children,
+  modal,
   initialRole = "admin",
 }: {
   children: React.ReactNode;
+  modal?: React.ReactNode;
   initialRole?: UserRole;
 }) {
   const pathname = usePathname();
@@ -49,6 +51,7 @@ export function AppShell({
                 </main>
               </div>
               <ManageWorkspaceModal />
+              {modal}
             </AddUrlModalProvider>
           </SmallPagesScanProvider>
         </SidebarProvider>

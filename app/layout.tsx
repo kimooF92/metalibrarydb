@@ -32,8 +32,10 @@ import { SESSION_COOKIE_NAME, verifySessionToken, UserRole } from "@/lib/auth";
 
 export default async function RootLayout({
   children,
+  modal,
 }: Readonly<{
   children: React.ReactNode;
+  modal?: React.ReactNode;
 }>) {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
@@ -62,7 +64,7 @@ export default async function RootLayout({
       </head>
       <body className={`${inter.className} bg-background text-foreground h-screen w-screen flex flex-col md:flex-row antialiased overflow-hidden`}>
         <ToastProvider>
-          <AppShell initialRole={initialRole}>
+          <AppShell initialRole={initialRole} modal={modal}>
             {children}
           </AppShell>
         </ToastProvider>
