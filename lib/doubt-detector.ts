@@ -170,19 +170,24 @@ export function harvestPriceCandidates(
 
   // 1. Structured JSON-LD Product Offer (highest confidence)
   if (html) {
-    const jsonLdRegex = /<script\s+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    const jsonLdRegex = /<script\b[^>]*\btype=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
     let jMatch: RegExpExecArray | null;
     while ((jMatch = jsonLdRegex.exec(html)) !== null) {
       try {
-        const parsed = JSON.parse(jMatch[1].trim());
+        let raw = jMatch[1].trim();
+        if (raw.startsWith("<!--")) {
+          raw = raw.replace(/^<!--\s*/, "").replace(/\s*-->$/, "");
+        }
+        const parsed = JSON.parse(raw);
         const matchIdx = jMatch.index;
         const checkOffer = (obj: any) => {
           if (!obj) return;
           const offer = obj.offers
             ? (Array.isArray(obj.offers) ? obj.offers[0] : obj.offers)
             : (obj["@type"] === "Offer" ? obj : null);
-          if (offer?.price) {
-            recordCandidate(String(offer.price), matchIdx, 10, true);
+          const p = offer?.price ?? offer?.lowPrice;
+          if (p !== undefined && p !== null && String(p).trim() !== "") {
+            recordCandidate(String(p), matchIdx, 10, true);
           }
         };
         if (Array.isArray(parsed)) parsed.forEach(checkOffer);

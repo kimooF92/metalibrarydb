@@ -3,16 +3,38 @@ import net from "net";
 import { isCategoryUrl } from "./url-parser";
 
 /**
+ * Helper to check if a schema.org @type matches Product
+ */
+function isProductSchemaType(type: any): boolean {
+  if (typeof type === "string") {
+    return (
+      type === "Product" ||
+      type === "http://schema.org/Product" ||
+      type === "https://schema.org/Product" ||
+      type === "IndividualProduct"
+    );
+  }
+  if (Array.isArray(type)) {
+    return type.some((t) => isProductSchemaType(t));
+  }
+  return false;
+}
+
+/**
  * Extracts JSON-LD schema objects from HTML content.
  */
 export function extractJsonLd(html: string): any[] {
   const results: any[] = [];
-  const regex = /<script\s+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  const regex = /<script\b[^>]*\btype=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
   let match;
 
   while ((match = regex.exec(html)) !== null) {
     try {
-      const parsed = JSON.parse(match[1].trim());
+      let raw = match[1].trim();
+      if (raw.startsWith("<!--")) {
+        raw = raw.replace(/^<!--\s*/, "").replace(/\s*-->$/, "");
+      }
+      const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         results.push(...parsed);
       } else if (parsed && typeof parsed === "object") {
@@ -21,22 +43,6 @@ export function extractJsonLd(html: string): any[] {
     } catch {
       // Ignore invalid JSON in ld+json scripts
     }
-  }
-
-  return results;
-}
-
-/**
- * Extracts raw unparsed JSON-LD script tag bodies from HTML content.
- */
-export function extractRawJsonLdScripts(html: string): string[] {
-  const results: string[] = [];
-  const regex = /<script\s+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
-  let match;
-
-  while ((match = regex.exec(html)) !== null) {
-    const raw = match[1].trim();
-    if (raw) results.push(raw);
   }
 
   return results;
@@ -477,13 +483,13 @@ export function parseProductHtmlContent(
     let jsonLdProduct: any = null;
 
     for (const item of jsonLdList) {
-      if (item["@type"] === "Product" || item["@type"] === "http://schema.org/Product") {
+      if (isProductSchemaType(item["@type"])) {
         jsonLdProduct = item;
         break;
       }
       if (Array.isArray(item["@graph"])) {
         const graphProd = item["@graph"].find(
-          (g: any) => g["@type"] === "Product" || g["@type"] === "http://schema.org/Product"
+          (g: any) => isProductSchemaType(g["@type"])
         );
         if (graphProd) {
           jsonLdProduct = graphProd;
@@ -856,13 +862,15 @@ export function parseProductHtmlContent(
     // 4b. Check JSON-LD offers price
     if (!currentPrice && jsonLdProduct?.offers) {
       const offer = Array.isArray(jsonLdProduct.offers) ? jsonLdProduct.offers[0] : jsonLdProduct.offers;
-      if (offer?.price) {
-        let priceNum = parseFloat(String(offer.price).replace(",", "."));
-        if (currency === "TND" && priceNum >= 1000 && (String(offer.price).includes(",000") || String(offer.price).includes(".000"))) {
+      const rawOfferPrice = offer?.price ?? offer?.lowPrice ?? offer?.priceSpecification?.price;
+      if (rawOfferPrice !== undefined && rawOfferPrice !== null && String(rawOfferPrice).trim() !== "") {
+        let priceNum = parseFloat(String(rawOfferPrice).replace(",", "."));
+        if (currency === "TND" && priceNum >= 1000 && (String(rawOfferPrice).includes(",000") || String(rawOfferPrice).includes(".000"))) {
           priceNum = Math.round(priceNum / 1000);
         }
-        if (offer.priceCurrency) {
-          const rawOfferCurr = String(offer.priceCurrency).trim().toUpperCase();
+        const offerCurrency = offer.priceCurrency || offer.priceSpecification?.priceCurrency;
+        if (offerCurrency) {
+          const rawOfferCurr = String(offerCurrency).trim().toUpperCase();
           const isForeignGeoSwitch = (rawOfferCurr === "USD" || rawOfferCurr === "EUR" || rawOfferCurr === "GBP") && isLocalStore;
 
           if (isForeignGeoSwitch) {
