@@ -517,12 +517,19 @@ export async function processProductExtraction(
     const isOutOfStock =
       /rupture\s*de\s*stock|out\s*of\s*stock|actuellement\s*en\s*rupture|غير\s*متوفر|نفذت\s*الكمية/i.test(
         rawHtml
-      );
-    const failureReason = isOutOfStock && !effectivePrice
+    const isForeignPrice = Boolean(
+      effectivePrice && /(?:\$|€|£|¥|\b(?:USD|EUR|GBP)\b)/i.test(effectivePrice)
+    );
+
+    let finalScrapeStatus = isOutOfStock && !effectivePrice ? "failed" : effectiveStatus;
+    let finalFailureReason = isOutOfStock && !effectivePrice
       ? "Produit en rupture de stock sur le site web"
       : effectiveReason;
 
-    const finalScrapeStatus = isOutOfStock && !effectivePrice ? "failed" : effectiveStatus;
+    if (isForeignPrice) {
+      finalScrapeStatus = "needs_review";
+      finalFailureReason = `Foreign currency detected (${effectivePrice}) - Queued for local worker residential validation`;
+    }
 
     const updateTime = new Date();
     await db
@@ -547,11 +554,29 @@ export async function processProductExtraction(
         targetAudience: enhanced.targetAudience,
         rawExtract: extractionResult.raw || null,
         scrapeStatus: finalScrapeStatus,
-        failureReason: failureReason || null,
+        failureReason: finalFailureReason || null,
         lastScrapedAt: updateTime,
         updatedAt: updateTime,
       })
       .where(eq(scrapedProducts.id, productId));
+
+    // When foreign currency is captured in cloud, enqueue for local worker residential validation
+    if (isForeignPrice) {
+      try {
+        await db
+          .insert(queue)
+          .values({
+            jobType: "product_scrape",
+            status: "pending",
+            priority: 8,
+            failureReason: `product:${productId}`,
+            workspaceId: options?.workspaceId || null,
+          })
+          .onConflictDoNothing();
+      } catch (queueErr) {
+        console.warn("[Product Ingest] Non-fatal queue insertion warning:", queueErr);
+      }
+    }
 
     // Task 3.1: Exact canonical normalized URL equality linking (replacing unindexed LIKE)
     await db

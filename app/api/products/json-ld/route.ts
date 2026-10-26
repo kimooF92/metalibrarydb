@@ -82,10 +82,14 @@ export async function POST(req: NextRequest) {
         savings: o.savings,
       }));
 
+      const isForeign = Boolean(p.current_price && /(?:\$|€|£|¥|\b(?:USD|EUR|GBP)\b)/i.test(p.current_price));
+
       const updatePayload: Record<string, any> = {
         lastScrapedAt: new Date(),
-        scrapeStatus: "success",
-        failureReason: null,
+        scrapeStatus: isForeign ? "needs_review" : "success",
+        failureReason: isForeign
+          ? `Foreign currency detected (${p.current_price}) - Queued for local worker residential validation`
+          : null,
       };
 
       if (p.title) updatePayload.title = p.title;
@@ -106,6 +110,21 @@ export async function POST(req: NextRequest) {
         .set(updatePayload)
         .where(eq(scrapedProducts.id, productId))
         .returning();
+
+      if (isForeign) {
+        try {
+          const { queue } = await import("@/db/schema");
+          await db
+            .insert(queue)
+            .values({
+              jobType: "product_scrape",
+              status: "pending",
+              priority: 9,
+              failureReason: `product:${productId}`,
+            })
+            .onConflictDoNothing();
+        } catch {}
+      }
 
       updatedProduct = updated;
       await deleteByPrefix("cache:products:").catch(() => {});

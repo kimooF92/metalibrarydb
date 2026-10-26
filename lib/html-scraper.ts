@@ -863,17 +863,40 @@ export function parseProductHtmlContent(
         }
         if (offer.priceCurrency) {
           const rawOfferCurr = String(offer.priceCurrency).trim().toUpperCase();
-          if (rawOfferCurr === "USD" && isLocalStore) {
-            // Ignore USD geo-switch from cloud scrapers on local stores
+          const isForeignGeoSwitch = (rawOfferCurr === "USD" || rawOfferCurr === "EUR" || rawOfferCurr === "GBP") && isLocalStore;
+
+          if (isForeignGeoSwitch) {
+            // First check if OpenGraph contains the authentic local store currency before using geo-converted price
+            const ogPrice = extractMeta(html, "product:sale_price:amount") || extractMeta(html, "og:price:amount") || extractMeta(html, "product:price:amount");
+            const ogCurr = (extractMeta(html, "product:sale_price:currency") || extractMeta(html, "og:price:currency") || extractMeta(html, "product:price:currency"))?.trim().toUpperCase();
+            if (ogPrice && (ogCurr === "TND" || ogCurr === "MAD" || (!ogCurr && isLocalStore))) {
+              let ogNum = parseFloat(ogPrice.replace(",", "."));
+              if (currency === "TND" && ogNum >= 1000 && (ogPrice.includes(",000") || ogPrice.includes(".000"))) {
+                ogNum = Math.round(ogNum / 1000);
+              }
+              currentPrice = `${ogNum} ${currencySymbol}`;
+              isHighConfidencePrice = true;
+            } else {
+              // Preserve the foreign currency symbol ($ or €) so it gets flagged cleanly for local worker residential validation
+              currency = rawOfferCurr;
+              currencySymbol = rawOfferCurr === "EUR" ? "€" : rawOfferCurr === "GBP" ? "£" : "$";
+              currentPrice = `${currencySymbol}${priceNum}`;
+              isHighConfidencePrice = false;
+            }
           } else {
             currency = rawOfferCurr;
             if (currency === "MAD") currencySymbol = "DH";
             else if (currency === "TND") currencySymbol = "DT";
+            else if (currency === "EUR") currencySymbol = "€";
+            else if (currency === "USD") currencySymbol = "$";
             else currencySymbol = currency;
+            currentPrice = `${priceNum} ${currencySymbol}`;
+            isHighConfidencePrice = true;
           }
+        } else {
+          currentPrice = `${priceNum} ${currencySymbol}`;
+          isHighConfidencePrice = true;
         }
-        currentPrice = `${priceNum} ${currencySymbol}`;
-        isHighConfidencePrice = true;
       }
       if (offer?.highPrice && parseFloat(offer.highPrice) > parseFloat(offer.price || "0")) {
         originalPrice = `${offer.highPrice} ${currencySymbol}`;

@@ -91,11 +91,17 @@ async function runWorker() {
     if (!shouldSkipStartupSweep) {
       // Check and immediately rescue any stuck or failed product scrapings on worker startup
       try {
-        const { rescueFailedProductsBatch } = await import("./product-rescue");
+        const { rescueFailedProductsBatch, validateForeignCurrencyProductsBatch } = await import("./product-rescue");
         console.log("[Worker Startup] Checking for stuck or failed product scrapings to rescue...");
         const rescuedCount = await rescueFailedProductsBatch(5, true);
         if (rescuedCount > 0) {
           console.log(`[Worker Startup] 🟢 Rescued ${rescuedCount} stuck product(s) via local residential browser.`);
+        }
+
+        console.log("[Worker Startup] Checking for products with foreign currency / cloud geo-switches to validate...");
+        const foreignCount = await validateForeignCurrencyProductsBatch(10, true);
+        if (foreignCount > 0) {
+          console.log(`[Worker Startup] 🟢 Validated ${foreignCount} product(s) with foreign currency via local residential connection.`);
         }
       } catch (rescueErr: any) {
         console.warn("[Worker Startup] Product rescue notice:", rescueErr?.message);
@@ -502,8 +508,9 @@ async function runWorker() {
 
         // Automatic Fallback: rescue any failed/incomplete product scrapings locally via residential IP & browser
         try {
-          const { rescueFailedProductsBatch } = await import("./product-rescue");
+          const { rescueFailedProductsBatch, validateForeignCurrencyProductsBatch } = await import("./product-rescue");
           await rescueFailedProductsBatch(3);
+          await validateForeignCurrencyProductsBatch(3);
         } catch (rescueErr: any) {
           console.warn("[Local Rescue] Background rescue cycle warning:", rescueErr?.message);
         }
@@ -594,6 +601,7 @@ async function runWorker() {
           id: true,
           url: true,
           title: true,
+          currentPrice: true,
           scrapeStatus: true,
           workspaceId: true,
           pageId: true,
@@ -668,7 +676,12 @@ async function runWorker() {
           continue;
         }
 
-        if (targetProduct.scrapeStatus === "success" || targetProduct.scrapeStatus === "ignored") {
+        const hasForeignPrice = Boolean(
+          targetProduct.currentPrice &&
+          /(?:\$|€|£|\b(?:USD|EUR|GBP)\b)/i.test(targetProduct.currentPrice)
+        );
+
+        if ((targetProduct.scrapeStatus === "success" && !hasForeignPrice) || targetProduct.scrapeStatus === "ignored") {
           console.log(`[Product Scrape Job] Product "${targetProduct.title || targetProduct.url}" already in status "${targetProduct.scrapeStatus}". Marking completed.`);
           await db
             .update(queue)

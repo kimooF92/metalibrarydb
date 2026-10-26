@@ -1,6 +1,6 @@
 import { db } from "../db";
-import { scrapedProducts, ads } from "../db/schema";
-import { eq, or, and, sql, desc, isNull } from "drizzle-orm";
+import { scrapedProducts, ads, queue } from "../db/schema";
+import { eq, or, and, sql, desc, isNull, inArray } from "drizzle-orm";
 import { scrapeUrlWithLocalPlaywright } from "../lib/local-browser-scraper";
 import { scrapeProductDirectHtml } from "../lib/html-scraper";
 import { getCleanDomain } from "../lib/utils";
@@ -307,3 +307,146 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
     isRescueRunning = false;
   }
 }
+
+let isForeignValidationRunning = false;
+let lastForeignValidationTime = 0;
+
+/**
+ * Rescans and validates products whose prices were captured in foreign currency ($ or € or USD or EUR)
+ * due to cloud proxies/Vercel IP geo-switches.
+ * Executes locally via residential Tunisian/Moroccan IP to recover the canonical local price (DT / DH).
+ */
+export async function validateForeignCurrencyProductsBatch(limit = 5, force = false): Promise<number> {
+  if (isForeignValidationRunning) return 0;
+
+  const now = Date.now();
+  if (!force && now - lastForeignValidationTime < 45000) return 0;
+  lastForeignValidationTime = now;
+
+  isForeignValidationRunning = true;
+
+  try {
+    const foreignItems = await db
+      .select({
+        id: scrapedProducts.id,
+        url: scrapedProducts.url,
+        title: scrapedProducts.title,
+        currentPrice: scrapedProducts.currentPrice,
+        originalPrice: scrapedProducts.originalPrice,
+        currency: scrapedProducts.currency,
+        domain: scrapedProducts.domain,
+        workspaceId: scrapedProducts.workspaceId,
+        failureReason: scrapedProducts.failureReason,
+      })
+      .from(scrapedProducts)
+      .where(
+        and(
+          sql`${scrapedProducts.scrapeStatus} NOT IN ('deleted', 'ignored')`,
+          sql`LOWER(${scrapedProducts.url}) NOT LIKE '%/category%'`,
+          sql`LOWER(${scrapedProducts.url}) NOT LIKE '%/categories%'`,
+          or(
+            // Foreign currency symbol in price ($ or € or £ or USD or EUR)
+            sql`${scrapedProducts.currentPrice} ~* '(\\$|€|£|\\b(USD|EUR|GBP)\\b)'`,
+            sql`COALESCE(${scrapedProducts.failureReason}, '') ILIKE '%foreign currency%'`,
+            sql`COALESCE(${scrapedProducts.failureReason}, '') ILIKE '%local worker%'`,
+            // Fractional prices on local domains caused by cloud geo-conversion (e.g. 16.72 DT, 14.91 DT on .tn domain)
+            sql`(
+              (${scrapedProducts.domain} LIKE '%.tn' OR ${scrapedProducts.url} LIKE '%.tn/%' OR ${scrapedProducts.workspaceId} = '00000000-0000-0000-0000-000000000001')
+              AND ${scrapedProducts.currentPrice} ~* '^[0-9]+\\.[0-9]{2}\\s*(dt|tnd)$'
+              AND ${scrapedProducts.currentPrice} NOT LIKE '%.50%'
+              AND ${scrapedProducts.currentPrice} NOT LIKE '%.90%'
+              AND ${scrapedProducts.currentPrice} NOT LIKE '%.00%'
+              AND ${scrapedProducts.currentPrice} NOT LIKE '%.99%'
+            )`
+          )
+        )
+      )
+      .orderBy(sql`${scrapedProducts.updatedAt} ASC NULLS FIRST`)
+      .limit(limit);
+
+    if (foreignItems.length === 0) return 0;
+
+    console.log(`\n[Local Validator] 💱 Found ${foreignItems.length} product(s) with foreign currency / cloud geo-switch. Validating via local residential IP...`);
+    let validatedCount = 0;
+
+    for (const item of foreignItems) {
+      const targetUrl = item.url;
+      if (!targetUrl || !targetUrl.startsWith("http")) continue;
+
+      console.log(`[Local Validator] 🔍 Rescanning: "${item.title || "Product"}" (current: ${item.currentPrice}) -> ${targetUrl}`);
+
+      const isMorocco = item.workspaceId === "00000000-0000-0000-0000-000000000002" || /\.ma(\/|$)/i.test(targetUrl);
+      const itemSym = isMorocco ? "DH" : "DT";
+      const itemCurr = isMorocco ? "MAD" : "TND";
+
+      // 1. Fast local residential direct HTML scrape
+      let res: any = await scrapeProductDirectHtml(targetUrl, 12000, 2, {
+        defaultCurrency: itemCurr,
+        defaultCurrencySymbol: itemSym,
+      }).catch(() => null);
+
+      const directPrice = res?.data?.current_price;
+      const isDirectPriceValid = Boolean(
+        directPrice &&
+        !directPrice.startsWith("0") &&
+        !/(?:\$|€|£|\b(?:USD|EUR|GBP)\b)/i.test(directPrice)
+      );
+
+      // 2. If direct HTML didn't get a valid local price, launch local Playwright browser
+      if (!res?.success || !res.data || !isDirectPriceValid) {
+        console.log(`[Local Validator] Launching local Playwright browser to validate price for: ${targetUrl}...`);
+        res = await scrapeUrlWithLocalPlaywright(targetUrl);
+      }
+
+      const extractedPrice = res?.data?.current_price;
+      const isValidExtractedPrice = Boolean(
+        extractedPrice &&
+        !extractedPrice.startsWith("0") &&
+        !/(?:\$|€|£|\b(?:USD|EUR|GBP)\b)/i.test(extractedPrice)
+      );
+
+      if (res?.success && isValidExtractedPrice) {
+        const newPrice = formatPrice(extractedPrice, itemSym);
+        const newOrigPrice = res.data.original_price ? formatPrice(res.data.original_price, itemSym) : item.originalPrice;
+
+        await db
+          .update(scrapedProducts)
+          .set({
+            currentPrice: newPrice,
+            originalPrice: newOrigPrice,
+            currency: itemCurr,
+            scrapeStatus: "success",
+            failureReason: null,
+            lastScrapedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(scrapedProducts.id, item.id));
+
+        // Mark any pending queue jobs for this product as completed
+        await db
+          .update(queue)
+          .set({ status: "completed", finishedAt: new Date() })
+          .where(
+            and(
+              eq(queue.jobType, "product_scrape"),
+              eq(queue.status, "pending"),
+              eq(queue.failureReason, `product:${item.id}`)
+            )
+          );
+
+        validatedCount++;
+        console.log(`[Local Validator] ✅ Validated: "${item.title || "Product"}" ➔ ${item.currentPrice} was updated to ${newPrice} (${itemCurr})!`);
+      } else {
+        console.warn(`[Local Validator] ⚠️ Could not validate local price for ${targetUrl}: ${res?.error || "Price still unresolvable"}`);
+      }
+    }
+
+    return validatedCount;
+  } catch (err: any) {
+    console.error("[Local Validator] Unexpected error during foreign validation loop:", err.message);
+    return 0;
+  } finally {
+    isForeignValidationRunning = false;
+  }
+}
+

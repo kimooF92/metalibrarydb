@@ -89,3 +89,66 @@ test("enhanceProductWithJev marks non-descriptive numeric slugs as needs_review"
   assert.equal(result.scrapeStatus, "needs_review");
   assert.match(result.statusReason || "", /non-descriptive slug/i);
 });
+
+test("parseProductHtmlContent recovers OpenGraph local base price when JSON-LD is geo-converted to EUR/USD", async () => {
+  const { parseProductHtmlContent } = await import("./html-scraper");
+  const htmlWithOg = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Tunsport Elite</title>
+        <meta property="product:sale_price:amount" content="49.9">
+        <meta property="product:sale_price:currency" content="TND">
+        <meta property="product:price:amount" content="69.9">
+        <script type="application/ld+json">
+        {
+          "@type": "Product",
+          "name": "Tunsport Elite",
+          "offers": {
+            "@type": "Offer",
+            "price": "14.91",
+            "priceCurrency": "EUR"
+          }
+        }
+        </script>
+      </head>
+      <body><h1>Tunsport Elite</h1></body>
+    </html>
+  `;
+
+  const parsed = parseProductHtmlContent(htmlWithOg, "https://zuma.com.tn/products/tennis");
+  assert.equal(parsed.success, true);
+  assert.equal(parsed.data?.current_price, "49.9 DT");
+  assert.equal(parsed.data?.currency, "TND");
+});
+
+test("parseProductHtmlContent preserves foreign currency symbol when store has only converted EUR/USD", async () => {
+  const { parseProductHtmlContent } = await import("./html-scraper");
+  const htmlWithoutOg = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Tennis Trainer</title>
+        <script type="application/ld+json">
+        {
+          "@type": "Product",
+          "name": "Tennis Trainer",
+          "offers": {
+            "@type": "Offer",
+            "price": "16.72",
+            "priceCurrency": "USD"
+          }
+        }
+        </script>
+      </head>
+      <body><h1>Tennis Trainer</h1></body>
+    </html>
+  `;
+
+  const parsed = parseProductHtmlContent(htmlWithoutOg, "https://zuma.com.tn/products/tennis");
+  assert.equal(parsed.success, true);
+  // Must NOT be "16.72 DT"! Must be "$16.72" so doubt-detector and local worker identify it
+  assert.notEqual(parsed.data?.current_price, "16.72 DT");
+  assert.equal(parsed.data?.current_price, "$16.72");
+});
+

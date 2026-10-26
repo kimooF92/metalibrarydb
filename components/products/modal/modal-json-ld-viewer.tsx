@@ -348,32 +348,51 @@ export function ModalJsonLdViewer({
             <div className="space-y-4">
               {/* Highlight Cards if Product Schema */}
               {parsedProduct && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-xs">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Title</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200 truncate block mt-0.5">
-                      {parsedProduct.title || "—"}
-                    </span>
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-xs">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Title</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200 truncate block mt-0.5">
+                        {parsedProduct.title || "—"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Price</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400 block mt-0.5">
+                        {parsedProduct.current_price
+                          ? /(?:DT|TND|DH|MAD|USD|EUR|GBP|\$|€|£)/i.test(parsedProduct.current_price)
+                            ? parsedProduct.current_price
+                            : `${parsedProduct.current_price} ${parsedProduct.currency || ""}`.trim()
+                          : "—"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Original Price</span>
+                      <span className="font-semibold text-slate-500 line-through block mt-0.5">
+                        {parsedProduct.original_price
+                          ? /(?:DT|TND|DH|MAD|USD|EUR|GBP|\$|€|£)/i.test(parsedProduct.original_price)
+                            ? parsedProduct.original_price
+                            : `${parsedProduct.original_price} ${parsedProduct.currency || ""}`.trim()
+                          : "—"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Images</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200 block mt-0.5">
+                        {Array.isArray(parsedProduct.gallery_images) ? `${parsedProduct.gallery_images.length} images` : "—"}
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Price</span>
-                    <span className="font-bold text-emerald-600 dark:text-emerald-400 block mt-0.5">
-                      {parsedProduct.current_price ? `${parsedProduct.current_price} ${parsedProduct.currency || ""}` : "—"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Original Price</span>
-                    <span className="font-semibold text-slate-500 line-through block mt-0.5">
-                      {parsedProduct.original_price ? `${parsedProduct.original_price} ${parsedProduct.currency || ""}` : "—"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Images</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200 block mt-0.5">
-                      {Array.isArray(parsedProduct.gallery_images) ? `${parsedProduct.gallery_images.length} images` : "—"}
-                    </span>
-                  </div>
-                </div>
+
+                  {parsedProduct.current_price && /(?:\$|€|£|\b(?:USD|EUR|GBP)\b)/i.test(parsedProduct.current_price) && (
+                    <div className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-300">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-amber-500" />
+                      <span>
+                        <strong>Cloud Geo-Conversion ({parsedProduct.current_price}):</strong> The cloud IP triggered store currency conversion. When your local residential worker runs, this product will be automatically validated with the authentic local price.
+                      </span>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Code Display */}
