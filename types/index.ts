@@ -206,6 +206,7 @@ export interface ScrapedProduct {
   brandPageId?: string | null;
   topCreativeThumbnail?: string | null;
   earliestAdDate?: string | null;
+  latestAdDate?: string | null;
   isBreakout?: boolean;
   brandHoldStatus?: "active" | "on_hold" | "inactive" | null;
   brandCurrentResults?: number | null;

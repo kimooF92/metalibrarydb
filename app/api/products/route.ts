@@ -554,12 +554,16 @@ export async function GET(req: NextRequest) {
       const m = metricsMap.get(p.id);
       const pageInfo = p.pageId ? pageMap.get(p.pageId) : null;
       const earliest = m?.earliestAdDate || p.createdAt;
+      const brandHoldStatus = (m?.brandHoldStatus || pageInfo?.holdStatus || "active") as any;
+      const isProductActive = (m?.activeAdsCount || 0) > 0 && brandHoldStatus !== "inactive";
+      const endTimestamp = isProductActive || !m?.latestAdDate
+        ? Date.now()
+        : new Date(m.latestAdDate).getTime();
       const daysRunning = earliest
-        ? Math.max(1, Math.round((Date.now() - new Date(earliest).getTime()) / 86400000))
+        ? Math.max(1, Math.round((endTimestamp - new Date(earliest).getTime()) / 86400000))
         : 1;
 
       const brandPageId = m?.brandPageId || p.pageId || null;
-      const brandHoldStatus = (m?.brandHoldStatus || pageInfo?.holdStatus || "active") as any;
       const brandName = m?.brandName || pageInfo?.displayName || null;
       const brandCurrentResults = typeof m?.brandCurrentResults === "number"
         ? m.brandCurrentResults
