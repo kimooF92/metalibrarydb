@@ -517,6 +517,7 @@ export async function processProductExtraction(
     const isOutOfStock =
       /rupture\s*de\s*stock|out\s*of\s*stock|actuellement\s*en\s*rupture|غير\s*متوفر|نفذت\s*الكمية/i.test(
         rawHtml
+      );
     const isForeignPrice = Boolean(
       effectivePrice && /(?:\$|€|£|¥|\b(?:USD|EUR|GBP)\b)/i.test(effectivePrice)
     );
