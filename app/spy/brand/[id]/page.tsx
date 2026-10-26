@@ -208,6 +208,7 @@ export default function BrandDeepDivePage({
   const [isLoadingProductsTab, setIsLoadingProductsTab] = useState(false);
   const [productsTabError, setProductsTabError] = useState<string | null>(null);
   const productsAbortControllerRef = useRef<AbortController | null>(null);
+  const productsRequestIdRef = useRef(0);
 
   const [isSyncingProducts, setIsSyncingProducts] = useState(false);
   const [isQueueingLocalRescan, setIsQueueingLocalRescan] = useState(false);
@@ -245,7 +246,7 @@ export default function BrandDeepDivePage({
   activeTabRef.current = activeTab;
 
   // On-demand products fetcher (scope=products)
-  const loadProductsTab = async (force = false) => {
+  const loadProductsTab = async (force = false, sisterPageIdOverride?: string | null) => {
     if (!force && (isProductsLoaded || isLoadingProductsTab)) return;
     setIsLoadingProductsTab(true);
     setProductsTabError(null);
@@ -254,10 +255,14 @@ export default function BrandDeepDivePage({
     const controller = new AbortController();
     productsAbortControllerRef.current = controller;
 
+    const currentReqId = ++productsRequestIdRef.current;
+    const requestedSisterPageId = sisterPageIdOverride !== undefined ? sisterPageIdOverride : selectedSisterPageId;
+    const requestedBrandId = id;
+
     try {
       const params = new URLSearchParams({ scope: "products" });
-      if (selectedSisterPageId) params.set("sisterPageId", selectedSisterPageId);
-      const res = await fetch(`/api/spy/brand/${encodeURIComponent(id)}?${params.toString()}`, {
+      if (requestedSisterPageId) params.set("sisterPageId", requestedSisterPageId);
+      const res = await fetch(`/api/spy/brand/${encodeURIComponent(requestedBrandId)}?${params.toString()}`, {
         signal: controller.signal,
       });
       if (!res.ok) {
@@ -265,13 +270,19 @@ export default function BrandDeepDivePage({
         throw new Error(errJson.error || "Failed to load products catalog");
       }
       const json = await res.json();
+      if (currentReqId !== productsRequestIdRef.current) return;
+      if (id !== requestedBrandId || selectedSisterPageId !== requestedSisterPageId) return;
+
       setData((prev) => (prev ? { ...prev, products: json.products } : prev));
       setIsProductsLoaded(true);
     } catch (err: any) {
       if (err.name === "AbortError") return;
+      if (currentReqId !== productsRequestIdRef.current) return;
       setProductsTabError(err.message || "Could not load products catalog.");
     } finally {
-      setIsLoadingProductsTab(false);
+      if (currentReqId === productsRequestIdRef.current) {
+        setIsLoadingProductsTab(false);
+      }
     }
   };
 
@@ -403,6 +414,8 @@ export default function BrandDeepDivePage({
       setData(json);
       if (json.products && json.products.length > 0) {
         setIsProductsLoaded(true);
+      } else {
+        setIsProductsLoaded(false);
       }
       setIsWatchlisted(Boolean(json.brand?.isWatchlisted));
       if (json.brand?.pageId) {
@@ -465,6 +478,16 @@ export default function BrandDeepDivePage({
         message: err.message || "Failed to trigger check",
         type: "error",
       });
+    }
+  };
+
+  const handleSisterPageSelect = (targetSisterId: string | null) => {
+    setSelectedSisterPageId(targetSisterId);
+    setIsProductsLoaded(false);
+    productsAbortControllerRef.current?.abort();
+    fetchBrandData(true, targetSisterId);
+    if (activeTabRef.current === "products") {
+      loadProductsTab(true, targetSisterId);
     }
   };
 
@@ -538,10 +561,14 @@ export default function BrandDeepDivePage({
     if (canonicalIdRef.current && id === canonicalIdRef.current && data) {
       return;
     }
+    // Brand identity changed: invalidate products state and cancel inflight product requests
+    setIsProductsLoaded(false);
+    productsAbortControllerRef.current?.abort();
     fetchBrandData();
     return () => {
       abortControllerRef.current?.abort();
       revalidateAbortControllerRef.current?.abort();
+      productsAbortControllerRef.current?.abort();
     };
   }, [id]);
 
@@ -1139,10 +1166,7 @@ export default function BrandDeepDivePage({
             <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 pt-1">
               <button
                 type="button"
-                onClick={() => {
-                  setSelectedSisterPageId(null);
-                  fetchBrandData(true, null);
-                }}
+                onClick={() => handleSisterPageSelect(null)}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
                   selectedSisterPageId === null
                     ? "bg-indigo-600 text-white shadow-xs"
@@ -1168,11 +1192,7 @@ export default function BrandDeepDivePage({
                   <button
                     key={sp.id}
                     type="button"
-                    onClick={() => {
-                      const targetId = sp.pageId || sp.id;
-                      setSelectedSisterPageId(targetId);
-                      fetchBrandData(true, targetId);
-                    }}
+                    onClick={() => handleSisterPageSelect(sp.pageId || sp.id)}
                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${
                       isSelected
                         ? "bg-indigo-600 text-white shadow-xs"

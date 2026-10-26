@@ -263,36 +263,16 @@ export async function GET(
     }
 
     const tAdStart = performance.now();
-    const candidateIdPromises: Promise<string[]>[] = [];
 
-    // Leg 1: Fast B-tree index scan on ads.page_id (idx_ads_page_id)
+    // 2. Resolve Candidate Ads via Database-Side UNION Subquery (Zero application memory materialization)
+    const subqueryParts = [];
     if (targetPageIds.length > 0) {
-      candidateIdPromises.push(
-        db
-          .select({ id: ads.id })
-          .from(ads)
-          .where(
-            targetPageIds.length === 1
-              ? eq(ads.pageId, targetPageIds[0])
-              : inArray(ads.pageId, targetPageIds)
-          )
-          .then((rows) => rows.map((r) => r.id))
-      );
+      const pageIdParams = targetPageIds.map((p) => sql`${p}`);
+      subqueryParts.push(sql`SELECT id FROM ads WHERE page_id IN (${sql.join(pageIdParams, sql`, `)})`);
     }
-
-    // Leg 2: Fast B-tree index scan on ad_observations.tracked_page_id (idx_ad_obs_tracked_page_id)
     if (targetTrackedPageIds.length > 0) {
-      candidateIdPromises.push(
-        db
-          .select({ id: adObservations.adId })
-          .from(adObservations)
-          .where(
-            targetTrackedPageIds.length === 1
-              ? eq(adObservations.trackedPageId, targetTrackedPageIds[0])
-              : inArray(adObservations.trackedPageId, targetTrackedPageIds)
-          )
-          .then((rows) => rows.map((r) => r.id))
-      );
+      const trackedParams = targetTrackedPageIds.map((tp) => sql`${tp}::uuid`);
+      subqueryParts.push(sql`SELECT ad_id AS id FROM ad_observations WHERE tracked_page_id IN (${sql.join(trackedParams, sql`, `)})`);
     }
 
     // Concurrently kick off 30-day historical scan trajectory promise (non-blocking)
@@ -323,12 +303,10 @@ export async function GET(
             })
         : Promise.resolve([]);
 
-    const candidateIdArrays = await Promise.all(candidateIdPromises);
-    const candidateAdIds = Array.from(new Set(candidateIdArrays.flat()));
-
-    // Distinct-on ads query restricted to candidate IDs using primary key index
+    // Distinct-on ads query restricted to candidate IDs using database-side UNION
     let brandAdsRaw: any[] = [];
-    if (candidateAdIds.length > 0) {
+    if (subqueryParts.length > 0) {
+      const candidateSubquery = sql`(${sql.join(subqueryParts, sql` UNION `)})`;
       brandAdsRaw = await db
         .selectDistinctOn([ads.id], {
           id: ads.id,
@@ -352,7 +330,7 @@ export async function GET(
         })
         .from(ads)
         .leftJoin(adObservations, eq(ads.id, adObservations.adId))
-        .where(inArray(ads.id, candidateAdIds))
+        .where(sql`${ads.id} IN ${candidateSubquery}`)
         .orderBy(ads.id, desc(adObservations.observedAt));
     }
     const tAdsDuration = Math.round(performance.now() - tAdStart);
@@ -387,44 +365,67 @@ export async function GET(
     if (pageId) {
       productQueryConditions.push(eq(scrapedProducts.pageId, pageId));
     }
-    // Only query raw URLs if full product catalog is requested (skips 100+ URL regex checks in lean mode)
-    if (!isLean && distinctNormalizedUrls.length > 0) {
+    // Query products by ID, pageId, or normalized URL (using B-tree index idx_scraped_products_url)
+    if (distinctNormalizedUrls.length > 0) {
       productQueryConditions.push(inArray(scrapedProducts.url, distinctNormalizedUrls));
     }
 
     let linkedProducts: any[] = [];
     if (productQueryConditions.length > 0) {
-      linkedProducts = await db
-        .select({
-          id: scrapedProducts.id,
-          url: scrapedProducts.url,
-          domain: scrapedProducts.domain,
-          pageId: scrapedProducts.pageId,
-          title: scrapedProducts.title,
-          currentPrice: scrapedProducts.currentPrice,
-          originalPrice: scrapedProducts.originalPrice,
-          currency: scrapedProducts.currency,
-          discountOrOffer: scrapedProducts.discountOrOffer,
-          mainImageUrl: scrapedProducts.mainImageUrl,
-          offerCount: sql<number>`COALESCE(json_array_length(${scrapedProducts.allOffers}), 0)`.mapWith(Number),
-          supplierCount: sql<number>`COALESCE(array_length(${scrapedProducts.supplierUrls}, 1), 0)`.mapWith(Number),
-          metaPixelIds: scrapedProducts.metaPixelIds,
-          phoneNumbers: scrapedProducts.phoneNumbers,
-          whatsappNumbers: scrapedProducts.whatsappNumbers,
-          storePlatform: scrapedProducts.storePlatform,
-          deliveryCost: scrapedProducts.deliveryCost,
-          category: scrapedProducts.category,
-          subCategory: scrapedProducts.subCategory,
-          targetAudience: scrapedProducts.targetAudience,
-          isFavorite: scrapedProducts.isFavorite,
-          scrapeStatus: scrapedProducts.scrapeStatus,
-          failureReason: scrapedProducts.failureReason,
-          lastScrapedAt: scrapedProducts.lastScrapedAt,
-          createdAt: scrapedProducts.createdAt,
-          updatedAt: scrapedProducts.updatedAt,
-        })
-        .from(scrapedProducts)
-        .where(or(...productQueryConditions));
+      if (isLean) {
+        // Lean projection: fetch lightweight columns needed for pricing, platform, and counts
+        linkedProducts = await db
+          .select({
+            id: scrapedProducts.id,
+            url: scrapedProducts.url,
+            domain: scrapedProducts.domain,
+            pageId: scrapedProducts.pageId,
+            currentPrice: scrapedProducts.currentPrice,
+            originalPrice: scrapedProducts.originalPrice,
+            currency: scrapedProducts.currency,
+            discountOrOffer: scrapedProducts.discountOrOffer,
+            metaPixelIds: scrapedProducts.metaPixelIds,
+            phoneNumbers: scrapedProducts.phoneNumbers,
+            whatsappNumbers: scrapedProducts.whatsappNumbers,
+            storePlatform: scrapedProducts.storePlatform,
+            scrapeStatus: scrapedProducts.scrapeStatus,
+          })
+          .from(scrapedProducts)
+          .where(or(...productQueryConditions));
+      } else {
+        // Full projection for product catalog
+        linkedProducts = await db
+          .select({
+            id: scrapedProducts.id,
+            url: scrapedProducts.url,
+            domain: scrapedProducts.domain,
+            pageId: scrapedProducts.pageId,
+            title: scrapedProducts.title,
+            currentPrice: scrapedProducts.currentPrice,
+            originalPrice: scrapedProducts.originalPrice,
+            currency: scrapedProducts.currency,
+            discountOrOffer: scrapedProducts.discountOrOffer,
+            mainImageUrl: scrapedProducts.mainImageUrl,
+            offerCount: sql<number>`COALESCE(json_array_length(${scrapedProducts.allOffers}), 0)`.mapWith(Number),
+            supplierCount: sql<number>`COALESCE(array_length(${scrapedProducts.supplierUrls}, 1), 0)`.mapWith(Number),
+            metaPixelIds: scrapedProducts.metaPixelIds,
+            phoneNumbers: scrapedProducts.phoneNumbers,
+            whatsappNumbers: scrapedProducts.whatsappNumbers,
+            storePlatform: scrapedProducts.storePlatform,
+            deliveryCost: scrapedProducts.deliveryCost,
+            category: scrapedProducts.category,
+            subCategory: scrapedProducts.subCategory,
+            targetAudience: scrapedProducts.targetAudience,
+            isFavorite: scrapedProducts.isFavorite,
+            scrapeStatus: scrapedProducts.scrapeStatus,
+            failureReason: scrapedProducts.failureReason,
+            lastScrapedAt: scrapedProducts.lastScrapedAt,
+            createdAt: scrapedProducts.createdAt,
+            updatedAt: scrapedProducts.updatedAt,
+          })
+          .from(scrapedProducts)
+          .where(or(...productQueryConditions));
+      }
     }
 
     const productMap = new Map<string, any>();
@@ -433,6 +434,147 @@ export async function GET(
       productMap.set(p.id, p);
       if (p.url) productUrlMap.set(p.url, p);
     });
+
+    // 4. If client requested product catalog only (scope=products), execute fast-path and short-circuit immediately
+    if (isProductsOnly) {
+      const brandProductsList: any[] = [];
+      const scrapedProductUrls = new Set<string>();
+
+      // Inverted index for matching ads
+      const adsByProductId = new Map<string, any[]>();
+      const adsByNormUrl = new Map<string, any[]>();
+
+      for (const row of brandAdsRaw) {
+        const normUrl = row.linkUrl ? normalizeProductUrl(row.linkUrl) : null;
+        const winner = calculateWinnerScore({
+          startedRunningOn: row.startedRunningOn,
+          firstSeenAt: row.firstSeenAt,
+          lastSeenAt: row.lastSeenAt,
+          duplicationCount: Number(row.duplicationCount || 1),
+          isActive: Boolean(row.isActive),
+          isArchived: Boolean(row.isArchived),
+          mediaType: row.mediaType,
+          productCreativeCount: 1,
+        });
+
+        const adObj = {
+          ...row,
+          normUrl,
+          winnerScore: winner.winnerScore,
+          isActive: Boolean(row.isActive),
+          isArchived: Boolean(row.isArchived),
+        };
+
+        if (row.productId) {
+          let list = adsByProductId.get(row.productId);
+          if (!list) {
+            list = [];
+            adsByProductId.set(row.productId, list);
+          }
+          list.push(adObj);
+        }
+        if (normUrl) {
+          let list = adsByNormUrl.get(normUrl);
+          if (!list) {
+            list = [];
+            adsByNormUrl.set(normUrl, list);
+          }
+          list.push(adObj);
+        }
+      }
+
+      linkedProducts.forEach((p) => {
+        if (p.url) scrapedProductUrls.add(p.url);
+
+        const matchedMap = new Map<string, any>();
+        (adsByProductId.get(p.id) || []).forEach((ad) => matchedMap.set(ad.id, ad));
+        if (p.url) {
+          (adsByNormUrl.get(p.url) || []).forEach((ad) => matchedMap.set(ad.id, ad));
+        }
+        const matchingAds = Array.from(matchedMap.values());
+
+        const linkedAdsCount = matchingAds.length;
+        const activeAdsCount = matchingAds.filter((a) => a.isActive && !a.isArchived).length;
+        const topThumb = matchingAds.find((a) => a.thumbnailUrl)?.thumbnailUrl || p.mainImageUrl;
+        const maxScore = matchingAds.reduce((max, a) => Math.max(max, a.winnerScore || 0), 0);
+
+        brandProductsList.push({
+          ...p,
+          brandName: trackedPage?.displayName || p.domain || "Brand",
+          brandPageId: trackedPage?.pageId || pageId,
+          brandHoldStatus: trackedPage?.holdStatus || "active",
+          brandCurrentResults: trackedPage?.currentResults ?? null,
+          linkedAdsCount,
+          activeAdsCount,
+          topCreativeThumbnail: topThumb,
+          winnerScore: maxScore,
+        });
+      });
+
+      distinctNormalizedUrls.forEach((normUrl) => {
+        if (!scrapedProductUrls.has(normUrl)) {
+          const matchingAds = adsByNormUrl.get(normUrl) || [];
+          brandProductsList.push({
+            id: `unscraped_${Buffer.from(normUrl).toString("base64").slice(0, 16)}`,
+            url: normUrl,
+            domain: getCleanDomain(normUrl),
+            pageId: pageId,
+            brandName: trackedPage?.displayName || getCleanDomain(normUrl),
+            brandPageId: trackedPage?.pageId || pageId,
+            brandHoldStatus: trackedPage?.holdStatus || "active",
+            brandCurrentResults: trackedPage?.currentResults ?? null,
+            title: matchingAds[0]?.title || "Unscraped Product Landing Page",
+            currentPrice: null,
+            originalPrice: null,
+            currency: null,
+            discountOrOffer: null,
+            mainImageUrl: matchingAds.find((a) => a.thumbnailUrl)?.thumbnailUrl || null,
+            galleryImages: [],
+            allOffers: null,
+            storePlatform: "other",
+            deliveryCost: null,
+            phoneNumbers: [],
+            whatsappNumbers: [],
+            metaPixelIds: [],
+            scrapeStatus: "pending",
+            failureReason: null,
+            lastScrapedAt: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            linkedAdsCount: matchingAds.length,
+            activeAdsCount: matchingAds.filter((a) => a.isActive && !a.isArchived).length,
+            topCreativeThumbnail: matchingAds.find((a) => a.thumbnailUrl)?.thumbnailUrl || null,
+            winnerScore: matchingAds.reduce((max, a) => Math.max(max, a.winnerScore || 0), 0),
+          });
+        }
+      });
+
+      brandProductsList.sort(
+        (a, b) => (b.linkedAdsCount || 0) - (a.linkedAdsCount || 0) || (b.activeAdsCount || 0) - (a.activeAdsCount || 0)
+      );
+
+      const pendingProductsCount = distinctNormalizedUrls.filter((u) => !productUrlMap.has(u)).length;
+      const totalCatalogProductsCount = brandProductsList.length;
+
+      const productsPayload = {
+        success: true,
+        products: brandProductsList,
+        totalCatalogProducts: totalCatalogProductsCount,
+        pendingProductsCount,
+      };
+
+      if (lockToken && lockKey && (await isLockOwner(lockKey, lockToken))) {
+        await setCached(cacheKey, productsPayload, 300, { l1MaxTtlMs: 300 * 1000 });
+      }
+
+      return NextResponse.json(productsPayload, {
+        headers: {
+          "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
+          Vary: PRIVATE_AUTH_VARY,
+          "Server-Timing": `db_ads;dur=${Math.round(tAdsDuration)}, total;dur=${Math.round(performance.now() - tStart)}`,
+        },
+      });
+    }
 
     // 4. Cluster analytics across brand ads
     const clusterMap = new Map<string, any>();
@@ -742,28 +884,6 @@ export async function GET(
     const totalCatalogProductsCount = isLean
       ? linkedProducts.length + pendingProductsCount
       : brandProductsList.length;
-
-    // If client requested product catalog only (scope=products), short-circuit here
-    if (isProductsOnly) {
-      const productsPayload = {
-        success: true,
-        products: brandProductsList,
-        totalCatalogProducts: totalCatalogProductsCount,
-        pendingProductsCount,
-      };
-
-      if (lockToken && lockKey && (await isLockOwner(lockKey, lockToken))) {
-        await setCached(cacheKey, productsPayload, 300, { l1MaxTtlMs: 300 * 1000 });
-      }
-
-      return NextResponse.json(productsPayload, {
-        headers: {
-          "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
-          Vary: PRIVATE_AUTH_VARY,
-          "Server-Timing": `db_ads;dur=${Math.round(tAdsDuration)}, total;dur=${Math.round(performance.now() - tStart)}`,
-        },
-      });
-    }
 
     // 9. Store Tech & Tracking Detectors
     const detectedPlatforms = new Set<string>();
