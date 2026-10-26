@@ -5,7 +5,7 @@ import { isCategoryUrl } from "./url-parser";
 /**
  * Extracts JSON-LD schema objects from HTML content.
  */
-function extractJsonLd(html: string): any[] {
+export function extractJsonLd(html: string): any[] {
   const results: any[] = [];
   const regex = /<script\s+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
   let match;
@@ -21,6 +21,22 @@ function extractJsonLd(html: string): any[] {
     } catch {
       // Ignore invalid JSON in ld+json scripts
     }
+  }
+
+  return results;
+}
+
+/**
+ * Extracts raw unparsed JSON-LD script tag bodies from HTML content.
+ */
+export function extractRawJsonLdScripts(html: string): string[] {
+  const results: string[] = [];
+  const regex = /<script\s+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match;
+
+  while ((match = regex.exec(html)) !== null) {
+    const raw = match[1].trim();
+    if (raw) results.push(raw);
   }
 
   return results;

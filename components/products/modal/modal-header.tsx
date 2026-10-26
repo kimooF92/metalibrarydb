@@ -27,6 +27,7 @@ import {
   Rocket,
   Tag,
   Layers,
+  Code2,
 } from "lucide-react";
 import { ModalTab, generateAIProductPrompt, generateCleanMarkdown } from "./modal-types";
 import { getNicheDisplayLabel, getSubNicheDisplayLabel } from "@/lib/niches-taxonomy";
@@ -49,6 +50,7 @@ interface ModalHeaderProps {
   isQueueingVerify: boolean;
   onRefresh?: () => Promise<void>;
   isRefreshing: boolean;
+  onExtractJsonLd?: () => void;
   onDelete?: (productId: string) => Promise<void>;
   onClose: () => void;
   currentIndex?: number;
@@ -74,6 +76,7 @@ export function ModalHeader({
   isQueueingVerify,
   onRefresh,
   isRefreshing,
+  onExtractJsonLd,
   onDelete,
   onClose,
   currentIndex = -1,
@@ -580,6 +583,24 @@ export function ModalHeader({
                         <div>
                           <div className="font-semibold text-slate-900 dark:text-slate-100">Re-scrape Store Page</div>
                           <div className="text-[10px] text-slate-400">Re-fetches price, offers, and images</div>
+                        </div>
+                      </button>
+                    )}
+
+                    {/* Extract JSON-LD */}
+                    {onExtractJsonLd && product.url && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowActionsMenu(false);
+                          onExtractJsonLd();
+                        }}
+                        className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-amber-50 dark:hover:bg-amber-950/60 hover:text-amber-600 dark:hover:text-amber-400 flex items-center gap-2 transition-colors cursor-pointer"
+                      >
+                        <Code2 className="w-3.5 h-3.5 text-amber-500" />
+                        <div>
+                          <div className="font-semibold text-slate-900 dark:text-slate-100">Extract JSON-LD</div>
+                          <div className="text-[10px] text-slate-400">Inspect & extract structured schema</div>
                         </div>
                       </button>
                     )}

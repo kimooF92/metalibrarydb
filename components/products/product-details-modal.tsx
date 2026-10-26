@@ -24,6 +24,7 @@ import { ModalNetworkIntelligence } from "./modal/modal-network-intelligence";
 import { ModalAdGallery } from "./modal/modal-ad-gallery";
 import { ModalEditForm, ModalEditFormHandle } from "./modal/modal-edit-form";
 import { ModalAdLightbox } from "./modal/modal-ad-lightbox";
+import { ModalJsonLdViewer } from "./modal/modal-json-ld-viewer";
 
 // Re-export getSupplierPlatformInfo for backward compatibility
 export { getSupplierPlatformInfo };
@@ -72,6 +73,7 @@ export function ProductDetailsModal({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isQueueingVerify, setIsQueueingVerify] = useState(false);
   const [lightboxAd, setLightboxAd] = useState<Ad | null>(null);
+  const [showJsonLdModal, setShowJsonLdModal] = useState(false);
 
   const fetchLinkedAds = useCallback(async (productId: string) => {
     setLoadingAds(true);
@@ -279,6 +281,7 @@ export function ProductDetailsModal({
           isQueueingVerify={isQueueingVerify}
           onRefresh={onRefresh ? handleRefresh : undefined}
           isRefreshing={isRefreshing}
+          onExtractJsonLd={() => setShowJsonLdModal(true)}
           onDelete={onDelete}
           onClose={onClose}
           currentIndex={currentIndex}
@@ -458,6 +461,19 @@ export function ProductDetailsModal({
         ad={lightboxAd}
         onClose={() => setLightboxAd(null)}
       />
+
+      {/* JSON-LD Structured Data Inspector Modal */}
+      {showJsonLdModal && currentProduct && (
+        <ModalJsonLdViewer
+          isOpen={showJsonLdModal}
+          onClose={() => setShowJsonLdModal(false)}
+          product={currentProduct}
+          onProductUpdate={(updatedProduct) => {
+            setCurrentProduct(updatedProduct);
+            onProductUpdate?.(updatedProduct);
+          }}
+        />
+      )}
     </div>
   );
 }
