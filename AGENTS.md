@@ -43,6 +43,7 @@ You MUST check and strictly adhere to these rules before implementing any featur
 The workspace uses a Notion Coding Workflow OS connected via Notion MCP (Bot: `Agy-token`, Workspace: `Kareem Fezani's Notion`) to track projects, backlogs, technical specs, and daily progress:
 - **Coding System Root Page**: `https://app.notion.com/p/Coding-system-4022b9f29f2680198c45dfaa4be26363`
 - **Projects DB**: `4022b9f2-9f26-817d-960d-c4412a504877`
+- **Parent Project (Meta Brand Result)**: `4022b9f2-9f26-81a8-b61c-c7f68abc3b8b`
 - **Docs & Specs DB**: `4022b9f2-9f26-8194-9914-e25be2a87326`
 - **Tasks & Backlog DB**: `4022b9f2-9f26-81a1-9fd1-ca9c352fb56a`
 - **Dev Logs & Journal DB**: `4022b9f2-9f26-8197-a162-ec0527e1768d`
@@ -52,6 +53,31 @@ The workspace uses a Notion Coding Workflow OS connected via Notion MCP (Bot: `A
 2. **Decompose New Features**: Whenever a new significant feature or refactor is planned, document the architecture in `Docs & Specs` and decompose it into actionable items in `Tasks & Backlog` linked to the active project.
 3. **Log Significant Milestones & Discoveries**: Record daily progress, key debugging breakthroughs, or architectural decisions in `Dev Logs & Journal` so insights are preserved.
 4. **Preserve Relations**: Always associate new tasks and documents with their parent Project (`Meta Brand Result` or corresponding codebase) and relevant specs.
+
+### Notion MCP Tool Call Standards (Prevent First-Try Validation Errors)
+- **Strict Parent Object Format**: In `API-post-page`, `parent` MUST ALWAYS be an object: `{ "database_id": "<UUID>" }` or `{ "page_id": "<UUID>" }`. NEVER pass a plain string UUID.
+- **Property ID Standard for Core Databases**: Notion database properties containing spaces, ampersands, or symbols fail validation if passed as raw names. Always use the internal property IDs in `properties`:
+  - **Dev Logs & Journal DB** (`4022b9f2-9f26-8197-a162-ec0527e1768d`):
+    - `title`: `{"title": [{"text": {"content": "<Title>"}}]}`
+    - `_trt`: `{"rich_text": [{"text": {"content": "<Insights/Notes>"}}]}` (Key Insights & Notes)
+    - `k<Ri`: `{"date": {"start": "YYYY-MM-DD"}}` (Date)
+    - `|hks`: `{"relation": [{"id": "4022b9f2-9f26-81a8-b61c-c7f68abc3b8b"}]}` (Project)
+    - `OXjv`: `{"relation": [{"id": "<TASK_ID>"}]}` (Tasks Worked)
+  - **Tasks & Backlog DB** (`4022b9f2-9f26-81a1-9fd1-ca9c352fb56a`):
+    - `title`: Task Name
+    - `pbuV`: Status (`{"status": {"name": "In Progress" | "Done" | "Backlog" | "Ready (Sprint)" | "Review / Testing"}}`)
+    - `:<M{`: Priority (`{"select": {"name": "P0 - Blocker" | "P1 - High" | "P2 - Medium" | "P3 - Low"}}`)
+    - `}VwN`: Type (`{"select": {"name": "Feature" | "Bug Fix" | "Refactor" | "Spike / Research" | "Chore / Infra"}}`)
+    - `lcU[`: Project relation (`4022b9f2-9f26-81a8-b61c-c7f68abc3b8b`)
+    - `|~WT`: Specification relation
+    - `DN\L`: Branch / PR URL
+    - `RFsv`: Sprint / Target Date
+  - **Docs & Specs DB** (`4022b9f2-9f26-8194-9914-e25be2a87326`):
+    - `title`: Doc Title
+    - `OnHP`: Doc Type (`{"select": {"name": "PRD / Spec" | "Architecture / ADR" | "API Schema" | "Dev Setup Guide" | "Snippet / Playbook"}}`)
+    - `^;Mi`: Status (`{"status": {"name": "Draft" | "Under Review" | "Approved / Active" | "Deprecated"}}`)
+    - `PZMB`: Project relation (`4022b9f2-9f26-81a8-b61c-c7f68abc3b8b`)
+- **Pre-flight Schema Inspection**: Before modifying any newly created or unfamiliar database, call `API-retrieve-a-database` to verify property IDs and option names before calling `API-post-page` or `API-patch-page`.
 <!-- END:notion-workflow-sync-rules -->
 
 <!-- BEGIN:database-migration-backup-rules -->
