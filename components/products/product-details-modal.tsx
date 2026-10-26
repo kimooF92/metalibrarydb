@@ -134,6 +134,17 @@ export function ProductDetailsModal({
         return;
       }
 
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (lightboxAd) {
+          setLightboxAd(null);
+        } else {
+          onClose();
+        }
+        return;
+      }
+
       if (e.key === "ArrowLeft") {
         if (hasPrev && onNavigatePrev) {
           e.preventDefault();

@@ -17,6 +17,7 @@ import { getSupabase } from "@/lib/supabase";
 import { Ad, ScrapedProduct } from "@/types";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import { formatRelativeTime } from "@/lib/utils";
+import { useBrandOverlay } from "@/components/spy/brand-overlay-sheet";
 import {
   ArrowLeft,
   Eye,
@@ -191,6 +192,8 @@ export function BrandDeepDiveView({
 }: BrandDeepDiveViewProps) {
   const router = useRouter();
   const { showToast } = useToast();
+  const { setOverlayMeta } = useBrandOverlay();
+  const statusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [activeTab, setActiveTab] = useState<"analytics" | "products" | "creatives">(() => {
     if (typeof window !== "undefined") {
@@ -200,6 +203,19 @@ export function BrandDeepDiveView({
     return "analytics";
   });
   const [data, setData] = useState<BrandAnalyticsData | null>(null);
+
+  // Sync active brand metadata to overlay header if mounted in modal
+  useEffect(() => {
+    if (data?.brand) {
+      const effResults = data.brand.holdStatus === "on_hold"
+        ? (data.brand.lastKnownValidResults ?? data.brand.currentResults)
+        : data.brand.currentResults;
+      setOverlayMeta({
+        displayName: data.brand.displayName,
+        currentResults: effResults,
+      });
+    }
+  }, [data?.brand, setOverlayMeta]);
   const [selectedSisterPageId, setSelectedSisterPageId] = useState<string | null>(null);
   const [isManageDomainModalOpen, setIsManageDomainModalOpen] = useState(false);
   const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(true);
@@ -476,7 +492,8 @@ export function BrandDeepDiveView({
       });
 
       // Safety timeout in case worker/network drops connection
-      setTimeout(() => {
+      if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
+      statusTimeoutRef.current = setTimeout(() => {
         setIsCheckingStatus(false);
         fetchBrandData(true);
       }, 45000);
@@ -544,6 +561,7 @@ export function BrandDeepDiveView({
           });
 
           if (updated.status === "success" || updated.status === "failed") {
+            if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
             setIsCheckingStatus(false);
             fetchBrandData(true);
             if (updated.status === "success") {
@@ -575,6 +593,7 @@ export function BrandDeepDiveView({
     productsAbortControllerRef.current?.abort();
     fetchBrandData();
     return () => {
+      if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
       abortControllerRef.current?.abort();
       revalidateAbortControllerRef.current?.abort();
       productsAbortControllerRef.current?.abort();
