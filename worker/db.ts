@@ -776,7 +776,7 @@ export async function markJobCompleted(
         results: null,
         difference: null,
         checkedAt: now,
-        creativeScannedAt: trackedPage?.lastCreativeScan || null,
+        creativeScannedAt: null,
         status: "unclear",
         failureReason: "circuit_breaker_meta_outage",
       });
@@ -844,7 +844,7 @@ export async function markJobCompleted(
     results,
     difference,
     checkedAt: now,
-    creativeScannedAt: trackedPage?.lastCreativeScan || null,
+    creativeScannedAt: null,
     status,
     failureReason: scanError,
   });
@@ -1515,18 +1515,13 @@ export async function markJobFailed(
 ) {
   const now = new Date();
 
-  const targetPage = await db.query.trackedPages.findFirst({
-    where: eq(trackedPages.id, pageId),
-    columns: { lastCreativeScan: true },
-  });
-
   // 1. Insert scan_history failure record
   await db.insert(scanHistory).values({
     trackedPageId: pageId,
     results: null,
     difference: null,
     checkedAt: now,
-    creativeScannedAt: targetPage?.lastCreativeScan || null,
+    creativeScannedAt: null,
     status: "failed",
     failureReason: reason,
   });

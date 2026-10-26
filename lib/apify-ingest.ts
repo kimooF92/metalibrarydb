@@ -893,7 +893,7 @@ export async function ingestApifyDatasetItems(
     }
   }
 
-  // Update tracked page ad count & record scan history entry from verified Apify results
+  // Update tracked page stored adCount and pair latest count scan with this creative scan
   try {
     const { scanHistory } = await import("@/db/schema");
     const [activeCountRes] = await db
@@ -908,18 +908,12 @@ export async function ingestApifyDatasetItems(
 
     const activeAdCount = Number(activeCountRes?.count || 0);
 
-    const prevResults = pageRecord?.currentResults ?? null;
-    const difference = prevResults !== null ? activeAdCount - prevResults : null;
-
+    // Update trackedPages.adCount (stored DB creative count) without modifying currentResults (live Meta search count)
     await db
       .update(trackedPages)
       .set({
-        currentResults: activeAdCount > 0 || isFullScan ? activeAdCount : pageRecord?.currentResults ?? 0,
-        adCount: activeAdCount > 0 || isFullScan ? activeAdCount : pageRecord?.adCount ?? 0,
-        lastChecked: now,
+        adCount: activeAdCount > 0 ? activeAdCount : pageRecord?.adCount ?? 0,
         lastSuccessAt: now,
-        // Apify only handles cloud-eligible pages (>= 20 ads), so we never set "pending" here.
-        // "pending" is only used as a local-worker trigger, managed by worker/db.ts.
         status: (pageRecord?.holdStatus === "on_hold" || pageRecord?.holdStatus === "inactive") && activeAdCount === 0
           ? (pageRecord?.status || "success")
           : "success",
@@ -930,18 +924,20 @@ export async function ingestApifyDatasetItems(
       })
       .where(eq(trackedPages.id, finalTrackedPageId));
 
-    if (activeAdCount > 0 || isFullScan) {
-      await db.insert(scanHistory).values({
-        trackedPageId: finalTrackedPageId,
-        results: activeAdCount,
-        difference,
-        checkedAt: now,
-        creativeScannedAt: now,
-        status: "success",
-      });
+    // Pair latest scanHistory entry with this creative scan date without injecting fake count results
+    const latestScan = await db.query.scanHistory.findFirst({
+      where: eq(scanHistory.trackedPageId, finalTrackedPageId),
+      orderBy: [desc(scanHistory.checkedAt)],
+      columns: { id: true },
+    });
+    if (latestScan) {
+      await db
+        .update(scanHistory)
+        .set({ creativeScannedAt: now })
+        .where(eq(scanHistory.id, latestScan.id));
     }
   } catch (err) {
-    console.error("[Apify Ingest] Error updating ad count and scan history:", err);
+    console.error("[Apify Ingest] Error updating ad count and pairing creative scan:", err);
   }
 
   // Log central Ad Spy notification
