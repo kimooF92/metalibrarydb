@@ -250,7 +250,7 @@ export function ProductDetailsModal({
 
       showToast({
         type: "success",
-        title: "Queued for Local Price Extraction",
+        title: "Queued for Local Price Sync",
         message: "Status set to Pending. Your local residential worker will scrape and validate the authentic store price.",
       });
     } catch (err: any) {

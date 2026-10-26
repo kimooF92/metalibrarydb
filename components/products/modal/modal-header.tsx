@@ -603,7 +603,7 @@ export function ModalHeader({
                         <MapPin className={`w-3.5 h-3.5 text-emerald-500 shrink-0 ${isQueueingLocalRescan ? "animate-spin" : ""}`} />
                         <div className="min-w-0 flex-1">
                           <div className="font-semibold text-slate-900 dark:text-slate-100 flex items-center justify-between gap-1">
-                            <span>Queue Local Price Extraction</span>
+                            <span>Sync Local Price</span>
                             {product.scrapeStatus === "pending" && (
                               <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold border border-amber-500/20">
                                 Pending
@@ -612,8 +612,8 @@ export function ModalHeader({
                           </div>
                           <div className="text-[10px] text-slate-400 truncate">
                             {product.scrapeStatus === "pending"
-                              ? "Awaiting local residential worker pickup"
-                              : "Set pending for local worker to extract true price"}
+                              ? "Awaiting local residential worker"
+                              : "Mark pending to extract authentic price"}
                           </div>
                         </div>
                       </button>
