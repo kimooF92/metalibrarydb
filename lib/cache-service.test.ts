@@ -7,6 +7,9 @@ import {
   deleteByPrefix,
   acquireLock,
   releaseLock,
+  _getMemoryCacheSize,
+  _clearMemoryCache,
+  _setMemoryCacheForTest,
 } from "./cache-service";
 import { isRedisAvailable } from "./redis";
 
@@ -133,5 +136,36 @@ test("Upstash Cache & Lock Service Suite", async (t) => {
     const matchedIds = matchingAds.map((a) => a.id).sort();
     assert.deepStrictEqual(matchedIds, ["ad_1", "ad_2", "ad_3"], "All 3 unique ads should be matched without duplicates");
   });
+
+  await t.test("L1 Memory capacity is strictly bounded at MAX_MEMORY_ENTRIES (500)", async () => {
+    _clearMemoryCache();
+
+    // Insert 510 active entries with high TTL (no expired entries, 0 Redis quota consumed)
+    for (let i = 0; i < 510; i++) {
+      _setMemoryCacheForTest(`cache:unit-test:bounded:${i}`, { idx: i }, 60_000);
+    }
+
+    const finalSize = _getMemoryCacheSize();
+    assert.strictEqual(finalSize, 500, "L1 memory cache must never exceed MAX_MEMORY_ENTRIES (500)");
+
+    // The oldest entry (index 0) must have been evicted by FIFO policy
+    const evicted = await getCached(`cache:unit-test:bounded:0`);
+    assert.strictEqual(evicted, null, "Oldest entry should be evicted and return null on getCached");
+    _clearMemoryCache();
+  });
+
+  await t.test("L1 custom TTL option is accepted by getCached and setCached", async () => {
+    _clearMemoryCache();
+    const testKey = "cache:unit-test:custom-l1-ttl";
+
+    // Set with custom 5-minute L1 retention
+    await setCached(testKey, { brand: "test" }, 300, { l1MaxTtlMs: 300 * 1000 });
+    const fromL1 = await getCached<any>(testKey, { l1MaxTtlMs: 300 * 1000 });
+    assert.deepStrictEqual(fromL1, { brand: "test" }, "Should retrieve payload from L1");
+
+    await deleteCached(testKey);
+    _clearMemoryCache();
+  });
 });
+
 

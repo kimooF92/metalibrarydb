@@ -20,12 +20,18 @@ export interface ProductClusterMetrics {
   isFlagshipProduct: boolean;
 }
 
+const copyNormalizationCache = new Map<string, string>();
+const MAX_COPY_CACHE_SIZE = 2000;
+
 /**
  * Normalizes ad caption text into a standardized content fingerprint.
  * Strips URLs, tracking codes, phone numbers, emojis, and excess whitespace.
+ * Memoized with a bounded cache to eliminate redundant regex execution across duplicate ads.
  */
 export function normalizeAdCopy(caption?: string | null): string {
   if (!caption) return "";
+  const cached = copyNormalizationCache.get(caption);
+  if (cached !== undefined) return cached;
 
   let text = caption;
 
@@ -45,7 +51,13 @@ export function normalizeAdCopy(caption?: string | null): string {
   text = text.trim().toLowerCase().replace(/\s+/g, " ");
 
   // Return first 120 characters as fingerprint
-  return text.slice(0, 120);
+  const result = text.slice(0, 120);
+
+  if (copyNormalizationCache.size >= MAX_COPY_CACHE_SIZE) {
+    copyNormalizationCache.clear();
+  }
+  copyNormalizationCache.set(caption, result);
+  return result;
 }
 
 /**

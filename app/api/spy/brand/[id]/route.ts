@@ -196,7 +196,7 @@ export async function GET(
     const cacheKey = `cache:brand:${activeWorkspace.id}:${canonicalBrandId}:${filterSisterPageId || "all"}`;
 
     if (!forceRefresh) {
-      const cached = await getCached<any>(cacheKey);
+      const cached = await getCached<any>(cacheKey, { l1MaxTtlMs: 300 * 1000 });
       if (cached) {
         return NextResponse.json(cached, {
           headers: {
@@ -823,8 +823,8 @@ export async function GET(
       },
     };
 
-    // Store in Upstash Redis + L1 Memory Cache (TTL: 300 seconds)
-    await setCached(cacheKey, responsePayload, 300);
+    // Store in Upstash Redis + L1 Memory Cache (TTL: 300 seconds, with 5-minute L1 retention for cold fallback)
+    await setCached(cacheKey, responsePayload, 300, { l1MaxTtlMs: 300 * 1000 });
 
     return NextResponse.json(responsePayload, {
       headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY },

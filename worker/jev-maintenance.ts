@@ -2,7 +2,7 @@ import { db } from "../db";
 import { scrapedProducts, ads } from "../db/schema";
 import { sql, eq, and, or, isNull, inArray } from "drizzle-orm";
 import { classifyProductWithJev } from "../lib/typesafe-jev";
-import { resolvePriceDoubtWithJev } from "../lib/doubt-detector";
+import { resolvePriceDoubtWithJev, harvestPriceCandidates } from "../lib/doubt-detector";
 import { formatPrice } from "../lib/format-price";
 import { scrapeProductDirectHtml } from "../lib/html-scraper";
 import { isCategoryUrl } from "../lib/url-parser";

@@ -11,22 +11,51 @@ const MAX_MEMORY_ENTRIES = 500;
 const L1_MAX_TTL_MS = 10 * 1000; // 10 seconds max L1 retention
 
 /**
- * Evict expired keys from L1 memory to prevent memory bloat.
+ * Evict expired keys from L1 memory, and if capacity is still reached,
+ * evict the oldest entry (FIFO/insertion-order) to guarantee MAX_MEMORY_ENTRIES bound.
  */
-function cleanupMemoryCache(): void {
+function ensureMemoryCapacity(): void {
   const now = Date.now();
   for (const [key, entry] of memoryCache.entries()) {
     if (entry.expiresAt <= now) {
       memoryCache.delete(key);
     }
   }
+
+  while (memoryCache.size >= MAX_MEMORY_ENTRIES) {
+    const oldestKey = memoryCache.keys().next().value;
+    if (!oldestKey) break;
+    memoryCache.delete(oldestKey);
+  }
+}
+
+/**
+ * For unit testing memory cache metrics and bounds.
+ */
+export function _getMemoryCacheSize(): number {
+  return memoryCache.size;
+}
+
+export function _clearMemoryCache(): void {
+  memoryCache.clear();
+}
+
+export function _setMemoryCacheForTest(key: string, value: any, ttlMs: number): void {
+  ensureMemoryCapacity();
+  memoryCache.set(key, {
+    value,
+    expiresAt: Date.now() + ttlMs,
+  });
 }
 
 /**
  * Retrieve cached data with Hybrid L1 (Memory) -> L2 (Upstash Redis) lookup.
  * Automatically handles serialization, fallback, and error suppression.
  */
-export async function getCached<T>(key: string): Promise<T | null> {
+export async function getCached<T>(
+  key: string,
+  options?: { l1MaxTtlMs?: number }
+): Promise<T | null> {
   const now = Date.now();
 
   // 1. Check L1 Memory Cache (0 Upstash commands consumed)
@@ -43,10 +72,12 @@ export async function getCached<T>(key: string): Promise<T | null> {
   try {
     const data = await redis.get<T>(key);
     if (data !== null && data !== undefined) {
-      // Backfill L1 memory for subsequent micro-requests
+      // Backfill L1 memory for subsequent micro-requests with bounded capacity
+      ensureMemoryCapacity();
+      const maxL1 = options?.l1MaxTtlMs ?? L1_MAX_TTL_MS;
       memoryCache.set(key, {
         value: data,
-        expiresAt: now + L1_MAX_TTL_MS,
+        expiresAt: now + maxL1,
       });
       return data;
     }
@@ -64,15 +95,20 @@ export async function getCached<T>(key: string): Promise<T | null> {
  * @param key Cache key string
  * @param value JSON-serializable data payload
  * @param ttlSeconds Expiration in seconds (mandatory to prevent orphaned Redis keys)
+ * @param options Optional configuration including custom l1MaxTtlMs
  */
-export async function setCached<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
+export async function setCached<T>(
+  key: string,
+  value: T,
+  ttlSeconds: number,
+  options?: { l1MaxTtlMs?: number }
+): Promise<void> {
   const now = Date.now();
-  const l1TtlMs = Math.min(ttlSeconds * 1000, L1_MAX_TTL_MS);
+  const maxL1 = options?.l1MaxTtlMs ?? L1_MAX_TTL_MS;
+  const l1TtlMs = Math.min(ttlSeconds * 1000, maxL1);
 
-  // 1. Populate L1 Memory
-  if (memoryCache.size >= MAX_MEMORY_ENTRIES) {
-    cleanupMemoryCache();
-  }
+  // 1. Populate L1 Memory with bounded capacity
+  ensureMemoryCapacity();
   memoryCache.set(key, {
     value,
     expiresAt: now + l1TtlMs,

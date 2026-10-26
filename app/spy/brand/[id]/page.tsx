@@ -223,34 +223,111 @@ export default function BrandDeepDivePage({
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // Sync activeTab from URL query params on mount
+  const tabScrollPositionsRef = useRef<Record<string, number>>({
+    analytics: 0,
+    products: 0,
+    creatives: 0,
+  });
+  const activeTabRef = useRef<"analytics" | "products" | "creatives">("analytics");
+  activeTabRef.current = activeTab;
+
+  const handleTabChange = (nextTab: "analytics" | "products" | "creatives", pushHistory = true) => {
+    const currentTab = activeTabRef.current;
+    if (nextTab === currentTab) return;
+
+    // 1. Save scroll position of the scroll container (<main>)
+    const mainEl = document.querySelector("main");
+    if (mainEl) {
+      tabScrollPositionsRef.current[currentTab] = mainEl.scrollTop;
+    }
+
+    // 2. Set active tab
+    activeTabRef.current = nextTab;
+    setActiveTab(nextTab);
+
+    // 3. Update URL query shallowly without triggering a Next.js re-fetch
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (nextTab === "analytics") {
+        url.searchParams.delete("tab");
+      } else {
+        url.searchParams.set("tab", nextTab);
+      }
+      if (pushHistory) {
+        window.history.pushState({ tab: nextTab }, "", url.toString());
+      } else {
+        window.history.replaceState({ tab: nextTab }, "", url.toString());
+      }
+    }
+
+    // 4. Restore scroll position for target tab
+    requestAnimationFrame(() => {
+      if (mainEl) {
+        mainEl.scrollTop = tabScrollPositionsRef.current[nextTab] || 0;
+      }
+    });
+  };
+
+  // Sync activeTab from URL query params on mount and on browser popstate (Back/Forward)
   useEffect(() => {
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
       const tab = urlParams.get("tab");
       if (tab === "products" || tab === "creatives" || tab === "analytics") {
+        activeTabRef.current = tab as any;
         setActiveTab(tab as any);
       }
       if (urlParams.get("active") === "true" || urlParams.get("activeOnly") === "true") {
         setProductActiveOnly(true);
       }
     }
+
+    const handlePopState = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tab = urlParams.get("tab");
+      const resolvedTab = tab === "products" || tab === "creatives" ? tab : "analytics";
+      handleTabChange(resolvedTab as any, false);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      abortControllerRef.current?.abort();
+      revalidateAbortControllerRef.current?.abort();
+    };
   }, []);
 
   const canonicalIdRef = useRef<string | null>(null);
-  const brandRequestIdRef = useRef(0);
+  const primaryRequestIdRef = useRef(0);
+  const silentRequestIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const revalidateAbortControllerRef = useRef<AbortController | null>(null);
 
   // Load brand analytics payload
-  const fetchBrandData = async (forceRefresh = false, sisterPageIdOverride?: string | null) => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
+  const fetchBrandData = async (
+    forceRefresh = false,
+    sisterPageIdOverride?: string | null,
+    silent = false
+  ) => {
+    // Silent revalidations use an independent controller so they don't cancel primary user fetches
+    const activeControllerRef = silent ? revalidateAbortControllerRef : abortControllerRef;
+    if (activeControllerRef.current) {
+      activeControllerRef.current.abort();
     }
     const controller = new AbortController();
-    abortControllerRef.current = controller;
-    const currentRequestId = ++brandRequestIdRef.current;
-    setIsLoadingAnalytics(true);
-    setError(null);
+    activeControllerRef.current = controller;
+
+    // Separate request tracking so silent background revalidations don't invalidate in-flight primary requests
+    const activeRequestIdRef = silent ? silentRequestIdRef : primaryRequestIdRef;
+    const currentRequestId = ++activeRequestIdRef.current;
+
+    // Only display blocking loader on cold mount when no data is present
+    if (!silent && !data) {
+      setIsLoadingAnalytics(true);
+    }
+    if (!silent) {
+      setError(null);
+    }
     try {
       const activeSisterId = sisterPageIdOverride !== undefined ? sisterPageIdOverride : selectedSisterPageId;
       const params = new URLSearchParams();
@@ -262,7 +339,7 @@ export default function BrandDeepDivePage({
         signal: controller.signal,
       });
       const json = await res.json();
-      if (currentRequestId !== brandRequestIdRef.current) return;
+      if (currentRequestId !== activeRequestIdRef.current) return;
       if (!res.ok) {
         throw new Error(json.error || "Failed to load brand analytics");
       }
@@ -280,10 +357,19 @@ export default function BrandDeepDivePage({
       }
     } catch (err: any) {
       if (err.name === "AbortError") return;
-      if (currentRequestId !== brandRequestIdRef.current) return;
-      setError(err.message || "Failed to load brand data");
+      if (currentRequestId !== activeRequestIdRef.current) return;
+      if (!silent) {
+        setError(err.message || "Failed to load brand data");
+      } else {
+        console.warn("[Brand Analytics] Silent background revalidation failed:", err.message || err);
+        showToast({
+          type: "warning",
+          title: "Metrics Refresh Delayed",
+          message: "Product was updated, but aggregate brand metrics could not be refreshed immediately.",
+        });
+      }
     } finally {
-      if (currentRequestId === brandRequestIdRef.current) {
+      if (currentRequestId === activeRequestIdRef.current && !silent) {
         setIsLoadingAnalytics(false);
       }
     }
@@ -394,9 +480,8 @@ export default function BrandDeepDivePage({
     }
     fetchBrandData();
     return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+      abortControllerRef.current?.abort();
+      revalidateAbortControllerRef.current?.abort();
     };
   }, [id]);
 
@@ -497,6 +582,8 @@ export default function BrandDeepDivePage({
     }
   };
 
+  const refreshingProductIdsRef = useRef<Set<string>>(new Set());
+
   // Re-extract individual product
   const handleRefreshProduct = async (productId: string, productOverride?: ScrapedProduct) => {
     const prod = resolveProductForRefresh(productId, data?.products || [], productOverride);
@@ -508,6 +595,10 @@ export default function BrandDeepDivePage({
       });
       return;
     }
+
+    if (refreshingProductIdsRef.current.has(prod.id)) return;
+    refreshingProductIdsRef.current.add(prod.id);
+
     try {
       const res = await fetch("/api/products/extract", {
         method: "POST",
@@ -521,12 +612,31 @@ export default function BrandDeepDivePage({
       });
       const resJson = await res.json();
       if (resJson.success) {
+        // 1. In-place optimistic update: update the product card immediately
+        if (resJson.product) {
+          const updated = resJson.product;
+          setData((prev) => {
+            if (!prev) return prev;
+            const prevProducts = prev.products || [];
+            const idx = prevProducts.findIndex((p) => p.id === updated.id || p.url === updated.url);
+            const newProducts = [...prevProducts];
+            if (idx >= 0) {
+              newProducts[idx] = { ...newProducts[idx], ...updated };
+            } else {
+              newProducts.unshift(updated);
+            }
+            return { ...prev, products: newProducts };
+          });
+        }
+
         showToast({
           type: "success",
           title: "Product Scraped",
           message: `${resJson.product?.title || "Product"} updated successfully.`,
         });
-        await fetchBrandData(true);
+
+        // 2. Background silent revalidation with forceRefresh=true so server-calculated aggregates refresh without unmounting UI
+        fetchBrandData(true, undefined, true);
       } else {
         throw new Error(resJson.error || "Failed to scrape product");
       }
@@ -536,6 +646,8 @@ export default function BrandDeepDivePage({
         title: "Scrape Failed",
         message: err.message || "Could not scrape product page.",
       });
+    } finally {
+      refreshingProductIdsRef.current.delete(prod.id);
     }
   };
 
@@ -567,7 +679,7 @@ export default function BrandDeepDivePage({
     });
     setFeedSearch("");
     updateFilters({ search: "", productId: product.id, page: 1 });
-    setActiveTab("creatives");
+    handleTabChange("creatives");
   };
 
   const handleClearProductFilter = () => {
@@ -695,7 +807,7 @@ export default function BrandDeepDivePage({
     };
   }, [activeTab, isLoadingFeed, isFetchingMore, pagination.page, pagination.totalPages, updateFilters]);
 
-  if (isLoadingAnalytics) {
+  if (isLoadingAnalytics && !data) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3 text-slate-500">
         <RefreshCw className="w-8 h-8 animate-spin text-indigo-500" />
@@ -1042,9 +1154,18 @@ export default function BrandDeepDivePage({
         )}
 
         {/* Sleek Segmented Tab Switcher */}
-        <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 w-fit max-w-full overflow-x-auto gap-1">
+        <div
+          role="tablist"
+          aria-label="Brand Deep Dive Navigation Tabs"
+          className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 w-fit max-w-full overflow-x-auto gap-1"
+        >
           <button
-            onClick={() => setActiveTab("analytics")}
+            type="button"
+            id="tab-analytics"
+            role="tab"
+            aria-selected={activeTab === "analytics"}
+            aria-controls="tabpanel-analytics"
+            onClick={() => handleTabChange("analytics")}
             className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
               activeTab === "analytics"
                 ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-300 shadow-xs"
@@ -1056,7 +1177,12 @@ export default function BrandDeepDivePage({
           </button>
 
           <button
-            onClick={() => setActiveTab("products")}
+            type="button"
+            id="tab-products"
+            role="tab"
+            aria-selected={activeTab === "products"}
+            aria-controls="tabpanel-products"
+            onClick={() => handleTabChange("products")}
             className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
               activeTab === "products"
                 ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-300 shadow-xs"
@@ -1073,7 +1199,12 @@ export default function BrandDeepDivePage({
           </button>
 
           <button
-            onClick={() => setActiveTab("creatives")}
+            type="button"
+            id="tab-creatives"
+            role="tab"
+            aria-selected={activeTab === "creatives"}
+            aria-controls="tabpanel-creatives"
+            onClick={() => handleTabChange("creatives")}
             className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
               activeTab === "creatives"
                 ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-300 shadow-xs"
@@ -1089,9 +1220,13 @@ export default function BrandDeepDivePage({
         </div>
       </div>
 
-      {/* 2. TAB CONTENT */}
-      {activeTab === "analytics" ? (
-        <div className="space-y-5 animate-in fade-in duration-150">
+      {/* 2. TAB CONTENT PANELS (Preserved DOM nodes to eliminate unmounting and scroll collapse) */}
+      <div
+        id="tabpanel-analytics"
+        role="tabpanel"
+        aria-labelledby="tab-analytics"
+        className={activeTab === "analytics" ? "space-y-5" : "hidden"}
+      >
           {/* Executive Metrics Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 p-3.5 shadow-sm">
@@ -1405,7 +1540,8 @@ export default function BrandDeepDivePage({
                 <div className="flex justify-between items-center py-0.5">
                   <span className="text-slate-500">Catalog Depth:</span>
                   <button
-                    onClick={() => setActiveTab("products")}
+                    type="button"
+                    onClick={() => handleTabChange("products")}
                     className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
                   >
                     <span>{commercialStrategy.totalCatalogProducts} products detected</span>
@@ -1441,10 +1577,15 @@ export default function BrandDeepDivePage({
               </div>
             </div>
           )}
-        </div>
-      ) : activeTab === "products" ? (
-        /* 2b. PRODUCTS & CATALOG TAB */
-        <div className="space-y-4 animate-in fade-in duration-150">
+      </div>
+
+      {/* 2b. PRODUCTS & CATALOG TAB */}
+      <div
+        id="tabpanel-products"
+        role="tabpanel"
+        aria-labelledby="tab-products"
+        className={activeTab === "products" ? "space-y-4" : "hidden"}
+      >
           {/* Header & Batch Scrape Action Bar */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white dark:bg-slate-950/50 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
             <div>
@@ -1769,10 +1910,15 @@ export default function BrandDeepDivePage({
               </div>
             );
           })()}
-        </div>
-      ) : (
-        /* 3. ALL CREATIVES FEED TAB */
-        <div className="space-y-4 animate-in fade-in duration-150">
+      </div>
+
+      {/* 3. ALL CREATIVES FEED TAB */}
+      <div
+        id="tabpanel-creatives"
+        role="tabpanel"
+        aria-labelledby="tab-creatives"
+        className={activeTab === "creatives" ? "space-y-4" : "hidden"}
+      >
           {/* Filter banner if filtered by product */}
           {filteredProductForCreatives && (
             <div className="flex items-center justify-between p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800/80 text-xs">
@@ -1945,7 +2091,6 @@ export default function BrandDeepDivePage({
             </>
           )}
         </div>
-      )}
 
       {/* Product Details & Competitor Benchmark Modal */}
       <ProductDetailsModal
