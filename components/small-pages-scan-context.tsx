@@ -26,9 +26,12 @@ const SmallPagesScanContext = createContext<SmallPagesScanContextType | undefine
 
 const LOCAL_STORAGE_DISMISS_KEY = "small_pages_scan_dismissed_sig";
 
+const getDismissKey = (wsId?: string) =>
+  wsId ? `small_pages_scan_dismissed_sig_${wsId}` : LOCAL_STORAGE_DISMISS_KEY;
+
 export function SmallPagesScanProvider({ children }: { children: React.ReactNode }) {
   const { isStaff } = useAuth();
-  const { activeWorkspace } = useWorkspace();
+  const { activeWorkspace, isLoading: isWorkspaceLoading, workspaces } = useWorkspace();
   const workspaceId = activeWorkspace?.id;
 
   const [pages, setPages] = useState<SmallPageNeedingScan[]>([]);
@@ -41,14 +44,29 @@ export function SmallPagesScanProvider({ children }: { children: React.ReactNode
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
 
   const requestInFlightRef = useRef(false);
+  const prevWorkspaceIdRef = useRef<string | undefined>(undefined);
+
+  // Reset counts if active workspace changes
+  useEffect(() => {
+    if (prevWorkspaceIdRef.current !== undefined && prevWorkspaceIdRef.current !== workspaceId) {
+      setCount(0);
+      setPages([]);
+      setInQueueCount(0);
+      setPendingEnqueueCount(0);
+      setIsDismissed(false);
+    }
+    prevWorkspaceIdRef.current = workspaceId;
+  }, [workspaceId]);
 
   const generateSignature = (items: SmallPageNeedingScan[]) => {
     if (!items || items.length === 0) return "";
     return `${items.length}_${items.slice(0, 5).map((p) => p.id).join(",")}`;
   };
 
+  const shouldWaitForWorkspace = isWorkspaceLoading || (workspaces.length > 0 && !workspaceId);
+
   const fetchData = useCallback(async () => {
-    if (isStaff || requestInFlightRef.current || document.hidden) return;
+    if (isStaff || shouldWaitForWorkspace || requestInFlightRef.current || document.hidden) return;
     requestInFlightRef.current = true;
     try {
       const url = workspaceId
@@ -68,7 +86,11 @@ export function SmallPagesScanProvider({ children }: { children: React.ReactNode
 
           if (fetchedPages.length > 0) {
             const sig = generateSignature(fetchedPages);
-            const savedSig = localStorage.getItem(LOCAL_STORAGE_DISMISS_KEY);
+            const dismissKey = getDismissKey(workspaceId);
+            const savedSig =
+              typeof window !== "undefined"
+                ? localStorage.getItem(dismissKey) || localStorage.getItem(LOCAL_STORAGE_DISMISS_KEY)
+                : null;
             // If the user already explicitly dismissed THIS exact signature, keep dismissed
             if (savedSig === sig) {
               setIsDismissed(true);
@@ -87,11 +109,11 @@ export function SmallPagesScanProvider({ children }: { children: React.ReactNode
       requestInFlightRef.current = false;
       setLoading(false);
     }
-  }, [workspaceId, isStaff]);
+  }, [workspaceId, isStaff, shouldWaitForWorkspace]);
 
   useEffect(() => {
-    if (isStaff) {
-      setLoading(false);
+    if (isStaff || shouldWaitForWorkspace) {
+      if (isStaff) setLoading(false);
       return;
     }
 
@@ -107,20 +129,30 @@ export function SmallPagesScanProvider({ children }: { children: React.ReactNode
       clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [fetchData, isModalOpen, isDismissed, isStaff]);
+  }, [fetchData, isModalOpen, isDismissed, isStaff, shouldWaitForWorkspace]);
 
   const dismiss = useCallback(() => {
     setIsDismissed(true);
     const sig = generateSignature(pages);
-    if (sig) {
-      localStorage.setItem(LOCAL_STORAGE_DISMISS_KEY, sig);
+    if (sig && typeof window !== "undefined") {
+      const dismissKey = getDismissKey(workspaceId);
+      try {
+        localStorage.setItem(dismissKey, sig);
+        localStorage.setItem(LOCAL_STORAGE_DISMISS_KEY, sig);
+      } catch {}
     }
-  }, [pages]);
+  }, [pages, workspaceId]);
 
   const unDismiss = useCallback(() => {
     setIsDismissed(false);
-    localStorage.removeItem(LOCAL_STORAGE_DISMISS_KEY);
-  }, []);
+    if (typeof window !== "undefined") {
+      const dismissKey = getDismissKey(workspaceId);
+      try {
+        localStorage.removeItem(dismissKey);
+        localStorage.removeItem(LOCAL_STORAGE_DISMISS_KEY);
+      } catch {}
+    }
+  }, [workspaceId]);
 
   const openModal = useCallback(() => {
     setIsModalOpen(true);
