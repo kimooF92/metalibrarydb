@@ -20,6 +20,7 @@ import { PRODUCT_EXTRACTION_LOOKUP_PROJECTION } from "@/lib/product-projections"
 import { buildProductExtractionNotification } from "@/lib/product-extraction";
 import { enhanceProductWithJev } from "@/lib/product-enhancer";
 import { validateAndGatekeepProduct, resolveEffectiveScrapeStatus } from "@/lib/product-validator";
+import { deleteByPrefix, deleteCached } from "@/lib/cache-service";
 
 export async function POST(req: NextRequest) {
   const authError = await validateApiSecret(req);
@@ -129,8 +130,15 @@ export async function POST(req: NextRequest) {
           .where(eq(ads.id, adId));
       }
 
-      // Also link any other ads with similar linkUrl in background
-      linkMatchingAds(existingProduct.id, normalizedUrl).catch(console.error);
+      // Also link any other ads with similar linkUrl
+      await linkMatchingAds(existingProduct.id, normalizedUrl);
+
+      if (adId && activeWorkspace) {
+        await Promise.allSettled([
+          deleteByPrefix(`cache:spy_ads:${activeWorkspace.id}:`),
+          deleteCached(`cache:stats:${activeWorkspace.id}`),
+        ]);
+      }
 
       const { rawExtract: _raw, ...cleanExisting } = existingProduct as any;
       return NextResponse.json({
@@ -331,7 +339,7 @@ export async function POST(req: NextRequest) {
 
     // Link any other ads that share this destination URL
     if (savedProduct) {
-      linkMatchingAds(savedProduct.id, normalizedUrl).catch(console.error);
+      await linkMatchingAds(savedProduct.id, normalizedUrl);
 
       await createNotification(buildProductExtractionNotification({
         success: true,
@@ -341,6 +349,19 @@ export async function POST(req: NextRequest) {
         url: normalizedUrl,
         domain: resolvedDomain,
       }));
+
+      // Invalidate relevant Upstash caches for the active workspace
+      if (resolvedWorkspaceId) {
+        const brandKeys = Array.from(
+          new Set([pageId, resolvedDomain].filter(Boolean).map((k) => k!.toLowerCase()))
+        );
+        await Promise.allSettled([
+          deleteByPrefix(`cache:products:${resolvedWorkspaceId}:`),
+          deleteByPrefix(`cache:spy_ads:${resolvedWorkspaceId}:`),
+          ...brandKeys.map((k) => deleteByPrefix(`cache:brand:${resolvedWorkspaceId}:${k}:`)),
+          deleteCached(`cache:stats:${resolvedWorkspaceId}`),
+        ]);
+      }
     }
 
     const { rawExtract: _raw, ...cleanProduct } = savedProduct as any;

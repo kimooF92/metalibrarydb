@@ -62,7 +62,13 @@ export async function GET(request: Request) {
           rank: sql<number>`row_number() over (partition by ${scanHistory.trackedPageId} order by ${scanHistory.checkedAt} desc)`.as("rank"),
         })
         .from(scanHistory)
-        .where(and(inArray(scanHistory.trackedPageId, pageIds), isNotNull(scanHistory.results)))
+        .where(
+          and(
+            inArray(scanHistory.trackedPageId, pageIds),
+            isNotNull(scanHistory.results),
+            gte(scanHistory.checkedAt, sql`NOW() - INTERVAL '90 days'`)
+          )
+        )
         .as("ranked_scans");
 
       recentScans = await db

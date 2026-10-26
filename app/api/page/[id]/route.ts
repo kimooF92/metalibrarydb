@@ -236,6 +236,16 @@ export async function DELETE(
 
     // 8. Invalidate all Redis caches across workspace nodes
     if (workspaceId) {
+      const brandKeys = [
+        pageId ? pageId.toLowerCase() : null,
+        domain ? domain.toLowerCase() : null,
+        id.toLowerCase(),
+      ].filter(Boolean) as string[];
+
+      const brandInvalidations = brandKeys.map((bk) =>
+        deleteByPrefix(`cache:brand:${workspaceId}:${bk}:`)
+      );
+
       await Promise.allSettled([
         deleteByPrefix(`cache:pages:${workspaceId}:`),
         deleteCached(`cache:stats:${workspaceId}`),
@@ -243,16 +253,12 @@ export async function DELETE(
         deleteByPrefix(`cache:spy_ads:${workspaceId}:`),
         deleteByPrefix(`cache:fresh_winners:${workspaceId}:`),
         deleteCached(`cache:spy_brands:${workspaceId}`),
+        ...brandInvalidations,
       ]);
     } else {
-      await Promise.allSettled([
-        deleteByPrefix("cache:pages:"),
-        deleteCached("cache:stats:"),
-        deleteByPrefix("cache:products:"),
-        deleteByPrefix("cache:spy_ads:"),
-        deleteByPrefix("cache:fresh_winners:"),
-        deleteCached("cache:spy_brands:"),
-      ]);
+      console.warn(
+        `[Cache Warning] Missing workspaceId for page ${id}; skipping prefix invalidation, relying on TTL.`
+      );
     }
 
     return NextResponse.json({

@@ -13,7 +13,15 @@ import {
   resolveNicheDbCategories,
 } from "@/lib/niches-taxonomy";
 
-import { getCached, setCached, deleteByPrefix } from "@/lib/cache-service";
+import { getCached, setCached, deleteByPrefix, deleteCached, buildCanonicalFilterHash } from "@/lib/cache-service";
+
+const ALLOWED_PRODUCT_FILTERS = [
+  "id", "productId", "search", "domain", "brand", "platform", "category", "niche",
+  "subCategory", "subNiche", "hasOffer", "isFavorite", "status", "hideInactive",
+  "adLaunch", "adLaunchFilter", "adLaunchFrom", "adLaunchTo", "stillRunning",
+  "activeStatus", "smartPreset", "preset", "discovery", "discoveryFrom", "discoveryTo",
+  "sortBy", "sortOrder", "includeStats", "page", "limit", "lean"
+];
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -67,7 +75,8 @@ export async function GET(req: NextRequest) {
 
     // Hybrid Upstash Redis cache check to eliminate duplicate DB waterfalls across all serverless instances
     const forceRefresh = searchParams.get("_t") !== null || searchParams.get("refresh") === "true";
-    const cacheKey = `cache:products:${activeWorkspace.id}:${role}:${req.nextUrl.searchParams.toString()}`;
+    const filterHash = buildCanonicalFilterHash(searchParams, ALLOWED_PRODUCT_FILTERS);
+    const cacheKey = `cache:products:${activeWorkspace.id}:${role}:${filterHash}`;
 
     if (!forceRefresh && !includeDetails) {
       const cached = await getCached<any>(cacheKey);
@@ -656,6 +665,7 @@ export async function PATCH(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    const activeWorkspace = await getActiveWorkspace(req);
     const role = (await getRoleFromRequest(req)) || "admin";
     const body = await req.json();
     const {
@@ -783,8 +793,17 @@ export async function PATCH(req: NextRequest) {
         updatedAt: scrapedProducts.updatedAt,
       });
 
-    // Invalidate products cache across all workspace nodes
-    await deleteByPrefix(`cache:products:`).catch(() => {});
+    // Invalidate products, spy ads, stats, and brand cache for this workspace
+    if (activeWorkspace) {
+      const ws = activeWorkspace.id;
+      const brandKey = (updatedProduct?.domain || "").toLowerCase();
+      await Promise.allSettled([
+        deleteByPrefix(`cache:products:${ws}:`),
+        deleteByPrefix(`cache:spy_ads:${ws}:`),
+        deleteCached(`cache:stats:${ws}`),
+        brandKey ? deleteByPrefix(`cache:brand:${ws}:${brandKey}:`) : Promise.resolve(),
+      ]);
+    }
 
     return NextResponse.json({
       success: true,
@@ -806,6 +825,7 @@ export async function DELETE(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    const activeWorkspace = await getActiveWorkspace(req);
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
 
@@ -823,7 +843,7 @@ export async function DELETE(req: NextRequest) {
       .where(eq(ads.productId, id));
 
     // Mark product as deleted and purge ephemeral raw_extract to protect 500 MB disk quota
-    await db
+    const [deletedProduct] = await db
       .update(scrapedProducts)
       .set({
         scrapeStatus: "deleted",
@@ -832,10 +852,20 @@ export async function DELETE(req: NextRequest) {
         isFavoriteStaff: false,
         updatedAt: new Date(),
       })
-      .where(eq(scrapedProducts.id, id));
+      .where(eq(scrapedProducts.id, id))
+      .returning({ domain: scrapedProducts.domain });
 
-    // Invalidate products cache across all workspace nodes
-    await deleteByPrefix(`cache:products:`).catch(() => {});
+    // Invalidate products, spy ads, stats, and brand cache for this workspace
+    if (activeWorkspace) {
+      const ws = activeWorkspace.id;
+      const brandKey = (deletedProduct?.domain || "").toLowerCase();
+      await Promise.allSettled([
+        deleteByPrefix(`cache:products:${ws}:`),
+        deleteByPrefix(`cache:spy_ads:${ws}:`),
+        deleteCached(`cache:stats:${ws}`),
+        brandKey ? deleteByPrefix(`cache:brand:${ws}:${brandKey}:`) : Promise.resolve(),
+      ]);
+    }
 
     return NextResponse.json({
       success: true,

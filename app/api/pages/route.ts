@@ -8,7 +8,11 @@ import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 import { validateAdminRole, validateApiSecret } from "@/lib/api-guard";
-import { getCached, setCached, deleteByPrefix, deleteCached } from "@/lib/cache-service";
+import { getCached, setCached, deleteByPrefix, deleteCached, buildCanonicalFilterHash } from "@/lib/cache-service";
+
+const ALLOWED_PAGES_FILTERS = [
+  "search", "status", "searchType", "tab", "tag", "sortBy", "sortOrder", "range", "page", "limit", "lean"
+];
 
 const PAGES_CACHE_TTL_SECONDS = 30; // 30 seconds global cache
 
@@ -59,10 +63,8 @@ export async function GET(request: Request) {
 
     // Hybrid Cache Check (L1 Memory + L2 Upstash Redis) to eliminate duplicate DB waterfalls
     const forceRefresh = searchParams.get("_t") !== null || searchParams.get("refresh") === "true";
-    const cleanParams = new URLSearchParams(searchParams);
-    cleanParams.delete("_t");
-    cleanParams.delete("refresh");
-    const cacheKey = `cache:pages:${activeWorkspace.id}:${cleanParams.toString()}`;
+    const filterHash = buildCanonicalFilterHash(searchParams, ALLOWED_PAGES_FILTERS);
+    const cacheKey = `cache:pages:${activeWorkspace.id}:${filterHash}`;
 
     if (!forceRefresh) {
       const cached = await getCached<any>(cacheKey);

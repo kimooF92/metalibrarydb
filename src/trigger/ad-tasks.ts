@@ -30,7 +30,7 @@ export const scanPageCountTask = task({
   queue: {
     concurrencyLimit: 2, // Protect against Meta rate limits
   },
-  onFailure: async ({ payload, error }: any) => {
+  onFailure: async ({ payload, error, ctx }: any) => {
     const errMessage = (error as any)?.message || String(error) || "trigger_task_failed";
     logger.error(`[scan-page-count] onFailure hook triggered: ${errMessage}`);
     try {
@@ -82,7 +82,9 @@ export const scanPageCountTask = task({
           .where(and(eq(queue.trackedPageId, pageRecord.id), inArray(queue.status, ["pending", "running"])))
           .catch(() => {});
 
-        await releaseLock(`lock:scrape:${pageRecord.id}`).catch(() => {});
+        if (ctx?.run?.id) {
+          await releaseLock(`lock:scrape:${pageRecord.id}`, ctx.run.id).catch(() => {});
+        }
         await setCached(
           `scan_step:${pageRecord.id}`,
           {
@@ -194,15 +196,21 @@ export const scanPageCountTask = task({
 
     // Distributed lock with 60s TTL (instead of 180s)
     const lockKey = `lock:scrape:${pageRecord.id}`;
+    // Bind token to Trigger.dev run ID so retries of the same run cleanly own the lock
+    const runToken =
+      ctx?.run?.id ||
+      (typeof crypto !== "undefined" && (crypto as any).randomUUID
+        ? (crypto as any).randomUUID()
+        : `run_${Date.now()}`);
 
-    // If this is a retry attempt (attempt > 1), release any dangling lock left by the previous crashed attempt
+    // If this is a retry attempt (attempt > 1), release any dangling lock left by the previous crashed attempt of THIS run
     if (ctx && ctx.attempt && ctx.attempt.number > 1) {
-      logger.info(`[scan-page-count] Attempt ${ctx.attempt.number}: clearing lock from previous attempt`);
-      await releaseLock(lockKey).catch(() => {});
+      logger.info(`[scan-page-count] Attempt ${ctx.attempt.number}: clearing lock from previous attempt of this run`);
+      await releaseLock(lockKey, runToken).catch(() => {});
     }
 
-    const acquired = await acquireLock(lockKey, 60);
-    if (!acquired) {
+    const lockToken = await acquireLock(lockKey, 60, runToken);
+    if (!lockToken) {
       logger.warn(`Page ${pageRecord.id} (${pageRecord.displayName || targetUrl}) is already locked by another worker.`);
       // Throw an error so Trigger.dev retries with backoff rather than falsely recording success
       throw new Error(`Page ${pageRecord.id} is currently locked by another worker.`);
@@ -436,7 +444,9 @@ export const scanPageCountTask = task({
         await browser.close().catch(() => {});
       }
       // Release distributed lock
-      await releaseLock(lockKey).catch(() => {});
+      if (lockToken) {
+        await releaseLock(lockKey, lockToken).catch(() => {});
+      }
 
       // Invalidate Upstash cache for workspace so UI reflects fresh counts
       if (pageRecord.workspaceId) {

@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { trackedPages, creativeScans, queue, discoveryRuns } from "@/db/schema";
 import { eq, and, or, lt, isNull, inArray } from "drizzle-orm";
-import { releaseLock, deleteCached } from "@/lib/cache-service";
+import { forceReleaseLock, deleteCached } from "@/lib/cache-service";
 
 /**
  * Cleans up orphaned or stuck scans across trackedPages, creativeScans, queue, and discoveryRuns tables.
@@ -116,10 +116,12 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 3): Promise<{
     fixedDiscoveryRuns = runIds.length;
   }
 
-  // 4. Reset orphaned tracked_pages in "scanning" status (tight 90s cutoff for count scans)
+  // 4. Reset orphaned tracked_pages in "scanning" status
+  // Safely exceeds worker 180s (3m) lock TTL to prevent killing active browser scrapes
+  const pageCutoffMinutes = timeoutMinutes === 0 ? 0 : Math.max(timeoutMinutes, 3.5);
   const pageCutoff = timeoutMinutes === 0
     ? cutoff
-    : new Date(Date.now() - Math.min(timeoutMinutes, 1.5) * 60 * 1000);
+    : new Date(Date.now() - pageCutoffMinutes * 60 * 1000);
 
   const scanningPages = timeoutMinutes === 0
     ? await db.query.trackedPages.findMany({
@@ -163,7 +165,7 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 3): Promise<{
       .catch(() => {});
 
     // Free distributed lock and clear stale scan_step in Redis
-    await releaseLock(`lock:scrape:${page.id}`).catch(() => {});
+    await forceReleaseLock(`lock:scrape:${page.id}`).catch(() => {});
     await deleteCached(`scan_step:${page.id}`).catch(() => {});
 
     fixedPages++;

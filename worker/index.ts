@@ -43,7 +43,7 @@ import {
   handleFailure,
   handleSuccess,
 } from "./backoff";
-import { acquireLock, releaseLock, deleteCached, deleteByPrefix } from "../lib/cache-service";
+import { acquireLock, acquireLockDetailed, releaseLock, deleteCached, deleteByPrefix } from "../lib/cache-service";
 
 async function runWorker() {
   const shardIndex = process.env.SHARD_INDEX !== undefined ? parseInt(process.env.SHARD_INDEX, 10) : 0;
@@ -557,10 +557,25 @@ async function runWorker() {
 
       // Acquire distributed scrape lock to synchronize with cloud workers (Meta Ad Library scans only)
       let lockKey: string | null = null;
+      let lockToken: string | null = null;
       if (trackedPage && jobType !== "product_scrape") {
         lockKey = `lock:scrape:${trackedPage.id}`;
-        const acquired = await acquireLock(lockKey, 180);
-        if (!acquired) {
+        const lockResult = await acquireLockDetailed(lockKey, 180);
+        if (!lockResult.acquired) {
+          if (lockResult.reason === "unavailable") {
+            console.warn(
+              `[Worker] ⚠️ Redis lock unavailable for "${targetDisplayName}". Retaining queue job for retry.`
+            );
+            if (queueJob.id) {
+              await db
+                .update(queue)
+                .set({ status: "pending", startedAt: null })
+                .where(eq(queue.id, queueJob.id))
+                .catch(() => {});
+            }
+            continue;
+          }
+
           console.log(
             `[Worker] 🔒 Page "${targetDisplayName}" is already locked by cloud or another worker. Skipping duplicate scrape.`
           );
@@ -573,6 +588,7 @@ async function runWorker() {
           }
           continue;
         }
+        lockToken = lockResult.token;
       }
 
       // Handle durable background product scraping job (Task 2.1)
@@ -970,8 +986,8 @@ async function runWorker() {
         }
       }
     } finally {
-      if (lockKey) {
-        await releaseLock(lockKey).catch(() => {});
+      if (lockKey && lockToken) {
+        await releaseLock(lockKey, lockToken).catch(() => {});
       }
     }
 

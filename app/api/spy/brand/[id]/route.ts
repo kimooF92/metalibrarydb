@@ -9,7 +9,7 @@ import { normalizeProductUrl } from "@/lib/firecrawl";
 import { getCleanDomain } from "@/lib/utils";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
-import { getCached, setCached, acquireLock, releaseLock } from "@/lib/cache-service";
+import { getCached, setCached, acquireLock, releaseLock, isLockOwner } from "@/lib/cache-service";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -54,7 +54,7 @@ export async function GET(
   const authError = await validateApiSecret(req);
   if (authError) return authError;
 
-  let lockAcquired = false;
+  let lockToken: string | null = null;
   let lockKey: string | null = null;
 
   try {
@@ -208,8 +208,28 @@ export async function GET(
     }
 
     // Acquire distributed lock to prevent thundering herd stampedes on cold misses
-    lockKey = `lock:brand:${activeWorkspace.id}:${canonicalBrandId}`;
-    lockAcquired = await acquireLock(lockKey, 15);
+    // TTL is 90 seconds (safely exceeding maxDuration = 60s), scoped with filter identity
+    lockKey = `lock:brand:${activeWorkspace.id}:${canonicalBrandId}:${filterSisterPageId || "all"}`;
+    lockToken = await acquireLock(lockKey, 90);
+
+    if (!lockToken) {
+      // Follower backoff: check 3 times with progressive backoff (700ms, 900ms, 1200ms = 2.8s) to allow leader to finish
+      const backoffMs = [700, 900, 1200];
+      for (const delay of backoffMs) {
+        await new Promise((r) => setTimeout(r, delay));
+        const cachedRetry = await getCached<any>(cacheKey, { l1MaxTtlMs: 300 * 1000 });
+        if (cachedRetry) {
+          return NextResponse.json(cachedRetry, {
+            headers: {
+              "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
+              Vary: PRIVATE_AUTH_VARY,
+            },
+          });
+        }
+      }
+      // If leader timed out or took >2.8s, follower falls back to computing from DB,
+      // but will not attempt to overwrite cache unless it holds lock ownership.
+    }
 
     // 2. Fetch all ads for this brand / portfolio (distinct by ad id with latest observation)
     const adConditions = [];
@@ -823,8 +843,11 @@ export async function GET(
       },
     };
 
-    // Store in Upstash Redis + L1 Memory Cache (TTL: 300 seconds, with 5-minute L1 retention for cold fallback)
-    await setCached(cacheKey, responsePayload, 300, { l1MaxTtlMs: 300 * 1000 });
+    // Store in Upstash Redis + L1 Memory Cache (TTL: 300s) ONLY if this instance still actively owns the lock in Redis.
+    // Prevents expired/superseded calculations from overwriting fresh cache.
+    if (lockToken && lockKey && (await isLockOwner(lockKey, lockToken))) {
+      await setCached(cacheKey, responsePayload, 300, { l1MaxTtlMs: 300 * 1000 });
+    }
 
     return NextResponse.json(responsePayload, {
       headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY },
@@ -836,8 +859,8 @@ export async function GET(
       { status: 500 }
     );
   } finally {
-    if (lockAcquired && lockKey) {
-      await releaseLock(lockKey).catch(() => {});
+    if (lockToken && lockKey) {
+      await releaseLock(lockKey, lockToken).catch(() => {});
     }
   }
 }
