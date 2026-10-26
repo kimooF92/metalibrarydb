@@ -45,11 +45,12 @@ export function BrandOverlaySheet({ children, brandId }: BrandOverlaySheetProps)
     }
   }, []);
 
-  // 1. Lock background scroll containers while overlay is active
+  // 1. Lock background scroll containers while overlay is active and restore exact scroll positions
   useEffect(() => {
     // Lock <main>
     const mainEl = document.querySelector("main");
     const originalMainOverflow = mainEl ? mainEl.style.overflow : "";
+    const originalMainScrollTop = mainEl ? mainEl.scrollTop : 0;
     if (mainEl) mainEl.style.overflow = "hidden";
 
     // Lock any nested table scroll containers (e.g. pages-table.tsx div)
@@ -57,16 +58,20 @@ export function BrandOverlaySheet({ children, brandId }: BrandOverlaySheetProps)
       document.querySelectorAll<HTMLElement>(".overflow-y-auto")
     ).filter((el) => el.id !== "brand-overlay-scroll-container");
 
-    const originalOverflows: { el: HTMLElement; overflow: string }[] = [];
+    const scrollStates: { el: HTMLElement; overflow: string; scrollTop: number }[] = [];
     backgroundScrollEls.forEach((el) => {
-      originalOverflows.push({ el, overflow: el.style.overflow });
+      scrollStates.push({ el, overflow: el.style.overflow, scrollTop: el.scrollTop });
       el.style.overflow = "hidden";
     });
 
     return () => {
-      if (mainEl) mainEl.style.overflow = originalMainOverflow;
-      originalOverflows.forEach(({ el, overflow }) => {
+      if (mainEl) {
+        mainEl.style.overflow = originalMainOverflow;
+        mainEl.scrollTop = originalMainScrollTop;
+      }
+      scrollStates.forEach(({ el, overflow, scrollTop }) => {
         el.style.overflow = overflow;
+        el.scrollTop = scrollTop;
       });
     };
   }, []);
@@ -159,6 +164,11 @@ export function BrandOverlaySheet({ children, brandId }: BrandOverlaySheetProps)
               {brandId && (
                 <a
                   href={fullWindowUrl}
+                  onClick={(e) => {
+                    if (brandId && typeof window !== "undefined") {
+                      e.currentTarget.href = `/spy/brand/${encodeURIComponent(brandId)}${window.location.search}`;
+                    }
+                  }}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"

@@ -380,6 +380,10 @@ export function useSpy(initialParams?: AdFilterParams) {
   const [error, setError] = useState<string | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const requestIdRef = useRef(0);
+  const lastFetchedQueryRef = useRef<string | null>(null);
+  const adsRef = useRef(ads);
+  adsRef.current = ads;
 
   const fetchFeed = useCallback(async (isManualRefresh = false) => {
     if (params.enabled === false) {
@@ -394,6 +398,7 @@ export function useSpy(initialParams?: AdFilterParams) {
     }
     const controller = new AbortController();
     abortControllerRef.current = controller;
+    const currentReqId = ++requestIdRef.current;
 
     const currentPage = isManualRefresh ? 1 : (params.page || 1);
     if (isManualRefresh) {
@@ -447,6 +452,16 @@ export function useSpy(initialParams?: AdFilterParams) {
       if (params.sortOrder) query.set("sortOrder", params.sortOrder);
       query.set("page", currentPage.toString());
       query.set("limit", (params.limit || 24).toString());
+
+      const currentQueryString = query.toString();
+
+      // Guard: if re-enabled with identical query params and cards already exist, skip redundant re-fetch
+      if (!isManualRefresh && currentQueryString === lastFetchedQueryRef.current && adsRef.current.length > 0) {
+        setIsLoading(false);
+        setIsFetchingMore(false);
+        return;
+      }
+
       if (isManualRefresh) query.set("_t", Date.now().toString());
 
       const res = await fetch(`/api/spy/ads?${query.toString()}`, {
@@ -457,6 +472,12 @@ export function useSpy(initialParams?: AdFilterParams) {
           : { Accept: "application/json" },
       });
       const data = await parseJsonResponse(res, "Failed to fetch ad feed");
+
+      if (currentReqId !== requestIdRef.current || controller.signal.aborted) {
+        return;
+      }
+
+      lastFetchedQueryRef.current = currentQueryString;
 
       const newItems = data.items || [];
       if (currentPage > 1 && !isManualRefresh) {
@@ -470,12 +491,12 @@ export function useSpy(initialParams?: AdFilterParams) {
       }
       setPagination(data.pagination || { page: 1, limit: 24, total: 0, totalPages: 0 });
     } catch (err: any) {
-      if (err.name === "AbortError" || controller.signal.aborted) {
+      if (err.name === "AbortError" || controller.signal.aborted || currentReqId !== requestIdRef.current) {
         return;
       }
       setError(err.message || "Failed to fetch ad feed");
     } finally {
-      if (!controller.signal.aborted) {
+      if (currentReqId === requestIdRef.current && !controller.signal.aborted) {
         setIsLoading(false);
         setIsFetchingMore(false);
         setIsRefreshing(false);
