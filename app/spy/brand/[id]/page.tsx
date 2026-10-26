@@ -93,6 +93,8 @@ interface BrandAnalyticsData {
     evergreenCount: number;
     evergreenRate: number;
     distinctProductsCount: number;
+    totalProductsCount?: number;
+    pendingProductsCount?: number;
   };
   mediaDistribution: {
     video: number;
@@ -184,7 +186,13 @@ export default function BrandDeepDivePage({
   const { id } = use(params);
   const { showToast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<"analytics" | "products" | "creatives">("analytics");
+  const [activeTab, setActiveTab] = useState<"analytics" | "products" | "creatives">(() => {
+    if (typeof window !== "undefined") {
+      const tabParam = new URLSearchParams(window.location.search).get("tab");
+      if (tabParam === "products" || tabParam === "creatives") return tabParam;
+    }
+    return "analytics";
+  });
   const [data, setData] = useState<BrandAnalyticsData | null>(null);
   const [selectedSisterPageId, setSelectedSisterPageId] = useState<string | null>(null);
   const [isManageDomainModalOpen, setIsManageDomainModalOpen] = useState(false);
@@ -196,6 +204,11 @@ export default function BrandDeepDivePage({
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
 
   // Products Tab State
+  const [isProductsLoaded, setIsProductsLoaded] = useState(false);
+  const [isLoadingProductsTab, setIsLoadingProductsTab] = useState(false);
+  const [productsTabError, setProductsTabError] = useState<string | null>(null);
+  const productsAbortControllerRef = useRef<AbortController | null>(null);
+
   const [isSyncingProducts, setIsSyncingProducts] = useState(false);
   const [isQueueingLocalRescan, setIsQueueingLocalRescan] = useState(false);
   const [isScrapeMenuOpen, setIsScrapeMenuOpen] = useState(false);
@@ -230,6 +243,37 @@ export default function BrandDeepDivePage({
   });
   const activeTabRef = useRef<"analytics" | "products" | "creatives">("analytics");
   activeTabRef.current = activeTab;
+
+  // On-demand products fetcher (scope=products)
+  const loadProductsTab = async (force = false) => {
+    if (!force && (isProductsLoaded || isLoadingProductsTab)) return;
+    setIsLoadingProductsTab(true);
+    setProductsTabError(null);
+
+    productsAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    productsAbortControllerRef.current = controller;
+
+    try {
+      const params = new URLSearchParams({ scope: "products" });
+      if (selectedSisterPageId) params.set("sisterPageId", selectedSisterPageId);
+      const res = await fetch(`/api/spy/brand/${encodeURIComponent(id)}?${params.toString()}`, {
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || "Failed to load products catalog");
+      }
+      const json = await res.json();
+      setData((prev) => (prev ? { ...prev, products: json.products } : prev));
+      setIsProductsLoaded(true);
+    } catch (err: any) {
+      if (err.name === "AbortError") return;
+      setProductsTabError(err.message || "Could not load products catalog.");
+    } finally {
+      setIsLoadingProductsTab(false);
+    }
+  };
 
   const handleTabChange = (nextTab: "analytics" | "products" | "creatives", pushHistory = true) => {
     const currentTab = activeTabRef.current;
@@ -266,6 +310,11 @@ export default function BrandDeepDivePage({
         mainEl.scrollTop = tabScrollPositionsRef.current[nextTab] || 0;
       }
     });
+
+    // 5. On-demand hydration: if switching to products and not loaded yet, fetch lightweight products
+    if (nextTab === "products" && (!data?.products || data.products.length === 0)) {
+      loadProductsTab();
+    }
   };
 
   // Sync activeTab from URL query params on mount and on browser popstate (Back/Forward)
@@ -294,6 +343,7 @@ export default function BrandDeepDivePage({
       window.removeEventListener("popstate", handlePopState);
       abortControllerRef.current?.abort();
       revalidateAbortControllerRef.current?.abort();
+      productsAbortControllerRef.current?.abort();
     };
   }, []);
 
@@ -333,6 +383,13 @@ export default function BrandDeepDivePage({
       const params = new URLSearchParams();
       if (forceRefresh) params.set("_t", Date.now().toString());
       if (activeSisterId) params.set("sisterPageId", activeSisterId);
+
+      // Initial analytics tab load requests lean=true mode to omit 200+ unrendered product cards
+      const isProductsTab = activeTabRef.current === "products" || (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab") === "products");
+      if (!isProductsTab) {
+        params.set("lean", "true");
+      }
+
       const queryString = params.toString() ? `?${params.toString()}` : "";
       const res = await fetch(`/api/spy/brand/${encodeURIComponent(id)}${queryString}`, {
         cache: forceRefresh ? "no-store" : "default",
@@ -344,6 +401,9 @@ export default function BrandDeepDivePage({
         throw new Error(json.error || "Failed to load brand analytics");
       }
       setData(json);
+      if (json.products && json.products.length > 0) {
+        setIsProductsLoaded(true);
+      }
       setIsWatchlisted(Boolean(json.brand?.isWatchlisted));
       if (json.brand?.pageId) {
         canonicalIdRef.current = json.brand.pageId;
@@ -858,8 +918,11 @@ export default function BrandDeepDivePage({
   };
 
   const commercialStrategy = rawCommercialStrategy || {
-    totalCatalogProducts: data.products?.length || 0,
-    scrapedProductsCount: data.products?.filter((p) => p.scrapeStatus === "success")?.length || 0,
+    totalCatalogProducts: summary.totalProductsCount ?? (data.products?.length || 0),
+    scrapedProductsCount:
+      summary.totalProductsCount !== undefined && summary.pendingProductsCount !== undefined
+        ? Math.max(0, summary.totalProductsCount - summary.pendingProductsCount)
+        : (data.products?.filter((p) => p.scrapeStatus === "success")?.length || 0),
     minPrice: null,
     maxPrice: null,
     avgPrice: null,
@@ -1190,10 +1253,21 @@ export default function BrandDeepDivePage({
             }`}
           >
             <ShoppingBag className="w-3.5 h-3.5" />
-            <span>Products ({data?.products?.length ?? productClusters.length})</span>
-            {data?.products && data.products.filter((p) => p.scrapeStatus === "pending").length > 0 && (
+            <span>
+              Products (
+                {summary.totalProductsCount ??
+                  commercialStrategy.totalCatalogProducts ??
+                  (data?.products?.length ?? productClusters.length)}
+              )
+            </span>
+            {(summary.pendingProductsCount !== undefined
+              ? summary.pendingProductsCount > 0
+              : (data?.products && data.products.filter((p) => p.scrapeStatus === "pending").length > 0)) && (
               <span className="px-1.5 py-0.2 rounded-full text-[9.5px] font-black bg-amber-400 text-slate-950">
-                {data.products.filter((p) => p.scrapeStatus === "pending").length} new
+                {summary.pendingProductsCount !== undefined
+                  ? summary.pendingProductsCount
+                  : data?.products?.filter((p) => p.scrapeStatus === "pending").length}{" "}
+                new
               </span>
             )}
           </button>
@@ -1696,8 +1770,12 @@ export default function BrandDeepDivePage({
           {/* Quick Metrics Bar */}
           {(() => {
             const allProds = data?.products || [];
-            const scrapedCount = allProds.filter((p) => p.scrapeStatus === "success").length;
-            const pendingCount = allProds.filter((p) => p.scrapeStatus === "pending").length;
+            const displayTotal = summary.totalProductsCount ?? allProds.length;
+            const pendingCount = summary.pendingProductsCount ?? allProds.filter((p) => p.scrapeStatus === "pending").length;
+            const scrapedCount =
+              summary.totalProductsCount !== undefined && summary.pendingProductsCount !== undefined
+                ? Math.max(0, summary.totalProductsCount - summary.pendingProductsCount)
+                : allProds.filter((p) => p.scrapeStatus === "success").length;
             const activeProdsCount = allProds.filter((p) => p.brandHoldStatus !== "inactive" && (p.activeAdsCount || 0) > 0).length;
             const heroProd = allProds[0];
 
@@ -1705,9 +1783,9 @@ export default function BrandDeepDivePage({
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="p-3 rounded-xl bg-white dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 shadow-sm">
                   <span className="text-[11px] font-bold uppercase text-slate-500 tracking-wider">Unique Products</span>
-                  <p className="text-xl font-black text-slate-900 dark:text-white mt-0.5">{allProds.length}</p>
+                  <p className="text-xl font-black text-slate-900 dark:text-white mt-0.5">{displayTotal}</p>
                   <span className="text-[10px] text-slate-500 font-medium">
-                    {activeProdsCount} active on air • {allProds.length - activeProdsCount} off-air
+                    {activeProdsCount > 0 ? `${activeProdsCount} active on air • ` : ""}{Math.max(0, displayTotal - activeProdsCount)} off-air
                   </span>
                 </div>
 
@@ -1835,6 +1913,41 @@ export default function BrandDeepDivePage({
             });
 
             if (allProds.length === 0) {
+              if (isLoadingProductsTab) {
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {[1, 2, 3, 4, 5, 6].map((i) => (
+                      <div
+                        key={i}
+                        className="animate-pulse bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3"
+                      >
+                        <div className="h-40 bg-slate-200 dark:bg-slate-800 rounded-lg w-full" />
+                        <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-3/4" />
+                        <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-1/2" />
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
+
+              if (productsTabError) {
+                return (
+                  <div className="flex flex-col items-center justify-center p-10 border border-red-200 dark:border-red-900/50 rounded-2xl bg-red-50/50 dark:bg-red-950/20 text-center space-y-3">
+                    <p className="text-sm font-semibold text-red-600 dark:text-red-400">
+                      {productsTabError}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => loadProductsTab(true)}
+                      className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all cursor-pointer"
+                    >
+                      <RotateCw className="w-3.5 h-3.5" />
+                      <span>Retry Loading Catalog</span>
+                    </button>
+                  </div>
+                );
+              }
+
               return (
                 <div className="flex flex-col items-center justify-center p-10 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-950/40 text-center space-y-3">
                   <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-950/60 flex items-center justify-center text-indigo-500">

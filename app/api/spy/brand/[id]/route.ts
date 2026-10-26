@@ -51,8 +51,10 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const tStart = performance.now();
   const authError = await validateApiSecret(req);
   if (authError) return authError;
+  const tAuthEnd = performance.now();
 
   let lockToken: string | null = null;
   let lockKey: string | null = null;
@@ -191,9 +193,14 @@ export async function GET(
       }
     }
 
-    // Tenant-safe canonical cache lookup
+    // Granular retrieval modes
+    const isLean = req.nextUrl.searchParams.get("lean") === "true";
+    const isProductsOnly = req.nextUrl.searchParams.get("scope") === "products";
+    const modeSuffix = isProductsOnly ? ":products" : isLean ? ":lean" : "";
+
+    // Tenant-safe canonical cache lookup with mode suffix
     const forceRefresh = req.nextUrl.searchParams.get("_t") !== null || req.nextUrl.searchParams.get("refresh") === "true";
-    const cacheKey = `cache:brand:${activeWorkspace.id}:${canonicalBrandId}:${filterSisterPageId || "all"}`;
+    const cacheKey = `cache:brand:${activeWorkspace.id}:${canonicalBrandId}:${filterSisterPageId || "all"}${modeSuffix}`;
 
     if (!forceRefresh) {
       const cached = await getCached<any>(cacheKey, { l1MaxTtlMs: 300 * 1000 });
@@ -202,20 +209,23 @@ export async function GET(
           headers: {
             "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
             Vary: PRIVATE_AUTH_VARY,
+            "Server-Timing": `cache_hit;dur=${Math.round(performance.now() - tStart)}`,
           },
         });
       }
     }
 
     // Acquire distributed lock to prevent thundering herd stampedes on cold misses
-    // TTL is 90 seconds (safely exceeding maxDuration = 60s), scoped with filter identity
-    lockKey = `lock:brand:${activeWorkspace.id}:${canonicalBrandId}:${filterSisterPageId || "all"}`;
+    // TTL is 90 seconds (safely exceeding maxDuration = 60s), scoped with filter identity and mode
+    lockKey = `lock:brand:${activeWorkspace.id}:${canonicalBrandId}:${filterSisterPageId || "all"}${modeSuffix}`;
     lockToken = await acquireLock(lockKey, 90);
 
     if (!lockToken) {
       // Follower backoff: check 3 times with progressive backoff (700ms, 900ms, 1200ms = 2.8s) to allow leader to finish
       const backoffMs = [700, 900, 1200];
+      let followerWaitMs = 0;
       for (const delay of backoffMs) {
+        followerWaitMs += delay;
         await new Promise((r) => setTimeout(r, delay));
         const cachedRetry = await getCached<any>(cacheKey, { l1MaxTtlMs: 300 * 1000 });
         if (cachedRetry) {
@@ -223,6 +233,7 @@ export async function GET(
             headers: {
               "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
               Vary: PRIVATE_AUTH_VARY,
+              "Server-Timing": `follower_wait;dur=${Math.round(followerWaitMs)}, cache_hit;dur=${Math.round(performance.now() - tStart)}`,
             },
           });
         }
@@ -231,58 +242,120 @@ export async function GET(
       // but will not attempt to overwrite cache unless it holds lock ownership.
     }
 
-    // 2. Fetch all ads for this brand / portfolio (distinct by ad id with latest observation)
-    const adConditions = [];
+    const tLookupEnd = performance.now();
+
+    // 2. Resolve Candidate Ad IDs with Two-Leg Indexed UNION (Guarantees zero ad omission)
+    const targetPageIds: string[] = [];
+    const targetTrackedPageIds: string[] = [];
 
     if (filterSisterPageId) {
-      adConditions.push(eq(ads.pageId, filterSisterPageId));
-    } else if (brandDomain && sisterPages.length > 0) {
-      const sisterPids = sisterPages.map((p) => p.pageId).filter(Boolean) as string[];
-      const sisterTpIds = sisterPages.map((p) => p.id);
-      const orClauses = [];
-      if (sisterPids.length > 0) orClauses.push(inArray(ads.pageId, sisterPids));
-      if (sisterTpIds.length > 0) orClauses.push(inArray(adObservations.trackedPageId, sisterTpIds));
-      adConditions.push(or(...orClauses));
-    } else if (trackedPage) {
-      adConditions.push(
-        or(
-          eq(ads.pageId, pageId!),
-          eq(adObservations.trackedPageId, trackedPage.id)
-        )
+      targetPageIds.push(filterSisterPageId);
+      const matchedSister = sisterPages.find(
+        (sp) => sp.pageId === filterSisterPageId || sp.id === filterSisterPageId
       );
+      if (matchedSister?.id) targetTrackedPageIds.push(matchedSister.id);
+    } else if (brandDomain && sisterPages.length > 0) {
+      targetPageIds.push(...(sisterPages.map((p) => p.pageId).filter(Boolean) as string[]));
+      targetTrackedPageIds.push(...sisterPages.map((p) => p.id));
     } else {
-      adConditions.push(eq(ads.pageId, pageId!));
+      if (pageId) targetPageIds.push(pageId);
+      if (trackedPage?.id) targetTrackedPageIds.push(trackedPage.id);
     }
 
-    // Optimized SQL Projection:
-    // 1. Truncate caption to 1,000 chars in SQL (cuts 90% text bloat while preserving clustering post-normalization semantics)
-    // 2. Retain adArchiveId for AdCard UI and Facebook Ad Library links
-    // 3. Exclude unused internal columns (thumbnailStoragePath, archivedAt, createdAt, updatedAt)
-    const brandAdsRaw = await db
-      .selectDistinctOn([ads.id], {
-        id: ads.id,
-        adArchiveId: ads.adArchiveId,
-        pageId: ads.pageId,
-        pageName: ads.pageName,
-        startedRunningOn: ads.startedRunningOn,
-        caption: sql<string>`LEFT(${ads.caption}, 1000)`,
-        title: ads.title,
-        ctaText: ads.ctaText,
-        linkUrl: ads.linkUrl,
-        productId: ads.productId,
-        mediaType: ads.mediaType,
-        thumbnailUrl: ads.thumbnailUrl,
-        firstSeenAt: ads.firstSeenAt,
-        lastSeenAt: ads.lastSeenAt,
-        isArchived: ads.isArchived,
-        duplicationCount: adObservations.duplicationCount,
-        isActive: adObservations.isActive,
-        trackedPageId: adObservations.trackedPageId,
-      })
-      .from(ads)
-      .leftJoin(adObservations, eq(ads.id, adObservations.adId))
-      .where(or(...adConditions))
-      .orderBy(ads.id, desc(adObservations.observedAt));
+    const tAdStart = performance.now();
+    const candidateIdPromises: Promise<string[]>[] = [];
+
+    // Leg 1: Fast B-tree index scan on ads.page_id (idx_ads_page_id)
+    if (targetPageIds.length > 0) {
+      candidateIdPromises.push(
+        db
+          .select({ id: ads.id })
+          .from(ads)
+          .where(
+            targetPageIds.length === 1
+              ? eq(ads.pageId, targetPageIds[0])
+              : inArray(ads.pageId, targetPageIds)
+          )
+          .then((rows) => rows.map((r) => r.id))
+      );
+    }
+
+    // Leg 2: Fast B-tree index scan on ad_observations.tracked_page_id (idx_ad_obs_tracked_page_id)
+    if (targetTrackedPageIds.length > 0) {
+      candidateIdPromises.push(
+        db
+          .select({ id: adObservations.adId })
+          .from(adObservations)
+          .where(
+            targetTrackedPageIds.length === 1
+              ? eq(adObservations.trackedPageId, targetTrackedPageIds[0])
+              : inArray(adObservations.trackedPageId, targetTrackedPageIds)
+          )
+          .then((rows) => rows.map((r) => r.id))
+      );
+    }
+
+    // Concurrently kick off 30-day historical scan trajectory promise (non-blocking)
+    const tHistStart = performance.now();
+    let tHistDuration = 0;
+    const historyPromise =
+      trackedPage && !isProductsOnly
+        ? db
+            .select({
+              id: scanHistory.id,
+              results: scanHistory.results,
+              difference: scanHistory.difference,
+              checkedAt: scanHistory.checkedAt,
+              status: scanHistory.status,
+            })
+            .from(scanHistory)
+            .where(
+              and(
+                eq(scanHistory.trackedPageId, trackedPage.id),
+                sql`${scanHistory.checkedAt} >= NOW() - INTERVAL '30 days'`
+              )
+            )
+            .orderBy(asc(scanHistory.checkedAt))
+            .limit(60)
+            .then((rows) => {
+              tHistDuration = Math.round(performance.now() - tHistStart);
+              return rows;
+            })
+        : Promise.resolve([]);
+
+    const candidateIdArrays = await Promise.all(candidateIdPromises);
+    const candidateAdIds = Array.from(new Set(candidateIdArrays.flat()));
+
+    // Distinct-on ads query restricted to candidate IDs using primary key index
+    let brandAdsRaw: any[] = [];
+    if (candidateAdIds.length > 0) {
+      brandAdsRaw = await db
+        .selectDistinctOn([ads.id], {
+          id: ads.id,
+          adArchiveId: ads.adArchiveId,
+          pageId: ads.pageId,
+          pageName: ads.pageName,
+          startedRunningOn: ads.startedRunningOn,
+          caption: sql<string>`LEFT(${ads.caption}, 1000)`,
+          title: ads.title,
+          ctaText: ads.ctaText,
+          linkUrl: ads.linkUrl,
+          productId: ads.productId,
+          mediaType: ads.mediaType,
+          thumbnailUrl: ads.thumbnailUrl,
+          firstSeenAt: ads.firstSeenAt,
+          lastSeenAt: ads.lastSeenAt,
+          isArchived: ads.isArchived,
+          duplicationCount: adObservations.duplicationCount,
+          isActive: adObservations.isActive,
+          trackedPageId: adObservations.trackedPageId,
+        })
+        .from(ads)
+        .leftJoin(adObservations, eq(ads.id, adObservations.adId))
+        .where(inArray(ads.id, candidateAdIds))
+        .orderBy(ads.id, desc(adObservations.observedAt));
+    }
+    const tAdsDuration = Math.round(performance.now() - tAdStart);
 
     if (brandAdsRaw.length === 0 && !trackedPage) {
       return NextResponse.json({ error: "Brand not found or no ads scanned yet" }, { status: 404 });
@@ -314,7 +387,8 @@ export async function GET(
     if (pageId) {
       productQueryConditions.push(eq(scrapedProducts.pageId, pageId));
     }
-    if (distinctNormalizedUrls.length > 0) {
+    // Only query raw URLs if full product catalog is requested (skips 100+ URL regex checks in lean mode)
+    if (!isLean && distinctNormalizedUrls.length > 0) {
       productQueryConditions.push(inArray(scrapedProducts.url, distinctNormalizedUrls));
     }
 
@@ -581,105 +655,115 @@ export async function GET(
       )
       .slice(0, 3);
 
-    // 7. Historical Scan Trajectory (time-bounded to 30 days per AGENTS.md performance rules)
-    let history: any[] = [];
-    if (trackedPage) {
-      history = await db
-        .select({
-          id: scanHistory.id,
-          results: scanHistory.results,
-          difference: scanHistory.difference,
-          checkedAt: scanHistory.checkedAt,
-          status: scanHistory.status,
-        })
-        .from(scanHistory)
-        .where(
-          and(
-            eq(scanHistory.trackedPageId, trackedPage.id),
-            sql`${scanHistory.checkedAt} >= NOW() - INTERVAL '30 days'`
-          )
-        )
-        .orderBy(asc(scanHistory.checkedAt))
-        .limit(60);
-    }
+    // 7. Historical Scan Trajectory (retrieved concurrently with ads query)
+    const history = await historyPromise;
 
     // 8. Brand Products Catalog Compilation (O(1) Inverted Index with deduplicated matches)
     const brandProductsList: any[] = [];
     const scrapedProductUrls = new Set<string>();
 
-    linkedProducts.forEach((p) => {
-      if (p.url) scrapedProductUrls.add(p.url);
+    if (!isLean) {
+      linkedProducts.forEach((p) => {
+        if (p.url) scrapedProductUrls.add(p.url);
 
-      // Deduplicate matching ads by ad.id
-      const matchedMap = new Map<string, EnrichedAd>();
-      (adsByProductId.get(p.id) || []).forEach((ad) => matchedMap.set(ad.id, ad));
-      if (p.url) {
-        (adsByNormUrl.get(p.url) || []).forEach((ad) => matchedMap.set(ad.id, ad));
-      }
-      const matchingAds = Array.from(matchedMap.values());
+        // Deduplicate matching ads by ad.id
+        const matchedMap = new Map<string, EnrichedAd>();
+        (adsByProductId.get(p.id) || []).forEach((ad) => matchedMap.set(ad.id, ad));
+        if (p.url) {
+          (adsByNormUrl.get(p.url) || []).forEach((ad) => matchedMap.set(ad.id, ad));
+        }
+        const matchingAds = Array.from(matchedMap.values());
 
-      const linkedAdsCount = matchingAds.length;
-      const activeAdsCount = matchingAds.filter((a) => a.isActive && !a.isArchived).length;
-      const topThumb = matchingAds.find((a) => a.thumbnailUrl)?.thumbnailUrl || p.mainImageUrl;
-      const maxScore = matchingAds.reduce((max, a) => Math.max(max, a.winnerScore || 0), 0);
-
-      brandProductsList.push({
-        ...p,
-        brandName: trackedPage?.displayName || p.domain || "Brand",
-        brandPageId: trackedPage?.pageId || pageId,
-        brandHoldStatus: trackedPage?.holdStatus || "active",
-        brandCurrentResults: trackedPage?.currentResults ?? null,
-        linkedAdsCount,
-        activeAdsCount,
-        topCreativeThumbnail: topThumb,
-        winnerScore: maxScore,
-      });
-    });
-
-    // Also include detected landing URLs that are pending scrape
-    distinctNormalizedUrls.forEach((normUrl) => {
-      if (!scrapedProductUrls.has(normUrl)) {
-        const matchingAds = adsByNormUrl.get(normUrl) || [];
+        const linkedAdsCount = matchingAds.length;
+        const activeAdsCount = matchingAds.filter((a) => a.isActive && !a.isArchived).length;
+        const topThumb = matchingAds.find((a) => a.thumbnailUrl)?.thumbnailUrl || p.mainImageUrl;
+        const maxScore = matchingAds.reduce((max, a) => Math.max(max, a.winnerScore || 0), 0);
 
         brandProductsList.push({
-          id: `unscraped_${Buffer.from(normUrl).toString("base64").slice(0, 16)}`,
-          url: normUrl,
-          domain: getCleanDomain(normUrl),
-          pageId: pageId,
-          brandName: trackedPage?.displayName || getCleanDomain(normUrl),
+          ...p,
+          brandName: trackedPage?.displayName || p.domain || "Brand",
           brandPageId: trackedPage?.pageId || pageId,
           brandHoldStatus: trackedPage?.holdStatus || "active",
           brandCurrentResults: trackedPage?.currentResults ?? null,
-          title: matchingAds[0]?.title || "Unscraped Product Landing Page",
-          currentPrice: null,
-          originalPrice: null,
-          currency: null,
-          discountOrOffer: null,
-          mainImageUrl: matchingAds.find((a) => a.thumbnailUrl)?.thumbnailUrl || null,
-          galleryImages: [],
-          allOffers: null,
-          storePlatform: "other",
-          deliveryCost: null,
-          phoneNumbers: [],
-          whatsappNumbers: [],
-          metaPixelIds: [],
-          scrapeStatus: "pending",
-          failureReason: null,
-          lastScrapedAt: null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          linkedAdsCount: matchingAds.length,
-          activeAdsCount: matchingAds.filter((a) => a.isActive && !a.isArchived).length,
-          topCreativeThumbnail: matchingAds.find((a) => a.thumbnailUrl)?.thumbnailUrl || null,
-          winnerScore: matchingAds.reduce((max, a) => Math.max(max, a.winnerScore || 0), 0),
+          linkedAdsCount,
+          activeAdsCount,
+          topCreativeThumbnail: topThumb,
+          winnerScore: maxScore,
         });
-      }
-    });
+      });
 
-    // Sort products by linkedAdsCount descending, then activeAdsCount descending
-    brandProductsList.sort(
-      (a, b) => (b.linkedAdsCount || 0) - (a.linkedAdsCount || 0) || (b.activeAdsCount || 0) - (a.activeAdsCount || 0)
-    );
+      // Also include detected landing URLs that are pending scrape
+      distinctNormalizedUrls.forEach((normUrl) => {
+        if (!scrapedProductUrls.has(normUrl)) {
+          const matchingAds = adsByNormUrl.get(normUrl) || [];
+
+          brandProductsList.push({
+            id: `unscraped_${Buffer.from(normUrl).toString("base64").slice(0, 16)}`,
+            url: normUrl,
+            domain: getCleanDomain(normUrl),
+            pageId: pageId,
+            brandName: trackedPage?.displayName || getCleanDomain(normUrl),
+            brandPageId: trackedPage?.pageId || pageId,
+            brandHoldStatus: trackedPage?.holdStatus || "active",
+            brandCurrentResults: trackedPage?.currentResults ?? null,
+            title: matchingAds[0]?.title || "Unscraped Product Landing Page",
+            currentPrice: null,
+            originalPrice: null,
+            currency: null,
+            discountOrOffer: null,
+            mainImageUrl: matchingAds.find((a) => a.thumbnailUrl)?.thumbnailUrl || null,
+            galleryImages: [],
+            allOffers: null,
+            storePlatform: "other",
+            deliveryCost: null,
+            phoneNumbers: [],
+            whatsappNumbers: [],
+            metaPixelIds: [],
+            scrapeStatus: "pending",
+            failureReason: null,
+            lastScrapedAt: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            linkedAdsCount: matchingAds.length,
+            activeAdsCount: matchingAds.filter((a) => a.isActive && !a.isArchived).length,
+            topCreativeThumbnail: matchingAds.find((a) => a.thumbnailUrl)?.thumbnailUrl || null,
+            winnerScore: matchingAds.reduce((max, a) => Math.max(max, a.winnerScore || 0), 0),
+          });
+        }
+      });
+
+      // Sort products by linkedAdsCount descending, then activeAdsCount descending
+      brandProductsList.sort(
+        (a, b) => (b.linkedAdsCount || 0) - (a.linkedAdsCount || 0) || (b.activeAdsCount || 0) - (a.activeAdsCount || 0)
+      );
+    }
+
+    const pendingProductsCount = distinctNormalizedUrls.filter((u) => !productUrlMap.has(u)).length;
+    const totalCatalogProductsCount = isLean
+      ? linkedProducts.length + pendingProductsCount
+      : brandProductsList.length;
+
+    // If client requested product catalog only (scope=products), short-circuit here
+    if (isProductsOnly) {
+      const productsPayload = {
+        success: true,
+        products: brandProductsList,
+        totalCatalogProducts: totalCatalogProductsCount,
+        pendingProductsCount,
+      };
+
+      if (lockToken && lockKey && (await isLockOwner(lockKey, lockToken))) {
+        await setCached(cacheKey, productsPayload, 300, { l1MaxTtlMs: 300 * 1000 });
+      }
+
+      return NextResponse.json(productsPayload, {
+        headers: {
+          "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
+          Vary: PRIVATE_AUTH_VARY,
+          "Server-Timing": `db_ads;dur=${Math.round(tAdsDuration)}, total;dur=${Math.round(performance.now() - tStart)}`,
+        },
+      });
+    }
 
     // 9. Store Tech & Tracking Detectors
     const detectedPlatforms = new Set<string>();
@@ -765,7 +849,7 @@ export async function GET(
     const avgPrice = validPrices.length > 0 ? Math.round(validPrices.reduce((a, b) => a + b, 0) / validPrices.length) : null;
 
     const commercialStrategy = {
-      totalCatalogProducts: brandProductsList.length,
+      totalCatalogProducts: totalCatalogProductsCount,
       scrapedProductsCount: linkedProducts.length,
       minPrice,
       maxPrice,
@@ -806,7 +890,9 @@ export async function GET(
         breakoutCount,
         evergreenCount,
         evergreenRate: totalAdsCaptured > 0 ? Math.round((evergreenCount / totalAdsCaptured) * 100) : 0,
-        distinctProductsCount: brandProductsList.length || productClusters.length,
+        distinctProductsCount: totalCatalogProductsCount || productClusters.length,
+        totalProductsCount: totalCatalogProductsCount,
+        pendingProductsCount,
       },
       mediaDistribution,
       longevityDistribution: {
@@ -823,7 +909,7 @@ export async function GET(
       launchVelocity,
       commercialStrategy,
       productClusters,
-      products: brandProductsList,
+      products: isLean ? [] : brandProductsList,
       topWinners,
       history,
       brandDomain: brandDomain || null,
@@ -843,20 +929,44 @@ export async function GET(
       },
     };
 
+    const tComputeEnd = performance.now();
+    let tCacheWrite = 0;
+
     // Store in Upstash Redis + L1 Memory Cache (TTL: 300s) ONLY if this instance still actively owns the lock in Redis.
     // Prevents expired/superseded calculations from overwriting fresh cache.
     if (lockToken && lockKey && (await isLockOwner(lockKey, lockToken))) {
+      const tCwStart = performance.now();
       await setCached(cacheKey, responsePayload, 300, { l1MaxTtlMs: 300 * 1000 });
+      tCacheWrite = performance.now() - tCwStart;
     }
 
+    const timingHeaders = [
+      `auth;dur=${Math.round(tAuthEnd - tStart)}`,
+      `lookup;dur=${Math.round(tLookupEnd - tAuthEnd)}`,
+      `db_ads;dur=${Math.round(tAdsDuration)}`,
+      `db_history;dur=${Math.round(tHistDuration)}`,
+      `compute;dur=${Math.round(tComputeEnd - tAdStart - tAdsDuration)}`,
+      `cache_write;dur=${Math.round(tCacheWrite)}`,
+      `total;dur=${Math.round(performance.now() - tStart)}`,
+    ].join(", ");
+
     return NextResponse.json(responsePayload, {
-      headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY },
+      headers: {
+        "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
+        Vary: PRIVATE_AUTH_VARY,
+        "Server-Timing": timingHeaders,
+      },
     });
   } catch (err: any) {
     console.error("[Brand Analytics API Error]:", err);
     return NextResponse.json(
       { error: err.message || "Failed to load brand analytics" },
-      { status: 500 }
+      {
+        status: 500,
+        headers: {
+          "Server-Timing": `error;dur=${Math.round(performance.now() - tStart)}`,
+        },
+      }
     );
   } finally {
     if (lockToken && lockKey) {
