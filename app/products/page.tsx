@@ -1256,13 +1256,7 @@ export default function ProductsPage() {
       {/* 3. Products Display Area */}
       {loading && products.length === 0 ? (
         viewMode === "grid" ? (
-          <div
-            className={`grid ${
-              isSidebarCollapsed
-                ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
-                : "grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-            } gap-4`}
-          >
+          <div className="products-cards-grid">
             {[...Array(8)].map((_, i) => (
               <div
                 key={i}
@@ -1329,13 +1323,7 @@ export default function ProductsPage() {
       ) : (
         <>
           {viewMode === "grid" ? (
-            <div
-              className={`grid ${
-                isSidebarCollapsed
-                  ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
-                  : "grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-              } gap-4`}
-            >
+            <div className="products-cards-grid">
               {products.map((product) => (
                 <ProductCard
                   key={product.id}
@@ -1374,13 +1362,7 @@ export default function ProductsPage() {
           {/* Skeletons while fetching more items */}
           {isFetchingMore && (
             viewMode === "grid" ? (
-              <div
-                className={`grid ${
-                  isSidebarCollapsed
-                    ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
-                    : "grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-                } gap-4 pt-2`}
-              >
+              <div className="products-cards-grid pt-2">
                 {[...Array(4)].map((_, i) => (
                   <div
                     key={`skeleton-${i}`}

@@ -148,7 +148,7 @@ export const ProductCard = memo(function ProductCard({
   return (
     <div
       onClick={() => onViewDetails?.(product)}
-      className={`group relative flex flex-col bg-white dark:bg-slate-900/60 rounded-xl border transition-all duration-200 overflow-hidden cursor-pointer ${
+      className={`group relative flex flex-col min-w-0 w-full bg-white dark:bg-slate-900/60 rounded-xl border transition-all duration-200 overflow-hidden cursor-pointer ${
         isPageOnHold
           ? "border-2 border-dashed border-amber-400 dark:border-amber-500/70 bg-amber-50/20 dark:bg-amber-950/15 opacity-90 hover:opacity-100 shadow-xs hover:shadow-md"
           : isInactive
