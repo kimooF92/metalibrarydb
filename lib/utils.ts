@@ -78,3 +78,30 @@ export function stripEmojis(str?: string | null): string {
     .trim();
 }
 
+/**
+ * Formats a date or ISO string into a concise human-readable relative time string
+ * (e.g. "Just now", "5m ago", "2h ago", "Yesterday", "3d ago", or "Oct 24").
+ */
+export function formatRelativeTime(dateInput: string | Date | null | undefined): string {
+  if (!dateInput) return "Never";
+  const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return "Never";
+
+  const diffMs = Date.now() - date.getTime();
+  if (diffMs < 0) return "Just now";
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHour = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHour / 24);
+
+  if (diffMin < 1) return "Just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffHour < 24) return `${diffHour}h ago`;
+  if (diffDay === 1) return "Yesterday";
+  if (diffDay < 7) return `${diffDay}d ago`;
+
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+

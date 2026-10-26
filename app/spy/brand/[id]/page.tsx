@@ -16,6 +16,7 @@ import { useToast } from "@/components/toast-context";
 import { getSupabase } from "@/lib/supabase";
 import { Ad, ScrapedProduct } from "@/types";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
+import { formatRelativeTime } from "@/lib/utils";
 import {
   ArrowLeft,
   Eye,
@@ -1029,10 +1030,40 @@ export default function BrandDeepDivePage({
                 )}
               </div>
 
-              <div className="flex items-center gap-2 mt-1 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
-                <span className="font-semibold text-slate-700 dark:text-slate-300">
-                  {summary.totalAdsCaptured} total ads captured
+              <div className="flex items-center gap-2 mt-1.5 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
+                {/* 1. Official Ad Count */}
+                <span className="inline-flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-200/80 dark:border-slate-700/80">
+                  <span className={`w-1.5 h-1.5 rounded-full ${effectiveResults > 0 ? "bg-emerald-500" : "bg-slate-400"}`} />
+                  <span>{effectiveResults} active ads</span>
+                  {summary.totalAdsCaptured > 0 && (
+                    <span className="text-slate-400 dark:text-slate-500 font-normal text-[11px]">
+                      ({summary.totalAdsCaptured} captured)
+                    </span>
+                  )}
                 </span>
+
+                <span className="text-slate-300 dark:text-slate-700">•</span>
+
+                {/* 2. Ad Count Scan Date */}
+                <span
+                  className="inline-flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-400"
+                  title={brand.lastChecked ? `Ad count scan: ${new Date(brand.lastChecked).toLocaleString()}` : "Count not checked yet"}
+                >
+                  <Clock className="w-3 h-3 text-slate-400" />
+                  <span>Count scan: <strong className="font-semibold text-slate-700 dark:text-slate-300">{formatRelativeTime(brand.lastChecked)}</strong></span>
+                </span>
+
+                <span className="text-slate-300 dark:text-slate-700">•</span>
+
+                {/* 3. Creative Scan Date */}
+                <span
+                  className="inline-flex items-center gap-1 text-[11px] text-purple-600 dark:text-purple-400"
+                  title={brand.lastCreativeScan ? `Creative scan (Apify): ${new Date(brand.lastCreativeScan).toLocaleString()}` : "Creatives not scanned yet"}
+                >
+                  <Sparkles className="w-3 h-3 shrink-0" />
+                  <span>Creative scan: <strong className="font-semibold">{formatRelativeTime(brand.lastCreativeScan)}</strong></span>
+                </span>
+
                 <span className="text-slate-300 dark:text-slate-700">•</span>
                 <span className="font-mono text-[11px]">ID: {brand.pageId}</span>
                 {brand.country && (
