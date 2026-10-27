@@ -143,47 +143,73 @@ export function ProductsSidebarFilters({
     brand: brandInput.trim().length > 0 ? 1 : 0,
   };
 
-  if (isCollapsed) {
-    return (
-      <aside
-        className={`w-14 h-full bg-card border-r border-border p-2 flex flex-col items-center gap-3 shrink-0 select-none z-10 ${className}`}
-      >
-        <button
-          type="button"
-          onClick={onToggleCollapse}
-          className="p-2 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
-          title="Expand filters sidebar"
-        >
-          <PanelLeftOpen className="w-4 h-4" />
-        </button>
-
-        <div className="h-px w-6 bg-border" />
-
-        <div className="relative">
-          <Filter className="w-4 h-4 text-indigo-500" />
-          {activeFilterCount > 0 && (
-            <span className="absolute -top-1.5 -right-2 px-1 py-0.2 rounded-full text-[9px] font-black bg-indigo-600 text-white">
-              {activeFilterCount}
-            </span>
-          )}
-        </div>
-
-        <button
-          type="button"
-          onClick={onToggleCollapse}
-          className="writing-mode-vertical text-[11px] font-bold text-muted-foreground hover:text-foreground tracking-wider uppercase py-4 cursor-pointer"
-          style={{ writingMode: "vertical-rl" }}
-        >
-          Filters ({activeFilterCount})
-        </button>
-      </aside>
-    );
-  }
+  const isCustomFullWidth = className?.includes("w-full");
+  const widthClass = isCustomFullWidth ? "w-full" : isCollapsed ? "w-14" : "w-72";
 
   return (
     <aside
-      className={`w-72 h-full bg-card border-r border-border shrink-0 flex flex-col select-none z-10 ${className}`}
+      className={`relative h-full bg-card border-r border-border shrink-0 flex flex-col select-none z-10 overflow-hidden transition-[width] duration-300 ease-[cubic-bezier(0.2,0,0,1)] ${widthClass} ${className || ""}`}
     >
+      {/* Collapsed Rail (Visible when collapsed) */}
+      {!isCustomFullWidth && (
+        <div
+          aria-hidden={!isCollapsed}
+          className={`absolute inset-y-0 left-0 w-14 p-2 flex flex-col items-center gap-3 bg-card z-20 transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] ${
+            isCollapsed
+              ? "opacity-100 pointer-events-auto"
+              : "opacity-0 pointer-events-none -translate-x-2"
+          }`}
+        >
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="p-2 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+            title="Expand filters sidebar"
+            aria-label="Expand filters sidebar"
+          >
+            <PanelLeftOpen className="w-4 h-4" />
+          </button>
+
+          <div className="h-px w-6 bg-border" />
+
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="group relative p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"
+            title="Expand filters sidebar"
+            aria-label="Expand filters sidebar"
+          >
+            <Filter className="w-4 h-4 text-indigo-500 group-hover:scale-110 transition-transform" />
+            {activeFilterCount > 0 && (
+              <span className="absolute -top-1 -right-1 px-1 py-0.2 rounded-full text-[9px] font-black bg-indigo-600 text-white shadow-xs">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="writing-mode-vertical text-[11px] font-bold text-muted-foreground hover:text-foreground tracking-wider uppercase py-4 cursor-pointer"
+            style={{ writingMode: "vertical-rl" }}
+            title="Expand filters sidebar"
+          >
+            Filters ({activeFilterCount})
+          </button>
+        </div>
+      )}
+
+      {/* Expanded Content (Header + Filter Body) */}
+      <div
+        aria-hidden={isCollapsed}
+        className={`h-full flex flex-col shrink-0 transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] ${
+          isCustomFullWidth ? "w-full" : "w-72"
+        } ${
+          isCollapsed
+            ? "opacity-0 pointer-events-none -translate-x-3"
+            : "opacity-100 pointer-events-auto translate-x-0"
+        }`}
+      >
       {/* Sidebar Header */}
       <div className="p-3.5 border-b border-border flex items-center justify-between shrink-0 bg-card">
         <div className="flex items-center gap-2">
@@ -566,6 +592,7 @@ export function ProductsSidebarFilters({
             </div>
           )}
         </div>
+      </div>
       </div>
     </aside>
   );
