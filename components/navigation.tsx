@@ -103,7 +103,7 @@ export function Navigation() {
         <header
           className={`hidden md:flex flex-col ${
             isCollapsed ? "w-14 px-2" : "w-60 px-2.5"
-          } py-3 h-screen border-r border-slate-200 dark:border-slate-800/60 bg-white dark:bg-[#0c0e14] shrink-0 sticky top-0 left-0 z-40 justify-between transition-[width,padding] duration-200 ease-[cubic-bezier(0.2,0,0,1)] relative select-none`}
+          } py-3 h-screen border-r border-slate-200 dark:border-slate-800/60 bg-white dark:bg-[#010202] shrink-0 sticky top-0 left-0 z-40 justify-between transition-[width,padding] duration-200 ease-[cubic-bezier(0.2,0,0,1)] relative select-none`}
         >
           <div className="flex flex-col flex-1 min-w-0">
             {/* Header Row (Logo, Title & Toggle) */}
@@ -317,7 +317,7 @@ export function Navigation() {
       )}
 
       {/* Mobile Top Bar */}
-      <header className="flex md:hidden items-center justify-between h-13 w-full px-4 border-b border-slate-200 dark:border-slate-800/80 bg-white/90 dark:bg-[#0c0e14]/90 backdrop-blur-md sticky top-0 z-40">
+      <header className="flex md:hidden items-center justify-between h-13 w-full px-4 border-b border-slate-200 dark:border-slate-800/80 bg-white/90 dark:bg-[#010202]/90 backdrop-blur-md sticky top-0 z-40">
         <div className="flex items-center space-x-2.5">
           <div className="w-6 h-6 rounded-md bg-indigo-600/10 dark:bg-indigo-500/15 border border-indigo-500/20 flex items-center justify-center shrink-0">
             <img
@@ -365,7 +365,7 @@ export function Navigation() {
 
       {/* Mobile Drawer Menu Overlay (Admin Only) */}
       {!isStaff && isOpen && (
-        <div className="fixed inset-x-0 bottom-0 top-13 z-40 bg-white/98 dark:bg-[#0c0e14]/98 backdrop-blur-md md:hidden flex flex-col p-5 space-y-5 animate-in slide-in-from-top-4 duration-200 justify-between">
+        <div className="fixed inset-x-0 bottom-0 top-13 z-40 bg-white/98 dark:bg-[#010202]/98 backdrop-blur-md md:hidden flex flex-col p-5 space-y-5 animate-in slide-in-from-top-4 duration-200 justify-between">
           <div className="flex flex-col space-y-4">
             <div className="pb-3 border-b border-slate-200 dark:border-slate-800/80">
               <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-2">

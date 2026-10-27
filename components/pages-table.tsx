@@ -50,6 +50,8 @@ import {
   MoreVertical,
   FolderSync,
   FolderInput,
+  ShoppingBag,
+  Coins,
 } from "lucide-react";
 import { useToast } from "@/components/toast-context";
 
@@ -1112,8 +1114,8 @@ export function PagesTable({
                 <th className="px-1 md:px-1.5 py-2.5 w-8 text-center">
                   <Star className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 mx-auto" />
                 </th>
-                <SortHeader col="displayName" label="Brand" className="w-[30%] min-w-[170px]" />
-                <th className="px-2.5 md:px-3.5 xl:px-4 py-2.5 whitespace-nowrap w-[20%] min-w-[155px]">
+                <SortHeader col="displayName" label="Brand" className="w-[24%] 2xl:w-[19%] min-w-[170px]" />
+                <th className="px-2.5 md:px-3.5 xl:px-4 py-2.5 whitespace-nowrap w-[18%] 2xl:w-[15%] min-w-[145px]">
                   <div className="flex items-center gap-1.5 font-semibold text-[10px] uppercase tracking-wider select-none">
                     <button
                       onClick={() => onSortChange("currentResults")}
@@ -1161,15 +1163,21 @@ export function PagesTable({
                     </button>
                   </div>
                 </th>
-                <th className="px-2 md:px-2.5 xl:px-3 py-2.5 text-center whitespace-nowrap text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase tracking-wider w-[9%] min-w-[65px]" title="Unique products catalog">
+                <th className="px-2 md:px-2.5 xl:px-3 py-2.5 text-center whitespace-nowrap text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase tracking-wider w-[8%] 2xl:w-[7%] min-w-[65px]" title="Unique products catalog">
                   <span className="inline-flex items-center justify-center gap-1 uppercase tracking-wider">
                     <Package className="w-3.5 h-3.5 text-slate-400" />
                     <span className="uppercase tracking-wider">Products</span>
                   </span>
                 </th>
-                <SortHeader col="status" label="Pattern & Status" className="hidden md:table-cell w-[17%] min-w-[135px] whitespace-nowrap" />
-                <SortHeader col="lastChecked" label="Last Checked" className="w-[13%] min-w-[100px] whitespace-nowrap" />
-                <th className="px-2.5 md:px-3.5 xl:px-4 py-2.5 text-right whitespace-nowrap text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase tracking-wider w-[9%] min-w-[75px]">
+                <th className="hidden 2xl:table-cell px-3 py-2.5 text-left whitespace-nowrap text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase tracking-wider 2xl:w-[21%] min-w-[190px]">
+                  <span className="inline-flex items-center gap-1.5 uppercase tracking-wider">
+                    <ShoppingBag className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Top Products & Price</span>
+                  </span>
+                </th>
+                <SortHeader col="status" label="Pattern & Status" className="hidden md:table-cell w-[18%] 2xl:w-[14%] min-w-[125px] whitespace-nowrap" />
+                <SortHeader col="lastChecked" label="Last Checked" className="w-[14%] 2xl:w-[11%] min-w-[95px] whitespace-nowrap" />
+                <th className="px-2.5 md:px-3.5 xl:px-4 py-2.5 text-right whitespace-nowrap text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase tracking-wider w-[8%] 2xl:w-[7%] min-w-[70px]">
                   <span className="uppercase tracking-wider">Actions</span>
                 </th>
               </tr>
@@ -1177,14 +1185,14 @@ export function PagesTable({
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-slate-500 dark:text-slate-400">
+                  <td colSpan={9} className="px-4 py-12 text-center text-slate-500 dark:text-slate-400">
                     <Loader2 className="w-6 h-6 animate-spin text-indigo-500 dark:text-indigo-400 mx-auto mb-2" />
                     <span>Loading tracked pages...</span>
                   </td>
                 </tr>
               ) : pages.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-16 text-center">
+                  <td colSpan={9} className="px-4 py-16 text-center">
                     <div className="flex flex-col items-center justify-center max-w-lg mx-auto space-y-4">
                       {search && searchTabCounts && searchTabCounts.all > 0 ? (
                         <div className="w-full p-5 rounded-2xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/90 dark:border-indigo-800/80 shadow-sm space-y-3.5 text-left animate-in fade-in zoom-in-95 duration-150">
@@ -1639,6 +1647,85 @@ export function PagesTable({
                               : "—"}
                           </span>
                         </Link>
+                      </td>
+
+                      {/* Top Products & Price Preview (Large Screens Only: 2xl:table-cell) */}
+                      <td className="px-3 py-2 hidden 2xl:table-cell whitespace-nowrap">
+                        {p.topProducts && p.topProducts.length > 0 ? (
+                          <div className="flex items-center gap-2.5">
+                            {/* Stacked Product Thumbnails with Hover Zoom & Tooltip */}
+                            <div className="flex items-center -space-x-1.5 shrink-0">
+                              {p.topProducts.slice(0, 3).map((prod, idx) => (
+                                <div key={prod.id || idx} className="relative group/thumb">
+                                  <a
+                                    href={prod.url || undefined}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="block relative w-7 h-7 rounded-md ring-1 ring-white dark:ring-slate-900 overflow-hidden bg-slate-100 dark:bg-slate-800 shadow-2xs hover:scale-125 hover:z-30 hover:ring-2 hover:ring-indigo-500 transition-all duration-150 cursor-pointer"
+                                    title={`${prod.title || "Product"}${prod.currentPrice ? ` • ${prod.currentPrice}` : ""}`}
+                                  >
+                                    {prod.mainImageUrl ? (
+                                      <img
+                                        src={prod.mainImageUrl}
+                                        alt={prod.title || "Product"}
+                                        className="w-full h-full object-cover"
+                                        loading="lazy"
+                                        onError={(e) => {
+                                          (e.target as HTMLElement).style.display = "none";
+                                        }}
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center text-slate-400">
+                                        <ShoppingBag className="w-3.5 h-3.5" />
+                                      </div>
+                                    )}
+                                  </a>
+
+                                  {/* Tooltip Preview on Hover */}
+                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/thumb:flex flex-col items-center pointer-events-none z-50 animate-in fade-in zoom-in-95 duration-150">
+                                    <div className="bg-slate-900 dark:bg-slate-950 text-white text-[11px] px-2.5 py-1.5 rounded-lg shadow-xl border border-slate-700/60 max-w-[200px] text-center">
+                                      <p className="font-medium truncate">{prod.title || "Catalog Product"}</p>
+                                      {prod.currentPrice && (
+                                        <p className="text-indigo-300 font-mono text-[10px] mt-0.5 font-bold">
+                                          {prod.currentPrice}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <div className="w-2 h-2 bg-slate-900 dark:bg-slate-950 rotate-45 -mt-1 border-r border-b border-slate-700/60" />
+                                  </div>
+                                </div>
+                              ))}
+
+                              {/* Overflow badge if catalog has more than 3 products */}
+                              {(p.approxProductCount ?? 0) > 3 && (
+                                <Link
+                                  href={`/spy/brand/${encodeURIComponent(p.pageId || p.landingPage || p.displayName || "")}?tab=products`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="relative z-10 w-7 h-7 rounded-md ring-1 ring-white dark:ring-slate-900 bg-slate-100 hover:bg-slate-200 dark:bg-white/[0.06] dark:hover:bg-white/[0.12] border border-slate-200/80 dark:border-white/[0.08] flex items-center justify-center text-[10px] font-mono font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 shrink-0 transition-colors"
+                                  title={`+${(p.approxProductCount ?? 0) - 3} more products (Click to view catalog)`}
+                                >
+                                  +{(p.approxProductCount ?? 0) - 3}
+                                </Link>
+                              )}
+                            </div>
+
+                            {/* Price Range Badge */}
+                            {p.priceRange?.formatted ? (
+                              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 dark:bg-white/[0.05] border border-slate-200/70 dark:border-white/[0.06] text-[11px] font-mono text-slate-700 dark:text-slate-300">
+                                <Coins className="w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0" />
+                                <span className="font-medium whitespace-nowrap">{p.priceRange.formatted}</span>
+                              </div>
+                            ) : p.topProducts[0]?.currentPrice ? (
+                              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/90 dark:bg-white/[0.05] border border-slate-200/70 dark:border-white/[0.06] text-[11px] font-mono text-slate-700 dark:text-slate-300">
+                                <Coins className="w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0" />
+                                <span className="font-medium whitespace-nowrap">{p.topProducts[0].currentPrice}</span>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 dark:text-slate-600 font-mono">——</span>
+                        )}
                       </td>
 
                       {/* Pattern & Status Column */}

@@ -95,6 +95,21 @@ export interface TrackedPage {
     linkedPagesCount?: number;
     totalCombinedAds?: number;
   } | null;
+  topProducts?: ProductPreviewItem[];
+  priceRange?: {
+    min: number | null;
+    max: number | null;
+    formatted: string | null;
+  } | null;
+}
+
+export interface ProductPreviewItem {
+  id: string;
+  title: string | null;
+  mainImageUrl: string | null;
+  currentPrice: string | null;
+  currency: string | null;
+  url: string | null;
 }
 
 export interface ScanHistoryEntry {
