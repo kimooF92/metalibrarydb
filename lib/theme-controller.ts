@@ -1,7 +1,7 @@
 export type Theme = "light" | "dark";
 
 const THEME_CHANGE_EVENT = "themechange";
-const FADE_DURATION_MS = 300;
+const FADE_DURATION_MS = 500;
 
 let cleanupTimer: number | undefined;
 
