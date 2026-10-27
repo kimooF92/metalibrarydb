@@ -68,7 +68,7 @@ html.theme-fade-overlay::before {
 }
 
 html.theme-fade-running::before {
-  animation: theme-overlay-fade 220ms ease-out forwards;
+  animation: theme-overlay-fade 300ms ease-out forwards;
 }
 
 @keyframes theme-overlay-fade {
