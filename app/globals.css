@@ -48,34 +48,15 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Cross-fade complete theme frames so individual component colors never interpolate. */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation-duration: 180ms;
-  animation-timing-function: ease-out;
-}
-
-::view-transition-old(root) {
-  animation-name: theme-fade-out;
-}
-
-::view-transition-new(root) {
-  animation-name: theme-fade-in;
-}
-
-@keyframes theme-fade-out {
-  to { opacity: 0; }
-}
-
-@keyframes theme-fade-in {
-  from { opacity: 0; }
+/* Theme changes are applied as one frame so borders and backgrounds stay in sync. */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
+  animation: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation-duration: 0ms;
-  }
   *,
   *::before,
   *::after {

@@ -50,7 +50,7 @@ export function TopBar() {
   const Icon = currentRoute.icon;
 
   return (
-    <header className="hidden md:flex items-center justify-between h-12 px-6 border-b border-slate-200 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-900/30 backdrop-blur-md shrink-0 sticky top-0 z-30 transition-all select-none">
+    <header className="hidden md:flex items-center justify-between h-12 px-6 border-b border-slate-200 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-900/30 backdrop-blur-md shrink-0 sticky top-0 z-30 transition-colors select-none">
       {/* Left: Logo/Breadcrumb & Workspace Switcher */}
       <div className="flex items-center space-x-3 text-xs">
         {isStaff ? (
@@ -110,4 +110,3 @@ export function TopBar() {
     </header>
   );
 }
-

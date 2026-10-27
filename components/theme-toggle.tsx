@@ -25,21 +25,18 @@ export function ThemeToggle({ className = "", size = "md" }: ThemeToggleProps) {
 
   const toggleTheme = () => {
     const nextTheme = theme === "dark" ? "light" : "dark";
-    const applyTheme = () => {
-      setTheme(nextTheme);
-      document.documentElement.classList.toggle("dark", nextTheme === "dark");
-      localStorage.setItem("theme", nextTheme);
-    };
+    const root = document.documentElement;
 
-    if (
-      "startViewTransition" in document &&
-      !window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      (document as any).startViewTransition(applyTheme);
-      return;
-    }
+    // Theme changes must be atomic. Temporarily disable component transitions so
+    // borders and backgrounds cannot interpolate on different timelines.
+    root.classList.add("theme-switching");
+    setTheme(nextTheme);
+    root.classList.toggle("dark", nextTheme === "dark");
+    localStorage.setItem("theme", nextTheme);
 
-    applyTheme();
+    window.requestAnimationFrame(() => {
+      root.classList.remove("theme-switching");
+    });
   };
 
   const buttonSizeClass = size === "sm" ? "w-8 h-8" : "w-8.5 h-8.5";
@@ -57,7 +54,7 @@ export function ThemeToggle({ className = "", size = "md" }: ThemeToggleProps) {
       onClick={toggleTheme}
       title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
       aria-label={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
-      className={`flex items-center justify-center ${buttonSizeClass} rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-sm transition-all cursor-pointer ${className}`}
+      className={`flex items-center justify-center ${buttonSizeClass} rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-sm transition-colors cursor-pointer ${className}`}
     >
       {theme === "dark" ? (
         <Sun className="w-4 h-4 text-amber-400 hover:text-amber-300 transition-colors" />

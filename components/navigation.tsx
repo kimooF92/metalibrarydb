@@ -69,7 +69,7 @@ export function Navigation() {
         <header
           className={`hidden md:flex flex-col ${
             isCollapsed ? "w-16 p-3" : "w-64 p-5"
-          } h-screen border-r border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900/20 backdrop-blur-md shrink-0 sticky top-0 left-0 z-40 justify-between transition-all duration-300 relative`}
+          } h-screen border-r border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900/20 backdrop-blur-md shrink-0 sticky top-0 left-0 z-40 justify-between transition-[width,padding] duration-300 relative`}
         >
         {/* Floating Border Toggle Button (Shadcn Style) */}
         <button
