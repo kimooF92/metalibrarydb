@@ -11,10 +11,14 @@ export interface BrandOverlayMeta {
 
 interface BrandOverlayContextType {
   setOverlayMeta: (meta: BrandOverlayMeta) => void;
+  onClose?: () => void;
+  isModal?: boolean;
 }
 
 const BrandOverlayContext = createContext<BrandOverlayContextType>({
   setOverlayMeta: () => {},
+  onClose: () => {},
+  isModal: true,
 });
 
 export const useBrandOverlay = () => useContext(BrandOverlayContext);
@@ -30,10 +34,25 @@ export function BrandOverlaySheet({ children, brandId }: BrandOverlaySheetProps)
   const sheetRef = useRef<HTMLDivElement>(null);
   const [overlayMeta, setOverlayMeta] = useState<BrandOverlayMeta>({});
   const [currentSearch, setCurrentSearch] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
 
+  // Trigger smooth enter slide-in transition on mount
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      setIsOpen(true);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  // Graceful animated close before routing back
   const handleClose = useCallback(() => {
-    router.back();
-  }, [router]);
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      router.back();
+    }, 220);
+  }, [router, isClosing]);
 
   // Sync current query params (e.g. ?tab=products) for "Open Full Window"
   useEffect(() => {
@@ -45,38 +64,14 @@ export function BrandOverlaySheet({ children, brandId }: BrandOverlaySheetProps)
     }
   }, []);
 
-  // 1. Lock background scroll containers while overlay is active and restore exact scroll positions
-  useEffect(() => {
-    // Lock <main>
-    const mainEl = document.querySelector("main");
-    const originalMainOverflow = mainEl ? mainEl.style.overflow : "";
-    const originalMainScrollTop = mainEl ? mainEl.scrollTop : 0;
-    if (mainEl) mainEl.style.overflow = "hidden";
+  // Prevent background scroll bleed when wheeling directly on backdrop
+  const handleBackdropWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (e.target === overlayRef.current) {
+      e.preventDefault();
+    }
+  };
 
-    // Lock any nested table scroll containers (e.g. pages-table.tsx div)
-    const backgroundScrollEls = Array.from(
-      document.querySelectorAll<HTMLElement>(".overflow-y-auto")
-    ).filter((el) => el.id !== "brand-overlay-scroll-container");
-
-    const scrollStates: { el: HTMLElement; overflow: string; scrollTop: number }[] = [];
-    backgroundScrollEls.forEach((el) => {
-      scrollStates.push({ el, overflow: el.style.overflow, scrollTop: el.scrollTop });
-      el.style.overflow = "hidden";
-    });
-
-    return () => {
-      if (mainEl) {
-        mainEl.style.overflow = originalMainOverflow;
-        mainEl.scrollTop = originalMainScrollTop;
-      }
-      scrollStates.forEach(({ el, overflow, scrollTop }) => {
-        el.style.overflow = overflow;
-        el.scrollTop = scrollTop;
-      });
-    };
-  }, []);
-
-  // 2. Global ESC key listener (guards against closing if a child modal is active)
+  // Global ESC key listener (guards against closing if a child modal is active)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -99,7 +94,7 @@ export function BrandOverlaySheet({ children, brandId }: BrandOverlaySheetProps)
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleClose]);
 
-  // 3. Handle backdrop click
+  // Handle backdrop click
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (sheetRef.current && !sheetRef.current.contains(e.target as Node)) {
       handleClose();
@@ -111,7 +106,7 @@ export function BrandOverlaySheet({ children, brandId }: BrandOverlaySheetProps)
     : "#";
 
   return (
-    <BrandOverlayContext.Provider value={{ setOverlayMeta }}>
+    <BrandOverlayContext.Provider value={{ setOverlayMeta, onClose: handleClose, isModal: true }}>
       <div
         ref={overlayRef}
         role="dialog"
@@ -119,11 +114,16 @@ export function BrandOverlaySheet({ children, brandId }: BrandOverlaySheetProps)
         aria-label="Brand Deep Dive Analytics Overlay"
         data-brand-overlay="true"
         onClick={handleBackdropClick}
-        className="fixed inset-0 z-40 flex justify-end bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150"
+        onWheel={handleBackdropWheel}
+        className={`fixed inset-0 z-40 flex justify-end bg-slate-950/60 backdrop-blur-sm transition-opacity duration-300 ease-out ${
+          isOpen && !isClosing ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
       >
         <div
           ref={sheetRef}
-          className="w-full max-w-[96vw] xl:max-w-[94vw] h-full bg-slate-50 dark:bg-slate-950 border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right-6 duration-200 ease-out"
+          className={`w-full max-w-[96vw] xl:max-w-[94vw] h-full bg-slate-50 dark:bg-slate-950 border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-out ${
+            isOpen && !isClosing ? "translate-x-0" : "translate-x-full"
+          }`}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Top Floating Control Bar */}
@@ -194,7 +194,7 @@ export function BrandOverlaySheet({ children, brandId }: BrandOverlaySheetProps)
           {/* Scrollable Workspace Container */}
           <div
             id="brand-overlay-scroll-container"
-            className="flex-1 overflow-y-auto p-4 sm:p-6"
+            className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6"
           >
             {children}
           </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -30,6 +30,15 @@ import { Plus, PlusCircle, ShieldCheck } from "lucide-react";
 
 export function Navigation() {
   const pathname = usePathname();
+  const [baseRoute, setBaseRoute] = useState(pathname);
+
+  useEffect(() => {
+    if (!pathname.startsWith("/spy/brand/")) {
+      setBaseRoute(pathname);
+    }
+  }, [pathname]);
+
+  const activeRoute = pathname.startsWith("/spy/brand/") ? baseRoute : pathname;
   const [isOpen, setIsOpen] = useState(false);
   const { isCollapsed, toggleSidebar } = useSidebar();
   const { logout, isLoggingOut } = useLogout();
@@ -51,7 +60,7 @@ export function Navigation() {
     ? allNavItems.filter((item) => item.href === "/products")
     : allNavItems;
 
-  const isSettingsActive = pathname === "/settings";
+  const isSettingsActive = activeRoute === "/settings";
 
   return (
     <>
@@ -110,7 +119,7 @@ export function Navigation() {
           <nav className="flex flex-col space-y-1.5">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const active = pathname === item.href;
+              const active = activeRoute === item.href;
 
               if (isCollapsed) {
                 return (
@@ -290,7 +299,7 @@ export function Navigation() {
             <nav className="flex flex-col space-y-2">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const active = pathname === item.href;
+              const active = activeRoute === item.href;
               return (
                 <Link
                   key={item.href}

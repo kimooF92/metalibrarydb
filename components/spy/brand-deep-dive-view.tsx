@@ -151,7 +151,7 @@ export function BrandDeepDiveView({
 }: BrandDeepDiveViewProps) {
   const router = useRouter();
   const { showToast } = useToast();
-  const { setOverlayMeta } = useBrandOverlay();
+  const { setOverlayMeta, onClose: overlayOnClose } = useBrandOverlay();
   const statusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [activeTab, setActiveTab] = useState<"analytics" | "products" | "creatives">(() => {
@@ -929,7 +929,7 @@ export function BrandDeepDiveView({
         selectedSisterPageId={selectedSisterPageId}
         onSelectSisterPage={handleSisterPageSelect}
         onOpenManageDomainModal={() => setIsManageDomainModalOpen(true)}
-        onBack={() => (onClose ? onClose() : router.back())}
+        onBack={() => (onClose ? onClose() : overlayOnClose ? overlayOnClose() : router.back())}
       />
 
       <BrandDeepDiveTabs

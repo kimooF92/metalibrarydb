@@ -30,7 +30,18 @@ export function AppShell({
     return <div className="h-full w-full bg-background overflow-y-auto flex flex-col">{children}</div>;
   }
 
-  const isFullCanvasPage = pathname.startsWith("/products") || pathname.startsWith("/discovery");
+  // Track the underlying base route to prevent canvas pages (products, discovery)
+  // from losing full-canvas styles when an intercepted modal (e.g. /spy/brand/*) opens over them.
+  const [baseRoute, setBaseRoute] = React.useState(pathname);
+
+  React.useEffect(() => {
+    if (!pathname.startsWith("/spy/brand/")) {
+      setBaseRoute(pathname);
+    }
+  }, [pathname]);
+
+  const activeBaseRoute = pathname.startsWith("/spy/brand/") ? baseRoute : pathname;
+  const isFullCanvasPage = activeBaseRoute.startsWith("/products") || activeBaseRoute.startsWith("/discovery");
 
   return (
     <AuthProvider initialRole={initialRole}>
