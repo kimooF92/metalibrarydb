@@ -61,9 +61,6 @@ export function Navigation() {
     : allNavItems;
 
   const isSettingsActive = activeRoute === "/settings";
-  const sidebarLabelTransition = isCollapsed
-    ? "pointer-events-none max-w-0 -translate-x-1 opacity-0 delay-0"
-    : "max-w-full translate-x-0 opacity-100 delay-300";
 
   return (
     <>
@@ -71,23 +68,19 @@ export function Navigation() {
       {!isStaff && (
         <header
           className={`hidden md:flex flex-col ${
-            isCollapsed ? "w-16 p-3" : "w-64 p-5"
-          } h-screen border-r border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900/20 backdrop-blur-md shrink-0 sticky top-0 left-0 z-40 justify-between transition-[width,padding] duration-300 relative`}
+            isCollapsed ? "w-16" : "w-64"
+          } p-3 h-screen border-r border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900/20 backdrop-blur-md shrink-0 sticky top-0 left-0 z-40 justify-between transition-[width] duration-300 ease-[cubic-bezier(0.2,0,0,1)] relative`}
         >
         <div className="flex flex-col flex-1 min-w-0">
           {/* Header Row (Logo, Title & Toggle) */}
-          <div
-            className={`flex items-center mb-8 h-9 ${
-              isCollapsed ? "justify-center" : "justify-between px-1 min-w-0"
-            }`}
-          >
+          <div className="flex items-center justify-between mb-6 h-10 w-full min-w-0">
             {isCollapsed ? (
               <button
                 type="button"
                 onClick={toggleSidebar}
                 aria-label="Expand sidebar"
                 title="Expand sidebar"
-                className="group relative flex items-center justify-center w-10 h-10 rounded-lg hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                className="group relative flex items-center justify-center w-10 h-10 rounded-lg hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 shrink-0"
               >
                 {/* Default: App Icon */}
                 <img
@@ -101,22 +94,30 @@ export function Navigation() {
                   aria-hidden="true"
                   className="absolute inset-0 flex items-center justify-center text-slate-600 dark:text-slate-300 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
                 >
-                  <PanelLeftOpen className="h-4 w-4" />
+                  <PanelLeftOpen className="w-4 h-4" />
                 </span>
               </button>
             ) : (
               <>
                 <Link
                   href="/"
-                  className="flex items-center space-x-2.5 min-w-0 flex-1 truncate group"
+                  className="flex items-center min-w-0 flex-1 h-full group"
                 >
-                  <img
-                    src="/icon.png"
-                    alt="Meta Ad Tracker"
-                    className="h-7 w-7 shrink-0 object-contain"
-                  />
+                  <div className="w-10 h-10 shrink-0 flex items-center justify-center">
+                    <img
+                      src="/icon.png"
+                      alt="Meta Ad Tracker"
+                      className="h-7 w-7 object-contain"
+                    />
+                  </div>
 
-                  <div className="min-w-0 flex-1 truncate">
+                  <div
+                    className={`min-w-0 flex-1 pl-1 truncate transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] ${
+                      isCollapsed
+                        ? "opacity-0 -translate-x-3 max-w-0 pointer-events-none"
+                        : "opacity-100 translate-x-0 max-w-full"
+                    }`}
+                  >
                     <span className="font-extrabold text-sm text-slate-900 dark:text-white tracking-tight block leading-tight truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                       Meta Ad Tracker
                     </span>
@@ -131,16 +132,16 @@ export function Navigation() {
                   onClick={toggleSidebar}
                   aria-label="Collapse sidebar"
                   title="Collapse sidebar"
-                  className="p-1.5 rounded-md hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer transition-colors shrink-0 ml-1 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer transition-colors shrink-0 ml-1 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                 >
-                  <PanelLeftClose className="h-4 w-4" />
+                  <PanelLeftClose className="w-4 h-4" />
                 </button>
               </>
             )}
           </div>
 
           {/* Navigation Links */}
-          <nav className="flex flex-col space-y-1.5">
+          <nav className="flex flex-col space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = activeRoute === item.href;
@@ -150,42 +151,43 @@ export function Navigation() {
                   key={item.href}
                   href={item.href}
                   title={isCollapsed ? item.label : undefined}
-                  className={`flex items-center rounded-lg text-sm font-semibold transition-all border ${
-                    isCollapsed ? "justify-center w-10 h-10 mx-auto" : "justify-between w-full px-4 py-3"
-                  } ${
+                  className={`group flex items-center h-10 w-full rounded-lg text-sm font-semibold transition-colors border ${
                     active
                       ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-300 shadow-md shadow-indigo-600/[0.03]"
                       : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
                   }`}
                 >
-                  <div className={`flex min-w-0 items-center ${isCollapsed ? "justify-center" : "space-x-3"}`}>
+                  {/* Stable stationary icon slot */}
+                  <div className="w-10 h-10 shrink-0 flex items-center justify-center">
                     <Icon
-                      className={`w-4 h-4 shrink-0 ${
+                      className={`w-4 h-4 ${
                         active ? "text-indigo-600 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
                       }`}
                     />
-                    <span
-                      aria-hidden={isCollapsed}
-                      className={`overflow-hidden whitespace-nowrap truncate transition-[opacity,transform] duration-150 ease-out ${sidebarLabelTransition}`}
-                    >
-                      {item.label}
+                  </div>
+
+                  {/* Text & badges with smooth natural glide and fade */}
+                  <div
+                    className={`flex items-center justify-between min-w-0 flex-1 overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] ${
+                      isCollapsed
+                        ? "opacity-0 -translate-x-3 max-w-0 pointer-events-none"
+                        : "opacity-100 translate-x-0 max-w-full pr-2.5"
+                    }`}
+                  >
+                    <span className="truncate whitespace-nowrap">{item.label}</span>
+                    <span className="flex shrink-0 items-center gap-1.5 ml-1.5">
+                      {item.isAi && (
+                        <span className="px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider rounded-md bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-xs">
+                          AI
+                        </span>
+                      )}
+                      {(item as any).isFlame && (
+                        <span className="px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider rounded-md bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 text-white shadow-xs shadow-rose-500/20 animate-pulse">
+                          HOT
+                        </span>
+                      )}
                     </span>
                   </div>
-                  <span
-                    aria-hidden={isCollapsed}
-                    className={`flex shrink-0 items-center gap-1.5 overflow-hidden transition-[opacity,transform] duration-150 ease-out ${sidebarLabelTransition}`}
-                  >
-                    {item.isAi && (
-                      <span className="px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider rounded-md bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-xs">
-                        AI
-                      </span>
-                    )}
-                    {(item as any).isFlame && (
-                      <span className="px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider rounded-md bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 text-white shadow-xs shadow-rose-500/20 animate-pulse">
-                        HOT
-                      </span>
-                    )}
-                  </span>
                 </Link>
               );
             })}
@@ -194,31 +196,33 @@ export function Navigation() {
 
         {/* Sidebar Bottom Footer — Settings & Lock / Sign Out */}
         <div className="pt-3 border-t border-slate-200 dark:border-slate-800/80 space-y-1">
-
           {/* Settings Button (Admin Only) */}
           {!isStaff && (
             <Link
               href="/settings"
               title={isCollapsed ? "Settings" : undefined}
-              className={`flex items-center rounded-lg text-sm font-semibold transition-all border ${
-                isCollapsed ? "justify-center w-10 h-10 mx-auto" : "space-x-3 w-full px-4 py-2.5"
-              } ${
+              className={`flex items-center h-10 w-full rounded-lg text-sm font-semibold transition-colors border ${
                 isSettingsActive
                   ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-300 shadow-md shadow-indigo-600/[0.03]"
                   : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
               }`}
             >
-              <Settings
-                className={`w-4 h-4 shrink-0 ${
-                  isSettingsActive ? "text-indigo-600 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
+              <div className="w-10 h-10 shrink-0 flex items-center justify-center">
+                <Settings
+                  className={`w-4 h-4 ${
+                    isSettingsActive ? "text-indigo-600 dark:text-indigo-400" : "text-slate-600 dark:text-slate-400"
+                  }`}
+                />
+              </div>
+              <div
+                className={`min-w-0 flex-1 overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] ${
+                  isCollapsed
+                    ? "opacity-0 -translate-x-3 max-w-0 pointer-events-none"
+                    : "opacity-100 translate-x-0 max-w-full pr-2.5"
                 }`}
-              />
-              <span
-                aria-hidden={isCollapsed}
-                className={`overflow-hidden whitespace-nowrap truncate transition-[opacity,transform] duration-150 ease-out ${sidebarLabelTransition}`}
               >
-                Settings
-              </span>
+                <span className="truncate whitespace-nowrap block">Settings</span>
+              </div>
             </Link>
           )}
 
@@ -227,17 +231,22 @@ export function Navigation() {
             onClick={logout}
             disabled={isLoggingOut}
             title={isCollapsed ? "Lock Session / Log Out" : undefined}
-            className={`group flex items-center rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 transition-all border border-transparent hover:border-rose-500/20 cursor-pointer disabled:opacity-50 ${
-              isCollapsed ? "justify-center w-10 h-10 mx-auto" : "w-full space-x-3 px-4 py-2.5"
-            }`}
+            className="group flex items-center h-10 w-full rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 transition-colors border border-transparent hover:border-rose-500/20 cursor-pointer disabled:opacity-50"
           >
-            <LogOut className={`w-4 h-4 shrink-0 group-hover:-translate-x-0.5 transition-transform ${isLoggingOut ? "animate-spin" : ""}`} />
-            <span
-              aria-hidden={isCollapsed}
-              className={`overflow-hidden whitespace-nowrap truncate transition-[opacity,transform] duration-150 ease-out ${sidebarLabelTransition}`}
+            <div className="w-10 h-10 shrink-0 flex items-center justify-center">
+              <LogOut className={`w-4 h-4 group-hover:-translate-x-0.5 transition-transform ${isLoggingOut ? "animate-spin" : ""}`} />
+            </div>
+            <div
+              className={`min-w-0 flex-1 overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] ${
+                isCollapsed
+                  ? "opacity-0 -translate-x-3 max-w-0 pointer-events-none"
+                  : "opacity-100 translate-x-0 max-w-full pr-2.5 text-left"
+              }`}
             >
-              {isLoggingOut ? "Locking..." : "Lock Session"}
-            </span>
+              <span className="truncate whitespace-nowrap block">
+                {isLoggingOut ? "Locking..." : "Lock Session"}
+              </span>
+            </div>
           </button>
         </div>
       </header>
