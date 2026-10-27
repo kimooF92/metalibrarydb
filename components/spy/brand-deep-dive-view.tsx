@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { resolveProductForRefresh } from "@/lib/product-extraction";
 import { ProductDetailsModal } from "@/components/products/product-details-modal";
 import { ExportDossierModal } from "@/components/export-dossier-modal";
@@ -141,27 +141,34 @@ interface BrandAnalyticsData {
 export interface BrandDeepDiveViewProps {
   id: string;
   isModal?: boolean;
+  initialTab?: "analytics" | "products" | "creatives";
   onClose?: () => void;
 }
 
 export function BrandDeepDiveView({
   id,
   isModal = false,
+  initialTab,
   onClose,
 }: BrandDeepDiveViewProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { showToast } = useToast();
   const { setOverlayMeta, onClose: overlayOnClose } = useBrandOverlay();
   const statusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const [activeTab, setActiveTab] = useState<"analytics" | "products" | "creatives">(() => {
-    if (typeof window !== "undefined") {
-      const tabParam = new URLSearchParams(window.location.search).get("tab");
-      if (tabParam === "products" || tabParam === "creatives") return tabParam;
-    }
-    return "analytics";
-  });
+  const searchTab = searchParams?.get("tab");
+  const resolvedInitialTab: "analytics" | "products" | "creatives" =
+    initialTab ||
+    (searchTab === "products" || searchTab === "creatives" || searchTab === "analytics" ? searchTab : undefined) ||
+    (typeof window !== "undefined" && (new URLSearchParams(window.location.search).get("tab") as any)) ||
+    "analytics";
+
+  const [activeTab, setActiveTab] = useState<"analytics" | "products" | "creatives">(
+    resolvedInitialTab === "products" || resolvedInitialTab === "creatives" ? resolvedInitialTab : "analytics"
+  );
   const [data, setData] = useState<BrandAnalyticsData | null>(null);
+  const pendingProductsRef = useRef<ScrapedProduct[] | null>(null);
 
   // Sync active brand metadata to overlay header if mounted in modal
   useEffect(() => {
@@ -206,11 +213,11 @@ export function BrandDeepDiveView({
 
   const [feedRevision, setFeedRevision] = useState(0);
   const [visitedTabs, setVisitedTabs] = useState<Set<"analytics" | "products" | "creatives">>(() => {
-    if (typeof window !== "undefined") {
-      const tabParam = new URLSearchParams(window.location.search).get("tab");
-      if (tabParam === "products" || tabParam === "creatives") return new Set([tabParam]);
+    const set = new Set<"analytics" | "products" | "creatives">(["analytics"]);
+    if (resolvedInitialTab === "products" || resolvedInitialTab === "creatives") {
+      set.add(resolvedInitialTab);
     }
-    return new Set(["analytics"]);
+    return set;
   });
 
   const tabScrollPositionsRef = useRef<Record<string, number>>({
@@ -218,7 +225,9 @@ export function BrandDeepDiveView({
     products: 0,
     creatives: 0,
   });
-  const activeTabRef = useRef<"analytics" | "products" | "creatives">("analytics");
+  const activeTabRef = useRef<"analytics" | "products" | "creatives">(
+    resolvedInitialTab === "products" || resolvedInitialTab === "creatives" ? resolvedInitialTab : "analytics"
+  );
   activeTabRef.current = activeTab;
 
   // On-demand products fetcher (scope=products)
@@ -233,7 +242,7 @@ export function BrandDeepDiveView({
 
     const currentReqId = ++productsRequestIdRef.current;
     const requestedSisterPageId = sisterPageIdOverride !== undefined ? sisterPageIdOverride : currentSisterPageIdRef.current;
-    const requestedBrandId = id;
+    const requestedBrandId = data?.brand?.pageId || data?.brand?.id || id;
 
     try {
       const params = new URLSearchParams({ scope: "products" });
@@ -247,9 +256,11 @@ export function BrandDeepDiveView({
       }
       const json = await res.json();
       if (currentReqId !== productsRequestIdRef.current) return;
-      if (id !== requestedBrandId || currentSisterPageIdRef.current !== requestedSisterPageId) return;
+      if (currentSisterPageIdRef.current !== requestedSisterPageId) return;
 
-      setData((prev) => (prev ? { ...prev, products: json.products } : prev));
+      const newProducts = json.products || [];
+      pendingProductsRef.current = newProducts;
+      setData((prev) => (prev ? { ...prev, products: newProducts } : prev));
       setIsProductsLoaded(true);
     } catch (err: any) {
       if (err.name === "AbortError") return;
@@ -264,7 +275,12 @@ export function BrandDeepDiveView({
 
   const handleTabChange = (nextTab: "analytics" | "products" | "creatives", pushHistory = true) => {
     const currentTab = activeTabRef.current;
-    if (nextTab === currentTab) return;
+    if (nextTab === currentTab) {
+      if (nextTab === "products" && (!data?.products || data.products.length === 0) && !isLoadingProductsTab) {
+        loadProductsTab(true);
+      }
+      return;
+    }
 
     // 0. Mark tab as visited for lazy first-mount
     setVisitedTabs((prev) => (prev.has(nextTab) ? prev : new Set(prev).add(nextTab)));
@@ -310,22 +326,33 @@ export function BrandDeepDiveView({
     }
   };
 
-  // Sync activeTab from URL query params on mount and on browser popstate (Back/Forward)
+  // Automatically trigger product catalog loading when products tab is active but products are not loaded
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const urlParams = new URLSearchParams(window.location.search);
-      const tab = urlParams.get("tab");
-      if (tab === "products" || tab === "creatives" || tab === "analytics") {
-        activeTabRef.current = tab as any;
-        setActiveTab(tab as any);
+    if (activeTab === "products") {
+      setVisitedTabs((prev) => (prev.has("products") ? prev : new Set(prev).add("products")));
+      if (!isProductsLoaded && !isLoadingProductsTab) {
+        loadProductsTab();
       }
     }
+  }, [activeTab, isProductsLoaded, isLoadingProductsTab]);
 
+  // Sync activeTab from URL searchParams or props
+  useEffect(() => {
+    const targetTab = initialTab || (searchTab === "products" || searchTab === "creatives" || searchTab === "analytics" ? searchTab : null);
+    if (targetTab && targetTab !== activeTabRef.current) {
+      handleTabChange(targetTab, false);
+    }
+  }, [initialTab, searchTab]);
+
+  // Sync activeTab from browser popstate (Back/Forward)
+  useEffect(() => {
     const handlePopState = () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const tab = urlParams.get("tab");
-      const resolvedTab = tab === "products" || tab === "creatives" ? tab : "analytics";
-      handleTabChange(resolvedTab as any, false);
+      if (typeof window !== "undefined") {
+        const urlParams = new URLSearchParams(window.location.search);
+        const tab = urlParams.get("tab");
+        const resolvedTab = tab === "products" || tab === "creatives" ? tab : "analytics";
+        handleTabChange(resolvedTab as any, false);
+      }
     };
 
     window.addEventListener("popstate", handlePopState);
@@ -390,12 +417,29 @@ export function BrandDeepDiveView({
       if (!res.ok) {
         throw new Error(json.error || "Failed to load brand analytics");
       }
-      setData(json);
-      if (json.products && json.products.length > 0) {
-        setIsProductsLoaded(true);
-      } else {
-        setIsProductsLoaded(false);
-      }
+
+      setData((prev) => {
+        const productsToKeep =
+          (pendingProductsRef.current && pendingProductsRef.current.length > 0)
+            ? pendingProductsRef.current
+            : (prev?.products && prev.products.length > 0)
+              ? prev.products
+              : (json.products && json.products.length > 0)
+                ? json.products
+                : [];
+
+        if (productsToKeep.length > 0) {
+          setIsProductsLoaded(true);
+        } else if (!isProductsTab) {
+          setIsProductsLoaded(false);
+        }
+
+        return {
+          ...json,
+          products: productsToKeep,
+        };
+      });
+
       setIsWatchlisted(Boolean(json.brand?.isWatchlisted));
       if (json.brand?.pageId) {
         canonicalIdRef.current = json.brand.pageId;

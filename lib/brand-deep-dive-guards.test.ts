@@ -165,4 +165,86 @@ test("Brand Deep Dive Lifecycle & Guard Suite", async (t) => {
     assert.equal(getNextTab("products", "Home"), "analytics");
     assert.equal(getNextTab("analytics", "End"), "creatives");
   });
+
+  await t.test("product hydration guard triggers load and preserves visitedTabs when opened directly on products tab", () => {
+    let visitedTabs = new Set(["analytics"]);
+    let isProductsLoaded = false;
+    let isLoadingProductsTab = false;
+    let loadCallCount = 0;
+
+    const checkTabHydration = (activeTab: string) => {
+      if (activeTab === "products") {
+        if (!visitedTabs.has("products")) {
+          visitedTabs = new Set(visitedTabs).add("products");
+        }
+        if (!isProductsLoaded && !isLoadingProductsTab) {
+          isLoadingProductsTab = true;
+          loadCallCount++;
+        }
+      }
+    };
+
+    // Cold open with activeTab = 'products'
+    checkTabHydration("products");
+    assert.equal(visitedTabs.has("products"), true, "visitedTabs must include products");
+    assert.equal(isLoadingProductsTab, true, "Loading state must be engaged");
+    assert.equal(loadCallCount, 1, "loadProductsTab must be triggered on cold products tab open");
+
+    // Re-evaluating while loading must not duplicate call
+    checkTabHydration("products");
+    assert.equal(loadCallCount, 1, "Duplicate network call must be prevented");
+  });
+
+  await t.test("pendingProductsRef prevents lean analytics response from wiping out concurrently loaded products", () => {
+    let data: { products?: any[] } | null = null;
+    let pendingProducts: any[] | null = null;
+    let isProductsLoaded = false;
+
+    // 1. loadProductsTab finishes first and stores products
+    const sampleProducts = [{ id: "p1", title: "Product 1" }];
+    pendingProducts = sampleProducts;
+    if (data) {
+      data = { ...data, products: sampleProducts };
+    }
+    isProductsLoaded = true;
+
+    // 2. fetchBrandData with lean=true finishes afterwards with products: []
+    const leanAnalyticsResponse = { brand: { displayName: "Brand X" }, products: [] };
+    const productsToKeep =
+      (pendingProducts && pendingProducts.length > 0)
+        ? pendingProducts
+        : (data?.products && data.products.length > 0)
+          ? data.products
+          : (leanAnalyticsResponse.products && leanAnalyticsResponse.products.length > 0)
+            ? leanAnalyticsResponse.products
+            : [];
+
+    data = {
+      ...leanAnalyticsResponse,
+      products: productsToKeep,
+    };
+
+    assert.equal(data.products.length, 1, "Products from loadProductsTab must not be wiped by lean response");
+    assert.equal(data.products[0].id, "p1");
+    assert.equal(isProductsLoaded, true);
+  });
+
+  await t.test("same-tab click forces reload if products catalog is empty", () => {
+    let reloadCount = 0;
+    const currentTab = "products";
+    const data = { products: [] };
+    const isLoadingProductsTab = false;
+
+    const onTabClick = (nextTab: string) => {
+      if (nextTab === currentTab) {
+        if (nextTab === "products" && (!data.products || data.products.length === 0) && !isLoadingProductsTab) {
+          reloadCount++;
+        }
+        return;
+      }
+    };
+
+    onTabClick("products");
+    assert.equal(reloadCount, 1, "Clicking active products tab when empty must trigger reload");
+  });
 });
