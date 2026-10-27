@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { ads, adObservations, scrapedProducts, trackedPages, discoveredPages } from "@/db/schema";
-import { eq, ilike, and, sql, desc, asc, or, count, inArray, isNull } from "drizzle-orm";
+import { ads, adObservations, scrapedProducts, trackedPages, discoveredPages, brandDomains } from "@/db/schema";
+import { eq, ilike, and, sql, desc, asc, or, count, inArray, isNull, isNotNull } from "drizzle-orm";
 import { validateApiSecret, validateAdminRole, getRoleFromRequest } from "@/lib/api-guard";
 import { PRIVATE_AUTH_VARY, PRIVATE_DETAIL_CACHE_CONTROL, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
@@ -504,6 +504,7 @@ export async function GET(req: NextRequest) {
             latestAdDate: sql<string>`MAX(${ads.lastSeenAt})`,
             brandName: sql<string>`MAX(COALESCE(${trackedPages.displayName}, ${ads.pageName}))`,
             brandPageId: sql<string>`MAX(${ads.pageId})`,
+            brandProfilePic: sql<string>`MAX(${trackedPages.profilePicUrl})`,
             brandHoldStatus: sql<string>`MAX(${trackedPages.holdStatus})`,
             brandCurrentResults: sql<number>`MAX(${trackedPages.currentResults})`.mapWith(Number),
             topCreativeThumbnail: sql<string>`MAX(COALESCE(NULLIF(${ads.thumbnailUrl}, ''), NULLIF(${ads.thumbnailStoragePath}, '')))`,
@@ -529,6 +530,7 @@ export async function GET(req: NextRequest) {
           .select({
             pageId: trackedPages.pageId,
             displayName: trackedPages.displayName,
+            profilePicUrl: trackedPages.profilePicUrl,
             holdStatus: trackedPages.holdStatus,
             currentResults: trackedPages.currentResults,
           })
@@ -541,6 +543,32 @@ export async function GET(req: NextRequest) {
           })
           .catch((pageErr) => {
             console.warn("[Products API] Tracked pages batch lookup warning:", pageErr);
+          })
+      );
+    }
+
+    // Also look up domain profile pics for products whose domain matches brandDomains
+    const domainsFromProducts = Array.from(
+      new Set(rawProducts.map((p) => p.domain).filter((d): d is string => Boolean(d && d.trim())))
+    );
+    const domainPicMap = new Map<string, string>();
+
+    if (!isLean && domainsFromProducts.length > 0) {
+      asyncLookups.push(
+        db
+          .select({
+            domain: brandDomains.domain,
+            profilePicUrl: brandDomains.profilePicUrl,
+          })
+          .from(brandDomains)
+          .where(and(inArray(brandDomains.domain, domainsFromProducts), isNotNull(brandDomains.profilePicUrl)))
+          .then((rows) => {
+            rows.forEach((row) => {
+              if (row.domain && row.profilePicUrl) domainPicMap.set(row.domain, row.profilePicUrl);
+            });
+          })
+          .catch((domainErr) => {
+            console.warn("[Products API] Brand domains batch lookup warning:", domainErr);
           })
       );
     }
@@ -565,6 +593,11 @@ export async function GET(req: NextRequest) {
 
       const brandPageId = m?.brandPageId || p.pageId || null;
       const brandName = m?.brandName || pageInfo?.displayName || null;
+      const brandProfilePic =
+        m?.brandProfilePic ||
+        pageInfo?.profilePicUrl ||
+        (p.domain ? domainPicMap.get(p.domain) : null) ||
+        null;
       const brandCurrentResults = typeof m?.brandCurrentResults === "number"
         ? m.brandCurrentResults
         : typeof pageInfo?.currentResults === "number"
@@ -589,6 +622,7 @@ export async function GET(req: NextRequest) {
         latestAdDate: m?.latestAdDate || null,
         brandName,
         brandPageId,
+        brandProfilePic,
         brandHoldStatus,
         brandCurrentResults,
         topCreativeThumbnail: m?.topCreativeThumbnail || null,

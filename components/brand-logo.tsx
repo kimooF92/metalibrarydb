@@ -101,19 +101,14 @@ export function BrandLogo({
   size = "sm",
   className = "",
 }: BrandLogoProps) {
-  const [imgFailed, setImgFailed] = useState<boolean>(false);
-  const [logoTone, setLogoTone] = useState<LogoTone>("unknown");
-
   const cleanUrl = useMemo(() => {
     if (!url || typeof url !== "string") return null;
     const trimmed = url.trim();
     if (!trimmed || trimmed === "null" || trimmed === "undefined") return null;
-    // Reject any Google Favicon URL that could return a generic globe
-    if (trimmed.includes("google.com/s2/favicons")) return null;
     return trimmed;
   }, [url]);
 
-  // Clean domain for display / initial fallback
+  // Clean domain for display / domain favicon resolution
   const cleanDomain = useMemo(() => {
     if (!domain) return null;
     const cleaned = domain
@@ -129,11 +124,34 @@ export function BrandLogo({
     return cleaned;
   }, [domain]);
 
-  // Reset state if url changes
+  const domainFaviconUrl = useMemo(() => {
+    if (!cleanDomain) return null;
+    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(cleanDomain)}&sz=128`;
+  }, [cleanDomain]);
+
+  const candidates = useMemo(() => {
+    const list: string[] = [];
+    if (cleanUrl) list.push(cleanUrl);
+    if (domainFaviconUrl && domainFaviconUrl !== cleanUrl) list.push(domainFaviconUrl);
+    return list;
+  }, [cleanUrl, domainFaviconUrl]);
+
+  const [candidateIndex, setCandidateIndex] = useState<number>(0);
+  const [logoTone, setLogoTone] = useState<LogoTone>("unknown");
+
+  // Reset state if candidates change
   useEffect(() => {
-    setImgFailed(false);
+    setCandidateIndex(0);
     setLogoTone("unknown");
-  }, [cleanUrl]);
+  }, [candidates]);
+
+  const activeSrc = candidateIndex < candidates.length ? candidates[candidateIndex] : null;
+  const hasImage = Boolean(activeSrc);
+
+  const handleImageError = () => {
+    setCandidateIndex((prev) => prev + 1);
+    setLogoTone("unknown");
+  };
 
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const currentImg = e.currentTarget;
@@ -160,8 +178,6 @@ export function BrandLogo({
   const sizeCfg = SIZE_MAP[size] || SIZE_MAP.sm;
   const initial = (name || cleanDomain || "B").trim().charAt(0).toUpperCase();
   const gradientClass = useMemo(() => getGradient(name || cleanDomain || "Brand"), [name, cleanDomain]);
-
-  const hasImage = Boolean(cleanUrl && !imgFailed);
 
   // Adaptive background:
   // - If logo is white/light: in Light Mode add dark background (bg-slate-900), in Dark Mode natural dark
@@ -193,12 +209,14 @@ export function BrandLogo({
         {hasImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={cleanUrl!}
+            key={activeSrc!}
+            src={activeSrc!}
             alt={name ? `${name} logo` : "Brand logo"}
             className="w-full h-full object-cover rounded-[inherit]"
             loading="lazy"
+            referrerPolicy="no-referrer"
             onLoad={handleImageLoad}
-            onError={() => setImgFailed(true)}
+            onError={handleImageError}
           />
         ) : (
           <div

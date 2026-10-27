@@ -273,13 +273,50 @@ export const ProductCard = memo(function ProductCard({
         <div className="flex items-center justify-between gap-2 mb-2.5 min-h-[32px]">
           {/* Left: Brand Avatar & Name */}
           <div className="flex items-center gap-2 min-w-0">
-            <BrandLogo
-              name={product.brandName}
-              domain={product.domain}
-              pageId={rawPageId}
-              size="xs"
-              className="shrink-0"
-            />
+            {isStaff ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFilterBrand?.(brandDisplayName);
+                }}
+                className="shrink-0 transition-transform active:scale-95 cursor-pointer"
+                title={`Filter by ${brandDisplayName}`}
+              >
+                <BrandLogo
+                  name={product.brandName}
+                  url={product.brandProfilePic || null}
+                  domain={product.domain}
+                  pageId={rawPageId}
+                  size="xs"
+                />
+              </button>
+            ) : brandTarget ? (
+              <Link
+                href={`/spy/brand/${encodeURIComponent(brandTarget)}?tab=products`}
+                onClick={(e) => e.stopPropagation()}
+                className="shrink-0 transition-transform active:scale-95 cursor-pointer"
+                tabIndex={-1}
+                title={`View ${brandDisplayName} catalog`}
+              >
+                <BrandLogo
+                  name={product.brandName}
+                  url={product.brandProfilePic || null}
+                  domain={product.domain}
+                  pageId={rawPageId}
+                  size="xs"
+                />
+              </Link>
+            ) : (
+              <BrandLogo
+                name={product.brandName}
+                url={product.brandProfilePic || null}
+                domain={product.domain}
+                pageId={rawPageId}
+                size="xs"
+                className="shrink-0"
+              />
+            )}
             <div className="flex items-center gap-1.5 min-w-0">
               {isStaff ? (
                 <button

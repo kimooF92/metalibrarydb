@@ -204,6 +204,7 @@ export interface ScrapedProduct {
   daysRunning?: number;
   brandName?: string | null;
   brandPageId?: string | null;
+  brandProfilePic?: string | null;
   topCreativeThumbnail?: string | null;
   earliestAdDate?: string | null;
   latestAdDate?: string | null;
