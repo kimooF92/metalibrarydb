@@ -310,21 +310,6 @@ export async function GET(request: Request) {
     let activeCreativeJobMap: Record<string, boolean> = {};
     let approxProductCountMap: Record<string, number> = {};
     let extractedAdCountMap: Record<string, number> = {};
-    let topProductsMap: Record<
-      string,
-      Array<{
-        id: string;
-        title: string | null;
-        mainImageUrl: string | null;
-        currentPrice: string | null;
-        currency: string | null;
-        url: string | null;
-      }>
-    > = {};
-    let brandPriceRangeMap: Record<
-      string,
-      { min: number | null; max: number | null; formatted: string | null }
-    > = {};
     let domainMap: Record<
       string,
       {
@@ -415,47 +400,6 @@ export async function GET(request: Request) {
             .groupBy(scrapedProducts.pageId)
         : Promise.resolve([]);
 
-      const rankedProductsSubquery = pageIdValues.length > 0
-        ? db
-            .select({
-              pageId: scrapedProducts.pageId,
-              id: scrapedProducts.id,
-              title: scrapedProducts.title,
-              mainImageUrl: scrapedProducts.mainImageUrl,
-              currentPrice: scrapedProducts.currentPrice,
-              currency: scrapedProducts.currency,
-              url: scrapedProducts.url,
-              rn: sql<number>`row_number() over (partition by ${scrapedProducts.pageId} order by case when ${scrapedProducts.mainImageUrl} is not null and ${scrapedProducts.mainImageUrl} != '' then 0 else 1 end, ${scrapedProducts.createdAt} desc)`.as("rn"),
-            })
-            .from(scrapedProducts)
-            .where(
-              and(
-                inArray(scrapedProducts.pageId, pageIdValues),
-                ne(scrapedProducts.scrapeStatus, "deleted")
-              )
-            )
-            .as("ranked_products")
-        : null;
-
-      const topProductsPromise = rankedProductsSubquery
-        ? db
-            .select({
-              pageId: rankedProductsSubquery.pageId,
-              id: rankedProductsSubquery.id,
-              title: rankedProductsSubquery.title,
-              mainImageUrl: rankedProductsSubquery.mainImageUrl,
-              currentPrice: rankedProductsSubquery.currentPrice,
-              currency: rankedProductsSubquery.currency,
-              url: rankedProductsSubquery.url,
-            })
-            .from(rankedProductsSubquery)
-            .where(lte(rankedProductsSubquery.rn, 3))
-            .catch((err) => {
-              console.warn("[Pages API] Warning fetching topProducts:", err);
-              return [];
-            })
-        : Promise.resolve([]);
-
       const domainPortfolioPromise = domainIds.length > 0
         ? Promise.all([
             db
@@ -491,7 +435,6 @@ export async function GET(request: Request) {
         fetchedQueueEntries,
         fetchedAdCounts,
         fetchedProductCounts,
-        fetchedTopProducts,
         [fetchedDomains, fetchedSisterPageRows]
       ] = await Promise.all([
         recentScansPromise,
@@ -499,7 +442,6 @@ export async function GET(request: Request) {
         queueEntriesPromise,
         adCountsPromise,
         productCountsPromise,
-        topProductsPromise,
         domainPortfolioPromise,
       ]);
 
@@ -600,47 +542,6 @@ export async function GET(request: Request) {
         }
       }
 
-      // Map top products & calculate price range
-      topProductsMap = {};
-      brandPriceRangeMap = {};
-
-      for (const row of fetchedTopProducts) {
-        if (!row.pageId) continue;
-        if (!topProductsMap[row.pageId]) {
-          topProductsMap[row.pageId] = [];
-        }
-        topProductsMap[row.pageId].push({
-          id: row.id,
-          title: row.title,
-          mainImageUrl: row.mainImageUrl,
-          currentPrice: row.currentPrice,
-          currency: row.currency,
-          url: row.url,
-        });
-      }
-
-      for (const [pId, prods] of Object.entries(topProductsMap)) {
-        const numericPrices = prods
-          .map((p) => {
-            if (!p.currentPrice) return null;
-            const numStr = p.currentPrice.replace(/[^\d.,]/g, "").replace(",", ".");
-            const val = parseFloat(numStr);
-            return isNaN(val) ? null : val;
-          })
-          .filter((v): v is number => v !== null && v > 0);
-
-        if (numericPrices.length > 0) {
-          const min = Math.min(...numericPrices);
-          const max = Math.max(...numericPrices);
-          const cur = prods[0]?.currency || "DT";
-          const formatted =
-            min === max
-              ? `${min % 1 === 0 ? min : min.toFixed(2)} ${cur}`
-              : `${min % 1 === 0 ? min : min.toFixed(0)} - ${max % 1 === 0 ? max : max.toFixed(0)} ${cur}`;
-          brandPriceRangeMap[pId] = { min, max, formatted };
-        }
-      }
-
       // Map brand domain portfolios
       if (domainIds.length > 0 && fetchedDomains.length > 0) {
         const sisterMap = Object.fromEntries(
@@ -707,8 +608,6 @@ export async function GET(request: Request) {
         }),
         extractedAdCount: extractedAdCountMap[p.id] ?? 0,
         approxProductCount: approxProductCountMap[p.id] ?? null,
-        topProducts: p.pageId ? topProductsMap[p.pageId] || [] : [],
-        priceRange: p.pageId ? brandPriceRangeMap[p.pageId] || null : null,
         holdStatus: p.holdStatus ?? "active",
         lastKnownValidResults: p.lastKnownValidResults ?? null,
         holdStartedAt: p.holdStartedAt ? p.holdStartedAt.toISOString() : null,
