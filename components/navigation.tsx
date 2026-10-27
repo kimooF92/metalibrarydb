@@ -75,45 +75,41 @@ export function Navigation() {
         <button
           onClick={toggleSidebar}
           aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={isCollapsed ? "Expand Sidebar (Ctrl+B)" : "Collapse Sidebar (Ctrl+B)"}
+          title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           className="absolute -right-3 top-6 z-50 w-6 h-6 rounded-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-900 shadow-md cursor-pointer transition-all hover:scale-105 active:scale-95"
         >
-          {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+          {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
         </button>
 
         <div className="flex flex-col flex-1 min-w-0">
           {/* Header Row (Logo & Title) */}
-          {isCollapsed ? (
-            <div className="flex flex-col items-center mb-8">
-              <img
-                src="/icon.png"
-                alt="Meta Ad Tracker Logo"
-                className="w-9 h-9 object-contain"
-              />
+          <div
+            className={`relative flex items-center mb-8 h-9 ${
+              isCollapsed ? "justify-center" : "space-x-2.5 px-1 min-w-0"
+            }`}
+          >
+            <img
+              src="/icon.png"
+              alt={isCollapsed ? "Meta Ad Tracker" : ""}
+              className="h-7 w-7 shrink-0 object-contain"
+            />
+
+            <div
+              aria-hidden={isCollapsed}
+              className={`min-w-0 flex-1 overflow-hidden whitespace-nowrap transition-[max-width,opacity,transform] duration-300 ease-in-out ${
+                isCollapsed
+                  ? "pointer-events-none max-w-0 -translate-x-1 opacity-0"
+                  : "max-w-full translate-x-0 opacity-100"
+              }`}
+            >
+              <span className="font-extrabold text-sm text-slate-900 dark:text-white tracking-tight block leading-tight truncate">
+                Meta Ad Tracker
+              </span>
+              <span className="text-[9px] text-slate-600 dark:text-slate-400 font-medium block truncate">
+                Competitor Intelligence
+              </span>
             </div>
-          ) : (
-            <div className="flex items-center space-x-3 mb-8 px-1 truncate">
-              <img
-                src="/icon.png"
-                alt="Meta Ad Tracker Logo"
-                className="w-9 h-9 object-contain shrink-0"
-              />
-              <div className="truncate">
-                <span className="font-extrabold text-sm text-slate-900 dark:text-white tracking-tight block leading-tight">
-                  Meta Ad Tracker
-                </span>
-                <span className="text-[9px] text-slate-600 dark:text-slate-400 font-medium block">
-                  Competitor Intelligence
-                </span>
-                {isStaff && (
-                  <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 mt-1">
-                    <ShieldCheck className="w-2.5 h-2.5" />
-                    <span>Staff Access</span>
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
+          </div>
 
           {/* Navigation Links */}
           <nav className="flex flex-col space-y-1.5">
