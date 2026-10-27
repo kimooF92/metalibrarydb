@@ -75,49 +75,68 @@ export function Navigation() {
           } h-screen border-r border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900/20 backdrop-blur-md shrink-0 sticky top-0 left-0 z-40 justify-between transition-[width,padding] duration-300 relative`}
         >
         <div className="flex flex-col flex-1 min-w-0">
-          {/* Header Row (Logo & Title) */}
+          {/* Header Row (Logo, Title & Toggle) */}
           <div
-            className={`relative flex items-center mb-8 h-9 ${
-              isCollapsed ? "justify-center" : "space-x-2.5 px-1 min-w-0"
+            className={`flex items-center mb-8 h-9 ${
+              isCollapsed ? "justify-center" : "justify-between px-1 min-w-0"
             }`}
           >
-            <div
-              className={`flex min-w-0 items-center ${
-                isCollapsed ? "justify-center" : "space-x-2.5"
-              }`}
-            >
-              <img
-                src="/icon.png"
-                alt={isCollapsed ? "Meta Ad Tracker" : ""}
-                className="h-7 w-7 shrink-0 object-contain"
-              />
-
-              <div
-                aria-hidden={isCollapsed}
-                className={`min-w-0 flex-1 overflow-hidden whitespace-nowrap transition-[opacity,transform] duration-150 ease-out ${sidebarLabelTransition}`}
+            {isCollapsed ? (
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                aria-label="Expand sidebar"
+                title="Expand sidebar"
+                className="group relative flex items-center justify-center w-10 h-10 rounded-lg hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
               >
-                <span className="font-extrabold text-sm text-slate-900 dark:text-white tracking-tight block leading-tight truncate">
-                  Meta Ad Tracker
-                </span>
-                <span className="text-[9px] text-slate-600 dark:text-slate-400 font-medium block truncate">
-                  Competitor Intelligence
-                </span>
-              </div>
-            </div>
+                {/* Default: App Icon */}
+                <img
+                  src="/icon.png"
+                  alt="Meta Ad Tracker"
+                  className="h-7 w-7 object-contain transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0"
+                />
 
-            <button
-              type="button"
-              onClick={toggleSidebar}
-              aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className="absolute -right-3 top-1/2 z-50 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-md transition-colors hover:bg-slate-50 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-slate-200"
-            >
-              {isCollapsed ? (
-                <PanelLeftOpen className="h-4 w-4" />
-              ) : (
-                <PanelLeftClose className="h-4 w-4" />
-              )}
-            </button>
+                {/* Hover: Expand Toggle Icon */}
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-0 flex items-center justify-center text-slate-600 dark:text-slate-300 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+                >
+                  <PanelLeftOpen className="h-4 w-4" />
+                </span>
+              </button>
+            ) : (
+              <>
+                <Link
+                  href="/"
+                  className="flex items-center space-x-2.5 min-w-0 flex-1 truncate group"
+                >
+                  <img
+                    src="/icon.png"
+                    alt="Meta Ad Tracker"
+                    className="h-7 w-7 shrink-0 object-contain"
+                  />
+
+                  <div className="min-w-0 flex-1 truncate">
+                    <span className="font-extrabold text-sm text-slate-900 dark:text-white tracking-tight block leading-tight truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                      Meta Ad Tracker
+                    </span>
+                    <span className="text-[9px] text-slate-600 dark:text-slate-400 font-medium block truncate">
+                      Competitor Intelligence
+                    </span>
+                  </div>
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={toggleSidebar}
+                  aria-label="Collapse sidebar"
+                  title="Collapse sidebar"
+                  className="p-1.5 rounded-md hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer transition-colors shrink-0 ml-1 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                >
+                  <PanelLeftClose className="h-4 w-4" />
+                </button>
+              </>
+            )}
           </div>
 
           {/* Navigation Links */}
