@@ -56,6 +56,26 @@ body {
   animation: none !important;
 }
 
+/* Fade one opaque layer after the new theme is already applied underneath. */
+html.theme-fade-overlay::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  pointer-events: none;
+  background: var(--theme-transition-from, var(--background));
+  opacity: 1;
+}
+
+html.theme-fade-running::before {
+  animation: theme-overlay-fade 220ms ease-out forwards;
+}
+
+@keyframes theme-overlay-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

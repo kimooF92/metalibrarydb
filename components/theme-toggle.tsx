@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Sun, Moon } from "lucide-react";
+import { applyTheme, getStoredTheme, onThemeChange, type Theme } from "@/lib/theme-controller";
 
 interface ThemeToggleProps {
   className?: string;
@@ -14,29 +15,21 @@ export function ThemeToggle({ className = "", size = "md" }: ThemeToggleProps) {
 
   useEffect(() => {
     setMounted(true);
-    const savedTheme = (localStorage.getItem("theme") as "light" | "dark") || "dark";
+    const savedTheme = getStoredTheme();
     setTheme(savedTheme);
     if (savedTheme === "dark") {
       document.documentElement.classList.add("dark");
     } else {
       document.documentElement.classList.remove("dark");
     }
+
+    return onThemeChange((nextTheme: Theme) => setTheme(nextTheme));
   }, []);
 
   const toggleTheme = () => {
     const nextTheme = theme === "dark" ? "light" : "dark";
-    const root = document.documentElement;
-
-    // Theme changes must be atomic. Temporarily disable component transitions so
-    // borders and backgrounds cannot interpolate on different timelines.
-    root.classList.add("theme-switching");
     setTheme(nextTheme);
-    root.classList.toggle("dark", nextTheme === "dark");
-    localStorage.setItem("theme", nextTheme);
-
-    window.requestAnimationFrame(() => {
-      root.classList.remove("theme-switching");
-    });
+    applyTheme(nextTheme);
   };
 
   const buttonSizeClass = size === "sm" ? "w-8 h-8" : "w-8.5 h-8.5";
