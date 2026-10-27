@@ -23,7 +23,7 @@ export async function processFileImport(
   filename: string
 ): Promise<ImportResultSummary> {
   // 1. Parse URLs from file
-  const rawUrls = parseImportFile(fileBuffer);
+  const rawUrls = await parseImportFile(fileBuffer);
   const totalRows = rawUrls.length;
   const activeWorkspace = await getActiveWorkspace();
 

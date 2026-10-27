@@ -5,7 +5,19 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve("."),
   },
-  serverExternalPackages: ["playwright", "playwright-core"],
+  outputFileTracingExcludes: {
+    "*": [
+      "./worker/**",
+      "./scripts/**",
+      "./tests/**",
+      "./node_modules/playwright/**",
+      "./node_modules/playwright-core/**",
+      "./node_modules/@playwright/**",
+      "./node_modules/@depot/**",
+      "./node_modules/@trigger.dev/build/**",
+      "./.playwright_profile*/**",
+    ],
+  },
   images: {
     remotePatterns: [
       // Facebook / Meta CDN (thumbnails, images from Ad Library)

@@ -70,6 +70,12 @@ export async function extractProductFromUrl(
   options?: {
     defaultCurrency?: string;
     defaultCurrencySymbol?: string;
+    browserScraperFallback?: (url: string) => Promise<{
+      success: boolean;
+      data?: ExtractedProductData;
+      rawHtml?: string;
+      engine?: string;
+    }>;
   }
 ): Promise<{
   success: boolean;
@@ -174,22 +180,19 @@ export async function extractProductFromUrl(
     };
   }
 
-  // 4. Local Residential Browser Fallback:
-  // If running on desktop/local worker (not Vercel/serverless), attempt to bypass Cloudflare
-  // using the local Playwright browser with residential IP
-  if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  // 4. Injected Browser Scraper Fallback (used when provided by local desktop/worker environments)
+  if (options?.browserScraperFallback) {
     try {
-      const { scrapeUrlWithLocalPlaywright } = await import("./local-browser-scraper");
-      const localResult = await scrapeUrlWithLocalPlaywright(normalized);
-      if (localResult.success && localResult.data) {
+      const localResult = await options.browserScraperFallback(normalized);
+      if (localResult && localResult.success && localResult.data) {
         return {
           success: true,
           data: localResult.data,
-          raw: { html: localResult.rawHtml, engine: "local_playwright_browser" },
+          raw: { html: localResult.rawHtml, engine: localResult.engine || "local_playwright_browser" },
         };
       }
     } catch (localErr: any) {
-      console.warn(`[Product Scraper] Local browser fallback error for ${normalized}:`, localErr?.message);
+      console.warn(`[Product Scraper] Injected browser fallback error for ${normalized}:`, localErr?.message);
     }
   }
 

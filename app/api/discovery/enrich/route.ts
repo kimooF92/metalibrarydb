@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/workspace-server";
-import { enrichDiscoveredPagesForRun } from "@/worker/discovery-enricher";
+import { enrichDiscoveredPagesForRun } from "@/lib/discovery-enricher";
 import { db } from "@/db";
 import { discoveryRuns, discoveredPages } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";

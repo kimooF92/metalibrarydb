@@ -1,9 +1,8 @@
-import * as XLSX from "xlsx";
-
 /**
  * Parses a CSV or XLSX Buffer/ArrayBuffer and extracts URLs from the first column or column named 'url'.
  */
-export function parseImportFile(fileBuffer: Buffer): string[] {
+export async function parseImportFile(fileBuffer: Buffer): Promise<string[]> {
+  const XLSX = await import("xlsx");
   const workbook = XLSX.read(fileBuffer, { type: "buffer" });
   const firstSheetName = workbook.SheetNames[0];
 
