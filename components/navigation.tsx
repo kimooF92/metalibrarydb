@@ -76,17 +76,13 @@ export function Navigation() {
         >
         <div className="flex flex-col flex-1 min-w-0">
           {/* Header Row (Logo & Title) */}
-          <button
-            type="button"
-            onClick={toggleSidebar}
-            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className={`group relative flex items-center mb-8 h-9 w-full cursor-pointer rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+          <div
+            className={`relative flex items-center mb-8 h-9 ${
               isCollapsed ? "justify-center" : "space-x-2.5 px-1 min-w-0"
             }`}
           >
             <div
-              className={`flex w-full min-w-0 items-center transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0 ${
+              className={`flex min-w-0 items-center ${
                 isCollapsed ? "justify-center" : "space-x-2.5"
               }`}
             >
@@ -109,17 +105,20 @@ export function Navigation() {
               </div>
             </div>
 
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 flex items-center justify-center text-slate-500 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100 dark:text-slate-400"
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className="absolute -right-3 top-1/2 z-50 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-md transition-colors hover:bg-slate-50 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-slate-200"
             >
               {isCollapsed ? (
                 <PanelLeftOpen className="h-4 w-4" />
               ) : (
                 <PanelLeftClose className="h-4 w-4" />
               )}
-            </span>
-          </button>
+            </button>
+          </div>
 
           {/* Navigation Links */}
           <nav className="flex flex-col space-y-1.5">
