@@ -161,6 +161,14 @@ test("isCategoryUrl detects category, collection, and catalog listing URLs", () 
   assert.equal(isCategoryUrl("https://store.tn/p/chemise-bleue"), false);
   assert.equal(isCategoryUrl("https://boutique.youcan.shop/item/phone-case"), false);
   assert.equal(isCategoryUrl("https://nike.com/produit/chaussure-air"), false);
+  assert.equal(isCategoryUrl("https://bamilostore.com/product/collection-2/pack-cric-hydraulique-2-tonnes-cle-en-croix-pour-roues"), false);
+  assert.equal(isCategoryUrl("https://bamilostore.com/product/52356/collection-2/944108/Repose-pieds-bois"), false);
+  assert.equal(isCategoryUrl("https://store.shopify.com/collections/summer/products/cool-shirt"), false);
+
+  // WooCommerce product-category archive and bare catalog listings
+  assert.equal(isCategoryUrl("https://store.tn/product-category/outils"), true);
+  assert.equal(isCategoryUrl("https://store.tn/products"), true);
+
   assert.equal(isCategoryUrl(null), false);
   assert.equal(isCategoryUrl(undefined), false);
   assert.equal(isCategoryUrl(""), false);

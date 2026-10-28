@@ -53,7 +53,7 @@ export async function validateAndGatekeepProduct(
   const hasProductSlug = /\/(?:products?|produits?|items?|item|p|dp)\//i.test(urlLower);
 
   // 0. Deterministic rejection for category, collection, and catalog listing URLs
-  if (isCategoryUrl(input.url) || urlLower.includes("/category")) {
+  if (isCategoryUrl(input.url)) {
     return {
       isProduct: false,
       status: "ignored",

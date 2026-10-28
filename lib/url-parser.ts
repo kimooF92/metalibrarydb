@@ -126,18 +126,78 @@ export function normalizeProductUrl(rawUrl: string | null | undefined): string |
 export function isCategoryUrl(url: string | null | undefined): boolean {
   if (!url) return false;
   const raw = url.trim();
-  const lower = raw.toLowerCase();
-  if (lower.includes("/category") || lower.includes("/categories")) {
-    return true;
-  }
+  if (!raw) return false;
+
   try {
     const parsed = new URL(raw.match(/^https?:\/\//i) ? raw : `https://${raw}`);
-    const pathname = parsed.pathname.toLowerCase();
-    return (
-      pathname.includes("/category") ||
-      pathname.includes("/categories") ||
-      /\/(?:category|categories|collection|collections|rayon|rayons|categorie|categories)\b/i.test(pathname)
-    );
+    const pathname = parsed.pathname.toLowerCase().replace(/\/+$/, "");
+    const segments = pathname.split("/").filter(Boolean);
+
+    if (segments.length === 0) {
+      return false;
+    }
+
+    // 1. Unambiguous product indicators:
+    // If the path starts with /product/ (singular) and has at least one slug, it's a product page
+    // e.g. /product/slug or /product/collection-2/product-slug (WooCommerce Shop Base with Category)
+    // Note: WooCommerce uses /product-category/ for category archives.
+    if (segments[0] === "product" && segments.length >= 2) {
+      return false;
+    }
+
+    // Singular /produit/<slug>, /item/<slug>, /p/<slug>
+    if ((segments[0] === "produit" || segments[0] === "item" || segments[0] === "p") && segments.length >= 2) {
+      return false;
+    }
+
+    // Shopify /collections/<name>/products/<slug> or /products/<slug>
+    const productsIndex = segments.indexOf("products");
+    if (productsIndex !== -1 && productsIndex < segments.length - 1) {
+      return false; // /products is followed by a product handle -> concrete product
+    }
+
+    // 2. Bare catalog listings like /products, /collections, /shop, /catalog with no slug
+    if (
+      segments.length === 1 &&
+      (segments[0] === "products" ||
+        segments[0] === "collections" ||
+        segments[0] === "shop" ||
+        segments[0] === "catalog")
+    ) {
+      return true;
+    }
+
+    // 3. Category indicator segments:
+    // "category", "categories", "collection", "collections", "rayon", "rayons", "categorie", "product-category"
+    const CATEGORY_SEGMENT_NAMES = new Set([
+      "category",
+      "categories",
+      "collection",
+      "collections",
+      "rayon",
+      "rayons",
+      "categorie",
+      "product-category",
+    ]);
+
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      if (CATEGORY_SEGMENT_NAMES.has(seg)) {
+        // If this category segment is followed only by category slugs (and no subsequent product keyword),
+        // it is a category/collection archive.
+        const remaining = segments.slice(i + 1);
+        const hasProductSubsegment = remaining.some(
+          (s, idx) =>
+            (s === "products" || s === "product" || s === "produit" || s === "item" || s === "p") &&
+            idx < remaining.length - 1
+        );
+        if (!hasProductSubsegment) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   } catch {
     return false;
   }

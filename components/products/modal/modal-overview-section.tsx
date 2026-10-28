@@ -3,16 +3,17 @@
 import { useState, useEffect } from "react";
 import NextImage from "next/image";
 import { ScrapedProduct } from "@/types";
-import { ShoppingBag, Tag, Truck, Layers, ExternalLink } from "lucide-react";
+import { ShoppingBag, Tag, Truck, Layers, ExternalLink, RotateCw } from "lucide-react";
 import { useWorkspace } from "@/components/workspace-context";
 import { formatPrice, formatDelivery } from "@/lib/format-price";
 
 interface ModalOverviewSectionProps {
   product: ScrapedProduct;
   allImages: string[];
+  isRefreshing?: boolean;
 }
 
-export function ModalOverviewSection({ product, allImages }: ModalOverviewSectionProps) {
+export function ModalOverviewSection({ product, allImages, isRefreshing }: ModalOverviewSectionProps) {
   const { activeWorkspace } = useWorkspace();
   const sym = activeWorkspace?.currencySymbol || "DT";
   const [selectedImage, setSelectedImage] = useState<string | null>(product.mainImageUrl || null);
@@ -53,6 +54,24 @@ export function ModalOverviewSection({ product, allImages }: ModalOverviewSectio
             <div className="flex flex-col items-center gap-2 text-slate-400">
               <ShoppingBag className="w-12 h-12 stroke-[1.5] opacity-40" />
               <span className="text-xs">No Image</span>
+            </div>
+          )}
+
+          {/* Re-scraping Loading Overlay */}
+          {isRefreshing && (
+            <div className="absolute inset-0 z-20 bg-slate-950/75 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2.5 p-3 text-center animate-in fade-in duration-200">
+              <div className="relative flex items-center justify-center">
+                <div className="w-10 h-10 rounded-full border-2 border-indigo-500/30 border-t-indigo-500 animate-spin" />
+                <RotateCw className="w-4 h-4 text-indigo-400 absolute animate-pulse" />
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-xs font-bold text-white tracking-wide">
+                  Re-extracting Landing Page...
+                </p>
+                <p className="text-[10px] text-slate-300">
+                  Fetching updated media & pricing
+                </p>
+              </div>
             </div>
           )}
         </div>
