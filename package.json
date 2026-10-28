@@ -16,6 +16,7 @@
     "worker:headless": "npx tsx worker/index.ts --headless",
     "worker:count": "npx tsx worker/index.ts --count-only",
     "worker:creative": "npx tsx worker/index.ts --creative-only",
+    "enqueue:refresh": "npx tsx scripts/enqueue-refresh.ts",
     "spy:apify": "npx tsx scripts/run-apify-spy-cron.ts",
     "apify:check": "npx tsx scripts/check-apify-tokens.ts",
     "scrape:products": "npx tsx scripts/run-product-scraper.ts",

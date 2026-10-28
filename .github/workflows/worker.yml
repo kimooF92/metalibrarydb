@@ -7,6 +7,14 @@ on:
         description: 'Run Meta Ad Library Canary check on startup (true/false)'
         required: false
         default: 'false'
+      force_refresh:
+        description: 'Force all active pages regardless of cooldown (true/false)'
+        required: false
+        default: 'false'
+      cooldown_hours:
+        description: 'Cooldown threshold in hours (default: 11)'
+        required: false
+        default: '11'
 
 # Dedicated concurrency group with cancel-in-progress to prevent stalled runs from blocking the queue
 concurrency:
@@ -14,8 +22,53 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # STAGE 1: Ultra-fast Enqueue & Stuck Scans Cleaner (No Playwright, finishes in ~15-20s)
+  enqueue-jobs:
+    name: Enqueue Stale Pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      has_jobs: ${{ steps.enqueue.outputs.has_jobs }}
+      job_count: ${{ steps.enqueue.outputs.job_count }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Cache Node Modules
+        uses: actions/cache@v4
+        id: node-modules-cache
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Dependencies
+        if: steps.node-modules-cache.outputs.cache-hit != 'true'
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Run Enqueue & Clean Stuck Jobs
+        id: enqueue
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          AUTO_REFRESH_COOLDOWN_HOURS: ${{ inputs.cooldown_hours || '11' }}
+          REFRESH_ALL: ${{ inputs.force_refresh || 'false' }}
+        run: npm run enqueue:refresh
+
+  # STAGE 2: 4-Shard Browser Worker Matrix (Only runs if has_jobs == 'true')
   run-worker-matrix:
     name: Shard ${{ matrix.shard_num }}/4
+    needs: enqueue-jobs
+    if: needs.enqueue-jobs.outputs.has_jobs == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -95,13 +148,14 @@ jobs:
           PLAYWRIGHT_HEADLESS: "true"
           MAX_SCANS_PER_HOUR: "0"
           MAX_SCANS_PER_DAY: "0"
-          AUTO_REFRESH_COOLDOWN_HOURS: "11"
+          AUTO_REFRESH_COOLDOWN_HOURS: ${{ inputs.cooldown_hours || '11' }}
           SHARD_INDEX: ${{ matrix.shard }}
           TOTAL_SHARDS: 4
           COUNT_ONLY: "true"
           AUTO_ENQUEUE_SPY: "false"
           SKIP_STARTUP_SWEEP: "true"
-          RUN_CANARY_CHECK: ${{ github.event.inputs.run_canary || 'false' }}
+          SKIP_ENQUEUE: "true"
+          RUN_CANARY_CHECK: ${{ inputs.run_canary || 'false' }}
           ZERO_AD_ANOMALY_THRESHOLD: "3"
           ZERO_AD_ANOMALY_WINDOW_MINUTES: "20"
           CIRCUIT_BREAKER_COOLDOWN_MINUTES: "45"

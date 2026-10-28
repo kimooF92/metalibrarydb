@@ -73,8 +73,13 @@ async function runWorker() {
     isForceRefresh ||
     process.env.AUTO_BURST_ENQUEUE !== "false";
 
-  // Only the primary coordinator (Shard 0 or standalone runner) clears orphaned jobs and enqueues
-  if (isCoordinator) {
+  const shouldSkipEnqueue =
+    args.includes("--skip-enqueue") ||
+    args.includes("--no-enqueue") ||
+    process.env.SKIP_ENQUEUE === "true";
+
+  // Only the primary coordinator (Shard 0 or standalone runner) clears orphaned jobs and enqueues (unless skipped by two-stage pipeline)
+  if (isCoordinator && !shouldSkipEnqueue) {
     await resetStuckJobs();
 
     // 1. Immediately enqueue pending/refresh pages FIRST so all worker shards have jobs ready right away
@@ -313,7 +318,7 @@ async function runWorker() {
 
   let lastHeartbeatAt = 0;
   let emptyQueueStartupRetries = 0;
-  const MAX_STARTUP_EMPTY_RETRIES = 10;
+  const MAX_STARTUP_EMPTY_RETRIES = 25; // 25 attempts (~90s) for legacy single-stage safety
   let lastJevSweepAt = Date.now();
   const JEV_SWEEP_FREQUENCY_MS = parseInt(process.env.JEV_SWEEP_INTERVAL_MS || "600000", 10); // default 10 minutes
 
@@ -493,13 +498,14 @@ async function runWorker() {
 
       if (!nextJob) {
         // Multi-shard coordination grace period: If this shard just booted (ranJobs === 0)
-        // in a multi-shard environment, wait for the coordinator to finish enqueuing before exiting.
-        if (isMultiShard && ranJobs === 0 && emptyQueueStartupRetries < MAX_STARTUP_EMPTY_RETRIES) {
+        // in a multi-shard environment, wait for coordinator only if enqueuing was not handled upfront.
+        const maxWarmupRetries = shouldSkipEnqueue ? 2 : MAX_STARTUP_EMPTY_RETRIES;
+        if (isMultiShard && ranJobs === 0 && emptyQueueStartupRetries < maxWarmupRetries) {
           emptyQueueStartupRetries++;
           console.log(
-            `[Queue Warmup] Waiting for coordinator to populate queue... (attempt ${emptyQueueStartupRetries}/${MAX_STARTUP_EMPTY_RETRIES})`
+            `[Queue Warmup] Waiting for coordinator to populate queue... (attempt ${emptyQueueStartupRetries}/${maxWarmupRetries})`
           );
-          await randomDelay(3000, 4000);
+          await randomDelay(shouldSkipEnqueue ? 1500 : 3000, shouldSkipEnqueue ? 2500 : 4000);
           continue;
         }
 
