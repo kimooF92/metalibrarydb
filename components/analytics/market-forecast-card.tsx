@@ -42,7 +42,6 @@ export function MarketForecastCard() {
           const parsed = JSON.parse(cached);
           if (parsed && typeof parsed === "object") {
             setResearch(parsed);
-            setIsExpanded(true);
             setLoading(false);
           }
         } catch {
@@ -60,7 +59,6 @@ export function MarketForecastCard() {
           const json = await res.json();
           if (json.forecast) {
             setResearch(json.forecast);
-            setIsExpanded(true);
             try {
               localStorage.setItem(cacheKey, JSON.stringify(json.forecast));
             } catch {}
@@ -187,13 +185,16 @@ export function MarketForecastCard() {
     <div className="w-full rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-white via-slate-50 to-indigo-50/20 dark:from-slate-900/90 dark:via-slate-900/60 dark:to-indigo-950/20 border border-indigo-500/20 dark:border-indigo-500/30 backdrop-blur-xl shadow-sm space-y-4">
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center space-x-3">
-          <div className="p-2.5 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/20 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 shrink-0">
+        <div
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex items-center space-x-3 cursor-pointer select-none group"
+        >
+          <div className="p-2.5 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/20 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 shrink-0 group-hover:scale-105 transition-transform">
             <Activity className="w-4 h-4 text-indigo-500" />
           </div>
           <div>
             <div className="flex items-center flex-wrap gap-2">
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                 AI Market Intelligence & Velocity Analysis
               </h2>
               <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${scoreColor}`}>
