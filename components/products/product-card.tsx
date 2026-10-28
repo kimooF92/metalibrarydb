@@ -22,6 +22,7 @@ import {
   Coins,
   Flame,
   ArrowUpRight,
+  Loader2,
 } from "lucide-react";
 import { formatDiscoveryDate } from "@/lib/format-date";
 import { useWorkspace } from "@/components/workspace-context";
@@ -40,6 +41,7 @@ export interface ProductCardProps {
   onViewCreatives?: (product: ScrapedProduct) => void;
   onFilterBrand?: (brandName: string) => void;
   isRecentlyViewed?: boolean;
+  isRefreshing?: boolean;
 }
 
 export const ProductCard = memo(function ProductCard({
@@ -51,6 +53,7 @@ export const ProductCard = memo(function ProductCard({
   onViewCreatives,
   onFilterBrand,
   isRecentlyViewed,
+  isRefreshing: isRefreshingProp,
 }: ProductCardProps) {
   const { activeWorkspace } = useWorkspace();
   const { isStaff } = useAuth();
@@ -58,7 +61,8 @@ export const ProductCard = memo(function ProductCard({
   const sym = activeWorkspace?.currencySymbol || "DT";
 
   const [imgError, setImgError] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [internalIsRefreshing, setInternalIsRefreshing] = useState(false);
+  const isRefreshing = Boolean(isRefreshingProp || internalIsRefreshing);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSyncingPrice, setIsSyncingPrice] = useState(false);
   const [localPrice, setLocalPrice] = useState(product.currentPrice);
@@ -117,13 +121,13 @@ export const ProductCard = memo(function ProductCard({
     if (e) e.stopPropagation();
     setIsMenuOpen(false);
     if (!onRefresh || isRefreshing || isStaff) return;
-    setIsRefreshing(true);
+    setInternalIsRefreshing(true);
     try {
       await onRefresh(product.id, product);
     } catch {
       // Parent handler already shows appropriate error toasts
     } finally {
-      setIsRefreshing(false);
+      setInternalIsRefreshing(false);
     }
   };
 
@@ -254,8 +258,16 @@ export const ProductCard = memo(function ProductCard({
 
   return (
     <div
-      onClick={() => onViewDetails?.(product)}
-      className={`group relative flex flex-col justify-between rounded-xl border px-3.5 py-[19px] shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-lg cursor-pointer ${
+      onClick={() => {
+        if (!isRefreshing) {
+          onViewDetails?.(product);
+        }
+      }}
+      className={`group relative flex flex-col justify-between rounded-xl border px-3.5 py-[19px] shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-lg ${
+        isRefreshing
+          ? "cursor-wait ring-2 ring-indigo-500/40"
+          : "cursor-pointer"
+      } ${
         isPageOnHold
           ? "border-amber-500/40 dark:border-amber-500/40 hover:border-amber-400 bg-white dark:bg-slate-950/40"
           : isInactive
@@ -370,14 +382,23 @@ export const ProductCard = memo(function ProductCard({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setIsMenuOpen((prev) => !prev);
+                  if (!isRefreshing) setIsMenuOpen((prev) => !prev);
                 }}
-                className={`w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/60 text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-200 ease-out hover:scale-105 active:scale-90 shadow-xs group/more cursor-pointer ${
-                  isMenuOpen ? "border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-200 ring-2 ring-indigo-500/20" : ""
+                disabled={isRefreshing}
+                className={`w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/60 text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-200 ease-out hover:scale-105 active:scale-90 shadow-xs group/more cursor-pointer disabled:opacity-75 disabled:cursor-wait ${
+                  isRefreshing
+                    ? "border-indigo-500/50 text-indigo-500"
+                    : isMenuOpen
+                    ? "border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-200 ring-2 ring-indigo-500/20"
+                    : ""
                 }`}
-                title="More options"
+                title={isRefreshing ? "Re-scraping live product landing page..." : "More options"}
               >
-                <MoreVertical className={`w-4 h-4 transition-transform duration-300 ease-out group-hover/more:rotate-90 group-hover/more:scale-110 ${isMenuOpen ? "rotate-90 text-indigo-500 dark:text-indigo-400" : ""}`} />
+                {isRefreshing ? (
+                  <RotateCw className="w-4 h-4 text-indigo-500 animate-spin" />
+                ) : (
+                  <MoreVertical className={`w-4 h-4 transition-transform duration-300 ease-out group-hover/more:rotate-90 group-hover/more:scale-110 ${isMenuOpen ? "rotate-90 text-indigo-500 dark:text-indigo-400" : ""}`} />
+                )}
               </button>
 
               {/* 3-Dots Dropdown Popover */}
@@ -448,6 +469,24 @@ export const ProductCard = memo(function ProductCard({
               : "border-slate-200 dark:border-slate-800/80 bg-slate-900/95 dark:bg-slate-950"
             }`}
         >
+          {/* Ambient Re-scraping Loading Overlay */}
+          {isRefreshing && (
+            <div className="absolute inset-0 z-30 bg-slate-950/80 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2.5 text-center p-3 animate-in fade-in duration-200">
+              <div className="relative flex items-center justify-center">
+                <div className="w-10 h-10 rounded-full border-2 border-indigo-500/30 border-t-indigo-500 animate-spin" />
+                <RotateCw className="w-4 h-4 text-indigo-400 absolute animate-pulse" />
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-xs font-bold text-white tracking-wide">
+                  Re-scraping Page...
+                </p>
+                <p className="text-[10px] text-slate-300">
+                  Extracting live price & details
+                </p>
+              </div>
+            </div>
+          )}
+
           {product.mainImageUrl && !imgError ? (
             <>
               {/* Ambient Blurred Background Canvas */}
@@ -488,7 +527,15 @@ export const ProductCard = memo(function ProductCard({
 
           {/* Top-Left Dynamic Status Pill (High contrast dark-glass pill for 100% readability over white images) */}
           <div className="absolute top-2 left-2 z-20">
-            {isPageOnHold ? (
+            {isRefreshing ? (
+              <span
+                className="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-300 bg-black/85 border border-indigo-500/60 px-2.5 py-0.5 rounded-full backdrop-blur-md shadow-md animate-pulse"
+                title="Re-scraping live product landing page..."
+              >
+                <Loader2 className="w-3 h-3 text-indigo-400 animate-spin" />
+                <span>Extracting...</span>
+              </span>
+            ) : isPageOnHold ? (
               <span
                 className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-300 bg-black/80 border border-amber-500/50 px-2.5 py-0.5 rounded-full backdrop-blur-md shadow-md"
                 title="Brand account is paused / on hold under grace period recheck"

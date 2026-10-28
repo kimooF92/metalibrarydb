@@ -48,6 +48,7 @@ export default function ProductsPage() {
   const { activeWorkspace } = useWorkspace();
   const { isStaff } = useAuth();
   const [products, setProducts] = useState<ScrapedProduct[]>([]);
+  const [refreshingProductIds, setRefreshingProductIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -728,6 +729,8 @@ export default function ProductsPage() {
       return;
     }
 
+    setRefreshingProductIds((prev) => new Set(prev).add(productId));
+
     try {
       const res = await fetch("/api/products/extract", {
         method: "POST",
@@ -763,6 +766,12 @@ export default function ProductsPage() {
         type: "error",
         title: "Network Error",
         message: err.message || "Failed to refresh product.",
+      });
+    } finally {
+      setRefreshingProductIds((prev) => {
+        const next = new Set(prev);
+        next.delete(productId);
+        return next;
       });
     }
   }, [products, selectedProduct, showToast]);
@@ -1335,6 +1344,7 @@ export default function ProductsPage() {
                   onViewCreatives={handleViewCreatives}
                   onFilterBrand={handleFilterBrand}
                   isRecentlyViewed={recentlyViewedIds.includes(product.id)}
+                  isRefreshing={refreshingProductIds.has(product.id)}
                 />
               ))}
             </div>
