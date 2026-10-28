@@ -196,15 +196,15 @@ test("Brand Deep Dive Lifecycle & Guard Suite", async (t) => {
   });
 
   await t.test("pendingProductsRef prevents lean analytics response from wiping out concurrently loaded products", () => {
-    let data: { products?: any[] } | null = null;
+    let data: { brand?: any; products?: any[] } | null = null;
     let pendingProducts: any[] | null = null;
     let isProductsLoaded = false;
 
     // 1. loadProductsTab finishes first and stores products
     const sampleProducts = [{ id: "p1", title: "Product 1" }];
     pendingProducts = sampleProducts;
-    if (data) {
-      data = { ...data, products: sampleProducts };
+    if (data !== null) {
+      data = { ...(data as { brand?: any; products?: any[] }), products: sampleProducts };
     }
     isProductsLoaded = true;
 
@@ -224,8 +224,8 @@ test("Brand Deep Dive Lifecycle & Guard Suite", async (t) => {
       products: productsToKeep,
     };
 
-    assert.equal(data.products.length, 1, "Products from loadProductsTab must not be wiped by lean response");
-    assert.equal(data.products[0].id, "p1");
+    assert.equal(data?.products?.length, 1, "Products from loadProductsTab must not be wiped by lean response");
+    assert.equal(data?.products?.[0]?.id, "p1");
     assert.equal(isProductsLoaded, true);
   });
 

@@ -2,6 +2,9 @@
   "name": "temp_app",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -67,7 +70,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@trigger.dev/build": "4.7.6",
-    "@types/node": "^20",
+    "@types/node": "^24.19.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.10",
