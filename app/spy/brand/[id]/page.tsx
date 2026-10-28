@@ -14,7 +14,7 @@ export default async function BrandDeepDivePage({
   const initialTab =
     search?.tab === "products" || search?.tab === "creatives" || search?.tab === "analytics"
       ? (search.tab as "analytics" | "products" | "creatives")
-      : undefined;
+      : (search?.productId || search?.id ? "products" : undefined);
 
   return <BrandDeepDiveView id={id} isModal={false} initialTab={initialTab} />;
 }

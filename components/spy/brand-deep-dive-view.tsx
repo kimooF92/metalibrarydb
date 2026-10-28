@@ -158,9 +158,17 @@ export function BrandDeepDiveView({
   const statusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const searchTab = searchParams?.get("tab");
+  const searchProductId =
+    searchParams?.get("productId") ||
+    searchParams?.get("id") ||
+    (typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("productId") ||
+        new URLSearchParams(window.location.search).get("id")
+      : null);
   const resolvedInitialTab: "analytics" | "products" | "creatives" =
     initialTab ||
     (searchTab === "products" || searchTab === "creatives" || searchTab === "analytics" ? searchTab : undefined) ||
+    (searchProductId ? "products" : undefined) ||
     (typeof window !== "undefined" && (new URLSearchParams(window.location.search).get("tab") as any)) ||
     "analytics";
 
@@ -205,6 +213,49 @@ export function BrandDeepDiveView({
   const [selectedProductForModal, setSelectedProductForModal] = useState<ScrapedProduct | null>(null);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const detailRequestIdRef = useRef(0);
+
+  // Auto-open product modal if productId is present in URL search params on initial mount
+  const initialProductIdRef = useRef<string | null>(searchProductId || null);
+
+  useEffect(() => {
+    const targetProductId = initialProductIdRef.current;
+    if (!targetProductId) return;
+    initialProductIdRef.current = null; // consume once
+
+    async function hydrateProductModal() {
+      try {
+        const res = await fetch(`/api/products?id=${encodeURIComponent(targetProductId!)}&details=true`);
+        const json = await res.json();
+        const product = json.products?.[0];
+        if (product) {
+          setSelectedProductForModal(product);
+          setIsProductModalOpen(true);
+        }
+      } catch (err) {
+        console.warn("[BrandDeepDive] Failed to hydrate deep-linked product modal:", err);
+      }
+    }
+
+    hydrateProductModal();
+  }, []);
+
+  // Continuous sync between active product modal state and URL address bar
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (isProductModalOpen && selectedProductForModal?.id) {
+      if (url.searchParams.get("productId") !== selectedProductForModal.id) {
+        url.searchParams.set("productId", selectedProductForModal.id);
+        window.history.replaceState(null, "", url.toString());
+      }
+    } else if (!isProductModalOpen) {
+      if (url.searchParams.has("productId") || url.searchParams.has("id")) {
+        url.searchParams.delete("productId");
+        url.searchParams.delete("id");
+        window.history.replaceState(null, "", url.toString());
+      }
+    }
+  }, [isProductModalOpen, selectedProductForModal?.id]);
   const [filteredProductForCreatives, setFilteredProductForCreatives] = useState<{
     id: string;
     title: string;

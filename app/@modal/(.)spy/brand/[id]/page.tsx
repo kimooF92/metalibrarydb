@@ -15,7 +15,7 @@ export default async function InterceptedBrandModalPage({
   const initialTab =
     search?.tab === "products" || search?.tab === "creatives" || search?.tab === "analytics"
       ? (search.tab as "analytics" | "products" | "creatives")
-      : undefined;
+      : (search?.productId || search?.id ? "products" : undefined);
 
   return (
     <BrandOverlaySheet brandId={id}>
