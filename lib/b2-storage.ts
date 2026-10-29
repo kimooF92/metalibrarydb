@@ -189,11 +189,11 @@ export async function uploadMediaWithHashing(
     }
 
     const arrayBuf = await res.arrayBuffer();
-    let buffer = Buffer.from(arrayBuf);
-
-    if (buffer.length === 0) {
+    if (arrayBuf.byteLength === 0) {
       return { url: sourceUrl, mediaHash: null, perceptualHash: null, wasReused: false };
     }
+
+    let uploadBuffer: Buffer = Buffer.from(arrayBuf);
 
     let contentType = res.headers.get("content-type") || "application/octet-stream";
     const isVideo = isVideoMedia(keyPrefix, sourceUrl, contentType);
@@ -204,20 +204,20 @@ export async function uploadMediaWithHashing(
       if (!contentType.includes("video")) contentType = "video/mp4";
     } else {
       // 🎯 Maximum Compression: Compress thumbnails and image creatives to WebP using Sharp
-      const compressed = await compressImageBuffer(buffer, { keyPrefix });
-      buffer = compressed.buffer;
+      const compressed = await compressImageBuffer(uploadBuffer, { keyPrefix });
+      uploadBuffer = Buffer.from(compressed.buffer);
       contentType = compressed.contentType;
       ext = compressed.ext;
     }
 
     // 1. Compute SHA-256 binary hash on the compressed buffer
-    const mediaHash = computeSha256(buffer);
+    const mediaHash = computeSha256(uploadBuffer);
 
     // 2. Compute 64-bit Perceptual dHash for thumbnails and images
     let perceptualHash: string | null = null;
     if (keyPrefix === "thumbnails" || !isVideo) {
       try {
-        perceptualHash = await computeDHash(buffer);
+        perceptualHash = await computeDHash(uploadBuffer);
       } catch {}
     }
 
@@ -226,7 +226,7 @@ export async function uploadMediaWithHashing(
     const wasAlreadyKnown = knownUploadedKeys.has(contentKey);
 
     // Tier 1: Try Backblaze B2
-    const b2Url = await uploadBufferToB2(buffer, contentKey, contentType);
+    const b2Url = await uploadBufferToB2(uploadBuffer, contentKey, contentType);
     if (b2Url) {
       return {
         url: b2Url,
@@ -237,8 +237,8 @@ export async function uploadMediaWithHashing(
     }
 
     // Tier 2: Catbox.moe (Unlimited Free Storage for heavy videos & images)
-    console.log(`[Storage Engine] Uploading ${contentKey} (${(buffer.length / 1024 / 1024).toFixed(2)} MB) to Catbox...`);
-    const catboxUrl = await uploadBufferToCatbox(buffer, `${mediaHash}${ext}`, contentType);
+    console.log(`[Storage Engine] Uploading ${contentKey} (${(uploadBuffer.length / 1024 / 1024).toFixed(2)} MB) to Catbox...`);
+    const catboxUrl = await uploadBufferToCatbox(uploadBuffer, `${mediaHash}${ext}`, contentType);
     if (catboxUrl) {
       return {
         url: catboxUrl,
@@ -250,8 +250,8 @@ export async function uploadMediaWithHashing(
 
     // Tier 3: Supabase Storage fallback is DISABLED by default to protect project egress limits
     // and avoid RLS errors with anon keys. Directly preserve the Meta CDN source URL instead.
-    if (process.env.ENABLE_SUPABASE_STORAGE_FALLBACK === "true" && canUseSupabaseStorageFallback(keyPrefix, buffer.length, isVideo)) {
-      const supabaseUrl = await uploadBufferToSupabase(buffer, contentKey, contentType);
+    if (process.env.ENABLE_SUPABASE_STORAGE_FALLBACK === "true" && canUseSupabaseStorageFallback(keyPrefix, uploadBuffer.length, isVideo)) {
+      const supabaseUrl = await uploadBufferToSupabase(uploadBuffer, contentKey, contentType);
       if (supabaseUrl) {
         console.log(`[Storage Engine] Stored to Supabase Storage fallback: ${supabaseUrl}`);
         return {
