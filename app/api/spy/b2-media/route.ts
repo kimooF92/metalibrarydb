@@ -42,7 +42,13 @@ export async function GET(req: NextRequest) {
       return new NextResponse("Media object body not found", { status: 444 });
     }
 
-    const contentType = b2Res.ContentType || (key.endsWith(".mp4") ? "video/mp4" : "image/jpeg");
+    const contentType =
+      b2Res.ContentType ||
+      (key.endsWith(".mp4")
+        ? "video/mp4"
+        : key.endsWith(".webp")
+        ? "image/webp"
+        : "image/jpeg");
     const stream = b2Res.Body.transformToWebStream();
 
     const responseHeaders: Record<string, string> = {

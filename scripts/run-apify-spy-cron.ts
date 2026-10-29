@@ -14,6 +14,7 @@ import {
 import { getApifyRunStatus } from "../lib/apify-sync";
 import { ingestApifyDatasetItems } from "../lib/apify-ingest";
 import { waitForScrapeQueueDrain } from "../lib/product-ingest";
+import { waitForB2UploadsDrain } from "../lib/b2-storage";
 
 // Sleep helper
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -546,6 +547,16 @@ async function main() {
     } catch (drainErr) {
       console.warn("⚠️ Warning waiting for product scrape drain:", drainErr);
     }
+  }
+
+  // Drain any in-flight background B2 media uploads so they aren't killed prematurely
+  try {
+    const b2DrainRes = await waitForB2UploadsDrain(45000);
+    if (b2DrainRes.drained > 0) {
+      console.log(`✅ Background B2 media uploads finished (${b2DrainRes.drained} uploaded).`);
+    }
+  } catch (b2DrainErr) {
+    console.warn("⚠️ Warning waiting for B2 uploads drain:", b2DrainErr);
   }
 
   process.exit(failedCount > 0 && successCount === 0 ? 1 : 0);

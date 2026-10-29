@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { ads, adObservations, creativeScans, trackedPages, brandDomains } from "@/db/schema";
 import { eq, and, sql, desc, ne, isNull, or } from "drizzle-orm";
-import { uploadMediaWithHashing, isB2Configured } from "@/lib/b2-storage";
+import { uploadMediaWithHashing, isB2Configured, registerPendingB2Upload } from "@/lib/b2-storage";
 import { linkAndAutoScrapeProduct } from "@/lib/product-ingest";
 import { checkAndRecordBreakout } from "@/lib/breakout-detector";
 import { resolveDestinationUrl } from "@/lib/utils";
@@ -452,8 +452,14 @@ export async function ingestApifyDatasetItems(
           title: sql`COALESCE(EXCLUDED.title, ${ads.title})`,
           ctaText: sql`COALESCE(EXCLUDED.cta_text, ${ads.ctaText})`,
           mediaType: sql`COALESCE(EXCLUDED.media_type, ${ads.mediaType})`,
-          mediaUrls: sql`COALESCE(EXCLUDED.media_urls, ${ads.mediaUrls})`,
-          thumbnailUrl: sql`COALESCE(EXCLUDED.thumbnail_url, ${ads.thumbnailUrl})`,
+          mediaUrls: sql`CASE 
+            WHEN EXISTS (SELECT 1 FROM unnest(${ads.mediaUrls}) AS u WHERE u LIKE '%b2%' OR u LIKE '%backblazeb2%') THEN ${ads.mediaUrls}
+            ELSE COALESCE(EXCLUDED.media_urls, ${ads.mediaUrls})
+          END`,
+          thumbnailUrl: sql`CASE 
+            WHEN ${ads.thumbnailUrl} LIKE '%b2%' OR ${ads.thumbnailUrl} LIKE '%backblazeb2%' THEN ${ads.thumbnailUrl}
+            ELSE COALESCE(EXCLUDED.thumbnail_url, ${ads.thumbnailUrl})
+          END`,
           lastSeenAt: now,
           updatedAt: now,
           isArchived: false,
@@ -462,66 +468,72 @@ export async function ingestApifyDatasetItems(
       })
       .returning({ id: ads.id });
 
-    // 2. Best-effort background Backblaze B2 media backup (non-blocking for high speed)
+    // 2. Best-effort background Backblaze B2 media backup (tracked in drain queue)
     if (isB2Configured()) {
-      (async () => {
-        try {
-          let updatedMediaUrls = rawMediaUrls;
-          let updatedThumb = rawThumbnailUrl;
-          let detectedMediaHash: string | null = null;
-          let detectedPerceptualHash: string | null = null;
-          let hasChange = false;
+      registerPendingB2Upload(
+        (async () => {
+          try {
+            let updatedMediaUrls = rawMediaUrls;
+            let updatedThumb = rawThumbnailUrl;
+            let detectedMediaHash: string | null = null;
+            let detectedPerceptualHash: string | null = null;
+            let hasChange = false;
 
-          // 1. Process all media assets (Videos, Image Ads, Carousel cards)
-          if (rawMediaUrls.length > 0) {
-            const storedMediaUrls = await Promise.all(
-              rawMediaUrls.map(async (url, idx) => {
-                if (url.includes("backblazeb2.com") || url.includes("/api/spy/b2-media") || url.includes("files.catbox.moe")) return url;
-                const isUrlVid = mediaType === "video" || url.includes(".mp4") || url.includes("/videos/") || url.includes("video.") || url.includes("fbcdn.net/o1/v/");
-                
-                // Skip uploading heavy full MP4 to storage to save 99.8% bandwidth & storage
-                if (isUrlVid) return url;
+            // 1. Process all media assets (Videos, Image Ads, Carousel cards)
+            if (rawMediaUrls.length > 0) {
+              const storedMediaUrls = await Promise.all(
+                rawMediaUrls.map(async (url, idx) => {
+                  if (url.includes("backblazeb2.com") || url.includes("/api/spy/b2-media") || url.includes("files.catbox.moe")) return url;
+                  const isUrlVid = mediaType === "video" || url.includes(".mp4") || url.includes("/videos/") || url.includes("video.") || url.includes("fbcdn.net/o1/v/");
+                  
+                  // Skip uploading heavy full MP4 to storage to save 99.8% bandwidth & storage
+                  if (isUrlVid) return url;
 
-                const uploadRes = await uploadMediaWithHashing(url, "images", `${adArchiveId}_${idx}`).catch(() => null);
-                if (uploadRes?.url) {
+                  const uploadRes = await uploadMediaWithHashing(url, "images", `${adArchiveId}_${idx}`).catch(() => null);
+                  if (uploadRes?.url) {
+                    hasChange = true;
+                    if (uploadRes.mediaHash && !detectedMediaHash) detectedMediaHash = uploadRes.mediaHash;
+                    if (uploadRes.perceptualHash && !detectedPerceptualHash) detectedPerceptualHash = uploadRes.perceptualHash;
+                    return uploadRes.url;
+                  }
+                  return url;
+                })
+              );
+              updatedMediaUrls = storedMediaUrls;
+            }
+
+            // 2. Process Thumbnail / Image media
+            if (rawThumbnailUrl) {
+              if (!rawThumbnailUrl.includes("backblazeb2.com") && !rawThumbnailUrl.includes("/api/spy/b2-media")) {
+                const thumbRes = await uploadMediaWithHashing(rawThumbnailUrl, "thumbnails", adArchiveId).catch(() => null);
+                if (thumbRes?.url) {
+                  updatedThumb = thumbRes.url;
+                  if (thumbRes.mediaHash && !detectedMediaHash) detectedMediaHash = thumbRes.mediaHash;
+                  if (thumbRes.perceptualHash) detectedPerceptualHash = thumbRes.perceptualHash;
                   hasChange = true;
-                  if (uploadRes.mediaHash && !detectedMediaHash) detectedMediaHash = uploadRes.mediaHash;
-                  if (uploadRes.perceptualHash && !detectedPerceptualHash) detectedPerceptualHash = uploadRes.perceptualHash;
-                  return uploadRes.url;
                 }
-                return url;
-              })
-            );
-            updatedMediaUrls = storedMediaUrls;
-          }
-
-          // 2. Process Thumbnail / Image media
-          if (rawThumbnailUrl) {
-            if (!rawThumbnailUrl.includes("backblazeb2.com") && !rawThumbnailUrl.includes("/api/spy/b2-media")) {
-              const thumbRes = await uploadMediaWithHashing(rawThumbnailUrl, "thumbnails", adArchiveId).catch(() => null);
-              if (thumbRes?.url) {
-                updatedThumb = thumbRes.url;
-                if (thumbRes.mediaHash && !detectedMediaHash) detectedMediaHash = thumbRes.mediaHash;
-                if (thumbRes.perceptualHash) detectedPerceptualHash = thumbRes.perceptualHash;
-                hasChange = true;
               }
             }
-          }
 
-          if (hasChange || detectedMediaHash || detectedPerceptualHash) {
-            const updatePayload: Record<string, any> = {
-              mediaUrls: updatedMediaUrls,
-              thumbnailUrl: updatedThumb,
-            };
-            if (detectedMediaHash) updatePayload.mediaHash = detectedMediaHash;
-            if (detectedPerceptualHash) updatePayload.perceptualHash = detectedPerceptualHash;
-            await db
-              .update(ads)
-              .set(updatePayload)
-              .where(eq(ads.adArchiveId, adArchiveId));
-          }
-        } catch {}
-      })();
+            if (hasChange || detectedMediaHash || detectedPerceptualHash) {
+              const updatePayload: Record<string, any> = {
+                mediaUrls: updatedMediaUrls,
+                thumbnailUrl: updatedThumb,
+                updatedAt: new Date(),
+              };
+              if (updatedThumb && (updatedThumb.includes("b2") || updatedThumb.includes("backblaze"))) {
+                updatePayload.thumbnailStoragePath = `b2/thumbnails/${detectedMediaHash || adArchiveId}.webp`;
+              }
+              if (detectedMediaHash) updatePayload.mediaHash = detectedMediaHash;
+              if (detectedPerceptualHash) updatePayload.perceptualHash = detectedPerceptualHash;
+              await db
+                .update(ads)
+                .set(updatePayload)
+                .where(eq(ads.adArchiveId, adArchiveId));
+            }
+          } catch {}
+        })()
+      );
     }
 
     if (upsertedAd) {

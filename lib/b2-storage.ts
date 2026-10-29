@@ -2,6 +2,40 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { uploadMediaFromUrlToCatbox, uploadBufferToCatbox } from "./catbox-storage";
 import { uploadBufferToSupabase } from "./supabase-storage";
 import { computeSha256, computeDHash } from "./media-hasher";
+import { compressImageBuffer } from "./image-compressor";
+
+// Global set of in-flight B2 background upload promises to guarantee clean process drain
+const inFlightB2Uploads = new Set<Promise<any>>();
+
+export function registerPendingB2Upload<T>(promise: Promise<T>): Promise<T> {
+  inFlightB2Uploads.add(promise);
+  promise.finally(() => inFlightB2Uploads.delete(promise)).catch(() => {});
+  return promise;
+}
+
+export async function waitForB2UploadsDrain(timeoutMs = 30000): Promise<{ drained: number; remaining: number }> {
+  const startCount = inFlightB2Uploads.size;
+  if (startCount === 0) return { drained: 0, remaining: 0 };
+
+  console.log(`[B2 Storage] Waiting for ${startCount} in-flight B2 upload(s) to drain (max ${timeoutMs / 1000}s)...`);
+  const deadline = Date.now() + timeoutMs;
+
+  while (inFlightB2Uploads.size > 0 && Date.now() < deadline) {
+    await Promise.race([
+      Promise.all(Array.from(inFlightB2Uploads)),
+      new Promise((resolve) => setTimeout(resolve, 500)),
+    ]);
+  }
+
+  const remaining = inFlightB2Uploads.size;
+  const drained = startCount - remaining;
+  if (remaining > 0) {
+    console.warn(`[B2 Storage] Timeout: ${remaining} uploads still pending after ${timeoutMs / 1000}s.`);
+  } else {
+    console.log(`[B2 Storage] All ${drained} in-flight B2 uploads successfully drained.`);
+  }
+  return { drained, remaining };
+}
 
 const BROWSER_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -155,17 +189,29 @@ export async function uploadMediaWithHashing(
     }
 
     const arrayBuf = await res.arrayBuffer();
-    const buffer = Buffer.from(arrayBuf);
+    let buffer = Buffer.from(arrayBuf);
 
     if (buffer.length === 0) {
       return { url: sourceUrl, mediaHash: null, perceptualHash: null, wasReused: false };
     }
 
-    // 1. Compute SHA-256 binary hash
-    const mediaHash = computeSha256(buffer);
-
     let contentType = res.headers.get("content-type") || "application/octet-stream";
     const isVideo = isVideoMedia(keyPrefix, sourceUrl, contentType);
+
+    let ext = ".jpg";
+    if (isVideo || contentType.includes("video")) {
+      ext = ".mp4";
+      if (!contentType.includes("video")) contentType = "video/mp4";
+    } else {
+      // 🎯 Maximum Compression: Compress thumbnails and image creatives to WebP using Sharp
+      const compressed = await compressImageBuffer(buffer, { keyPrefix });
+      buffer = compressed.buffer;
+      contentType = compressed.contentType;
+      ext = compressed.ext;
+    }
+
+    // 1. Compute SHA-256 binary hash on the compressed buffer
+    const mediaHash = computeSha256(buffer);
 
     // 2. Compute 64-bit Perceptual dHash for thumbnails and images
     let perceptualHash: string | null = null;
@@ -173,12 +219,6 @@ export async function uploadMediaWithHashing(
       try {
         perceptualHash = await computeDHash(buffer);
       } catch {}
-    }
-
-    let ext = ".jpg";
-    if (isVideo || contentType.includes("video")) {
-      ext = ".mp4";
-      if (!contentType.includes("video")) contentType = "video/mp4";
     }
 
     // Content-Addressable Storage Key (deduplicates identical files)

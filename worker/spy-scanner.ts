@@ -716,8 +716,11 @@ export async function scanAdCreatives(
             linkUrl: adData.linkUrl,
             mediaType: adData.mediaType,
             mediaUrls: finalMediaUrls,
-            thumbnailUrl: finalThumbnailUrl || ads.thumbnailUrl,
-            thumbnailStoragePath: storagePath || ads.thumbnailStoragePath,
+            thumbnailUrl: sql`CASE 
+              WHEN ${ads.thumbnailUrl} LIKE '%b2%' OR ${ads.thumbnailUrl} LIKE '%backblazeb2%' THEN ${ads.thumbnailUrl}
+              ELSE COALESCE(${finalThumbnailUrl}, ${ads.thumbnailUrl})
+            END`,
+            thumbnailStoragePath: sql`COALESCE(${storagePath}, ${ads.thumbnailStoragePath})`,
             ...(mediaHash ? { mediaHash } : {}),
             ...(perceptualHash ? { perceptualHash } : {}),
             lastSeenAt: now,
