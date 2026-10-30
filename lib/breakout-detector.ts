@@ -26,6 +26,8 @@ export interface BreakoutEvaluation {
   isBreakout: boolean;
   reason: string;
   winnerScore: number;
+  breakoutScore?: number;
+  breakoutTier?: "hard" | "standard" | "soft" | null;
   daysRunning: number;
   scaleJump: number;
 }
@@ -34,6 +36,8 @@ export interface BreakoutDetectorResult {
   isBreakout: boolean;
   reason?: string;
   winnerScore?: number;
+  breakoutScore?: number;
+  breakoutTier?: "hard" | "standard" | "soft" | null;
   daysRunning?: number;
   scaleJump?: number;
   notificationCreated?: boolean;
@@ -41,7 +45,8 @@ export interface BreakoutDetectorResult {
 
 /**
  * Pure evaluation function for breakout velocity rules.
- * Zero database side-effects, fully testable.
+ * A Breakout identifies a validated product (7-30 days running) that survived
+ * the test phase and is receiving an active scaling push (3+ copies / surge).
  */
 export function evaluateBreakoutCriteria(params: {
   currentDuplication: number;
@@ -74,6 +79,7 @@ export function evaluateBreakoutCriteria(params: {
   }
 
   // 1. Calculate Winner Metrics & Days Running
+  const scaleJump = typeof prevDuplication === "number" ? Math.max(0, currentDuplication - prevDuplication) : currentDuplication;
   const winnerMetrics = calculateWinnerScore({
     startedRunningOn,
     firstSeenAt,
@@ -81,51 +87,61 @@ export function evaluateBreakoutCriteria(params: {
     duplicationCount: currentDuplication,
     isActive,
     mediaType,
+    recentSurge: scaleJump,
   });
 
   const daysRunning = winnerMetrics.daysRunning;
 
-  // Guard: Only recently launched ads (<= 7 days) can qualify as fresh breakouts
-  if (daysRunning > 7) {
+  // Guard: Must be in the validated breakout window (7 to 30 days)
+  if (daysRunning < 7) {
     return {
       isBreakout: false,
-      reason: `Ad running for ${daysRunning}d (> 7d fresh window)`,
+      reason: `Ad running for ${daysRunning}d (< 7d initial test window - fresh testing phase)`,
       daysRunning,
       winnerScore: winnerMetrics.winnerScore,
-      scaleJump: 0,
+      scaleJump,
     };
   }
 
-  // 2. Velocity Jump Trigger Logic
+  if (daysRunning > 30) {
+    return {
+      isBreakout: false,
+      reason: `Ad running for ${daysRunning}d (> 30d mature/evergreen window)`,
+      daysRunning,
+      winnerScore: winnerMetrics.winnerScore,
+      scaleJump,
+    };
+  }
+
+  // 2. Velocity Jump Trigger Logic in the validated 7-30d window
   const prevDup = typeof prevDuplication === "number" ? prevDuplication : null;
   let isVelocityTrigger = false;
   let triggerReason = "";
 
   if (prevDup !== null) {
     if (prevDup < 3 && currentDuplication >= 3) {
-      // Classic test-to-scale breakout (e.g. 1 -> 3 or 1 -> 5 copies)
+      // Classic test-to-scale breakout (e.g. 1 -> 3 or 1 -> 5 copies in week 2-4)
       isVelocityTrigger = true;
-      triggerReason = `Crossed threshold (${prevDup} ➔ ${currentDuplication} copies)`;
+      triggerReason = `Crossed scaling threshold (${prevDup} ➔ ${currentDuplication} copies in week 2-4)`;
     } else if (currentDuplication - prevDup >= 2) {
-      // Rapid surge (e.g. 3 -> 6 copies in one scan interval)
+      // Rapid surge (e.g. 3 -> 5+ copies in one scan interval)
       isVelocityTrigger = true;
-      triggerReason = `Surge (+${currentDuplication - prevDup} copies)`;
+      triggerReason = `Scaling surge (+${currentDuplication - prevDup} copies)`;
     }
   } else {
-    // First time this ad is observed by the system:
-    // If it launched in the last 72 hours and already has 3+ copies, it's an instant breakout!
-    if (daysRunning <= 3) {
+    // First time observed in the 7-30d window already at scale (>= 3 copies)
+    if (currentDuplication >= 3) {
       isVelocityTrigger = true;
-      triggerReason = `Launched with high scale (${currentDuplication} copies in ${daysRunning}d)`;
+      triggerReason = `Validated scaler (${currentDuplication} copies at day ${daysRunning})`;
     }
   }
 
-  const scaleJump = prevDup !== null ? Math.max(0, currentDuplication - prevDup) : currentDuplication;
-
   return {
     isBreakout: isVelocityTrigger,
-    reason: isVelocityTrigger ? triggerReason : "No velocity jump detected",
+    reason: isVelocityTrigger ? triggerReason : "No velocity jump detected in validated window",
     winnerScore: winnerMetrics.winnerScore,
+    breakoutScore: winnerMetrics.breakoutScore,
+    breakoutTier: winnerMetrics.breakoutTier,
     daysRunning,
     scaleJump,
   };
@@ -156,6 +172,8 @@ export async function checkAndRecordBreakout(
         isBreakout: false,
         reason: evalResult.reason,
         winnerScore: evalResult.winnerScore,
+        breakoutScore: evalResult.breakoutScore,
+        breakoutTier: evalResult.breakoutTier,
         daysRunning: evalResult.daysRunning,
       };
     }
@@ -183,6 +201,8 @@ export async function checkAndRecordBreakout(
           reason: "Breakout detected but suppressed by 72h deduplication window",
           daysRunning: evalResult.daysRunning,
           winnerScore: evalResult.winnerScore,
+          breakoutScore: evalResult.breakoutScore,
+          breakoutTier: evalResult.breakoutTier,
           scaleJump: evalResult.scaleJump,
           notificationCreated: false,
         };
@@ -215,6 +235,8 @@ export async function checkAndRecordBreakout(
       isBreakout: true,
       reason: evalResult.reason,
       winnerScore: evalResult.winnerScore,
+      breakoutScore: evalResult.breakoutScore,
+      breakoutTier: evalResult.breakoutTier,
       daysRunning: evalResult.daysRunning,
       scaleJump: evalResult.scaleJump,
       notificationCreated: true,

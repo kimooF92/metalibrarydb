@@ -209,6 +209,9 @@ export interface ScrapedProduct {
   earliestAdDate?: string | null;
   latestAdDate?: string | null;
   isBreakout?: boolean;
+  breakoutScore?: number;
+  breakoutTier?: "hard" | "standard" | "soft" | null;
+  breakoutSurge?: number;
   brandHoldStatus?: "active" | "on_hold" | "inactive" | null;
   brandCurrentResults?: number | null;
   winnerScore?: number;
@@ -277,6 +280,9 @@ export interface Ad {
   winnerScore?: number;
   winnerTier?: "super" | "high" | "promising" | "testing";
   isBreakout?: boolean;
+  breakoutScore?: number;
+  breakoutTier?: "hard" | "standard" | "soft" | null;
+  breakoutSurge?: number;
   isEvergreen?: boolean;
   daysRunning?: number;
   winnerBreakdown?: {

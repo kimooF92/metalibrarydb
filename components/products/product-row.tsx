@@ -119,10 +119,12 @@ export const ProductRow = memo(function ProductRow({
   const isBreakout = Boolean(
     !isPageOnHold &&
     !isPageInactive &&
-    (product.isBreakout ||
-      ((product.activeAdsCount || 0) > 0 &&
-        (product.daysRunning || 1) <= 7 &&
-        (product.maxDuplications || 1) >= 3))
+    (product.isBreakout !== undefined
+      ? product.isBreakout
+      : ((product.activeAdsCount || 0) > 0 &&
+          (product.daysRunning || 1) >= 7 &&
+          (product.daysRunning || 1) <= 30 &&
+          (product.maxDuplications || 1) >= 3))
   );
   const isPendingScrape = product.scrapeStatus === "pending";
   const isInactive = isPageInactive || (typeof product.activeAdsCount === "number" && product.activeAdsCount === 0 && (product.linkedAdsCount || 0) > 0);
@@ -217,9 +219,18 @@ export const ProductRow = memo(function ProductRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             {isBreakout && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-gradient-to-r from-pink-600 via-rose-500 to-amber-500 text-white shadow-2xs">
+              <span
+                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold text-white shadow-2xs ${
+                  product.breakoutTier === "hard"
+                    ? "bg-gradient-to-r from-red-600 via-rose-500 to-amber-500 animate-pulse"
+                    : "bg-gradient-to-r from-pink-600 via-rose-500 to-amber-500"
+                }`}
+                title={`Validated product (${product.daysRunning || 7}d running) with ${product.breakoutSurge ? `+${product.breakoutSurge} ads/surge` : `${product.maxDuplications || 3}x copies`}${product.breakoutScore ? ` • Score: ${product.breakoutScore}/100` : ""}`}
+              >
                 <Rocket className="w-2.5 h-2.5" />
-                <span>🚀 Breakout ({product.maxDuplications || 3}x Copies)</span>
+                <span>
+                  🚀 {product.breakoutTier === "hard" ? "Super Breakout" : "Breakout"} ({product.breakoutSurge ? `+${product.breakoutSurge} Surge` : `${product.maxDuplications || 3}x Copies`})
+                </span>
               </span>
             )}
 

@@ -226,10 +226,12 @@ export const ProductCard = memo(function ProductCard({
   const isBreakout = Boolean(
     !isPageOnHold &&
     !isPageInactive &&
-    (product.isBreakout ||
-      ((product.activeAdsCount || 0) > 0 &&
-        (product.daysRunning || 1) <= 7 &&
-        (product.maxDuplications || 1) >= 3))
+    (product.isBreakout !== undefined
+      ? product.isBreakout
+      : ((product.activeAdsCount || 0) > 0 &&
+          (product.daysRunning || 1) >= 7 &&
+          (product.daysRunning || 1) <= 30 &&
+          (product.maxDuplications || 1) >= 3))
   );
   const isWinning = !isBreakout && !isPageOnHold && !isPageInactive && (product.linkedAdsCount || 0) >= 3 && (product.activeAdsCount || 0) > 0;
   const isInactive = isPageInactive || (typeof product.activeAdsCount === "number" && product.activeAdsCount === 0 && (product.linkedAdsCount || 0) > 0);
@@ -545,11 +547,19 @@ export const ProductCard = memo(function ProductCard({
               </span>
             ) : isBreakout ? (
               <span
-                className="inline-flex items-center gap-1 text-[11px] font-bold text-pink-300 bg-black/80 border border-pink-500/50 px-2.5 py-0.5 rounded-full backdrop-blur-md shadow-md"
-                title={`Breakout product: ${product.maxDuplications || 3}x copies running in first week`}
+                className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full backdrop-blur-md shadow-md ${
+                  product.breakoutTier === "hard"
+                    ? "text-rose-300 bg-rose-950/80 border border-rose-500/70 animate-pulse"
+                    : product.breakoutTier === "soft"
+                    ? "text-amber-300 bg-black/80 border border-amber-500/50"
+                    : "text-pink-300 bg-black/80 border border-pink-500/50"
+                }`}
+                title={`Breakout Scaler: Validated product (${product.daysRunning || 7}d running) with ${product.breakoutSurge ? `+${product.breakoutSurge} new ads/surge` : `${product.maxDuplications || 3}x copies`}${product.breakoutScore ? ` • Score: ${product.breakoutScore}/100` : ""}`}
               >
-                <Rocket className="w-3 h-3 text-pink-400" />
-                <span>Breakout</span>
+                <Rocket className={`w-3 h-3 ${product.breakoutTier === "hard" ? "text-rose-400" : "text-pink-400"}`} />
+                <span>
+                  {product.breakoutTier === "hard" ? "Super Breakout" : "Breakout"}
+                </span>
               </span>
             ) : isWinning ? (
               <span

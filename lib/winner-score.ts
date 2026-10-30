@@ -7,12 +7,15 @@ export interface WinnerCalculationInput {
   isArchived?: boolean | null;
   mediaType?: string | null;
   productCreativeCount?: number;
+  recentSurge?: number;
 }
 
 export interface WinnerCalculationResult {
   winnerScore: number;
   winnerTier: "super" | "high" | "promising" | "testing";
   isBreakout: boolean;
+  breakoutScore?: number;
+  breakoutTier?: "hard" | "standard" | "soft" | null;
   isEvergreen: boolean;
   daysRunning: number;
   breakdown: {
@@ -88,8 +91,14 @@ export function calculateWinnerScore(input: WinnerCalculationInput): WinnerCalcu
 
   // 5. Velocity & Multi-Creative Bonuses (0 - 8 pts)
   let bonusPts = 0;
-  // Fast scale velocity bonus (scaled to 3+ copies within 7 days)
-  if (isActive && daysRunning <= 7 && dup >= 3) {
+  // Validated scale velocity bonus: 7-30 days running with aggressive scale (3+ copies or surge)
+  const hasScalingSurge = Boolean(
+    isActive &&
+    daysRunning >= 7 &&
+    daysRunning <= 30 &&
+    (dup >= 3 || (input.recentSurge && input.recentSurge >= 3))
+  );
+  if (hasScalingSurge) {
     bonusPts += 3;
   }
   // Video production bonus
@@ -119,11 +128,34 @@ export function calculateWinnerScore(input: WinnerCalculationInput): WinnerCalcu
 
   const winnerScore = Math.min(100, Math.max(1, Math.round(rawScore)));
 
-  // Breakout: Newly launched (<= 7 days) with high duplication (>= 3)
-  const isBreakout = Boolean(isActive && daysRunning <= 7 && dup >= 3);
+  // Breakout: Validated running age (7 to 30 days) with aggressive scale (>= 3 copies or surge)
+  const isBreakout = Boolean(
+    isActive &&
+    daysRunning >= 7 &&
+    daysRunning <= 30 &&
+    (dup >= 3 || (input.recentSurge && input.recentSurge >= 3))
+  );
+
+  let breakoutScore: number | undefined;
+  let breakoutTier: "hard" | "standard" | "soft" | null = null;
+
+  if (isBreakout) {
+    // A. Scale Component (0-40)
+    const scaleComp = dup >= 16 ? 40 : dup >= 9 ? 35 : dup >= 5 ? 28 : dup >= 3 ? 20 : 10;
+    // B. Surge Component (0-35)
+    const surgeVal = input.recentSurge || (dup >= 3 ? dup : 3);
+    const surgeComp = surgeVal >= 8 ? 35 : surgeVal >= 5 ? 25 : surgeVal >= 3 ? 20 : 15;
+    // C. Longevity Sweet-Spot Component (0-15)
+    const longevityComp = (daysRunning >= 11 && daysRunning <= 18) ? 15 : (daysRunning >= 7 && daysRunning <= 10) ? 12 : 10;
+    // D. Content Component (0-10)
+    const contentComp = (input.mediaType === "video" ? 4 : 0) + (creativesCount >= 5 ? 6 : creativesCount >= 3 ? 3 : 0);
+
+    breakoutScore = Math.min(100, scaleComp + surgeComp + longevityComp + contentComp);
+    breakoutTier = breakoutScore >= 75 ? "hard" : breakoutScore >= 50 ? "standard" : "soft";
+  }
 
   // Evergreen: Running for 30+ days with solid scale (>= 2 copies)
-  const isEvergreen = Boolean(isActive && daysRunning >= 30 && dup >= 2);
+  const isEvergreen = Boolean(isActive && daysRunning > 30 && dup >= 2);
 
   // Tier classification
   let winnerTier: "super" | "high" | "promising" | "testing" = "testing";
@@ -139,6 +171,8 @@ export function calculateWinnerScore(input: WinnerCalculationInput): WinnerCalcu
     winnerScore,
     winnerTier,
     isBreakout,
+    breakoutScore,
+    breakoutTier,
     isEvergreen,
     daysRunning,
     breakdown: {

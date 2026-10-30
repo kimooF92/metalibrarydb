@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ads, adObservations, scrapedProducts, trackedPages, discoveredPages, brandDomains } from "@/db/schema";
-import { eq, ilike, and, sql, desc, asc, or, count, inArray, isNull, isNotNull } from "drizzle-orm";
+import { eq, ilike, and, sql, desc, asc, or, count, inArray, isNull, isNotNull, gte } from "drizzle-orm";
 import { validateApiSecret, validateAdminRole, getRoleFromRequest } from "@/lib/api-guard";
 import { PRIVATE_AUTH_VARY, PRIVATE_DETAIL_CACHE_CONTROL, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
@@ -336,16 +336,32 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Smart Preset: Breakout Scalers (new ads <= 7 days with >= 3 duplications)
+    // Smart Preset: Breakout Scalers (validated age 7-30 days with a fresh scaling push: >= 3 new ads or >= 3 duplication surge)
     if (smartPreset === "breakout") {
       conditions.push(
         sql`EXISTS (
-          SELECT 1 FROM ${ads}
-          JOIN ${adObservations} ON ${adObservations.adId} = ${ads.id}
-          WHERE ${ads.productId} = ${scrapedProducts.id}
-          AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
-          AND (${ads.startedRunningOn} >= NOW() - INTERVAL '7 days' OR ${ads.firstSeenAt} >= NOW() - INTERVAL '7 days')
-          AND ${adObservations.duplicationCount} >= 3
+          SELECT 1 FROM ${ads} a1
+          WHERE a1.product_id = ${scrapedProducts.id}
+          AND (a1.is_archived = false OR a1.is_archived IS NULL)
+          AND COALESCE(a1.started_running_on, a1.first_seen_at) <= NOW() - INTERVAL '7 days'
+          AND COALESCE(a1.started_running_on, a1.first_seen_at) >= NOW() - INTERVAL '30 days'
+        ) AND (
+          (
+            SELECT COUNT(a2.id) FROM ${ads} a2
+            WHERE a2.product_id = ${scrapedProducts.id}
+            AND (a2.is_archived = false OR a2.is_archived IS NULL)
+            AND COALESCE(a2.started_running_on, a2.first_seen_at) >= NOW() - INTERVAL '7 days'
+          ) >= 3
+          OR
+          EXISTS (
+            SELECT 1 FROM ${ads} a3
+            JOIN ${adObservations} ao ON ao.ad_id = a3.id
+            WHERE a3.product_id = ${scrapedProducts.id}
+            AND (a3.is_archived = false OR a3.is_archived IS NULL)
+            AND ao.is_active = true
+            AND ao.observed_at >= NOW() - INTERVAL '7 days'
+            AND ao.duplication_count >= 3
+          )
         )`
       );
     }
@@ -489,6 +505,7 @@ export async function GET(req: NextRequest) {
       new Set(rawProducts.map((p) => p.pageId).filter((pid): pid is string => Boolean(pid && pid.trim())))
     );
     const pageMap = new Map<string, any>();
+    const obsMetricsMap = new Map<string, { maxDuplications: number; maxSurge: number }>();
 
     const asyncLookups: Promise<any>[] = [];
 
@@ -499,6 +516,8 @@ export async function GET(req: NextRequest) {
             productId: ads.productId,
             linkedAdsCount: sql<number>`COUNT(${ads.id})`.mapWith(Number),
             activeAdsCount: sql<number>`COUNT(CASE WHEN ${ads.isArchived} = false OR ${ads.isArchived} IS NULL THEN ${ads.id} END)`.mapWith(Number),
+            recentAdsCount: sql<number>`COUNT(CASE WHEN (${ads.isArchived} = false OR ${ads.isArchived} IS NULL) AND COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) >= NOW() - INTERVAL '7 days' THEN 1 END)`.mapWith(Number),
+            videoAdsCount: sql<number>`COUNT(CASE WHEN ${ads.mediaType} = 'video' THEN 1 END)`.mapWith(Number),
             hasCarouselAd: sql<boolean>`COALESCE(BOOL_OR(${ads.mediaType} = 'carousel'), false)`,
             earliestAdDate: sql<string>`MIN(COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}))`,
             latestAdDate: sql<string>`MAX(${ads.lastSeenAt})`,
@@ -520,6 +539,45 @@ export async function GET(req: NextRequest) {
           })
           .catch((metricsErr) => {
             console.warn("[Products API] Ad metrics batch lookup warning:", metricsErr);
+          })
+      );
+
+      // Batch query duplication scale and 7-day surge from ad observations
+      asyncLookups.push(
+        db
+          .select({
+            productId: ads.productId,
+            maxDuplications: sql<number>`MAX(${adObservations.duplicationCount})`.mapWith(Number),
+            maxSurge: sql<number>`
+              COALESCE(
+                MAX(CASE WHEN ${adObservations.observedAt} >= NOW() - INTERVAL '7 days' THEN ${adObservations.duplicationCount} ELSE 0 END) -
+                MIN(CASE WHEN ${adObservations.observedAt} >= NOW() - INTERVAL '7 days' THEN ${adObservations.duplicationCount} ELSE NULL END),
+                0
+              )
+            `.mapWith(Number),
+          })
+          .from(adObservations)
+          .innerJoin(ads, eq(ads.id, adObservations.adId))
+          .where(
+            and(
+              inArray(ads.productId, productIds),
+              eq(adObservations.isActive, true),
+              gte(adObservations.observedAt, sql`NOW() - INTERVAL '14 days'`)
+            )
+          )
+          .groupBy(ads.productId)
+          .then((rows) => {
+            rows.forEach((row) => {
+              if (row.productId) {
+                obsMetricsMap.set(row.productId, {
+                  maxDuplications: row.maxDuplications || 1,
+                  maxSurge: Math.max(0, row.maxSurge || 0),
+                });
+              }
+            });
+          })
+          .catch((obsErr) => {
+            console.warn("[Products API] Ad observations batch lookup warning:", obsErr);
           })
       );
     }
@@ -604,20 +662,65 @@ export async function GET(req: NextRequest) {
         ? pageInfo.currentResults
         : null;
 
+      const obs = obsMetricsMap.get(p.id);
+      const maxDuplications = Math.max(obs?.maxDuplications || 1, 1);
+      const recentNewAds = m?.recentAdsCount || 0;
+      const duplicationSurge = obs?.maxSurge || 0;
+      const effectiveSurge = Math.max(recentNewAds, duplicationSurge);
+
+      // Breakout product:
+      // 1. Brand is active (not on hold / inactive)
+      // 2. Active ads running currently
+      // 3. Validated product age: 7 to 30 days running
+      // 4. Scaling push: >= 3 new ads launched this week OR >= 3 duplication surge (or >= 3 copies with fresh activity)
       const isBreakout = Boolean(
         brandHoldStatus !== "on_hold" &&
         brandHoldStatus !== "inactive" &&
         (m?.activeAdsCount || 0) > 0 &&
-        daysRunning <= 7 &&
-        (m?.maxDuplications || 1) >= 3
+        daysRunning >= 7 &&
+        daysRunning <= 30 &&
+        (effectiveSurge >= 3 || (maxDuplications >= 3 && recentNewAds >= 2))
       );
+
+      // Compute Breakout Confidence Score (0-100) & Tier
+      let breakoutScore: number | undefined;
+      let breakoutTier: "hard" | "standard" | "soft" | null = null;
+
+      if (isBreakout) {
+        // A. Scale Score (0 - 40 pts)
+        let scaleScore = 15;
+        if (maxDuplications >= 16) scaleScore = 40;
+        else if (maxDuplications >= 9) scaleScore = 35;
+        else if (maxDuplications >= 5) scaleScore = 28;
+        else if (maxDuplications >= 3) scaleScore = 20;
+
+        // B. Surge Score (0 - 35 pts)
+        let surgeScore = 15;
+        if (effectiveSurge >= 8) surgeScore = 35;
+        else if (effectiveSurge >= 5) surgeScore = 25;
+        else if (effectiveSurge >= 3) surgeScore = 20;
+
+        // C. Longevity Sweet-Spot (0 - 15 pts)
+        let longevityScore = 10;
+        if (daysRunning >= 11 && daysRunning <= 18) longevityScore = 15; // Golden breakout zone
+        else if (daysRunning >= 7 && daysRunning <= 10) longevityScore = 12;
+
+        // D. Content Bonus (0 - 10 pts)
+        let contentBonus = 0;
+        if ((m?.videoAdsCount || 0) > 0) contentBonus += 4;
+        if ((m?.linkedAdsCount || 0) >= 5) contentBonus += 6;
+        else if ((m?.linkedAdsCount || 0) >= 3) contentBonus += 3;
+
+        breakoutScore = Math.min(100, scaleScore + surgeScore + longevityScore + contentBonus);
+        breakoutTier = breakoutScore >= 75 ? "hard" : breakoutScore >= 50 ? "standard" : "soft";
+      }
 
       return {
         ...p,
         linkedAdsCount: m?.linkedAdsCount || 0,
         activeAdsCount: m?.activeAdsCount || 0,
         hasCarouselAd: Boolean(m?.hasCarouselAd),
-        maxDuplications: m?.maxDuplications || 1,
+        maxDuplications,
         earliestAdDate: m?.earliestAdDate || null,
         latestAdDate: m?.latestAdDate || null,
         brandName,
@@ -628,12 +731,21 @@ export async function GET(req: NextRequest) {
         topCreativeThumbnail: m?.topCreativeThumbnail || null,
         daysRunning,
         isBreakout,
+        breakoutScore,
+        breakoutTier,
+        breakoutSurge: effectiveSurge,
       };
     });
 
     // In-memory sort fallback for ad-metrics specific sorts (breakout / most_scaled / top_lasting)
     if (sortBy === "breakout") {
-      products.sort((a, b) => (b.maxDuplications || 1) - (a.maxDuplications || 1) || (b.activeAdsCount || 0) - (a.activeAdsCount || 0));
+      products.sort((a, b) => {
+        if (a.isBreakout !== b.isBreakout) return a.isBreakout ? -1 : 1;
+        if (a.isBreakout && b.isBreakout) {
+          return (b.breakoutScore || 0) - (a.breakoutScore || 0);
+        }
+        return (b.maxDuplications || 1) - (a.maxDuplications || 1) || (b.activeAdsCount || 0) - (a.activeAdsCount || 0);
+      });
     } else if (sortBy === "most_scaled" || sortBy === "ads") {
       products.sort((a, b) => (b.activeAdsCount || 0) - (a.activeAdsCount || 0) || (b.maxDuplications || 1) - (a.maxDuplications || 1));
     } else if (sortBy === "top_lasting" || sortBy === "longevity") {
