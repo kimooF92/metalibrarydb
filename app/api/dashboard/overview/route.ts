@@ -60,6 +60,8 @@ export async function GET(req: NextRequest) {
       brandStatsRows,
       productStatsRows,
       adsStatsRows,
+      scalingProductsRows,
+      hotOfferProductsRows,
       freshBreakoutRows,
       topCategoriesRows,
       workerStateRows,
@@ -106,7 +108,87 @@ export async function GET(req: NextRequest) {
         .innerJoin(trackedPages, eq(ads.pageId, trackedPages.pageId))
         .where(eq(trackedPages.workspaceId, activeWorkspace.id)),
 
-      // 4. Fresh Breakouts (top ads with creative media)
+      // 4. Top Scaling Products (E-Commerce Products with active ad scaling)
+      db
+        .select({
+          id: scrapedProducts.id,
+          url: scrapedProducts.url,
+          domain: scrapedProducts.domain,
+          pageId: scrapedProducts.pageId,
+          title: sql<string>`left(${scrapedProducts.title}, 100)`,
+          currentPrice: scrapedProducts.currentPrice,
+          originalPrice: scrapedProducts.originalPrice,
+          currency: scrapedProducts.currency,
+          discountOrOffer: scrapedProducts.discountOrOffer,
+          mainImageUrl: scrapedProducts.mainImageUrl,
+          storePlatform: scrapedProducts.storePlatform,
+          category: scrapedProducts.category,
+          activeAdsCount: sql<number>`(
+            SELECT count(*)
+            FROM ${ads}
+            WHERE ${ads.productId} = ${scrapedProducts.id}
+              AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
+          )`.mapWith(Number),
+          brandDisplayName: sql<string>`(
+            SELECT coalesce(${trackedPages.displayName}, ${scrapedProducts.domain})
+            FROM ${trackedPages}
+            WHERE ${trackedPages.pageId} = ${scrapedProducts.pageId}
+            LIMIT 1
+          )`,
+        })
+        .from(scrapedProducts)
+        .where(
+          and(
+            eq(scrapedProducts.workspaceId, activeWorkspace.id),
+            eq(scrapedProducts.scrapeStatus, "success"),
+            isNotNull(scrapedProducts.mainImageUrl),
+            ne(scrapedProducts.mainImageUrl, "")
+          )
+        )
+        .orderBy(
+          desc(sql`(
+            SELECT count(*)
+            FROM ${ads}
+            WHERE ${ads.productId} = ${scrapedProducts.id}
+              AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
+          )`),
+          desc(scrapedProducts.updatedAt)
+        )
+        .limit(4),
+
+      // 5. Hot Offers & Tier Bundles (products with detected special bundle offers)
+      db
+        .select({
+          id: scrapedProducts.id,
+          url: scrapedProducts.url,
+          domain: scrapedProducts.domain,
+          title: sql<string>`left(${scrapedProducts.title}, 90)`,
+          currentPrice: scrapedProducts.currentPrice,
+          currency: scrapedProducts.currency,
+          discountOrOffer: scrapedProducts.discountOrOffer,
+          mainImageUrl: scrapedProducts.mainImageUrl,
+          storePlatform: scrapedProducts.storePlatform,
+          category: scrapedProducts.category,
+          brandDisplayName: sql<string>`(
+            SELECT coalesce(${trackedPages.displayName}, ${scrapedProducts.domain})
+            FROM ${trackedPages}
+            WHERE ${trackedPages.pageId} = ${scrapedProducts.pageId}
+            LIMIT 1
+          )`,
+        })
+        .from(scrapedProducts)
+        .where(
+          and(
+            eq(scrapedProducts.workspaceId, activeWorkspace.id),
+            eq(scrapedProducts.scrapeStatus, "success"),
+            isNotNull(scrapedProducts.discountOrOffer),
+            ne(scrapedProducts.discountOrOffer, "")
+          )
+        )
+        .orderBy(desc(scrapedProducts.updatedAt))
+        .limit(4),
+
+      // 6. Fresh Breakouts (top ads with creative media)
       db
         .select({
           id: ads.id,
@@ -137,7 +219,7 @@ export async function GET(req: NextRequest) {
         .orderBy(desc(sql`coalesce(${ads.startedRunningOn}, ${ads.firstSeenAt})`))
         .limit(6),
 
-      // 5. Category Distribution (top 5)
+      // 7. Category Distribution (top 5)
       db
         .select({
           category: scrapedProducts.category,
@@ -155,7 +237,7 @@ export async function GET(req: NextRequest) {
         .orderBy(desc(sql`count(*)`))
         .limit(5),
 
-      // 6. Worker State
+      // 8. Worker State
       db
         .select({
           id: workerState.id,
@@ -170,7 +252,7 @@ export async function GET(req: NextRequest) {
         .from(workerState)
         .where(eq(workerState.id, 1)),
 
-      // 7. Queue Health Stats
+      // 9. Queue Health Stats
       db
         .select({
           status: queue.status,
@@ -180,7 +262,7 @@ export async function GET(req: NextRequest) {
         .where(eq(queue.workspaceId, activeWorkspace.id))
         .groupBy(queue.status),
 
-      // 8. Dark / High-Risk Brands (consecutive 0s, on hold, failed)
+      // 10. Dark / High-Risk Brands (consecutive 0s, on hold, failed)
       db
         .select({
           id: trackedPages.id,
@@ -203,7 +285,7 @@ export async function GET(req: NextRequest) {
         .orderBy(desc(trackedPages.consecutiveZeroScans), desc(trackedPages.updatedAt))
         .limit(4),
 
-      // 9. Discovery Stats
+      // 11. Discovery Stats
       db
         .select({
           discoveredCount: sql<number>`count(case when ${discoveredPages.status} = 'discovered' then 1 end)`.mapWith(Number),
@@ -213,7 +295,7 @@ export async function GET(req: NextRequest) {
         .innerJoin(discoveryRuns, eq(discoveredPages.runId, discoveryRuns.id))
         .where(eq(discoveryRuns.workspaceId, activeWorkspace.id)),
 
-      // 10. Recent Discovered Competitors
+      // 12. Recent Discovered Competitors
       db
         .select({
           id: discoveredPages.id,
@@ -236,7 +318,7 @@ export async function GET(req: NextRequest) {
         .orderBy(desc(discoveredPages.matchingAdCount), desc(discoveredPages.id))
         .limit(3),
 
-      // 11. Recent Activity Notifications
+      // 13. Recent Activity Notifications
       db
         .select({
           id: activityNotifications.id,
@@ -251,7 +333,7 @@ export async function GET(req: NextRequest) {
         .orderBy(desc(activityNotifications.createdAt))
         .limit(4),
 
-      // 12. Scaling Brands Leaderboard
+      // 14. Scaling Brands Leaderboard
       db
         .select({
           id: trackedPages.id,
@@ -394,6 +476,8 @@ export async function GET(req: NextRequest) {
         totalAds: adsStatsRows[0]?.totalAds ?? 0,
         activeAds: adsStatsRows[0]?.activeAds ?? 0,
       },
+      scalingProducts: scalingProductsRows,
+      hotOffers: hotOfferProductsRows,
       freshBreakouts,
       scalingBrands: scalingBrandsWithPattern,
       darkBrands: darkBrandRows,
