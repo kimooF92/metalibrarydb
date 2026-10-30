@@ -12,7 +12,7 @@ export default function ImportPage() {
         <div>
           <div className="flex items-center space-x-2">
             <Link
-              href="/"
+              href="/brands"
               className="text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900"
             >
               <ArrowLeft className="w-4 h-4" />

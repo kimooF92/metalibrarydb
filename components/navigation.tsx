@@ -26,7 +26,7 @@ import { WorkspaceSwitcher } from "./workspace-switcher";
 import { useLogout } from "@/hooks/use-logout";
 import { useAuth } from "@/components/auth-context";
 import { useAddUrlModal } from "@/components/add-url-modal";
-import { Plus, PlusCircle, ShieldCheck } from "lucide-react";
+import { Plus, PlusCircle, ShieldCheck, Building2 } from "lucide-react";
 
 export function Navigation() {
   const pathname = usePathname();
@@ -50,6 +50,7 @@ export function Navigation() {
       id: "overview",
       items: [
         { href: "/", label: "Dashboard", icon: LayoutDashboard },
+        { href: "/brands", label: "Tracked Brands", icon: Building2 },
       ],
     },
     {
@@ -64,13 +65,13 @@ export function Navigation() {
         },
         {
           href: "/opportunities",
-          label: "Opportunity Seeker",
+          label: "Opportunities",
           icon: Sparkles,
           badge: { text: "AI", variant: "ai" as const },
           accentColor: "text-indigo-500 dark:text-indigo-400",
         },
-        { href: "/discovery", label: "Discover Pages", icon: Globe },
-        { href: "/spy", label: "Ad Spy Feed", icon: Eye },
+        { href: "/discovery", label: "Discover Brands", icon: Globe },
+        { href: "/spy", label: "Ad Feed", icon: Eye },
       ],
     },
     {
@@ -85,13 +86,13 @@ export function Navigation() {
   // Staff role only sees Products
   const filteredNavSections = isStaff
     ? [
-        {
-          id: "catalog",
-          items: [
-            { href: "/products", label: "Products", icon: ShoppingBag },
-          ],
-        },
-      ]
+      {
+        id: "catalog",
+        items: [
+          { href: "/products", label: "Products", icon: ShoppingBag },
+        ],
+      },
+    ]
     : navSections;
 
   const isSettingsActive = activeRoute === "/settings";
@@ -101,9 +102,8 @@ export function Navigation() {
       {/* Desktop Left Sidebar (Admin Only - Staff has clean full-width workspace) */}
       {!isStaff && (
         <header
-          className={`hidden md:flex flex-col ${
-            isCollapsed ? "w-14 px-2" : "w-60 px-2.5"
-          } py-3 h-screen border-r border-slate-200 dark:border-slate-800/60 bg-white dark:bg-[#010202] shrink-0 sticky top-0 left-0 z-40 justify-between transition-[width,padding] duration-200 ease-[cubic-bezier(0.2,0,0,1)] relative select-none`}
+          className={`hidden md:flex flex-col ${isCollapsed ? "w-14 px-2" : "w-60 px-2.5"
+            } py-3 h-screen border-r border-slate-200 dark:border-slate-800/60 bg-white dark:bg-[#010202] shrink-0 sticky top-0 left-0 z-40 justify-between transition-[width,padding] duration-200 ease-[cubic-bezier(0.2,0,0,1)] relative select-none`}
         >
           <div className="flex flex-col flex-1 min-w-0">
             {/* Header Row (Logo, Title & Toggle) */}
@@ -174,48 +174,48 @@ export function Navigation() {
                 <div key={section.id} className="flex flex-col space-y-0.5">
                   {sIdx > 0 && (
                     <div
-                      className={`my-1.5 border-t border-slate-200/80 dark:border-slate-800/60 ${
-                        isCollapsed ? "mx-1" : "mx-1.5"
-                      }`}
+                      className={`my-1.5 border-t border-slate-200/80 dark:border-slate-800/60 ${isCollapsed ? "mx-1" : "mx-1.5"
+                        }`}
                     />
                   )}
                   {section.items.map((item) => {
                     const Icon = item.icon;
-                    const active = activeRoute === item.href;
+                    const active =
+                      item.href === "/"
+                        ? activeRoute === "/"
+                        : item.href === "/brands"
+                          ? activeRoute === "/brands" || activeRoute === "/brand"
+                          : activeRoute.startsWith(item.href);
 
                     return (
                       <Link
                         key={item.href}
                         href={item.href}
                         title={isCollapsed ? item.label : undefined}
-                        className={`group relative flex items-center h-[34px] rounded-md text-[13px] font-medium transition-all duration-150 ${
-                          isCollapsed
+                        className={`group relative flex items-center h-[34px] rounded-md text-[13px] font-medium transition-all duration-150 ${isCollapsed
                             ? "w-9 h-9 mx-auto justify-center p-0"
                             : "w-full px-2.5 gap-2.5 justify-start"
-                        } ${
-                          active
+                          } ${active
                             ? "bg-indigo-50/90 dark:bg-indigo-500/[0.12] text-indigo-950 dark:text-white"
                             : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100/80 dark:hover:bg-white/[0.04]"
-                        }`}
+                          }`}
                       >
                         {/* Stationary Icon */}
                         <Icon
-                          className={`w-4 h-4 shrink-0 stroke-[1.75] transition-colors ${
-                            active
+                          className={`w-4 h-4 shrink-0 stroke-[1.75] transition-colors ${active
                               ? "text-indigo-600 dark:text-indigo-400"
                               : item.accentColor
-                              ? item.accentColor
-                              : "text-slate-400 dark:text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"
-                          }`}
+                                ? item.accentColor
+                                : "text-slate-400 dark:text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"
+                            }`}
                         />
 
                         {/* Label & Badge */}
                         <div
-                          className={`flex items-center justify-between min-w-0 flex-1 overflow-hidden transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)] ${
-                            isCollapsed
+                          className={`flex items-center justify-between min-w-0 flex-1 overflow-hidden transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)] ${isCollapsed
                               ? "opacity-0 -translate-x-2 max-w-0 pointer-events-none"
                               : "opacity-100 translate-x-0 max-w-full"
-                          }`}
+                            }`}
                         >
                           <span className="truncate whitespace-nowrap">{item.label}</span>
                           {item.badge && (
@@ -244,9 +244,8 @@ export function Navigation() {
           {/* Sidebar Bottom Footer — Settings & Lock / Sign Out */}
           <div className="pt-2">
             <div
-              className={`mb-1.5 border-t border-slate-200/80 dark:border-slate-800/60 ${
-                isCollapsed ? "mx-1" : "mx-1.5"
-              }`}
+              className={`mb-1.5 border-t border-slate-200/80 dark:border-slate-800/60 ${isCollapsed ? "mx-1" : "mx-1.5"
+                }`}
             />
             <div className="flex flex-col space-y-0.5">
               {/* Settings Button (Admin Only) */}
@@ -254,29 +253,25 @@ export function Navigation() {
                 <Link
                   href="/settings"
                   title={isCollapsed ? "Settings" : undefined}
-                  className={`group relative flex items-center h-[34px] rounded-md text-[13px] font-medium transition-all duration-150 ${
-                    isCollapsed
+                  className={`group relative flex items-center h-[34px] rounded-md text-[13px] font-medium transition-all duration-150 ${isCollapsed
                       ? "w-9 h-9 mx-auto justify-center p-0"
                       : "w-full px-2.5 gap-2.5 justify-start"
-                  } ${
-                    isSettingsActive
+                    } ${isSettingsActive
                       ? "bg-indigo-50/90 dark:bg-indigo-500/[0.12] text-indigo-950 dark:text-white"
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100/80 dark:hover:bg-white/[0.04]"
-                  }`}
+                    }`}
                 >
                   <Settings
-                    className={`w-4 h-4 shrink-0 stroke-[1.75] transition-colors ${
-                      isSettingsActive
+                    className={`w-4 h-4 shrink-0 stroke-[1.75] transition-colors ${isSettingsActive
                         ? "text-indigo-600 dark:text-indigo-400"
                         : "text-slate-400 dark:text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"
-                    }`}
+                      }`}
                   />
                   <div
-                    className={`min-w-0 flex-1 overflow-hidden transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)] ${
-                      isCollapsed
+                    className={`min-w-0 flex-1 overflow-hidden transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)] ${isCollapsed
                         ? "opacity-0 -translate-x-2 max-w-0 pointer-events-none"
                         : "opacity-100 translate-x-0 max-w-full"
-                    }`}
+                      }`}
                   >
                     <span className="truncate whitespace-nowrap block">Settings</span>
                   </div>
@@ -288,26 +283,23 @@ export function Navigation() {
                 onClick={logout}
                 disabled={isLoggingOut}
                 title={isCollapsed ? "Lock Session / Log Out" : undefined}
-                className={`group relative flex items-center h-[34px] rounded-md text-[13px] font-medium transition-all duration-150 cursor-pointer disabled:opacity-50 ${
-                  isCollapsed
+                className={`group relative flex items-center h-[34px] rounded-md text-[13px] font-medium transition-all duration-150 cursor-pointer disabled:opacity-50 ${isCollapsed
                     ? "w-9 h-9 mx-auto justify-center p-0"
                     : "w-full px-2.5 gap-2.5 justify-start"
-                } text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10`}
+                  } text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10`}
               >
                 <LogOut
-                  className={`w-4 h-4 shrink-0 stroke-[1.75] text-slate-400 dark:text-slate-400 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors ${
-                    isLoggingOut ? "animate-spin" : ""
-                  }`}
+                  className={`w-4 h-4 shrink-0 stroke-[1.75] text-slate-400 dark:text-slate-400 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors ${isLoggingOut ? "animate-spin" : ""
+                    }`}
                 />
                 <div
-                  className={`min-w-0 flex-1 overflow-hidden transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)] ${
-                    isCollapsed
+                  className={`min-w-0 flex-1 overflow-hidden transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)] ${isCollapsed
                       ? "opacity-0 -translate-x-2 max-w-0 pointer-events-none"
                       : "opacity-100 translate-x-0 max-w-full text-left"
-                  }`}
+                    }`}
                 >
                   <span className="truncate whitespace-nowrap block">
-                    {isLoggingOut ? "Locking..." : "Lock Session"}
+                    {isLoggingOut ? "Signing out..." : "Sign Out"}
                   </span>
                 </div>
               </button>
@@ -382,25 +374,28 @@ export function Navigation() {
                   )}
                   {section.items.map((item) => {
                     const Icon = item.icon;
-                    const active = activeRoute === item.href;
+                    const active =
+                      item.href === "/"
+                        ? activeRoute === "/"
+                        : item.href === "/brands"
+                          ? activeRoute === "/brands" || activeRoute === "/brand"
+                          : activeRoute.startsWith(item.href);
                     return (
                       <Link
                         key={item.href}
                         href={item.href}
                         onClick={() => setIsOpen(false)}
-                        className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                          active
+                        className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${active
                             ? "bg-indigo-50/90 dark:bg-indigo-500/[0.12] text-indigo-950 dark:text-white"
                             : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.04]"
-                        }`}
+                          }`}
                       >
                         <div className="flex items-center space-x-3">
                           <Icon
-                            className={`w-4 h-4 stroke-[1.75] ${
-                              active
+                            className={`w-4 h-4 stroke-[1.75] ${active
                                 ? "text-indigo-600 dark:text-indigo-400"
                                 : item.accentColor || "text-slate-400"
-                            }`}
+                              }`}
                           />
                           <span>{item.label}</span>
                         </div>
@@ -435,23 +430,21 @@ export function Navigation() {
               className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition-all cursor-pointer"
             >
               <PlusCircle className="w-4 h-4" />
-              <span>Add Tracked Page</span>
+              <span>Add Brand</span>
             </button>
 
             {!isStaff && (
               <Link
                 href="/settings"
                 onClick={() => setIsOpen(false)}
-                className={`flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                  isSettingsActive
+                className={`flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${isSettingsActive
                     ? "bg-indigo-50/90 dark:bg-indigo-500/[0.12] text-indigo-950 dark:text-white"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.04]"
-                }`}
+                  }`}
               >
                 <Settings
-                  className={`w-4 h-4 stroke-[1.75] ${
-                    isSettingsActive ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400"
-                  }`}
+                  className={`w-4 h-4 stroke-[1.75] ${isSettingsActive ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400"
+                    }`}
                 />
                 <span>Settings</span>
               </Link>
@@ -463,7 +456,7 @@ export function Navigation() {
               className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 rounded-lg text-sm font-medium text-rose-500 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-all cursor-pointer disabled:opacity-50"
             >
               <LogOut className={`w-4 h-4 ${isLoggingOut ? "animate-spin" : ""}`} />
-              <span>{isLoggingOut ? "Locking Session..." : "Lock Session / Sign Out"}</span>
+              <span>{isLoggingOut ? "Signing Out..." : "Sign Out"}</span>
             </button>
           </div>
         </div>

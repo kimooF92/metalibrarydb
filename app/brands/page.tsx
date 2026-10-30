@@ -1,0 +1,778 @@
+"use client";
+
+import { useEffect, useState, useCallback, useMemo, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { TrackedPage, DashboardStats, SearchTabCounts } from "@/types";
+import { StatsCards } from "@/components/stats-cards";
+import { AddUrlForm } from "@/components/add-url-form";
+import { ImportDropzone } from "@/components/import-dropzone";
+import { PagesTable } from "@/components/pages-table";
+import { RefreshCw, X, Plus, UploadCloud } from "lucide-react";
+import { useWorkspace } from "@/components/workspace-context";
+import { getSupabase } from "@/lib/supabase";
+import { ScanProgressWidget } from "@/components/scan-progress-widget";
+
+const VALID_STATUSES = ["all", "success", "pending", "scanning", "failed", "unclear"] as const;
+const VALID_SEARCH_TYPES = ["all", "page", "keyword_exact_phrase", "keyword_unordered"] as const;
+const VALID_TAGS = ["all", "breakout", "scaling", "burst", "stable", "heavy_tester", "descaling", "moderate", "emerging", "off_air", "inactive"] as const;
+const VALID_TABS = ["active", "all", "watchlist", "high_volume", "attention", "zero_ads", "needs_review"] as const;
+const VALID_SORT_COLS = ["createdAt", "displayName", "currentResults", "lastChecked", "lastCreativeScan", "status", "difference"] as const;
+const VALID_PAGE_SIZES = [25, 50, 100] as const;
+
+function getInitialDashboardState() {
+  const defaults = {
+    search: "",
+    statusFilter: "all" as (typeof VALID_STATUSES)[number],
+    searchTypeFilter: "all" as (typeof VALID_SEARCH_TYPES)[number],
+    tagFilter: "all" as (typeof VALID_TAGS)[number],
+    activeTab: "active" as (typeof VALID_TABS)[number],
+    sortBy: "createdAt" as (typeof VALID_SORT_COLS)[number],
+    sortOrder: "desc" as "asc" | "desc",
+    page: 1,
+    pageSize: 25,
+  };
+
+  if (typeof window === "undefined") return defaults;
+
+  try {
+    // 1. Load saved state from localStorage or sessionStorage
+    let saved: Partial<typeof defaults> = {};
+    const rawSaved =
+      localStorage.getItem("dashboard_filters_v2") ||
+      sessionStorage.getItem("dashboard_filters_v2");
+
+    if (rawSaved) {
+      try {
+        saved = JSON.parse(rawSaved);
+      } catch { }
+    }
+
+    // Validate saved fields against whitelist
+    if (saved.statusFilter && !VALID_STATUSES.includes(saved.statusFilter as any)) {
+      saved.statusFilter = "all";
+    }
+    if (saved.searchTypeFilter && !VALID_SEARCH_TYPES.includes(saved.searchTypeFilter as any)) {
+      saved.searchTypeFilter = "all";
+    }
+    if (saved.activeTab && !VALID_TABS.includes(saved.activeTab as any)) {
+      saved.activeTab = "active";
+    }
+    if (saved.sortBy && !VALID_SORT_COLS.includes(saved.sortBy as any)) {
+      saved.sortBy = "createdAt";
+    }
+    if (saved.sortOrder && saved.sortOrder !== "asc" && saved.sortOrder !== "desc") {
+      saved.sortOrder = "desc";
+    }
+    if (saved.pageSize && !VALID_PAGE_SIZES.includes(saved.pageSize as any)) {
+      saved.pageSize = 25;
+    }
+
+    const state = {
+      ...defaults,
+      ...saved,
+    };
+
+    // 2. Overlay individual URL query parameters if present (with strict validation)
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has("search")) state.search = urlParams.get("search") || "";
+    if (urlParams.has("status")) {
+      const s = urlParams.get("status");
+      state.statusFilter = s && VALID_STATUSES.includes(s as any) ? (s as any) : "all";
+    }
+    if (urlParams.has("searchType")) {
+      const st = urlParams.get("searchType");
+      state.searchTypeFilter = st && VALID_SEARCH_TYPES.includes(st as any) ? (st as any) : "all";
+    }
+    if (urlParams.has("tag")) {
+      const tg = urlParams.get("tag");
+      state.tagFilter = tg && VALID_TAGS.includes(tg as any) ? (tg as any) : "all";
+    }
+    if (urlParams.has("tab")) {
+      const t = urlParams.get("tab");
+      state.activeTab = t && VALID_TABS.includes(t as any) ? (t as any) : "active";
+    }
+    if (urlParams.has("sortBy")) {
+      const sb = urlParams.get("sortBy");
+      state.sortBy = sb && VALID_SORT_COLS.includes(sb as any) ? (sb as any) : "createdAt";
+    }
+    if (urlParams.has("sortOrder")) {
+      const so = urlParams.get("sortOrder");
+      state.sortOrder = so === "asc" ? "asc" : "desc";
+    }
+    if (urlParams.has("page")) state.page = Math.max(1, Number(urlParams.get("page")) || 1);
+    if (urlParams.has("limit")) {
+      const l = Number(urlParams.get("limit"));
+      state.pageSize = VALID_PAGE_SIZES.includes(l as any) ? l : 25;
+    }
+
+    return state;
+  } catch (e) {
+    console.error("Error reading dashboard params:", e);
+  }
+
+  return defaults;
+}
+
+function syncDashboardStateToUrl(state: {
+  search: string;
+  statusFilter: string;
+  searchTypeFilter: string;
+  tagFilter: string;
+  activeTab: string;
+  sortBy: string;
+  sortOrder: "asc" | "desc";
+  page: number;
+  pageSize: number;
+}) {
+  if (typeof window === "undefined") return;
+  try {
+    const query = new URLSearchParams();
+    if (state.search) query.set("search", state.search);
+    if (state.statusFilter && state.statusFilter !== "all" && VALID_STATUSES.includes(state.statusFilter as any)) {
+      query.set("status", state.statusFilter);
+    }
+    if (state.searchTypeFilter && state.searchTypeFilter !== "all" && VALID_SEARCH_TYPES.includes(state.searchTypeFilter as any)) {
+      query.set("searchType", state.searchTypeFilter);
+    }
+    if (state.tagFilter && state.tagFilter !== "all" && VALID_TAGS.includes(state.tagFilter as any)) {
+      query.set("tag", state.tagFilter);
+    }
+    if (state.activeTab && state.activeTab !== "active" && VALID_TABS.includes(state.activeTab as any)) {
+      query.set("tab", state.activeTab);
+    }
+    if (state.sortBy && state.sortBy !== "createdAt" && VALID_SORT_COLS.includes(state.sortBy as any)) {
+      query.set("sortBy", state.sortBy);
+    }
+    if (state.sortOrder && state.sortOrder !== "desc") query.set("sortOrder", state.sortOrder);
+    if (state.page && state.page > 1) query.set("page", String(state.page));
+    if (state.pageSize && state.pageSize !== 25) query.set("limit", String(state.pageSize));
+
+    const queryString = query.toString();
+    const newUrl = queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname;
+    window.history.replaceState(null, "", newUrl);
+
+    const payload = JSON.stringify(state);
+    sessionStorage.setItem("dashboard_filters_v2", payload);
+    localStorage.setItem("dashboard_filters_v2", payload);
+  } catch (e) {
+    console.error("Error syncing dashboard state:", e);
+  }
+}
+
+function DashboardContent() {
+  const searchParams = useSearchParams();
+  const { activeWorkspace } = useWorkspace();
+  const [initialLoaded] = useState(() => getInitialDashboardState());
+
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addModalTab, setAddModalTab] = useState<"single" | "bulk">("single");
+
+  const [pages, setPages] = useState<TrackedPage[]>([]);
+  const [pagesLoading, setPagesLoading] = useState(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const [search, setSearch] = useState(initialLoaded.search);
+  const [statusFilter, setStatusFilter] = useState(initialLoaded.statusFilter);
+  const [searchTypeFilter, setSearchTypeFilter] = useState(initialLoaded.searchTypeFilter);
+  const [tagFilter, setTagFilter] = useState(initialLoaded.tagFilter);
+  const [activeTab, setActiveTab] = useState(initialLoaded.activeTab);
+  const [sortBy, setSortBy] = useState(initialLoaded.sortBy);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">(initialLoaded.sortOrder);
+
+  const [page, setPage] = useState(initialLoaded.page);
+  const [pageSize, setPageSize] = useState(initialLoaded.pageSize);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [searchTabCounts, setSearchTabCounts] = useState<SearchTabCounts | null>(null);
+
+  // Active scanning page IDs for real-time progress stream
+  const scanningPageIds = useMemo(
+    () => pages.filter((p) => p.status === "scanning").map((p) => p.id),
+    [pages]
+  );
+
+  // Sync state when URL query params change (e.g. from internal router navigation or notification click)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has("search")) {
+      setSearch(urlParams.get("search") || "");
+    }
+    if (urlParams.has("status")) {
+      const s = urlParams.get("status");
+      if (s && VALID_STATUSES.includes(s as any)) setStatusFilter(s as any);
+    }
+    if (urlParams.has("searchType")) {
+      const st = urlParams.get("searchType");
+      if (st && VALID_SEARCH_TYPES.includes(st as any)) setSearchTypeFilter(st as any);
+    }
+    if (urlParams.has("tag")) {
+      const tg = urlParams.get("tag");
+      if (tg && VALID_TAGS.includes(tg as any)) setTagFilter(tg as any);
+    }
+    if (urlParams.has("tab")) {
+      const t = urlParams.get("tab");
+      if (t && VALID_TABS.includes(t as any)) setActiveTab(t as any);
+    }
+    if (urlParams.has("sortBy")) {
+      const sb = urlParams.get("sortBy");
+      if (sb && VALID_SORT_COLS.includes(sb as any)) setSortBy(sb as any);
+    }
+    if (urlParams.has("sortOrder")) {
+      const so = urlParams.get("sortOrder");
+      if (so === "asc" || so === "desc") setSortOrder(so);
+    }
+    if (urlParams.has("page")) {
+      setPage(Math.max(1, Number(urlParams.get("page")) || 1));
+    }
+    if (urlParams.has("limit")) {
+      const l = Number(urlParams.get("limit"));
+      if (VALID_PAGE_SIZES.includes(l as any)) setPageSize(l as any);
+    }
+  }, [searchParams]);
+
+  // Sync state to URL and session storage
+  useEffect(() => {
+    syncDashboardStateToUrl({
+      search,
+      statusFilter,
+      searchTypeFilter,
+      tagFilter,
+      activeTab,
+      sortBy,
+      sortOrder,
+      page,
+      pageSize,
+    });
+  }, [search, statusFilter, searchTypeFilter, activeTab, sortBy, sortOrder, page, pageSize]);
+
+  // Sync on browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const init = getInitialDashboardState();
+      setSearch(init.search);
+      setStatusFilter(init.statusFilter);
+      setSearchTypeFilter(init.searchTypeFilter);
+      setActiveTab(init.activeTab);
+      setSortBy(init.sortBy);
+      setSortOrder(init.sortOrder);
+      setPage(init.page);
+      setPageSize(init.pageSize);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  const [toast, setToast] = useState<{
+    type: "success" | "error" | "info";
+    message: string;
+  } | null>(null);
+
+  const showToast = useCallback((type: "success" | "error" | "info", message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  const fetchStats = useCallback(async (silent = false, forceRefresh = false) => {
+    if (!silent) setStatsLoading(true);
+    try {
+      const cacheBust = forceRefresh ? `?refresh=true&_t=${Date.now()}` : "";
+      const res = await fetch(`/api/stats${cacheBust}`, {
+        cache: forceRefresh ? "no-store" : "default",
+        headers: forceRefresh ? { "Cache-Control": "no-cache" } : undefined,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch stats", err);
+    } finally {
+      if (!silent) setStatsLoading(false);
+    }
+  }, []);
+
+  const fetchPages = useCallback(async (silent = false, forceRefresh = false) => {
+    // Abort previous in-flight request so stale search/filter responses never overwrite latest state
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    if (!silent) setPagesLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("page", String(page));
+      params.set("limit", String(pageSize));
+      if (search) params.set("search", search);
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      if (searchTypeFilter !== "all") params.set("searchType", searchTypeFilter);
+      if (tagFilter !== "all") params.set("tag", tagFilter);
+      if (activeTab) params.set("tab", activeTab);
+      params.set("sortBy", sortBy);
+      params.set("sortOrder", sortOrder);
+      if (forceRefresh) params.set("_t", String(Date.now()));
+
+      const res = await fetch(`/api/pages?${params.toString()}`, {
+        signal: controller.signal,
+        cache: forceRefresh ? "no-store" : "default",
+        headers: forceRefresh ? { "Cache-Control": "no-cache" } : undefined,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPages(data.data || []);
+        setTotalPages(data.pagination?.totalPages || 1);
+        setTotalCount(data.pagination?.total || 0);
+        setSearchTabCounts(data.searchTabCounts || null);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        showToast("error", errData.error || "Failed to load table pages.");
+      }
+    } catch (err: any) {
+      if (err.name === "AbortError" || err.name === "DOMException") {
+        // Request was cancelled by a newer search/filter action — silently ignore
+        return;
+      }
+      console.error("Failed to fetch pages", err);
+      showToast("error", "Network error loading table pages.");
+    } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+        if (!silent) setPagesLoading(false);
+      }
+    }
+  }, [page, pageSize, search, statusFilter, searchTypeFilter, tagFilter, activeTab, sortBy, sortOrder, showToast]);
+
+  const loadData = useCallback(async (silent = false, forceRefresh = false) => {
+    return Promise.all([
+      fetchStats(silent, forceRefresh),
+      fetchPages(silent, forceRefresh),
+    ]);
+  }, [fetchStats, fetchPages]);
+
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+
+  const handleManualRefresh = async () => {
+    if (isManualRefreshing || pagesLoading) return;
+    setIsManualRefreshing(true);
+    try {
+      await Promise.all([
+        loadData(false, true),
+        new Promise((resolve) => setTimeout(resolve, 800)),
+      ]);
+    } finally {
+      setIsManualRefreshing(false);
+    }
+  };
+
+  const handleSortChange = (col: string) => {
+    if (col === sortBy) {
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(col as any);
+      setSortOrder("desc");
+    }
+    setPage(1);
+  };
+
+  const handleResetFilters = useCallback(() => {
+    setSearch("");
+    setSearchTabCounts(null);
+    setStatusFilter("all");
+    setSearchTypeFilter("all");
+    setTagFilter("all");
+    setActiveTab("active");
+    setSortBy("createdAt");
+    setSortOrder("desc");
+    setPage(1);
+    try {
+      sessionStorage.removeItem("dashboard_filters_v2");
+      localStorage.removeItem("dashboard_filters_v2");
+      sessionStorage.removeItem("dashboard_filters");
+      localStorage.removeItem("dashboard_filters");
+      window.history.replaceState(null, "", window.location.pathname);
+    } catch (e) {
+      console.error("Error clearing dashboard filter storage:", e);
+    }
+  }, []);
+
+  // Track previous workspace ID to distinguish initial mount from an actual workspace switch
+  const prevWorkspaceIdRef = useRef<string | null>(null);
+
+  // Initial load on mount and when filters/pagination change
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Re-fetch dashboard data ONLY when the active workspace actually switches to a different one
+  useEffect(() => {
+    if (!activeWorkspace?.id) return;
+
+    if (prevWorkspaceIdRef.current === null) {
+      // First resolution on initial mount: record the id without double-fetching or forcing cache bypass
+      prevWorkspaceIdRef.current = activeWorkspace.id;
+      return;
+    }
+
+    if (prevWorkspaceIdRef.current !== activeWorkspace.id) {
+      prevWorkspaceIdRef.current = activeWorkspace.id;
+      // Workspace changed by user: fetch without forceRefresh so Redis cache can serve it immediately if warm
+      loadData(false, false);
+    }
+  }, [activeWorkspace?.id, loadData]);
+
+  // Real-time row status & ad-count updates via Supabase WebSockets (Zero polling, zero full table reloads)
+  useEffect(() => {
+    const supabase = getSupabase();
+    const channel = supabase
+      .channel("realtime-tracked-pages")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "tracked_pages",
+        },
+        (payload) => {
+          const updated = payload.new as any;
+          if (!updated?.id) return;
+
+          // In-place row patch: only the updated row reference changes, preventing whole-table re-render or flicker
+          setPages((prevPages) =>
+            prevPages.map((page) => {
+              if (page.id !== updated.id) return page;
+
+              const rawResults =
+                updated.current_results !== undefined && updated.current_results !== null
+                  ? updated.current_results
+                  : updated.currentResults !== undefined && updated.currentResults !== null
+                    ? updated.currentResults
+                    : page.currentResults;
+              const newResults = rawResults !== null && rawResults !== undefined ? Number(rawResults) : null;
+
+              const oldResults = page.currentResults;
+              const hasCountChanged = newResults !== null && oldResults !== null && newResults !== oldResults;
+              const difference = hasCountChanged ? newResults - oldResults : page.difference;
+              const previousResults = hasCountChanged ? oldResults : page.previousResults;
+
+              // Dynamically append new point to live sparkline history points
+              let historyPoints = page.historyPoints;
+              if (hasCountChanged && Array.isArray(historyPoints) && newResults !== null) {
+                historyPoints = [...historyPoints.slice(-13), newResults];
+              }
+
+              return {
+                ...page,
+                status: updated.status ?? page.status,
+                currentResults: newResults,
+                previousResults,
+                difference,
+                historyPoints,
+                lastChecked: updated.last_checked || updated.lastChecked || page.lastChecked,
+                lastSuccessAt: updated.last_success_at || updated.lastSuccessAt || page.lastSuccessAt,
+                updatedAt: updated.updated_at || updated.updatedAt || page.updatedAt,
+                holdStatus: updated.hold_status || updated.holdStatus || page.holdStatus,
+              };
+            })
+          );
+
+          // Silently sync the top summary stats (pending, scanning, completed) with fresh data
+          fetchStats(true, true);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchStats]);
+
+  // Active scan sync loop: while scans are in progress (scanning or pending > 0), poll stats every 3s
+  useEffect(() => {
+    if (!stats || (stats.scanning === 0 && stats.pending === 0)) return;
+    const interval = setInterval(() => {
+      fetchStats(true, true);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [stats?.scanning, stats?.pending, fetchStats]);
+
+  const handleRefresh = async (ids: string[]) => {
+    try {
+      // 1. Optimistic UI: mark row status as 'pending' immediately without reloading table
+      setPages((prev) =>
+        prev.map((p) => (ids.includes(p.id) ? { ...p, status: "pending" } : p))
+      );
+
+      const res = await fetch("/api/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (res.ok) {
+        showToast("info", "Scan refresh queued successfully.");
+        fetchStats(true);
+      } else {
+        showToast("error", "Failed to queue refresh.");
+      }
+    } catch (err) {
+      console.error("Refresh action failed", err);
+      showToast("error", "Failed to queue refresh.");
+    }
+  };
+
+  const handleRetry = async (ids?: string[]) => {
+    try {
+      // 1. Optimistic UI: mark retried failed pages as 'pending' immediately without reloading table
+      setPages((prev) =>
+        prev.map((p) => (!ids || ids.includes(p.id) ? { ...p, status: "pending" } : p))
+      );
+
+      const res = await fetch("/api/retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (res.ok) {
+        showToast("info", "Failed scans queued for retry.");
+        fetchStats(true);
+      } else {
+        showToast("error", "Failed to queue retry.");
+      }
+    } catch (err) {
+      console.error("Retry action failed", err);
+      showToast("error", "Failed to queue retry.");
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      const res = await fetch(`/api/page/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        showToast("success", "Tracked page deleted successfully.");
+        loadData(false, true);
+      } else {
+        showToast("error", "Failed to delete tracked page.");
+      }
+    } catch (err) {
+      console.error("Delete action failed", err);
+      showToast("error", "Network error while deleting page.");
+    }
+  };
+
+  const handleBulkDelete = async (ids: string[]) => {
+    try {
+      await Promise.all(ids.map((id) => fetch(`/api/page/${id}`, { method: "DELETE" })));
+      showToast("success", `Deleted ${ids.length} page(s) successfully.`);
+      loadData(false, true);
+    } catch (err) {
+      console.error("Bulk delete failed", err);
+      showToast("error", "Failed to delete some pages.");
+    }
+  };
+
+  return (
+    <div className="h-full flex flex-col space-y-4 overflow-y-auto md:overflow-hidden min-w-0">
+      {/* Toast Alert Banner */}
+      {toast && (
+        <div
+          className={`fixed top-20 right-6 z-50 flex items-center space-x-3 px-4 py-3 rounded-xl shadow-2xl border text-xs font-semibold animate-in slide-in-from-top-5 duration-200 ${toast.type === "success"
+              ? "bg-emerald-50 dark:bg-emerald-950/95 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/40"
+              : toast.type === "error"
+                ? "bg-rose-50 dark:bg-rose-950/95 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-500/40"
+                : "bg-indigo-50 dark:bg-indigo-950/95 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-500/40"
+            }`}
+        >
+          <span>{toast.message}</span>
+        </div>
+      )}
+      {/* Page Header (Line 2) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200 dark:border-slate-800/40">
+        <div className="flex items-center flex-wrap gap-2">
+          <h1 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight">
+            Tracked Brands
+          </h1>
+
+          {stats && (
+            <div className="flex items-center gap-1.5 ml-1">
+              <span className="inline-flex items-center gap-1 text-[11px] bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md font-semibold">
+                <span className="text-slate-400 font-normal">Monitored:</span>
+                <span>{stats.totalPages}</span>
+              </span>
+
+              <span className="inline-flex items-center gap-1 text-[11px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-md font-semibold">
+                <span className="text-emerald-600/70 dark:text-emerald-400/70 font-normal">Completed:</span>
+                <span>{stats.completed}</span>
+              </span>
+
+              {stats.failed > 0 && (
+                <span className="inline-flex items-center gap-1 text-[11px] bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-300 px-2 py-0.5 rounded-md font-semibold">
+                  <span className="text-rose-600/70 dark:text-rose-400/70 font-normal">Failed:</span>
+                  <span>{stats.failed}</span>
+                </span>
+              )}
+
+              {stats.scanning > 0 && (
+                <span className="flex items-center space-x-1 text-[11px] bg-cyan-50 dark:bg-cyan-950/80 border border-cyan-200 dark:border-cyan-500/30 text-cyan-700 dark:text-cyan-300 px-2 py-0.5 rounded-md font-semibold animate-pulse shrink-0">
+                  <RefreshCw className="w-2.5 h-2.5 animate-spin text-cyan-500 dark:text-cyan-400" />
+                  <span>Scanning {stats.scanning}...</span>
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Track URL</span>
+          </button>
+
+          <button
+            onClick={handleManualRefresh}
+            disabled={isManualRefreshing || pagesLoading}
+            title="Refresh dashboard data"
+            className="group flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer active:scale-95 disabled:opacity-60 shadow-xs hover:shadow-sm"
+          >
+            <RefreshCw
+              className={`w-3.5 h-3.5 transition-transform duration-300 ${isManualRefreshing || pagesLoading
+                  ? "animate-spin text-indigo-500"
+                  : "group-hover:rotate-90 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200"
+                }`}
+            />
+            <span>{isManualRefreshing ? "Refreshing..." : "Refresh"}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Tracked Pages Table */}
+      <PagesTable
+        pages={pages}
+        loading={pagesLoading}
+        stats={stats}
+        onRefresh={handleRefresh}
+        onRetry={handleRetry}
+        onDelete={handleDelete}
+        onBulkDelete={handleBulkDelete}
+        search={search}
+        searchTabCounts={searchTabCounts}
+        onSearchChange={(val) => {
+          setSearch(val);
+          setPage(1);
+        }}
+        statusFilter={statusFilter}
+        onStatusFilterChange={(val) => {
+          setStatusFilter(val as any);
+          setPage(1);
+        }}
+        searchTypeFilter={searchTypeFilter}
+        onSearchTypeFilterChange={(val) => {
+          setSearchTypeFilter(val as any);
+          setPage(1);
+        }}
+        tagFilter={tagFilter}
+        onTagFilterChange={(val) => {
+          setTagFilter(val as any);
+          setPage(1);
+        }}
+        activeTab={activeTab}
+        onTabChange={(tab) => {
+          setActiveTab(tab as any);
+          setPage(1);
+        }}
+        page={page}
+        pageSize={pageSize}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        onPageChange={(p) => setPage(p)}
+        onPageSizeChange={(newSize) => {
+          setPageSize(newSize);
+          setPage(1);
+        }}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onSortChange={handleSortChange}
+        onWatchlistToggle={() => loadData(true, true)}
+        onResetFilters={handleResetFilters}
+      />
+
+      {/* Track URL / Bulk File Import Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in">
+          <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
+            <button
+              onClick={() => {
+                setShowAddModal(false);
+                setAddModalTab("single");
+              }}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-200 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Modal Switcher Tabs */}
+            <div className="flex items-center space-x-2 mb-4 pb-2.5 border-b border-slate-800/80">
+              <button
+                type="button"
+                onClick={() => setAddModalTab("single")}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${addModalTab === "single"
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                  }`}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Single URL / Domain</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAddModalTab("bulk")}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${addModalTab === "bulk"
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                  }`}
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span>Bulk File Import (CSV / XLSX)</span>
+              </button>
+            </div>
+
+            {addModalTab === "single" ? (
+              <AddUrlForm
+                onSuccess={() => {
+                  setShowAddModal(false);
+                  loadData(false, true);
+                }}
+              />
+            ) : (
+              <div className="space-y-4">
+                <ImportDropzone />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Feature 2: Real-time Live Scraper Progress Bar & Step Stream */}
+      <ScanProgressWidget
+        scanningPageIds={scanningPageIds}
+        onScanFinished={() => {
+          loadData(true, true);
+        }}
+      />
+    </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <DashboardContent />
+    </Suspense>
+  );
+}

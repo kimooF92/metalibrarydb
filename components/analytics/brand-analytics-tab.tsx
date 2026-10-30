@@ -240,10 +240,10 @@ export function BrandAnalyticsTab({
           </p>
         </div>
         <Link
-          href="/pages"
+          href="/brands"
           className="inline-flex items-center space-x-1.5 px-4 py-2 text-xs font-semibold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition-all"
         >
-          <span>Go to Monitored Pages</span>
+          <span>Go to Tracked Brands</span>
         </Link>
       </div>
     );
