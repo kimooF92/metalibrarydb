@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Flame,
   Sparkles,
+  Building2,
 } from "lucide-react";
 import { SmallPagesScanBadge } from "./small-pages-scan-banner";
 import { DispatchWorkerBtn } from "./dispatch-worker-btn";
@@ -26,12 +27,13 @@ const ROUTE_INFO: Record<
   { label: string; icon: React.ComponentType<{ className?: string }> }
 > = {
   "/": { label: "Dashboard", icon: LayoutDashboard },
+  "/products": { label: "Products", icon: ShoppingBag },
+  "/brands": { label: "Tracked Brands", icon: Building2 },
+  "/analytics": { label: "Analytics", icon: BarChart3 },
   "/fresh-winners": { label: "Fresh Winners", icon: Flame },
   "/opportunities": { label: "Opportunities", icon: Sparkles },
-  "/discovery": { label: "Discover Brands", icon: Globe },
   "/spy": { label: "Ad Feed", icon: Eye },
-  "/products": { label: "Products", icon: ShoppingBag },
-  "/analytics": { label: "Analytics", icon: BarChart3 },
+  "/discovery": { label: "Discover Brands", icon: Globe },
   "/settings": { label: "Settings", icon: Settings },
   "/import": { label: "Import Brands", icon: UploadCloud },
 };

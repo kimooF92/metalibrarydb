@@ -50,10 +50,12 @@ export function Navigation() {
 
   const navSections = [
     {
-      id: "overview",
+      id: "workspace",
       items: [
         { href: "/", label: "Dashboard", icon: LayoutDashboard },
+        { href: "/products", label: "Products", icon: ShoppingBag },
         { href: "/brands", label: "Tracked Brands", icon: Building2 },
+        { href: "/analytics", label: "Analytics", icon: BarChart3 },
       ],
     },
     {
@@ -73,15 +75,8 @@ export function Navigation() {
           badge: { text: "AI", variant: "ai" as const },
           accentColor: "text-indigo-500 dark:text-indigo-400",
         },
-        { href: "/discovery", label: "Discover Brands", icon: Globe },
         { href: "/spy", label: "Ad Feed", icon: Eye },
-      ],
-    },
-    {
-      id: "catalog",
-      items: [
-        { href: "/products", label: "Products", icon: ShoppingBag },
-        { href: "/analytics", label: "Analytics", icon: BarChart3 },
+        { href: "/discovery", label: "Discover Brands", icon: Globe },
       ],
     },
   ];
@@ -90,7 +85,7 @@ export function Navigation() {
   const filteredNavSections = isStaff
     ? [
       {
-        id: "catalog",
+        id: "workspace",
         items: [
           { href: "/products", label: "Products", icon: ShoppingBag },
         ],
