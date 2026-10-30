@@ -8,7 +8,6 @@ import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 import type { FreshWinnerItem, FreshWinnersStats } from "@/types";
-
 import { getCached, setCached } from "@/lib/cache-service";
 
 export const dynamic = "force-dynamic";
@@ -42,8 +41,10 @@ export async function GET(req: NextRequest) {
     const role = (await getRoleFromRequest(req)) || "admin";
     const favColumn = role === "staff" ? scrapedProducts.isFavoriteStaff : scrapedProducts.isFavorite;
 
-    const baseCacheKey = `${activeWorkspace.id}:${role}:${windowDays}:${minCopies}:${mediaType || 'all'}:${category || 'all'}:${hasProduct}:${search || ''}:${sortBy}`;
-    const pageCacheKey = `cache:fresh_winners:${baseCacheKey}:p${page}:l${limit}`;
+    // Harmonized cache keys under workspace namespace so worker deleteByPrefix invalidates both
+    const baseCacheKey = `${role}:${windowDays}:${minCopies}:${mediaType || 'all'}:${category || 'all'}:${hasProduct}:${search || ''}:${sortBy}`;
+    const pageCacheKey = `cache:fresh_winners:${activeWorkspace.id}:p${page}:l${limit}:${baseCacheKey}`;
+    const statsCacheKey = `cache:fresh_winners:${activeWorkspace.id}:stats:${baseCacheKey}`;
 
     if (!forceRefresh) {
       const cachedPage = await getCached<any>(pageCacheKey);
@@ -57,7 +58,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Build conditions for raw SQL subquery / joins
+    // Build conditions for query
     const conditions: any[] = [
       sql`(${ads.isArchived} = false OR ${ads.isArchived} IS NULL)`,
       sql`COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) >= ${cutoffDate.toISOString()}::timestamptz`,
@@ -90,10 +91,28 @@ export async function GET(req: NextRequest) {
 
     const whereSql = and(...conditions);
 
-    // 1. Resolve aggregate market stats efficiently (cached in Redis per base filter key or queried via lean SQL)
+    // Reusable latest observation subquery:
+    // Finds the genuine latest observation per ad FIRST, then filters by active & minCopies.
+    // This prevents descaled or paused ads from resurrecting older observations!
+    const latestObsSql = sql`(
+      SELECT * FROM (
+        SELECT DISTINCT ON (ad_id)
+          id AS obs_id,
+          ad_id,
+          tracked_page_id,
+          duplication_count,
+          is_active,
+          observed_at
+        FROM ${adObservations}
+        ORDER BY ad_id, observed_at DESC
+      ) AS per_ad
+      WHERE per_ad.is_active = true
+        AND per_ad.duplication_count >= ${minCopies}
+    ) AS latest_obs`;
+
+    // 1. Resolve aggregate market stats in a single consolidated query (reducing DB egress)
     let stats: FreshWinnersStats;
     let totalBreakouts = 0;
-    const statsCacheKey = `cache:fresh_winners_stats:${baseCacheKey}`;
     const cachedStats = !forceRefresh ? await getCached<{ stats: FreshWinnersStats; total: number }>(statsCacheKey) : null;
 
     if (cachedStats) {
@@ -105,23 +124,10 @@ export async function GET(req: NextRequest) {
           totalBreakouts: sql<number>`count(*)`.mapWith(Number),
           activeBrandsCount: sql<number>`count(distinct latest_obs.tracked_page_id)`.mapWith(Number),
           videoCount: sql<number>`count(case when ${ads.mediaType} = 'video' then 1 end)`.mapWith(Number),
+          avgPrice: sql<number | null>`ROUND(AVG(NULLIF(regexp_replace(${scrapedProducts.currentPrice}, '[^0-9.]', '', 'g'), '')::numeric), 0)`.mapWith(Number),
         })
         .from(ads)
-        .innerJoin(
-          sql`(
-            SELECT DISTINCT ON (ad_id)
-              id AS obs_id,
-              ad_id,
-              tracked_page_id,
-              duplication_count,
-              observed_at
-            FROM ${adObservations}
-            WHERE ${adObservations.isActive} = true
-              AND ${adObservations.duplicationCount} >= ${minCopies}
-            ORDER BY ad_id, observed_at DESC
-          ) AS latest_obs`,
-          sql`latest_obs.ad_id = ${ads.id}`
-        )
+        .innerJoin(latestObsSql, sql`latest_obs.ad_id = ${ads.id}`)
         .leftJoin(scrapedProducts, eq(ads.productId, scrapedProducts.id))
         .leftJoin(trackedPages, sql`tracked_pages.id = latest_obs.tracked_page_id`)
         .where(whereSql);
@@ -134,76 +140,37 @@ export async function GET(req: NextRequest) {
       let medianPrice: string | null = null;
 
       if (totalBreakouts > 0) {
-        const [topCatRow, priceRow] = await Promise.all([
-          db
-            .select({
-              category: scrapedProducts.category,
-            })
-            .from(ads)
-            .innerJoin(
-              sql`(
-                SELECT DISTINCT ON (ad_id)
-                  id AS obs_id,
-                  ad_id,
-                  tracked_page_id,
-                  duplication_count,
-                  observed_at
-                FROM ${adObservations}
-                WHERE ${adObservations.isActive} = true
-                  AND ${adObservations.duplicationCount} >= ${minCopies}
-                ORDER BY ad_id, observed_at DESC
-              ) AS latest_obs`,
-              sql`latest_obs.ad_id = ${ads.id}`
-            )
-            .leftJoin(scrapedProducts, eq(ads.productId, scrapedProducts.id))
-            .leftJoin(trackedPages, sql`tracked_pages.id = latest_obs.tracked_page_id`)
-            .where(and(whereSql, sql`${scrapedProducts.category} IS NOT NULL`))
-            .groupBy(scrapedProducts.category)
-            .orderBy(desc(sql`count(*)`))
-            .limit(1),
+        // Resolve top category only if records exist
+        const [topCatRow] = await db
+          .select({
+            category: scrapedProducts.category,
+          })
+          .from(ads)
+          .innerJoin(latestObsSql, sql`latest_obs.ad_id = ${ads.id}`)
+          .leftJoin(scrapedProducts, eq(ads.productId, scrapedProducts.id))
+          .leftJoin(trackedPages, sql`tracked_pages.id = latest_obs.tracked_page_id`)
+          .where(and(whereSql, sql`${scrapedProducts.category} IS NOT NULL`))
+          .groupBy(scrapedProducts.category)
+          .orderBy(desc(sql`count(*)`))
+          .limit(1);
 
-          db
-            .select({
-              avgPrice: sql<number>`ROUND(AVG(NULLIF(regexp_replace(${scrapedProducts.currentPrice}, '[^0-9.]', '', 'g'), '')::numeric), 0)`.mapWith(Number),
-            })
-            .from(ads)
-            .innerJoin(
-              sql`(
-                SELECT DISTINCT ON (ad_id)
-                  id AS obs_id,
-                  ad_id,
-                  tracked_page_id,
-                  duplication_count,
-                  observed_at
-                FROM ${adObservations}
-                WHERE ${adObservations.isActive} = true
-                  AND ${adObservations.duplicationCount} >= ${minCopies}
-                ORDER BY ad_id, observed_at DESC
-              ) AS latest_obs`,
-              sql`latest_obs.ad_id = ${ads.id}`
-            )
-            .leftJoin(scrapedProducts, eq(ads.productId, scrapedProducts.id))
-            .leftJoin(trackedPages, sql`tracked_pages.id = latest_obs.tracked_page_id`)
-            .where(and(whereSql, sql`${scrapedProducts.currentPrice} IS NOT NULL`)),
-        ]);
+        topCategory = topCatRow?.category || null;
 
-        topCategory = topCatRow?.[0]?.category || null;
-        if (priceRow?.[0]?.avgPrice) {
-          const sym = activeWorkspace.currencySymbol || "TND";
-          medianPrice = `${priceRow[0].avgPrice} ${sym}`;
+        if (statsRow?.avgPrice && statsRow.avgPrice > 0) {
+          const sym = activeWorkspace.currencySymbol || "DT";
+          medianPrice = `${statsRow.avgPrice} ${sym}`;
         }
       }
 
-      const sym = activeWorkspace.currencySymbol || "TND";
       stats = {
         totalBreakouts,
         videoRatePercent,
-        topCategory: topCategory || "Multi-Niche",
-        medianPrice: medianPrice || `49 ${sym}`,
+        topCategory: topCategory || null,
+        medianPrice: medianPrice || null,
         activeBrandsCount: Number(statsRow?.activeBrandsCount || 0),
       };
 
-      await setCached(statsCacheKey, { stats, total: totalBreakouts }, FRESH_WINNERS_REDIS_TTL).catch(() => {});
+      await setCached(statsCacheKey, { stats, total: totalBreakouts }, FRESH_WINNERS_REDIS_TTL).catch(() => { });
     }
 
     if (totalBreakouts === 0) {
@@ -228,7 +195,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 2. Sort directly in SQL to paginate at the database level (returns only ~24 rows max, NOT 12,000+)
+    // 2. Sort directly in SQL with distinct behavior for each option
     let sqlOrderBy;
     if (sortBy === "duplication_count") {
       sqlOrderBy = [
@@ -241,7 +208,13 @@ export async function GET(req: NextRequest) {
         desc(sql`latest_obs.duplication_count`),
       ];
     } else if (sortBy === "winner_score") {
+      // Direct SQL approximation of the composite winner score:
+      // Combines scale volume (duplication count) + freshness velocity (copies / day)
       sqlOrderBy = [
+        desc(sql`(
+          LEAST(50, latest_obs.duplication_count * 8) + 
+          LEAST(50, (latest_obs.duplication_count::numeric / GREATEST(1, EXTRACT(DAY FROM NOW() - COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt})))) * 15)
+        )`),
         desc(sql`latest_obs.duplication_count`),
         desc(sql`COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt})`),
       ];
@@ -293,21 +266,7 @@ export async function GET(req: NextRequest) {
         pageWatchlisted: trackedPages.isWatchlisted,
       })
       .from(ads)
-      .innerJoin(
-        sql`(
-          SELECT DISTINCT ON (ad_id)
-            id AS obs_id,
-            ad_id,
-            tracked_page_id,
-            duplication_count,
-            observed_at
-          FROM ${adObservations}
-          WHERE ${adObservations.isActive} = true
-            AND ${adObservations.duplicationCount} >= ${minCopies}
-          ORDER BY ad_id, observed_at DESC
-        ) AS latest_obs`,
-        sql`latest_obs.ad_id = ${ads.id}`
-      )
+      .innerJoin(latestObsSql, sql`latest_obs.ad_id = ${ads.id}`)
       .leftJoin(scrapedProducts, eq(ads.productId, scrapedProducts.id))
       .leftJoin(trackedPages, sql`tracked_pages.id = latest_obs.tracked_page_id`)
       .where(whereSql)
@@ -329,7 +288,8 @@ export async function GET(req: NextRequest) {
       });
 
       const days = metrics.daysRunning;
-      const velocityScore = Math.round((dup / Math.max(1, days)) * 15 + metrics.winnerScore * 0.5);
+      // Clean normalized velocity score (0-100) representing copies scaled per day
+      const velocityScore = Math.min(100, Math.round((dup / Math.max(1, days)) * 20));
       const scalingPattern = classifyScalingPattern(null, row.pageCurrentResults);
 
       return {
@@ -357,20 +317,20 @@ export async function GET(req: NextRequest) {
         velocityScore,
         product: row.productId
           ? {
-              id: row.productId,
-              url: row.productUrl || "",
-              domain: row.productDomain || "",
-              title: row.productTitle || "",
-              currentPrice: row.productCurrentPrice,
-              originalPrice: row.productOriginalPrice,
-              currency: row.productCurrency,
-              discountOrOffer: row.productDiscountOrOffer,
-              mainImageUrl: row.productMainImageUrl,
-              category: row.productCategory,
-              storePlatform: row.productStorePlatform,
-              isFavorite: Boolean(row.productIsFavorite),
-              supplierUrls: row.productSupplierUrls,
-            }
+            id: row.productId,
+            url: row.productUrl || "",
+            domain: row.productDomain || "",
+            title: row.productTitle || "",
+            currentPrice: row.productCurrentPrice,
+            originalPrice: row.productOriginalPrice,
+            currency: row.productCurrency,
+            discountOrOffer: row.productDiscountOrOffer,
+            mainImageUrl: row.productMainImageUrl,
+            category: row.productCategory,
+            storePlatform: row.productStorePlatform,
+            isFavorite: Boolean(row.productIsFavorite),
+            supplierUrls: row.productSupplierUrls,
+          }
           : null,
         brand: {
           id: row.trackedPageId,
@@ -396,7 +356,7 @@ export async function GET(req: NextRequest) {
     };
 
     if (!forceRefresh) {
-      await setCached(pageCacheKey, responsePayload, FRESH_WINNERS_REDIS_TTL).catch(() => {});
+      await setCached(pageCacheKey, responsePayload, FRESH_WINNERS_REDIS_TTL).catch(() => { });
     }
 
     return NextResponse.json(responsePayload, {

@@ -128,10 +128,10 @@ export function calculateWinnerScore(input: WinnerCalculationInput): WinnerCalcu
 
   const winnerScore = Math.min(100, Math.max(1, Math.round(rawScore)));
 
-  // Breakout: Validated running age (7 to 30 days) with aggressive scale (>= 3 copies or surge)
+  // Breakout: Active campaign up to 30 days old with aggressive scale (>= 3 copies or surge)
+  // Supports both fresh breakout launches (< 7 days) and validated scale (7 to 30 days)
   const isBreakout = Boolean(
     isActive &&
-    daysRunning >= 7 &&
     daysRunning <= 30 &&
     (dup >= 3 || (input.recentSurge && input.recentSurge >= 3))
   );
@@ -145,8 +145,8 @@ export function calculateWinnerScore(input: WinnerCalculationInput): WinnerCalcu
     // B. Surge Component (0-35)
     const surgeVal = input.recentSurge || (dup >= 3 ? dup : 3);
     const surgeComp = surgeVal >= 8 ? 35 : surgeVal >= 5 ? 25 : surgeVal >= 3 ? 20 : 15;
-    // C. Longevity Sweet-Spot Component (0-15)
-    const longevityComp = (daysRunning >= 11 && daysRunning <= 18) ? 15 : (daysRunning >= 7 && daysRunning <= 10) ? 12 : 10;
+    // C. Longevity Sweet-Spot Component (0-15) - rewards fast fresh scale as well as validated run
+    const longevityComp = (daysRunning >= 11 && daysRunning <= 18) ? 15 : (daysRunning <= 10) ? 12 : 10;
     // D. Content Component (0-10)
     const contentComp = (input.mediaType === "video" ? 4 : 0) + (creativesCount >= 5 ? 6 : creativesCount >= 3 ? 3 : 0);
 
