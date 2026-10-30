@@ -14,13 +14,12 @@ import {
   Flame,
   Sparkles,
 } from "lucide-react";
-import { ThemeToggle } from "./theme-toggle";
 import { SmallPagesScanBadge } from "./small-pages-scan-banner";
 import { DispatchWorkerBtn } from "./dispatch-worker-btn";
 import { NotificationCenter } from "./notification-center";
 import { WorkspaceSwitcher } from "./workspace-switcher";
+import { ProfileMenu } from "./profile-menu";
 import { useAuth } from "./auth-context";
-import { useLogout } from "@/hooks/use-logout";
 
 const ROUTE_INFO: Record<
   string,
@@ -40,7 +39,6 @@ const ROUTE_INFO: Record<
 export function TopBar() {
   const pathname = usePathname();
   const { isStaff } = useAuth();
-  const { logout, isLoggingOut } = useLogout();
 
   const currentRoute =
     ROUTE_INFO[pathname] ||
@@ -85,27 +83,13 @@ export function TopBar() {
         <WorkspaceSwitcher />
       </div>
 
-      {/* Right: Actions (Run Worker, Notification Center, Theme Toggle & Logout) */}
+      {/* Right: Actions (Run Worker, Notification Center & Super Admin Profile) */}
       <div className="flex items-center space-x-2">
         {!isStaff && <DispatchWorkerBtn variant="navbar" />}
         {!isStaff && <SmallPagesScanBadge />}
         <NotificationCenter layout="navbar" />
-        <ThemeToggle size="sm" />
-
-        {isStaff && (
-          <>
-            <div className="h-4 w-px bg-slate-200 dark:border-slate-800 mx-1" />
-            <button
-              onClick={logout}
-              disabled={isLoggingOut}
-              className="flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-slate-200 dark:border-slate-800 hover:border-rose-200 dark:hover:border-rose-900/50 transition-all cursor-pointer disabled:opacity-50"
-              title="Sign out of Staff session"
-            >
-              <LogOut className={`w-3.5 h-3.5 ${isLoggingOut ? "animate-spin" : ""}`} />
-              <span>{isLoggingOut ? "Signing out..." : "Sign Out"}</span>
-            </button>
-          </>
-        )}
+        <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-0.5" />
+        <ProfileMenu layout="topbar" />
       </div>
     </header>
   );

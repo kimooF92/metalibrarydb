@@ -19,6 +19,7 @@ import {
   Flame,
 } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
+import { ProfileMenu } from "./profile-menu";
 import { useSidebar } from "@/components/sidebar-context";
 import { SmallPagesScanBadge } from "./small-pages-scan-banner";
 import { NotificationCenter } from "./notification-center";
@@ -269,69 +270,13 @@ export function Navigation() {
             </nav>
           </div>
 
-          {/* Sidebar Bottom Footer — Settings & Lock / Sign Out */}
+          {/* Sidebar Bottom Footer — Super Admin Profile Menu */}
           <div className="pt-2">
             <div
               className={`mb-1.5 border-t border-slate-200/80 dark:border-slate-800/60 ${isCollapsed ? "mx-1" : "mx-1.5"
                 }`}
             />
-            <div className="flex flex-col space-y-0.5">
-              {/* Settings Button (Admin Only) */}
-              {!isStaff && (
-                <Link
-                  href="/settings"
-                  title={isCollapsed ? "Settings" : undefined}
-                  className={`group relative flex items-center h-[34px] rounded-md text-[13px] font-medium transition-all duration-150 ${isCollapsed
-                      ? "w-9 h-9 mx-auto justify-center p-0"
-                      : "w-full px-2.5 gap-2.5 justify-start"
-                    } ${isSettingsActive
-                      ? "bg-indigo-50/90 dark:bg-indigo-500/[0.12] text-indigo-950 dark:text-white"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100/80 dark:hover:bg-white/[0.04]"
-                    }`}
-                >
-                  <Settings
-                    className={`w-4 h-4 shrink-0 stroke-[1.75] transition-colors ${isSettingsActive
-                        ? "text-indigo-600 dark:text-indigo-400"
-                        : "text-slate-400 dark:text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"
-                      }`}
-                  />
-                  <div
-                    className={`min-w-0 flex-1 overflow-hidden transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)] ${isCollapsed
-                        ? "opacity-0 -translate-x-2 max-w-0 pointer-events-none"
-                        : "opacity-100 translate-x-0 max-w-full"
-                      }`}
-                  >
-                    <span className="truncate whitespace-nowrap block">Settings</span>
-                  </div>
-                </Link>
-              )}
-
-              {/* Logout / Lock Session */}
-              <button
-                onClick={logout}
-                disabled={isLoggingOut}
-                title={isCollapsed ? "Lock Session / Log Out" : undefined}
-                className={`group relative flex items-center h-[34px] rounded-md text-[13px] font-medium transition-all duration-150 cursor-pointer disabled:opacity-50 ${isCollapsed
-                    ? "w-9 h-9 mx-auto justify-center p-0"
-                    : "w-full px-2.5 gap-2.5 justify-start"
-                  } text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10`}
-              >
-                <LogOut
-                  className={`w-4 h-4 shrink-0 stroke-[1.75] text-slate-400 dark:text-slate-400 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors ${isLoggingOut ? "animate-spin" : ""
-                    }`}
-                />
-                <div
-                  className={`min-w-0 flex-1 overflow-hidden transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)] ${isCollapsed
-                      ? "opacity-0 -translate-x-2 max-w-0 pointer-events-none"
-                      : "opacity-100 translate-x-0 max-w-full text-left"
-                    }`}
-                >
-                  <span className="truncate whitespace-nowrap block">
-                    {isLoggingOut ? "Signing out..." : "Sign Out"}
-                  </span>
-                </div>
-              </button>
-            </div>
+            <ProfileMenu layout="sidebar" />
           </div>
         </header>
       )}
@@ -360,18 +305,8 @@ export function Navigation() {
         <div className="flex items-center space-x-2">
           {!isStaff && <SmallPagesScanBadge />}
           <NotificationCenter layout="navbar" />
-          <ThemeToggle size="sm" />
-          {isStaff ? (
-            <button
-              onClick={logout}
-              disabled={isLoggingOut}
-              className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/40 transition-colors cursor-pointer disabled:opacity-50"
-              title="Sign Out"
-            >
-              <LogOut className={`w-3.5 h-3.5 ${isLoggingOut ? "animate-spin" : ""}`} />
-              <span>Exit</span>
-            </button>
-          ) : (
+          <ProfileMenu layout="mobile" />
+          {!isStaff && (
             <button
               onClick={() => setIsOpen(!isOpen)}
               aria-label={isOpen ? "Close menu" : "Open menu"}
