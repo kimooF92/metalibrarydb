@@ -1,6 +1,6 @@
 "use client";
 
-import { Flame, Video, TrendingUp, Tag, RefreshCw } from "lucide-react";
+import { Flame, Video, TrendingUp, Tag, Sparkles, RefreshCw } from "lucide-react";
 import type { FreshWinnersStats } from "@/types";
 
 interface FreshWinnersHeaderProps {
@@ -16,135 +16,129 @@ export function FreshWinnersHeader({
   onRefresh,
   windowDays = "7d",
 }: FreshWinnersHeaderProps) {
-  const windowLabel =
-    windowDays === "3d" ? "Last 72 Hours" : windowDays === "14d" ? "Past 14 Days" : "Past 7 Days";
+  const windowLabel = windowDays === "3d" ? "Last 72 Hours" : windowDays === "14d" ? "Past 14 Days" : "Past 7 Days";
 
   return (
-    <div className="space-y-3">
-      {/* Header Row: Matching /products & /dashboard style */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-border">
+    <div className="space-y-6">
+      {/* Top Banner Row */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-rose-500/10 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center">
-              <Flame className="w-4 h-4 fill-rose-500/20" />
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-pink-500 via-rose-500 to-amber-500 flex items-center justify-center shadow-lg shadow-rose-500/25 ring-2 ring-rose-500/30">
+              <Flame className="w-5 h-5 text-white fill-white" />
             </div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-black text-foreground tracking-tight">
-                Fresh Winners
-              </h1>
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
-              </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                  Fresh Winners
+                </h1>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 shadow-xs">
+                  Trending Now
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                New ads and products quickly gaining traction across Tunisia.
+              </p>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Recently launched ad creatives and products gaining rapid scale across competitor stores.
-          </p>
         </div>
 
         {/* Refresh button */}
         {onRefresh && (
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 self-start md:self-auto">
             <button
               onClick={onRefresh}
               disabled={isLoading}
-              title="Refresh winners feed"
-              className="flex items-center space-x-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer disabled:opacity-50 shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-all shadow-xs cursor-pointer disabled:opacity-50"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-rose-500" : "text-slate-400"}`} />
-              <span className="text-[11px]">{isLoading ? "Updating..." : "Refresh Feed"}</span>
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-rose-500" : ""}`} />
+              <span>Refresh Feed</span>
             </button>
           </div>
         )}
       </div>
 
-      {/* 4 Executive KPI Cards (Matching /dashboard and /products theme) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* KPI 1: Fresh Scalers */}
-        <div className="group p-3.5 rounded-xl bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200 shadow-xs hover:shadow-sm">
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
-            <span className="flex items-center gap-1.5">
-              <Flame className="w-3.5 h-3.5 text-rose-500" />
-              <span>Scaling Ads</span>
+      {/* 4 Market Pulse Metric Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* Card 1: Fresh Scalers */}
+        <div className="relative overflow-hidden rounded-2xl border border-rose-500/20 bg-gradient-to-br from-rose-500/[0.04] via-pink-500/[0.02] to-amber-500/[0.04] p-4 dark:border-rose-500/25 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Rising Ads</span>
+            <div className="w-7 h-7 rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+              <Flame className="w-4 h-4 fill-rose-500/20" />
+            </div>
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+              {stats?.totalBreakouts ?? (isLoading ? "..." : 0)}
             </span>
-            <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded-md">
+            <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
               {windowLabel}
             </span>
           </div>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              {stats?.totalBreakouts ?? (isLoading ? "--" : 0)}
-            </span>
-          </div>
-          <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-            <span>
-              <strong className="text-slate-700 dark:text-slate-200">{stats?.activeBrandsCount ?? 0}</strong> brands scaling
-            </span>
-          </div>
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 truncate">
+            {stats?.activeBrandsCount ?? 0} brands scaling up
+          </p>
         </div>
 
-        {/* KPI 2: Video Rate */}
-        <div className="group p-3.5 rounded-xl bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200 shadow-xs hover:shadow-sm">
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
-            <span className="flex items-center gap-1.5">
-              <Video className="w-3.5 h-3.5 text-indigo-500" />
-              <span>Video Share</span>
-            </span>
-            <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 rounded-md">
-              Creatives
-            </span>
+        {/* Card 2: Video Rate */}
+        <div className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Video Share</span>
+            <div className="w-7 h-7 rounded-xl bg-purple-500/15 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+              <Video className="w-4 h-4" />
+            </div>
           </div>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
               {stats?.videoRatePercent ?? 0}%
             </span>
+            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+              of winners
+            </span>
           </div>
-          <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-            <span>Video ad formats</span>
-          </div>
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 truncate">
+            Video ad creatives
+          </p>
         </div>
 
-        {/* KPI 3: Top Category */}
-        <div className="group p-3.5 rounded-xl bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200 shadow-xs hover:shadow-sm">
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
-            <span className="flex items-center gap-1.5">
-              <TrendingUp className="w-3.5 h-3.5 text-amber-500" />
-              <span>Top Category</span>
-            </span>
-            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-md">
-              Niche
-            </span>
+        {/* Card 3: Top Scaling Niche */}
+        <div className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Top Category</span>
+            <div className="w-7 h-7 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+              <TrendingUp className="w-4 h-4" />
+            </div>
           </div>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-base md:text-lg font-black text-slate-900 dark:text-white tracking-tight truncate max-w-[180px]">
-              {stats?.topCategory || "—"}
+          <div className="mt-2 flex items-baseline gap-1.5">
+            <span className="text-lg font-black tracking-tight text-slate-900 dark:text-white truncate">
+              {stats?.topCategory || "General & Other"}
             </span>
           </div>
-          <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-            <span>Most duplicated niche</span>
-          </div>
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 truncate">
+            Fastest growing category
+          </p>
         </div>
 
-        {/* KPI 4: Average Winning Price */}
-        <div className="group p-3.5 rounded-xl bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200 shadow-xs hover:shadow-sm">
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
-            <span className="flex items-center gap-1.5">
-              <Tag className="w-3.5 h-3.5 text-emerald-500" />
-              <span>Average Price</span>
-            </span>
-            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-md">
-              Offer
-            </span>
+        {/* Card 4: Median Winning Price */}
+        <div className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Average Price</span>
+            <div className="w-7 h-7 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+              <Tag className="w-4 h-4" />
+            </div>
           </div>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
               {stats?.medianPrice || "—"}
             </span>
+            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+              typical order
+            </span>
           </div>
-          <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-            <span>Average store price</span>
-          </div>
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 truncate">
+            Optimal price for Tunisian COD
+          </p>
         </div>
       </div>
     </div>
