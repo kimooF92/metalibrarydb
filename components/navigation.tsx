@@ -271,7 +271,7 @@ export function Navigation() {
               className={`mb-1.5 border-t border-slate-200/80 dark:border-slate-800/60 ${isCollapsed ? "mx-1" : "mx-1.5"
                 }`}
             />
-            <ProfileMenu layout="sidebar" />
+            <ProfileMenu />
           </div>
         </header>
       )}
@@ -300,7 +300,6 @@ export function Navigation() {
         <div className="flex items-center space-x-2">
           {!isStaff && <SmallPagesScanBadge />}
           <NotificationCenter layout="navbar" />
-          <ProfileMenu layout="mobile" />
           {!isStaff && (
             <button
               onClick={() => setIsOpen(!isOpen)}
@@ -402,31 +401,7 @@ export function Navigation() {
               <span>Add Brand</span>
             </button>
 
-            {!isStaff && (
-              <Link
-                href="/settings"
-                onClick={() => setIsOpen(false)}
-                className={`flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${isSettingsActive
-                    ? "bg-indigo-50/90 dark:bg-indigo-500/[0.12] text-indigo-950 dark:text-white"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.04]"
-                  }`}
-              >
-                <Settings
-                  className={`w-4 h-4 stroke-[1.75] ${isSettingsActive ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400"
-                    }`}
-                />
-                <span>Settings</span>
-              </Link>
-            )}
-
-            <button
-              onClick={logout}
-              disabled={isLoggingOut}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 rounded-lg text-sm font-medium text-rose-500 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-all cursor-pointer disabled:opacity-50"
-            >
-              <LogOut className={`w-4 h-4 ${isLoggingOut ? "animate-spin" : ""}`} />
-              <span>{isLoggingOut ? "Signing Out..." : "Sign Out"}</span>
-            </button>
+            <ProfileMenu />
           </div>
         </div>
       )}

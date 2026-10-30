@@ -19,7 +19,6 @@ import { SmallPagesScanBadge } from "./small-pages-scan-banner";
 import { DispatchWorkerBtn } from "./dispatch-worker-btn";
 import { NotificationCenter } from "./notification-center";
 import { WorkspaceSwitcher } from "./workspace-switcher";
-import { ProfileMenu } from "./profile-menu";
 import { useAuth } from "./auth-context";
 
 const ROUTE_INFO: Record<
@@ -85,13 +84,11 @@ export function TopBar() {
         <WorkspaceSwitcher />
       </div>
 
-      {/* Right: Actions (Run Worker, Notification Center & Super Admin Profile) */}
+      {/* Right: Actions (Run Worker, Notification Center) */}
       <div className="flex items-center space-x-2">
         {!isStaff && <DispatchWorkerBtn variant="navbar" />}
         {!isStaff && <SmallPagesScanBadge />}
         <NotificationCenter layout="navbar" />
-        <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-0.5" />
-        <ProfileMenu layout="topbar" />
       </div>
     </header>
   );

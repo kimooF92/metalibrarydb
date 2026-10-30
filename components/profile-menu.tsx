@@ -1,21 +1,15 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Settings,
-  LogOut,
   Lock,
   Sun,
   Moon,
-  Shield,
-  ShieldCheck,
-  Check,
   ChevronsUpDown,
   ChevronRight,
-  User,
-  Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/components/auth-context";
 import { useLogout } from "@/hooks/use-logout";
@@ -23,13 +17,13 @@ import { useSidebar } from "@/components/sidebar-context";
 import { applyTheme, getStoredTheme, onThemeChange, type Theme } from "@/lib/theme-controller";
 
 interface ProfileMenuProps {
-  layout?: "sidebar" | "topbar" | "mobile";
+  layout?: "sidebar";
   className?: string;
 }
 
 export function ProfileMenu({ layout = "sidebar", className = "" }: ProfileMenuProps) {
   const pathname = usePathname();
-  const { isStaff, role } = useAuth();
+  const { isStaff } = useAuth();
   const { logout, isLoggingOut } = useLogout();
   const { isCollapsed } = useSidebar();
 
@@ -75,102 +69,62 @@ export function ProfileMenu({ layout = "sidebar", className = "" }: ProfileMenuP
   const displayRole = isStaff ? "Restricted Access" : "Full Control";
   const initials = isStaff ? "ST" : "SA";
 
-  // Position styles based on trigger placement
-  const getPopoverPositionClass = () => {
-    if (layout === "topbar" || layout === "mobile") {
-      return "top-full right-0 mt-2";
-    }
-    // Sidebar
-    if (isCollapsed) {
-      return "bottom-0 left-full ml-3";
-    }
-    return "bottom-full left-0 mb-2";
-  };
-
   return (
     <div ref={menuRef} className={`relative ${className}`}>
-      {/* Trigger: TopBar / Mobile Variant */}
-      {(layout === "topbar" || layout === "mobile") && (
+      {/* Sidebar Trigger */}
+      {isCollapsed ? (
         <button
           type="button"
           onClick={() => setIsOpen((prev) => !prev)}
-          className="flex items-center space-x-2 p-1 pl-1.5 pr-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/60 border border-transparent hover:border-slate-200 dark:hover:border-slate-800 transition-all cursor-pointer group"
-          title={`${displayName} Profile & Preferences`}
-          aria-expanded={isOpen}
+          aria-label={`${displayName} menu`}
+          title={`${displayName} - Settings, Theme & Session`}
+          className="w-9 h-9 mx-auto rounded-lg flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors relative cursor-pointer group outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
         >
-          <div className="relative">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-500 flex items-center justify-center text-white text-[11px] font-bold tracking-tight shadow-sm shadow-indigo-500/20 ring-1 ring-white/20">
-              {initials}
+          {/* Solid Mono Avatar */}
+          <div className="w-7 h-7 rounded-md bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-950 flex items-center justify-center text-[10px] font-mono font-bold tracking-tight shadow-xs border border-slate-700/60 dark:border-slate-300">
+            {initials}
+          </div>
+          <span className="absolute bottom-1 right-1 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#010202]" />
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setIsOpen((prev) => !prev)}
+          className="w-full flex items-center justify-between p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/[0.05] border border-transparent hover:border-slate-200/60 dark:hover:border-slate-800 transition-all cursor-pointer group text-left outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+        >
+          <div className="flex items-center space-x-2.5 min-w-0">
+            {/* Solid Mono Avatar */}
+            <div className="relative shrink-0">
+              <div className="w-7 h-7 rounded-md bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-950 flex items-center justify-center text-[11px] font-mono font-bold tracking-tight shadow-xs border border-slate-700/60 dark:border-slate-300">
+                {initials}
+              </div>
+              <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#010202]" />
             </div>
-            <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#010202]" />
+            <div className="min-w-0 flex-1 truncate">
+              <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 block truncate group-hover:text-slate-950 dark:group-hover:text-white transition-colors">
+                {displayName}
+              </span>
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 block truncate font-medium">
+                {displayRole}
+              </span>
+            </div>
           </div>
-
-          <div className="hidden sm:flex flex-col text-left">
-            <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-              {displayName}
-            </span>
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium leading-none">
-              {isStaff ? "Staff" : "Admin"}
-            </span>
-          </div>
-
-          <ChevronsUpDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 ml-0.5" />
+          <ChevronsUpDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 shrink-0" />
         </button>
       )}
 
-      {/* Trigger: Sidebar Variant */}
-      {layout === "sidebar" && (
-        <>
-          {isCollapsed ? (
-            <button
-              type="button"
-              onClick={() => setIsOpen((prev) => !prev)}
-              aria-label={`${displayName} menu`}
-              title={`${displayName} - Settings, Theme & Session`}
-              className="w-9 h-9 mx-auto rounded-lg flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors relative cursor-pointer group outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-            >
-              <div className="w-7 h-7 rounded-md bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-500 flex items-center justify-center text-white text-[10px] font-black tracking-tight shadow-sm ring-1 ring-white/20">
-                {initials}
-              </div>
-              <span className="absolute bottom-1 right-1 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#010202]" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setIsOpen((prev) => !prev)}
-              className="w-full flex items-center justify-between p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/[0.05] border border-transparent hover:border-slate-200/60 dark:hover:border-slate-800 transition-all cursor-pointer group text-left outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-            >
-              <div className="flex items-center space-x-2.5 min-w-0">
-                <div className="relative shrink-0">
-                  <div className="w-7 h-7 rounded-md bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-500 flex items-center justify-center text-white text-[11px] font-black tracking-tight shadow-sm shadow-indigo-500/20 ring-1 ring-white/20">
-                    {initials}
-                  </div>
-                  <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#010202]" />
-                </div>
-                <div className="min-w-0 flex-1 truncate">
-                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 block truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                    {displayName}
-                  </span>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 block truncate font-medium">
-                    {displayRole}
-                  </span>
-                </div>
-              </div>
-              <ChevronsUpDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 shrink-0" />
-            </button>
-          )}
-        </>
-      )}
-
-      {/* Popover Dropdown Card */}
+      {/* Popover Dropdown Card (Opens upwards or sideways from sidebar) */}
       {isOpen && (
         <div
-          className={`absolute ${getPopoverPositionClass()} w-68 rounded-2xl bg-white dark:bg-[#0B0F17] border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-900/10 dark:shadow-black/50 z-50 p-2 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md select-none`}
+          className={`absolute ${
+            isCollapsed ? "bottom-0 left-full ml-3" : "bottom-full left-0 mb-2"
+          } w-68 rounded-2xl bg-white dark:bg-[#0B0F17] border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-900/10 dark:shadow-black/50 z-50 p-2 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md select-none`}
         >
           {/* Section 1: User Identity Card */}
           <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80 mb-2">
             <div className="flex items-center space-x-2.5">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-500 flex items-center justify-center text-white text-xs font-black shadow-sm ring-1 ring-white/20 shrink-0">
+              {/* Solid Mono Identity Avatar */}
+              <div className="w-8 h-8 rounded-lg bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-950 flex items-center justify-center text-xs font-mono font-bold shadow-xs border border-slate-700/60 dark:border-slate-300 shrink-0">
                 {initials}
               </div>
               <div className="min-w-0 flex-1">
@@ -178,7 +132,7 @@ export function ProfileMenu({ layout = "sidebar", className = "" }: ProfileMenuP
                   <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
                     {displayName}
                   </span>
-                  <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold tracking-tight bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30">
+                  <span className="px-1.5 py-0.2 rounded-md text-[9px] font-mono font-bold tracking-tight bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300/60 dark:border-slate-700">
                     {isStaff ? "STAFF" : "ROOT"}
                   </span>
                 </div>
@@ -203,7 +157,7 @@ export function ProfileMenu({ layout = "sidebar", className = "" }: ProfileMenuP
                 onClick={() => handleSelectTheme("light")}
                 className={`flex items-center justify-center space-x-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   theme === "light"
-                    ? "bg-white text-slate-900 shadow-xs border border-slate-200/60"
+                    ? "bg-white text-slate-900 shadow-xs border border-slate-200"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
@@ -216,11 +170,11 @@ export function ProfileMenu({ layout = "sidebar", className = "" }: ProfileMenuP
                 onClick={() => handleSelectTheme("dark")}
                 className={`flex items-center justify-center space-x-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   theme === "dark"
-                    ? "bg-indigo-600 text-white shadow-xs"
+                    ? "bg-slate-900 text-white dark:bg-slate-800 dark:border dark:border-slate-700 shadow-xs"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
-                <Moon className={`w-3.5 h-3.5 ${theme === "dark" ? "text-indigo-200" : ""}`} />
+                <Moon className={`w-3.5 h-3.5 ${theme === "dark" ? "text-slate-200" : ""}`} />
                 <span>Dark</span>
               </button>
             </div>
@@ -236,7 +190,7 @@ export function ProfileMenu({ layout = "sidebar", className = "" }: ProfileMenuP
                 onClick={() => setIsOpen(false)}
                 className={`flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-medium transition-colors ${
                   pathname === "/settings"
-                    ? "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-semibold"
+                    ? "bg-slate-100 dark:bg-slate-800/80 text-slate-900 dark:text-white font-semibold"
                     : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60"
                 }`}
               >
