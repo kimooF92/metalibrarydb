@@ -218,6 +218,9 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
           productId: data.product.id,
           product: data.product,
         }));
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("product-added"));
+        }
         showToast({
           type: "success",
           title: data.cached ? "Product Linked" : "Product Saved!",

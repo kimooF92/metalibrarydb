@@ -113,6 +113,10 @@ export function AddProductModal({ isOpen, onClose, onSuccess }: AddProductModalP
         message: data.message,
       });
 
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("product-added"));
+      }
+
       if (onSuccess) {
         onSuccess();
       }

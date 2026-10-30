@@ -26,6 +26,7 @@ import { WorkspaceSwitcher } from "./workspace-switcher";
 import { useLogout } from "@/hooks/use-logout";
 import { useAuth } from "@/components/auth-context";
 import { useAddUrlModal } from "@/components/add-url-modal";
+import { useProductBadge } from "@/hooks/use-product-badge";
 import { Plus, PlusCircle, ShieldCheck, Building2 } from "lucide-react";
 
 export function Navigation() {
@@ -44,6 +45,7 @@ export function Navigation() {
   const { logout, isLoggingOut } = useLogout();
   const { isStaff } = useAuth();
   const { openAddUrlModal } = useAddUrlModal();
+  const { count: newProductsCount } = useProductBadge();
 
   const navSections = [
     {
@@ -187,11 +189,21 @@ export function Navigation() {
                           ? activeRoute === "/brands" || activeRoute === "/brand"
                           : activeRoute.startsWith(item.href);
 
+                    const isProductItem = item.href === "/products";
+                    const showProductBadge = isProductItem && newProductsCount > 0;
+                    const badgeText = newProductsCount > 99 ? "99+" : `${newProductsCount}`;
+
                     return (
                       <Link
                         key={item.href}
                         href={item.href}
-                        title={isCollapsed ? item.label : undefined}
+                        title={
+                          isCollapsed
+                            ? showProductBadge
+                              ? `${item.label} (+${badgeText} new)`
+                              : item.label
+                            : undefined
+                        }
                         className={`group relative flex items-center h-[34px] rounded-md text-[13px] font-medium transition-all duration-150 ${isCollapsed
                             ? "w-9 h-9 mx-auto justify-center p-0"
                             : "w-full px-2.5 gap-2.5 justify-start"
@@ -210,6 +222,14 @@ export function Navigation() {
                             }`}
                         />
 
+                        {/* Collapsed Product Notification Dot */}
+                        {isCollapsed && showProductBadge && (
+                          <span className="absolute top-1.5 right-1.5 flex h-2 w-2 pointer-events-none">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500 ring-2 ring-white dark:ring-[#010202]" />
+                          </span>
+                        )}
+
                         {/* Label & Badge */}
                         <div
                           className={`flex items-center justify-between min-w-0 flex-1 overflow-hidden transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)] ${isCollapsed
@@ -218,6 +238,14 @@ export function Navigation() {
                             }`}
                         >
                           <span className="truncate whitespace-nowrap">{item.label}</span>
+                          {/* Dynamic Product Unseen Notification Badge */}
+                          {showProductBadge && (
+                            <span className="flex shrink-0 items-center ml-2 animate-in fade-in zoom-in-95 duration-150">
+                              <span className="px-1.5 py-0.5 text-[10px] font-mono font-semibold rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 leading-none shadow-xs">
+                                +{badgeText}
+                              </span>
+                            </span>
+                          )}
                           {item.badge && (
                             <span className="flex shrink-0 items-center ml-2">
                               {item.badge.variant === "ai" && (
@@ -380,6 +408,10 @@ export function Navigation() {
                         : item.href === "/brands"
                           ? activeRoute === "/brands" || activeRoute === "/brand"
                           : activeRoute.startsWith(item.href);
+                    const isProductItem = item.href === "/products";
+                    const showProductBadge = isProductItem && newProductsCount > 0;
+                    const badgeText = newProductsCount > 99 ? "99+" : `${newProductsCount}`;
+
                     return (
                       <Link
                         key={item.href}
@@ -399,20 +431,27 @@ export function Navigation() {
                           />
                           <span>{item.label}</span>
                         </div>
-                        {item.badge && (
-                          <span>
-                            {item.badge.variant === "ai" && (
-                              <span className="px-1.5 py-0.5 text-[10px] font-mono font-medium rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20">
-                                {item.badge.text}
-                              </span>
-                            )}
-                            {item.badge.variant === "hot" && (
-                              <span className="px-1.5 py-0.5 text-[10px] font-mono font-medium rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                                {item.badge.text}
-                              </span>
-                            )}
-                          </span>
-                        )}
+                        <div className="flex items-center space-x-2">
+                          {showProductBadge && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-mono font-semibold rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 leading-none">
+                              +{badgeText}
+                            </span>
+                          )}
+                          {item.badge && (
+                            <span>
+                              {item.badge.variant === "ai" && (
+                                <span className="px-1.5 py-0.5 text-[10px] font-mono font-medium rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20">
+                                  {item.badge.text}
+                                </span>
+                              )}
+                              {item.badge.variant === "hot" && (
+                                <span className="px-1.5 py-0.5 text-[10px] font-mono font-medium rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                  {item.badge.text}
+                                </span>
+                              )}
+                            </span>
+                          )}
+                        </div>
                       </Link>
                     );
                   })}
