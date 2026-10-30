@@ -53,14 +53,14 @@ export function DiscoverySecondSidebar({
         <button
           onClick={onToggleCollapse}
           className="p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition cursor-pointer"
-          title="Expand Founded Pages Panel"
+          title="Expand Brands Panel"
         >
           <ChevronRight className="w-4 h-4" />
         </button>
         <div className="mt-4 flex flex-col items-center gap-3 text-slate-400">
           <Layers className="w-4 h-4" />
           <span className="text-[10px] font-bold rotate-90 whitespace-nowrap tracking-wider uppercase mt-4">
-            Pages ({pages.length})
+            Brands ({pages.length})
           </span>
         </div>
       </div>
@@ -74,7 +74,7 @@ export function DiscoverySecondSidebar({
         <div className="flex items-center gap-2 min-w-0">
           <Layers className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
           <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300 truncate">
-            Founded Pages ({pages.length})
+            Discovered Brands ({pages.length})
           </h2>
         </div>
         <button
@@ -92,7 +92,7 @@ export function DiscoverySecondSidebar({
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           <input
             type="text"
-            placeholder="Search pages or products..."
+            placeholder="Search brands or products..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full text-xs pl-8 pr-7 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -122,13 +122,13 @@ export function DiscoverySecondSidebar({
           <div className="flex items-center gap-2 min-w-0">
             <Sparkles className={`w-4 h-4 shrink-0 ${selectedPageId === null ? "text-amber-300" : "text-amber-500"}`} />
             <div className="min-w-0">
-              <div className="text-xs truncate font-bold">All Pages</div>
+              <div className="text-xs truncate font-bold">All Brands</div>
               <div
                 className={`text-[10px] truncate ${
                   selectedPageId === null ? "text-indigo-100" : "text-slate-400 dark:text-slate-500"
                 }`}
               >
-                {totalExtractedProducts} product{totalExtractedProducts === 1 ? "" : "s"} extracted
+                {totalExtractedProducts} product{totalExtractedProducts === 1 ? "" : "s"} found
               </div>
             </div>
           </div>

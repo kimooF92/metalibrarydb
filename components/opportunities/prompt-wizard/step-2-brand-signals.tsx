@@ -28,7 +28,7 @@ export function Step2BrandSignals() {
                 </span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Injects brands aggressively adding new ads over the selected window.
+                Includes brands actively adding new ads in your chosen timeframe.
               </p>
             </div>
           </div>
@@ -79,13 +79,13 @@ export function Step2BrandSignals() {
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                Include Descaling / Creative Fatigue Signals
+                Include Brands Cutting Ads (Ad Fatigue)
                 <span className="text-[10px] font-mono font-bold bg-rose-500/10 text-rose-700 dark:text-rose-400 px-2 py-0.5 rounded-full">
                   {descalingCount} brands cutting ads
                 </span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Teaches the AI model what creative burnout and margin compression look like.
+                Helps the AI identify worn-out ad angles and shrinking margins.
               </p>
             </div>
           </div>
@@ -111,13 +111,13 @@ export function Step2BrandSignals() {
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                Highlight Saturated Clone Traps
+                Flag Over-Saturated Products
                 <span className="text-[10px] font-mono font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded-full">
                   {cloneTrapCount} detected traps
                 </span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Flags multi-store cloned products selling at &lt; 30 TND price wars to instruct the model to avoid them.
+                Warns the AI about generic products caught in low-price wars so it avoids recommending them.
               </p>
             </div>
           </div>

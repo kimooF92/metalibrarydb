@@ -94,7 +94,7 @@ export function Step5ExportAudit() {
       showToast({
         type: "success",
         title: "Prompt Copied to Clipboard",
-        message: `Packed ~${estimatedTokens.toLocaleString()} tokens of market telemetry. Paste into your target LLM!`,
+        message: `Copied! Paste directly into ${config.targetLlm.toUpperCase()} to generate your report.`,
       });
       setTimeout(() => setCopied(false), 2500);
     } catch {
@@ -178,8 +178,8 @@ export function Step5ExportAudit() {
       setDownloadingCsv(true);
       showToast({
         type: "info",
-        title: "Downloading Telemetry Datasets",
-        message: "Fetching accurate CSV files for brands, products, categories, and ads...",
+        title: "Downloading Datasets",
+        message: "Preparing spreadsheet files for brands, products, categories, and ads...",
       });
 
       const succeeded: string[] = [];
@@ -257,7 +257,7 @@ export function Step5ExportAudit() {
           <div className="flex items-center space-x-2">
             <ShieldCheck className="w-4 h-4 text-teal-500" />
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-              Live Ingestion Telemetry Audit
+              Data Summary
             </h3>
           </div>
           <span className={`flex items-center text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full ${tokenSafety.badgeClass}`}>
@@ -267,7 +267,7 @@ export function Step5ExportAudit() {
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80 text-center">
-            <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Packed Niches</span>
+            <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Categories</span>
             <p className="text-base font-black text-indigo-600 dark:text-indigo-400 font-mono mt-0.5">
               {packedCounts.categoriesCount}
             </p>
@@ -285,19 +285,19 @@ export function Step5ExportAudit() {
             </p>
           </div>
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80 text-center">
-            <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Products Packed</span>
+            <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Products</span>
             <p className="text-base font-black text-slate-900 dark:text-slate-100 font-mono mt-0.5">
               {packedCounts.productsCount}
             </p>
           </div>
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80 text-center">
-            <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Creatives</span>
+            <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Active Ads</span>
             <p className="text-base font-black text-purple-600 dark:text-purple-400 font-mono mt-0.5">
               {packedCounts.creativesCount}
             </p>
           </div>
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80 text-center">
-            <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Total Rows</span>
+            <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Total Records</span>
             <p className="text-base font-black text-amber-600 dark:text-amber-400 font-mono mt-0.5">
               {packedCounts.totalDataPoints}
             </p>
@@ -318,10 +318,10 @@ export function Step5ExportAudit() {
           <div>
             <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
               <Sparkles className="w-4 h-4 text-indigo-500" />
-              Frontier Prompt Ready for Ingestion
+              Prompt Ready
             </h4>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Optimized for <strong>{config.targetLlm.toUpperCase()}</strong> with <strong>{config.htmlTheme}</strong> theme.
+              Formatted for <strong>{config.targetLlm.toUpperCase()}</strong> with <strong>{config.htmlTheme}</strong> style.
             </p>
           </div>
 
@@ -361,7 +361,7 @@ export function Step5ExportAudit() {
                     <Download className="w-4 h-4 text-teal-600" />
                   )}
                   <span className="hidden sm:inline">
-                    {downloadingCsv ? "Downloading..." : "Full CSVs (4)"}
+                    {downloadingCsv ? "Downloading..." : "Download All (4)"}
                   </span>
                 </button>
                 <button
@@ -378,7 +378,7 @@ export function Step5ExportAudit() {
               {csvMenuOpen && (
                 <div className="absolute right-0 top-full mt-1.5 w-60 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl z-50 p-1.5 space-y-1">
                   <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Individual Telemetry CSVs
+                    Export Individual Files
                   </div>
                   <button
                     type="button"
@@ -400,7 +400,7 @@ export function Step5ExportAudit() {
                   >
                     <span className="flex items-center gap-1.5">
                       <TrendingUp className="w-3.5 h-3.5 text-indigo-500" />
-                      <span>Brands Velocity CSV</span>
+                      <span>Brands Growth CSV</span>
                     </span>
                     {activeDownloadType === "brands" && <Loader2 className="w-3 h-3 animate-spin text-teal-500" />}
                   </button>
@@ -412,7 +412,7 @@ export function Step5ExportAudit() {
                   >
                     <span className="flex items-center gap-1.5">
                       <ShoppingBag className="w-3.5 h-3.5 text-emerald-500" />
-                      <span>Products & Clones CSV</span>
+                      <span>Products CSV</span>
                     </span>
                     {activeDownloadType === "products" && <Loader2 className="w-3 h-3 animate-spin text-teal-500" />}
                   </button>
@@ -424,7 +424,7 @@ export function Step5ExportAudit() {
                   >
                     <span className="flex items-center gap-1.5">
                       <Layers className="w-3.5 h-3.5 text-amber-500" />
-                      <span>Category Matrix CSV</span>
+                      <span>Categories CSV</span>
                     </span>
                     {activeDownloadType === "categories" && <Loader2 className="w-3 h-3 animate-spin text-teal-500" />}
                   </button>
@@ -437,7 +437,7 @@ export function Step5ExportAudit() {
         {/* Quick Launchers */}
         <div className="pt-3 border-t border-indigo-500/15 flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mr-1">
-            Copy & Launch Destination:
+            Copy & Open:
           </span>
           <button
             type="button"
@@ -475,7 +475,7 @@ export function Step5ExportAudit() {
         >
           <div className="flex items-center space-x-2">
             <FileCode className="w-4 h-4 text-indigo-500" />
-            <span>Interactive Generated Prompt Preview ({generatedPrompt.length.toLocaleString()} characters)</span>
+            <span>Prompt Preview ({generatedPrompt.length.toLocaleString()} characters)</span>
           </div>
           {previewOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>

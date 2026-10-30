@@ -30,7 +30,7 @@ export function ModalNetworkIntelligence({
         <div className="flex items-center gap-2">
           <Building2 className="w-4 h-4 text-purple-500" />
           <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-            Advertiser Network Intelligence ({countryName} COD)
+            Brand Network &amp; Related Stores ({countryName} COD)
           </h4>
         </div>
 
@@ -40,14 +40,14 @@ export function ModalNetworkIntelligence({
               <span className="px-2.5 py-1 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs font-bold border border-purple-500/25 flex items-center gap-1.5 shadow-sm">
                 <Radio className="w-3 h-3 animate-pulse text-purple-500" />
                 <span>
-                  Shadow Network Detected ({network.sisterPagesCount} Sister Page
+                  Connected Brand Network ({network.sisterPagesCount} Connected Store
                   {network.sisterPagesCount === 1 ? "" : "s"})
                 </span>
               </span>
             ) : (
               <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold border border-emerald-500/20 flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                <span>Independent Brand (No Shadow Network)</span>
+                <span>Single Brand (No Connected Stores)</span>
               </span>
             )}
           </div>
@@ -56,7 +56,7 @@ export function ModalNetworkIntelligence({
 
       {loadingNetwork ? (
         <div className="py-4 text-center text-xs text-slate-400">
-          Scanning advertiser network & contact fingerprints...
+          Looking up connected brand stores and contact info...
         </div>
       ) : network ? (
         <div className="space-y-3">
@@ -65,7 +65,7 @@ export function ModalNetworkIntelligence({
             <div className="p-2.5 rounded-lg bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 flex items-start gap-2 text-xs text-purple-900 dark:text-purple-200">
               <Share2 className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />
               <div>
-                <span className="font-bold block">Network Link Attribution:</span>
+                <span className="font-bold block">How they are connected:</span>
                 <span>{network.networkSummary}</span>
               </div>
             </div>
@@ -156,7 +156,7 @@ export function ModalNetworkIntelligence({
               <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center justify-between">
                 <span>
                   {network.hasShadowNetwork
-                    ? `Connected Facebook Pages in this Scaling Network (${network.totalConnectedPages} Pages, ${network.totalNetworkAds} Total Ads):`
+                    ? `Connected Brand Stores & Pages (${network.totalConnectedPages} Pages, ${network.totalNetworkAds} Total Active Ads):`
                     : `Primary Facebook Page (${network.connectedPages[0]?.activeAdsCount || 0} Active Ads):`}
                 </span>
               </div>

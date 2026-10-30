@@ -46,10 +46,10 @@ export function AddUrlModalProvider({ children }: { children: React.ReactNode })
                 </div>
                 <div>
                   <h2 className="text-base font-bold text-slate-900 dark:text-white leading-tight">
-                    Add Tracked Page
+                    Add Brand
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Submit a new website domain, landing page, or Meta Ad Library link to track
+                    Enter a website, store link, or Meta Ad Library URL to start tracking
                   </p>
                 </div>
               </div>

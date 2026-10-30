@@ -86,14 +86,14 @@ export function ProductsEmptyState({
 
       <div>
         <h3 className="text-base font-bold text-foreground">
-          {isFavoriteMode ? "No Starred Favorite Products Yet" : "No Matching Products Found"}
+          {isFavoriteMode ? "No Saved Products Yet" : "No Matching Products Found"}
         </h3>
         <p className="text-xs text-muted-foreground max-w-sm mt-1">
           {isFavoriteMode
-            ? "Click the star (⭐) button on any product card to add it to your starred favorites watchlist."
+            ? "Click the star on any product card to save it here for quick access."
             : hasActiveFilters
-            ? "Your active filters narrowed down results to 0. Use 1-click recovery below or reset all."
-            : "Run ad spy scans to automatically extract, deduplicate, and scrape product landing pages."}
+            ? "No products match your current filters. Try removing a filter or resetting below."
+            : "Scan brands to automatically discover products and store landing pages."}
         </p>
       </div>
 
@@ -101,7 +101,7 @@ export function ProductsEmptyState({
       {hasActiveFilters && (
         <div className="flex flex-col items-center gap-2 max-w-md w-full pt-1">
           <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-            1-Click Recovery Options:
+            Quick adjustments:
           </span>
           <div className="flex flex-wrap items-center justify-center gap-2">
             {debouncedSearch.trim() && (
@@ -133,7 +133,7 @@ export function ProductsEmptyState({
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-semibold text-xs hover:bg-emerald-100 dark:hover:bg-emerald-900/60 cursor-pointer transition-colors"
               >
                 <EyeOff className="w-3 h-3 text-emerald-500" />
-                <span>Include Inactive (Off-Air)</span>
+                <span>Show Inactive Products</span>
               </button>
             )}
 
@@ -144,7 +144,7 @@ export function ProductsEmptyState({
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 font-semibold text-xs hover:bg-amber-100 dark:hover:bg-amber-900/60 cursor-pointer transition-colors"
               >
                 <Tag className="w-3 h-3 text-amber-500" />
-                <span>Clear Niche ({categoryFilter})</span>
+                <span>Clear Category ({categoryFilter})</span>
               </button>
             )}
 
@@ -166,7 +166,7 @@ export function ProductsEmptyState({
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-colors"
               >
                 <SlidersHorizontal className="w-3 h-3 text-slate-500" />
-                <span>Reset Scrape Status</span>
+                <span>Reset Product Status</span>
               </button>
             )}
 
@@ -177,7 +177,7 @@ export function ProductsEmptyState({
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-colors"
               >
                 <Calendar className="w-3 h-3 text-slate-500" />
-                <span>Reset Discovery Date</span>
+                <span>Reset Date Range</span>
               </button>
             )}
 

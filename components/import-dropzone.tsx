@@ -187,12 +187,12 @@ export function ImportDropzone() {
             {uploading ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Processing Import...</span>
+                <span>Importing file...</span>
               </>
             ) : (
               <>
                 <UploadCloud className="w-5 h-5" />
-                <span>Upload & Process Import</span>
+                <span>Upload & Import</span>
               </>
             )}
           </button>
@@ -205,7 +205,7 @@ export function ImportDropzone() {
           <div className="flex items-center space-x-2 mb-4 pb-3 border-b border-slate-200 dark:border-slate-800">
             <CheckCircle2 className="w-5 h-5 text-emerald-500 dark:text-emerald-400" />
             <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
-              Import Completed Summary
+              Import Summary
             </h3>
           </div>
 
@@ -223,7 +223,7 @@ export function ImportDropzone() {
               </div>
             </div>
             <div className="bg-amber-500/10 p-3.5 rounded-xl border border-amber-500/20">
-              <div className="text-xs text-amber-600 dark:text-amber-400">Duplicates Removed</div>
+              <div className="text-xs text-amber-600 dark:text-amber-400">Duplicates Skipped</div>
               <div className="text-xl font-bold text-amber-700 dark:text-amber-300 mt-0.5">
                 {summary.duplicates}
               </div>
@@ -243,12 +243,12 @@ export function ImportDropzone() {
                 <AlertTriangle className="w-5 h-5 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <h4 className="text-sm font-bold text-amber-700 dark:text-amber-300">
-                    Large Queue Batch Notice
+                    Large Import Notice
                   </h4>
                   <p className="text-xs text-amber-800 dark:text-amber-200/80 mt-1 leading-relaxed">
-                    You have queued <strong>{summary.imported.toLocaleString()}</strong> URLs.
-                    At configured system rate caps (2,400 scans/day), processing this batch will take approximately{" "}
-                    <strong>{summary.estimatedDaysToComplete} day(s)</strong> to complete.
+                    You have added <strong>{summary.imported.toLocaleString()}</strong> links.
+                    At standard safe scanning speeds, this will take about{" "}
+                    <strong>{summary.estimatedDaysToComplete} day(s)</strong> to finish.
                   </p>
 
                   {!confirmed ? (
@@ -262,12 +262,12 @@ export function ImportDropzone() {
                       ) : (
                         <Play className="w-4 h-4" />
                       )}
-                      <span>Confirm & Start Worker Queue</span>
+                      <span>Confirm & Start Queue</span>
                     </button>
                   ) : (
                     <div className="mt-3 flex items-center space-x-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                       <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                      <span>Queue execution confirmed! Worker will process in background.</span>
+                      <span>Confirmed! Your links will be scanned in the background.</span>
                     </div>
                   )}
                 </div>
@@ -277,7 +277,7 @@ export function ImportDropzone() {
             <div className="flex items-center space-x-2 text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
               <Info className="w-4 h-4 text-indigo-500 dark:text-indigo-400 shrink-0" />
               <span>
-                Small import queued. Worker will automatically process jobs during local runs.
+                Links added to your queue and will scan in the background.
               </span>
             </div>
           )}

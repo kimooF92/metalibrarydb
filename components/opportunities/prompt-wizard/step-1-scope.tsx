@@ -6,9 +6,9 @@ import { TimeWindow } from "@/lib/opportunities/prompt-types";
 import { Clock, Layers, Filter, Check, Loader2 } from "lucide-react";
 
 const TIME_WINDOWS: { value: TimeWindow; label: string; desc: string }[] = [
-  { value: "7d", label: "7 Days (Velocity)", desc: "Fastest breakout signals & recent ad tests" },
+  { value: "7d", label: "7 Days (Trending)", desc: "Fastest breakout signals & recent ad tests" },
   { value: "14d", label: "14 Days (Balanced)", desc: "Campaign stability & sustained growth trends" },
-  { value: "30d", label: "30 Days (Macro)", desc: "High-conviction catalog & seasonal durability" },
+  { value: "30d", label: "30 Days (Full Month)", desc: "High-conviction catalog & seasonal durability" },
 ];
 
 export function Step1Scope() {
@@ -39,11 +39,11 @@ export function Step1Scope() {
         <div className="flex items-center space-x-2 mb-3">
           <Clock className="w-4 h-4 text-indigo-500" />
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-            Observation Time Window
+            Time Window
           </h3>
         </div>
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-          Select the timeframe used to evaluate ad volume growth, new campaigns, and descaling drops.
+          Choose the timeframe used to analyze ad growth, new campaigns, and paused ads.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {TIME_WINDOWS.map((tw) => {
@@ -76,7 +76,7 @@ export function Step1Scope() {
           <div className="flex items-center space-x-2">
             <Layers className="w-4 h-4 text-indigo-500" />
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-              Category Focus Matrix
+              Product Categories
             </h3>
           </div>
           {loadingTelemetry && (
@@ -87,7 +87,7 @@ export function Step1Scope() {
           )}
         </div>
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-          Include all categories or narrow your prompt down to specific high-potential niches.
+          Include all categories or focus on specific categories.
         </p>
 
         <div className="flex flex-wrap gap-2">
@@ -144,14 +144,14 @@ export function Step1Scope() {
         <div className="flex items-center space-x-2 mb-3">
           <Filter className="w-4 h-4 text-indigo-500" />
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-            Niche Filtering Thresholds
+            Minimum Activity Filters
           </h3>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80">
             <div className="flex items-center justify-between text-xs font-medium mb-1.5">
-              <span className="text-slate-700 dark:text-slate-300">Min. Active Ads per Niche</span>
+              <span className="text-slate-700 dark:text-slate-300">Min. Active Ads</span>
               <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
                 &ge; {config.minActiveAdsThreshold}
               </span>
@@ -166,7 +166,7 @@ export function Step1Scope() {
               className="w-full accent-indigo-500 cursor-pointer"
             />
             <p className="text-[11px] text-slate-500 mt-1">
-              Filters out sub-niches with negligible active ad presence.
+              Filters out categories with too few running ads.
             </p>
           </div>
 
@@ -187,7 +187,7 @@ export function Step1Scope() {
               className="w-full accent-indigo-500 cursor-pointer"
             />
             <p className="text-[11px] text-slate-500 mt-1">
-              Ensures multi-store validation rather than single-store anomalies.
+              Ensures trends are confirmed across multiple stores rather than just one.
             </p>
           </div>
         </div>

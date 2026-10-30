@@ -28,13 +28,13 @@ const ROUTE_INFO: Record<
 > = {
   "/": { label: "Dashboard", icon: LayoutDashboard },
   "/fresh-winners": { label: "Fresh Winners", icon: Flame },
-  "/opportunities": { label: "Opportunity Seeker", icon: Sparkles },
-  "/discovery": { label: "Discover Pages", icon: Globe },
-  "/spy": { label: "Ad Spy Feed", icon: Eye },
+  "/opportunities": { label: "Opportunities", icon: Sparkles },
+  "/discovery": { label: "Discover Brands", icon: Globe },
+  "/spy": { label: "Ad Feed", icon: Eye },
   "/products": { label: "Products", icon: ShoppingBag },
   "/analytics": { label: "Analytics", icon: BarChart3 },
   "/settings": { label: "Settings", icon: Settings },
-  "/import": { label: "Import Pages", icon: UploadCloud },
+  "/import": { label: "Import Brands", icon: UploadCloud },
 };
 
 export function TopBar() {
@@ -45,7 +45,7 @@ export function TopBar() {
   const currentRoute =
     ROUTE_INFO[pathname] ||
     (pathname.startsWith("/spy/brand/")
-      ? { label: "Brand Deep Dive", icon: Eye }
+      ? { label: "Brand Overview", icon: Eye }
       : { label: "Meta Ad Tracker", icon: LayoutDashboard });
   const Icon = currentRoute.icon;
 
@@ -102,7 +102,7 @@ export function TopBar() {
               title="Sign out of Staff session"
             >
               <LogOut className={`w-3.5 h-3.5 ${isLoggingOut ? "animate-spin" : ""}`} />
-              <span>{isLoggingOut ? "Exiting..." : "Log Out"}</span>
+              <span>{isLoggingOut ? "Signing out..." : "Sign Out"}</span>
             </button>
           </>
         )}

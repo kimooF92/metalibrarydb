@@ -82,7 +82,7 @@ function LoginForm() {
           Meta Ad Tracker
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Private Intelligence & Automated Scraping Hub
+          Your private window into what's working right now
         </p>
       </div>
 
@@ -94,10 +94,10 @@ function LoginForm() {
         <div className="mb-6">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-indigo-500 dark:text-indigo-400 mb-1">
             <Lock className="w-3.5 h-3.5" />
-            <span>Secured Session Gate</span>
+            <span>Sign In</span>
           </div>
           <p className="text-xs text-muted-foreground">
-            Enter your Master or Staff Password to access your competitor dashboards and product catalogs.
+            Enter your password to access your dashboard.
           </p>
         </div>
 
@@ -118,7 +118,7 @@ function LoginForm() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <label htmlFor="password" className="block text-xs font-medium text-foreground">
-              Master or Staff Password
+              Password
             </label>
             <div className="relative">
               <input
@@ -174,7 +174,7 @@ function LoginForm() {
             {loading ? (
               <>
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                <span>Verifying credentials...</span>
+                <span>Signing in...</span>
               </>
             ) : success ? (
               <>
@@ -194,15 +194,15 @@ function LoginForm() {
         <div className="mt-6 pt-5 border-t border-border/50 flex items-center justify-between text-[11px] text-muted-foreground/80">
           <div className="flex items-center gap-1.5">
             <KeyRound className="w-3.5 h-3.5 text-indigo-500/80 dark:text-indigo-400/80" />
-            <span>HMAC-256 Signed</span>
+            <span>Secure</span>
           </div>
           <div className="flex items-center gap-1.5">
             <Radio className="w-3.5 h-3.5 text-emerald-400/80" />
-            <span>Edge Protected</span>
+            <span>Private</span>
           </div>
           <div className="flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-purple-400/80" />
-            <span>HttpOnly Cookie</span>
+            <span>Always On</span>
           </div>
         </div>
       </div>
@@ -221,7 +221,7 @@ export default function LoginPage() {
         fallback={
           <div className="flex flex-col items-center gap-3">
             <div className="w-8 h-8 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
-            <p className="text-xs text-muted-foreground">Loading security gate...</p>
+            <p className="text-xs text-muted-foreground">Loading...</p>
           </div>
         }
       >

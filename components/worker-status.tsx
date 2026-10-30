@@ -150,7 +150,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
       <button
         onClick={toggleWorker}
         disabled={loading}
-        title={isPaused ? "Worker is Paused. Click to Resume." : isBackoffActive ? "Worker Cooldown. Click to Resume." : "Worker Active. Click to Pause."}
+        title={isPaused ? "Scanner paused. Click to resume." : isBackoffActive ? "Cooldown active. Click to resume." : "Scanner active. Click to pause."}
         className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-slate-200/40 dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-800/60 transition-all cursor-pointer relative"
       >
         <span className="relative flex h-3.5 w-3.5">
@@ -195,8 +195,8 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
               {isPaused
                 ? "Paused"
                 : isBackoffActive
-                ? "Backoff Cooldown"
-                : "Worker Active"}
+                ? "Cooling Down"
+                : "Active"}
             </span>
           </div>
           
@@ -219,7 +219,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
             <div className="flex items-center justify-between font-bold text-indigo-600 dark:text-indigo-400">
               <span className="flex items-center gap-1.5">
                 <Loader2 className="w-3 h-3 animate-spin text-indigo-500" />
-                <span>Apify Scanning ({activeScans.length})</span>
+                <span>Scanning Creatives ({activeScans.length})</span>
               </span>
               <span className="px-1.5 py-0.2 rounded-full bg-indigo-500/20 text-[9px] font-black tracking-wider text-indigo-600 dark:text-indigo-300">
                 LIVE
@@ -235,7 +235,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
         {isBackoffActive && (
           <div className="flex items-start space-x-1.5 text-[10px] text-amber-800 dark:text-amber-400 bg-amber-100/80 dark:bg-amber-500/10 p-2 rounded-lg border border-amber-300 dark:border-amber-500/20">
             <ShieldAlert className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-            <span>Repeated scraper failures detected. Cooldown active.</span>
+            <span>Pausing briefly to protect search limits.</span>
           </div>
         )}
 
@@ -295,7 +295,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
           title="Reset hourly and daily scan count limits counters immediately"
         >
           <Cpu className="w-3 h-3" />
-          <span>Reset Rate Limits</span>
+          <span>Reset Scan Counters</span>
         </button>
 
         {/* Queue Pruning Action */}
@@ -306,7 +306,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
             className="flex items-center justify-center space-x-1.5 text-[10px] w-full text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-300 bg-white dark:bg-slate-900/60 hover:bg-rose-50 dark:hover:bg-rose-500/10 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-rose-300 dark:hover:border-rose-500/30 transition-all cursor-pointer"
           >
             <Trash2 className="w-3 h-3" />
-            <span>Prune {pruneCount} old jobs</span>
+            <span>Clear {pruneCount} old jobs</span>
           </button>
         )}
         
@@ -334,7 +334,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
       {isBackoffActive && (
         <div className="hidden md:flex items-center space-x-1.5 text-xs text-amber-800 dark:text-amber-400 bg-amber-100 dark:bg-amber-500/10 px-3 py-1 rounded-full border border-amber-300 dark:border-amber-500/20">
           <ShieldAlert className="w-3.5 h-3.5" />
-          <span>Worker paused — repeated failures detected</span>
+          <span>Scanning paused briefly to protect search limits</span>
         </div>
       )}
 
@@ -359,8 +359,8 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
             {isPaused
               ? "Paused"
               : isBackoffActive
-              ? "Backoff Cooldown"
-              : "Worker Ready"}
+              ? "Cooling Down"
+              : "Active"}
           </span>
         </div>
 
@@ -408,7 +408,7 @@ export function WorkerStatus({ layout = "horizontal" }: { layout?: "horizontal" 
         <button
           onClick={toggleWorker}
           disabled={loading}
-          title={isPaused ? "Resume worker activity" : "Immediately pause all worker activity"}
+          title={isPaused ? "Resume scanning" : "Pause scanning"}
           className={`flex items-center space-x-1 text-xs px-2.5 py-1 rounded-full font-medium transition-all ${
             isPaused
               ? "bg-emerald-50 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/30 border border-emerald-200 dark:border-emerald-500/30"

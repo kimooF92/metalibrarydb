@@ -66,10 +66,10 @@ export function ModalOverviewSection({ product, allImages, isRefreshing }: Modal
               </div>
               <div className="space-y-0.5">
                 <p className="text-xs font-bold text-white tracking-wide">
-                  Re-extracting Landing Page...
+                  Updating Product...
                 </p>
                 <p className="text-[10px] text-slate-300">
-                  Fetching updated media & pricing
+                  Checking current price & photos
                 </p>
               </div>
             </div>
@@ -117,7 +117,7 @@ export function ModalOverviewSection({ product, allImages, isRefreshing }: Modal
                 {formatPrice(product.currentPrice, sym)}
               </span>
             ) : (
-              <span className="text-sm text-slate-400 italic">Price not detected</span>
+              <span className="text-sm text-slate-400 italic">Price not listed</span>
             )}
 
             {product.originalPrice && (

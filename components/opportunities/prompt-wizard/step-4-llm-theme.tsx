@@ -17,25 +17,25 @@ const MODELS: ModelOption[] = [
     id: "claude",
     title: "Claude 3.7 Sonnet / Opus",
     badge: "Recommended",
-    desc: "Strict XML tags, extended reasoning directive, and artifact delivery.",
+    desc: "Optimized XML structure and deep reasoning directives.",
   },
   {
     id: "chatgpt",
     title: "ChatGPT o3-mini / o1 / 4o",
     badge: "Advanced Analysis",
-    desc: "Clean markdown headers and Python pandas code interpreter directives.",
+    desc: "Clean markdown formatting and analytical guidance.",
   },
   {
     id: "gemini",
     title: "Gemini 2.5 Pro",
     badge: "Long Context",
-    desc: "High-density system blocks with maximum empirical tabular comprehension.",
+    desc: "Structured prompt blocks tailored for large context windows.",
   },
   {
     id: "deepseek",
     title: "DeepSeek R1 / CoT",
     badge: "Chain-of-Thought",
-    desc: "Explicit step-by-step reasoning scaffolds for open reasoning models.",
+    desc: "Step-by-step reasoning guidance for open reasoning models.",
   },
 ];
 
@@ -49,20 +49,20 @@ interface ThemeOption {
 const THEMES: ThemeOption[] = [
   {
     id: "tactical-dark",
-    title: "Tactical Dark Glassmorphism",
-    desc: "Sleek dark mode (#030712) with glowing emerald & indigo KPI accents.",
+    title: "Modern Dark",
+    desc: "Sleek dark theme with vibrant emerald and indigo highlights.",
     colors: ["bg-slate-950", "bg-emerald-500", "bg-indigo-500"],
   },
   {
     id: "clean-slate",
-    title: "Modern Clean Slate",
-    desc: "Crisp enterprise SaaS aesthetic with light gray cards and indigo badges.",
+    title: "Clean Light",
+    desc: "Crisp light theme with subtle gray cards and indigo accents.",
     colors: ["bg-slate-50", "bg-white", "bg-indigo-600"],
   },
   {
     id: "monochrome",
-    title: "Executive Monochrome",
-    desc: "Publication-grade high-contrast black & white styling with monospace metrics.",
+    title: "Minimalist Mono",
+    desc: "High-contrast black & white styling with clean typography.",
     colors: ["bg-black", "bg-zinc-800", "bg-zinc-200"],
   },
 ];
@@ -77,11 +77,11 @@ export function Step4LlmTheme() {
         <div className="flex items-center space-x-2 mb-2">
           <Cpu className="w-4 h-4 text-indigo-500" />
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-            Target Frontier Model Optimization
+            Target AI Model
           </h3>
         </div>
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-          Calibrates prompt syntax, XML delimiters, and thinking instructions for your destination model.
+          Formats the prompt structure and thinking instructions for your chosen AI.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -122,11 +122,11 @@ export function Step4LlmTheme() {
         <div className="flex items-center space-x-2 mb-2">
           <Palette className="w-4 h-4 text-indigo-500" />
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-            HTML Research Dossier Aesthetic
+            Report Theme & Style
           </h3>
         </div>
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-          Instructs the LLM on which color palette and visual styling to embed in the output HTML.
+          Select the color palette and visual styling for the generated report.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -164,24 +164,24 @@ export function Step4LlmTheme() {
       {/* 3. Output Specs Checklist */}
       <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200/80 dark:border-slate-800/80">
         <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-2">
-          Enforced HTML Output Invariants:
+          What&apos;s Included in Your Report:
         </h4>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-600 dark:text-slate-400">
           <div className="flex items-center space-x-1.5">
             <CheckCircle className="w-3.5 h-3.5 text-teal-500 shrink-0" />
-            <span>Single-file self-contained HTML (zero external CDN scripts)</span>
+            <span>Standalone HTML file (opens anywhere without internet)</span>
           </div>
           <div className="flex items-center space-x-1.5">
             <CheckCircle className="w-3.5 h-3.5 text-teal-500 shrink-0" />
-            <span>Embedded vanilla JavaScript tab switcher</span>
+            <span>Interactive tabs for easy navigation</span>
           </div>
           <div className="flex items-center space-x-1.5">
             <CheckCircle className="w-3.5 h-3.5 text-teal-500 shrink-0" />
-            <span>Top 3 Winning Product Test Blueprints with Darija angles</span>
+            <span>Top 3 product opportunities with local ad hooks</span>
           </div>
           <div className="flex items-center space-x-1.5">
             <CheckCircle className="w-3.5 h-3.5 text-teal-500 shrink-0" />
-            <span>Printable styling (@media print) for clean PDF export</span>
+            <span>Print-friendly formatting for saving as PDF</span>
           </div>
         </div>
       </div>

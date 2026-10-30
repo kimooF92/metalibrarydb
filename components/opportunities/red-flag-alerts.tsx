@@ -28,13 +28,13 @@ export function RedFlagAlerts({ redFlags, directives }: RedFlagAlertsProps) {
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>Red Ocean Alerts & Niches to Avoid</span>
+                <span>Categories to Avoid</span>
                 <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
                   Caution
                 </span>
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Products experiencing aggressive copycat price wars, ad fatigue, or high COD return rates.
+                Categories seeing heavy price undercutting, ad fatigue, or high return rates.
               </p>
             </div>
           </div>
@@ -54,7 +54,7 @@ export function RedFlagAlerts({ redFlags, directives }: RedFlagAlertsProps) {
                   {flag.riskReason}
                 </p>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
-                  <strong className="text-slate-600 dark:text-slate-300">Churn Note: </strong>
+                  <strong className="text-slate-600 dark:text-slate-300">Trend Note: </strong>
                   {flag.descalingRateNote}
                 </p>
               </div>
@@ -72,13 +72,13 @@ export function RedFlagAlerts({ redFlags, directives }: RedFlagAlertsProps) {
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>Direct-Response Execution Directives</span>
+                <span>Winning Strategies & Tips</span>
                 <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20">
-                  Tactics
+                  Best Practices
                 </span>
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Core creative, offer, and COD confirmation guidelines proven to boost ROAS in Tunisia.
+                Proven tips on ad creatives, offers, and delivery confirmation in Tunisia.
               </p>
             </div>
           </div>

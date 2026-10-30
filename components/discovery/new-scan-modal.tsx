@@ -196,13 +196,13 @@ export function NewScanModal({
             </div>
             <div>
               <h2 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                Launch Meta Brand Discovery
+                Discover New Brands
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
                   Shop Now & Order Now
                 </span>
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Scan active ads in Meta Ad Library to identify new e-commerce brands & product opportunities.
+                Search Meta's ad library to uncover rising stores and trending products.
               </p>
             </div>
           </div>
@@ -241,7 +241,7 @@ export function NewScanModal({
               }`}
             >
               <Link2 className="w-3.5 h-3.5" />
-              <span>Direct Meta Ad URL</span>
+              <span>Paste Ad Library Link</span>
             </button>
             <button
               type="button"
@@ -253,7 +253,7 @@ export function NewScanModal({
               }`}
             >
               <ListOrdered className="w-3.5 h-3.5" />
-              <span>Sequence Batch (RAM-Safe)</span>
+              <span>Batch Queue</span>
             </button>
           </div>
         </div>
@@ -385,16 +385,16 @@ export function NewScanModal({
                 </div>
               )}
 
-              {/* Performance & Cold-Restart Memory Safeguard Notice */}
+              {/* Queue Protection Notice */}
               <div className="p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-900 dark:text-indigo-200 text-xs flex items-start gap-2.5 shadow-xs">
                 <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
                 <div className="space-y-1">
                   <div className="font-extrabold text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
-                    <span>RAM Memory Safeguard & Cold-Restart Active</span>
-                    <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-indigo-500/20 font-mono">1-by-1 FIFO</span>
+                    <span>Smart Queue Protection Active</span>
+                    <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-indigo-500/20 font-mono">1 by 1</span>
                   </div>
                   <p className="text-[11px] leading-relaxed text-indigo-800/80 dark:text-indigo-300/80">
-                    The worker processes each scan sequentially. Chromium is automatically closed and cold-restarted between runs with an inter-run rest interval, reclaiming 100% of RAM and protecting against Meta rate caps.
+                    Searches run one after another with short pauses in between. This keeps your computer fast and avoids search limits.
                   </p>
                 </div>
               </div>
@@ -846,19 +846,19 @@ export function NewScanModal({
               {isLaunchingScan ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Harvesting Pages...</span>
+                  <span>Searching for Ads...</span>
                 </>
               ) : searchMode === "sequence" ? (
                 <>
                   <ListOrdered className="w-3.5 h-3.5" />
                   <span>
-                    Queue Sequence ({sequenceCount} Scan{sequenceCount === 1 ? "" : "s"} · 1-by-1)
+                    Start Batch ({sequenceCount} Search{sequenceCount === 1 ? "" : "es"})
                   </span>
                 </>
               ) : (
                 <>
                   <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>Launch Discovery ({effectiveTargetMaxAds.toLocaleString()} Ads)</span>
+                  <span>Start Search ({effectiveTargetMaxAds.toLocaleString()} Ads)</span>
                 </>
               )}
             </button>

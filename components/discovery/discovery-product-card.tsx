@@ -191,7 +191,7 @@ export function DiscoveryProductCard({
             className="font-bold text-sm text-slate-900 dark:text-slate-100 line-clamp-2 leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors"
             title={item.previewProductTitle || item.displayName || `Page ${item.pageId}`}
           >
-            {item.previewProductTitle || "No Product Title Detected"}
+            {item.previewProductTitle || "Product Name Not Found"}
           </h3>
 
           {/* Brand Attribution & Meta Ad Library link */}
@@ -232,28 +232,28 @@ export function DiscoveryProductCard({
               onClick={handleValidateClick}
               disabled={isSubmitting || isActionPending}
               className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer disabled:opacity-50"
-              title="Atomically merges brand into dashboard and seeds product catalog"
+              title="Add this brand to your dashboard and save its product"
             >
               {isSubmitting ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <CheckCircle2 className="w-3.5 h-3.5" />
               )}
-              <span>Validate & Auto-Merge</span>
+              <span>Add Brand &amp; Product</span>
             </button>
           ) : (
             <button
               onClick={handleMergePageClick}
               disabled={isSubmitting || isActionPending}
               className="flex-1 py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer disabled:opacity-50"
-              title="Merges page into dashboard only (no single product promotion)"
+              title="Add this brand to your dashboard"
             >
               {isSubmitting ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <Layers className="w-3.5 h-3.5" />
               )}
-              <span>Merge Page Only</span>
+              <span>Add Brand Only</span>
             </button>
           )}
 
@@ -262,7 +262,7 @@ export function DiscoveryProductCard({
               onClick={handleIgnoreClick}
               disabled={isSubmitting || isActionPending}
               className="p-2 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-transparent hover:border-rose-200 dark:hover:border-rose-900 transition cursor-pointer disabled:opacity-50"
-              title="Dismiss page and clear staging preview data"
+              title="Dismiss this brand"
             >
               <X className="w-4 h-4" />
             </button>

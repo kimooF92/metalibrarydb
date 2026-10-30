@@ -87,11 +87,11 @@ export function ScanRunnerModal({
         setFeedback(
           enable
             ? isSingle
-              ? "⚡ Automatic creative scans enabled"
-              : `⚡ Enabled auto-scan for ${pageIds.length} pages`
+              ? "⚡ Auto-scan turned on"
+              : `⚡ Auto-scan enabled for ${pageIds.length} brands`
             : isSingle
-            ? "⏸️ Automatic creative scans paused (Apify credits saved)"
-            : `⏸️ Paused auto-scan for ${pageIds.length} pages`
+            ? "⏸️ Auto-scan paused"
+            : `⏸️ Auto-scan paused for ${pageIds.length} brands`
         );
       } else {
         const errData = await res.json().catch(() => ({}));
@@ -122,7 +122,7 @@ export function ScanRunnerModal({
           <div className="flex items-center space-x-2">
             <Sparkles className="w-5 h-5 text-indigo-500" />
             <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-              Creative Scan & Auto-Scan Control
+              Ad Scan Settings
             </h2>
           </div>
           <button
@@ -144,7 +144,7 @@ export function ScanRunnerModal({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Automatic Creative Scanning
+                Auto-Scan
               </span>
             </div>
 
@@ -183,12 +183,12 @@ export function ScanRunnerModal({
           <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
             {isSingle ? (
               isSingleActive ? (
-                "Routine count scans & Apify crons automatically extract newly added ads. Pause to prevent Apify credit consumption."
+                "New ads are picked up automatically in the background. Pause if you want to save credits."
               ) : (
-                "Automatic scans are paused. Apify credits saved. Manual scans triggered below will still run on-demand anytime."
+                "Auto-scan is paused. Credits are safe. You can still run a manual scan anytime."
               )
             ) : (
-              "Control whether background sweeps and cron jobs automatically extract newly detected ads for all selected brands."
+              "Choose whether to keep scanning all selected brands in the background automatically."
             )}
           </p>
 
@@ -265,10 +265,10 @@ export function ScanRunnerModal({
         {/* Section Divider & Manual Trigger Title */}
         <div className="space-y-1 pt-1">
           <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
-            Manual Extraction Engine
+            Run a Manual Scan
           </div>
           <p className="text-[11px] text-slate-500 dark:text-slate-400">
-            Select an engine to launch an immediate creative scan:
+            Choose how you want to scan for new ads right now:
           </p>
         </div>
 
@@ -290,14 +290,14 @@ export function ScanRunnerModal({
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-extrabold text-slate-900 dark:text-white">
-                  ⚡ Apify Delta Cloud
+                  ⚡ Cloud Scan (Apify)
                 </span>
                 <span className="text-[9px] bg-amber-500/20 text-amber-600 dark:text-amber-300 px-1.5 py-0.2 rounded font-bold">
                   Fastest & Recommended
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
-                Cloud-based incremental scraping. Scrapes only newly added ads (Delta + Safety Buffer) using your Apify credit balance. Bypasses IP limits.
+                Cloud-based scan that only grabs new ads since your last run. Uses your Apify credits and bypasses rate limits.
               </p>
             </div>
           </button>
@@ -318,14 +318,14 @@ export function ScanRunnerModal({
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-extrabold text-slate-900 dark:text-white">
-                  🖥️ Local Playwright Worker
+                  🖥️ Local Scan (Free)
                 </span>
                 <span className="text-[9px] bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 px-1.5 py-0.2 rounded font-bold">
                   Free ($0)
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
-                Enqueues a job for your local desktop Playwright worker (`run-worker.bat`). Full infinite scroll extraction.
+                Runs directly on your computer using your background worker. Free with unlimited scroll depth.
               </p>
             </div>
           </button>
@@ -355,7 +355,7 @@ export function ScanRunnerModal({
             ) : (
               <>
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Launch Manual Scan ({selectedRunner === "apify" ? "Apify Cloud" : "Local"})</span>
+                <span>Start Scan ({selectedRunner === "apify" ? "Cloud" : "Local"})</span>
               </>
             )}
           </button>

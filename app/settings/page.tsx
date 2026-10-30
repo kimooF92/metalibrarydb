@@ -372,7 +372,7 @@ function SettingsContent() {
               )}
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Manage scraper frequency, cloud tokens, discovery rules, and data maintenance.
+              Configure scanning frequency, cloud connections, and data maintenance.
             </p>
           </div>
         </div>
@@ -416,8 +416,8 @@ function SettingsContent() {
       {/* Settings Tab Navigation with URL deep-linking */}
       <div className="flex items-center space-x-2 border-b border-slate-200 dark:border-slate-800 overflow-x-auto pb-2">
         {[
-          { id: "general", label: "General & Scraping", icon: Cpu },
-          { id: "spy", label: "Ad Spy & Cloud", icon: Sparkles },
+          { id: "general", label: "General & Scanning", icon: Cpu },
+          { id: "spy", label: "Ad Feed & Cloud", icon: Sparkles },
           { id: "discovery", label: "Discovery Engine", icon: Globe },
           { id: "maintenance", label: "Database & Queue", icon: Database },
           { id: "security", label: "Security & Access", icon: Shield },
@@ -449,9 +449,9 @@ function SettingsContent() {
             <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 space-y-3">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Auto-Merge Domain Matches</h3>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Auto-Connect Brand Pages</h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                    Automatically convert single-brand exact phrase domain searches to canonical Facebook Page IDs during local & cloud scans.
+                    Automatically link store website searches to their official Facebook Page when discovered.
                   </p>
                 </div>
                 <Switch
@@ -464,9 +464,9 @@ function SettingsContent() {
               </div>
               <div className="p-3 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/50 dark:border-indigo-800/30 text-[11px] text-indigo-700 dark:text-indigo-300">
                 {draftSettings.autoMerge ? (
-                  <span>✓ <strong>Enabled:</strong> Verified numeric Page IDs (e.g. <code>920201531178963</code>) automatically become primary tracked targets.</span>
+                  <span>✓ <strong>Enabled:</strong> Newly verified brand pages automatically become primary tracked brands.</span>
                 ) : (
-                  <span>✕ <strong>Disabled:</strong> Domain search terms remain tracked strictly as keywords.</span>
+                  <span>✕ <strong>Disabled:</strong> Website domains are tracked separately as search keywords.</span>
                 )}
               </div>
             </div>
@@ -475,9 +475,9 @@ function SettingsContent() {
             <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 space-y-3">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Auto-Link Sister Pages (Domain Portfolios)</h3>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Group Related Store Pages</h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                    Automatically group multiple Facebook Pages sharing the same checkout/store domain into unified brand domain portfolios.
+                    Automatically link multiple Facebook Pages that drive traffic to the same online store.
                   </p>
                 </div>
                 <Switch
@@ -490,9 +490,9 @@ function SettingsContent() {
               </div>
               <div className="p-3 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/50 dark:border-emerald-800/30 text-[11px] text-emerald-700 dark:text-emerald-300">
                 {draftSettings.autoDomainLink ? (
-                  <span>✓ <strong>Enabled:</strong> Pages driving traffic to the same destination store (e.g. flagship + promo pages) are linked with combined ad intelligence.</span>
+                  <span>✓ <strong>Enabled:</strong> Pages sending traffic to the same store are grouped together with combined ad metrics.</span>
                 ) : (
-                  <span>✕ <strong>Disabled:</strong> Sister pages are treated as completely independent competitor entities.</span>
+                  <span>✕ <strong>Disabled:</strong> Every Facebook page is tracked completely independently.</span>
                 )}
               </div>
             </div>

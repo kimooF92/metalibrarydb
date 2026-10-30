@@ -140,7 +140,7 @@ export const ProductCard = memo(function ProductCard({
       showToast({
         type: "success",
         title: "Link Copied",
-        message: "Product landing page URL copied to clipboard.",
+        message: "Product page link copied to clipboard.",
       });
     } catch {
       showToast({
@@ -168,20 +168,20 @@ export const ProductCard = memo(function ProductCard({
         setLocalPrice(normalizedPrice);
         showToast({
           type: "success",
-          title: "Price Synced",
-          message: `Product price normalized with ${sym} currency symbol.`,
+          title: "Price Updated",
+          message: `Product price set to ${normalizedPrice}.`,
         });
       } else {
         showToast({
           type: "error",
-          title: "Sync Failed",
+          title: "Update Failed",
           message: "Failed to update price currency.",
         });
       }
     } catch {
       showToast({
         type: "error",
-        title: "Network Error",
+        title: "Connection Error",
         message: "Could not connect to update price.",
       });
     } finally {
@@ -198,8 +198,8 @@ export const ProductCard = memo(function ProductCard({
       await onDelete(product.id);
       showToast({
         type: "info",
-        title: "Product Deleted",
-        message: "Product removed from tracking hub.",
+        title: "Product Removed",
+        message: "Product removed from your list.",
       });
     } finally {
       setIsDeleting(false);
@@ -417,7 +417,7 @@ export const ProductCard = memo(function ProductCard({
                       className="group/item w-full flex items-center gap-2 px-3 py-2 text-left font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 transition-all duration-150 active:scale-[0.98] cursor-pointer disabled:opacity-50"
                     >
                       <RotateCw className={`w-4 h-4 text-indigo-500 shrink-0 transition-transform duration-300 ease-out group-hover/item:rotate-180 ${isRefreshing ? "animate-spin" : ""}`} />
-                      <span>{isRefreshing ? "Re-scraping..." : "Re-scrape Landing Page"}</span>
+                      <span>{isRefreshing ? "Refreshing..." : "Refresh Product Data"}</span>
                     </button>
                   )}
 
@@ -429,7 +429,7 @@ export const ProductCard = memo(function ProductCard({
                       className="group/item w-full flex items-center gap-2 px-3 py-2 text-left font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 transition-all duration-150 active:scale-[0.98] cursor-pointer disabled:opacity-50"
                     >
                       <Coins className="w-4 h-4 text-amber-500 shrink-0 transition-transform duration-200 ease-out group-hover/item:scale-115 group-hover/item:-rotate-12" />
-                      <span>Sync Local Price ({sym})</span>
+                      <span>Update Currency ({sym})</span>
                     </button>
                   )}
 
@@ -480,10 +480,10 @@ export const ProductCard = memo(function ProductCard({
               </div>
               <div className="space-y-0.5">
                 <p className="text-xs font-bold text-white tracking-wide">
-                  Re-scraping Page...
+                  Updating Product...
                 </p>
                 <p className="text-[10px] text-slate-300">
-                  Extracting live price & details
+                  Checking current price & photos
                 </p>
               </div>
             </div>
@@ -522,7 +522,7 @@ export const ProductCard = memo(function ProductCard({
             <div className="flex flex-col items-center gap-2 text-slate-400 font-medium">
               <ShoppingBag className="w-10 h-10 opacity-40 stroke-[1.5]" />
               <span className="text-[11px] text-slate-400">
-                {isPendingScrape ? "Pending Scrape" : "No Image Available"}
+                {isPendingScrape ? "Queued for Review" : "No Image Available"}
               </span>
             </div>
           )}
@@ -532,15 +532,15 @@ export const ProductCard = memo(function ProductCard({
             {isRefreshing ? (
               <span
                 className="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-300 bg-black/85 border border-indigo-500/60 px-2.5 py-0.5 rounded-full backdrop-blur-md shadow-md animate-pulse"
-                title="Re-scraping live product landing page..."
+                title="Updating product page information..."
               >
                 <Loader2 className="w-3 h-3 text-indigo-400 animate-spin" />
-                <span>Extracting...</span>
+                <span>Updating...</span>
               </span>
             ) : isPageOnHold ? (
               <span
                 className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-300 bg-black/80 border border-amber-500/50 px-2.5 py-0.5 rounded-full backdrop-blur-md shadow-md"
-                title="Brand account is paused / on hold under grace period recheck"
+                title="Brand has paused ads"
               >
                 <Pause className="w-3 h-3 text-amber-400" />
                 <span>Paused</span>
@@ -554,17 +554,17 @@ export const ProductCard = memo(function ProductCard({
                     ? "text-amber-300 bg-black/80 border border-amber-500/50"
                     : "text-pink-300 bg-black/80 border border-pink-500/50"
                 }`}
-                title={`Breakout Scaler: Validated product (${product.daysRunning || 7}d running) with ${product.breakoutSurge ? `+${product.breakoutSurge} new ads/surge` : `${product.maxDuplications || 3}x copies`}${product.breakoutScore ? ` • Score: ${product.breakoutScore}/100` : ""}`}
+                title={`Scaling fast: running for ${product.daysRunning || 7} days with active ads`}
               >
                 <Rocket className={`w-3 h-3 ${product.breakoutTier === "hard" ? "text-rose-400" : "text-pink-400"}`} />
                 <span>
-                  {product.breakoutTier === "hard" ? "Super Breakout" : "Breakout"}
+                  {product.breakoutTier === "hard" ? "Top Scaler" : "Rising"}
                 </span>
               </span>
             ) : isWinning ? (
               <span
                 className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-300 bg-black/80 border border-amber-500/50 px-2.5 py-0.5 rounded-full backdrop-blur-md shadow-md"
-                title={`Winning product with ${product.linkedAdsCount || 0} active ads`}
+                title={`Proven product with ${product.linkedAdsCount || 0} active ads`}
               >
                 <Sparkles className="w-3 h-3 text-amber-400" />
                 <span>Winning</span>
@@ -572,26 +572,26 @@ export const ProductCard = memo(function ProductCard({
             ) : isInactive ? (
               <span
                 className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-300 bg-black/80 border border-slate-600/60 px-2.5 py-0.5 rounded-full backdrop-blur-md shadow-md"
-                title="All ads for this product are currently inactive (off-air)"
+                title="Ads for this product have ended"
               >
                 <span className="w-2 h-2 rounded-full bg-slate-400" />
-                <span>Inactive</span>
+                <span>Ended</span>
               </span>
             ) : isPendingScrape ? (
               <span
                 className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-300 bg-black/80 border border-slate-600/60 px-2.5 py-0.5 rounded-full backdrop-blur-md shadow-md"
-                title="Landing page extraction queued"
+                title="Product details will be checked shortly"
               >
                 <Clock className="w-3 h-3 text-slate-400" />
-                <span>Pending</span>
+                <span>In Queue</span>
               </span>
             ) : isFailedScrape ? (
               <span
                 className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-300 bg-black/80 border border-rose-500/50 px-2.5 py-0.5 rounded-full backdrop-blur-md shadow-md"
-                title="Failed to extract product landing page"
+                title="Could not open product page"
               >
                 <AlertCircle className="w-3 h-3 text-rose-400" />
-                <span>Failed</span>
+                <span>Needs Check</span>
               </span>
             ) : null}
           </div>
@@ -645,9 +645,9 @@ export const ProductCard = memo(function ProductCard({
                 {cleanPrice}
               </span>
             ) : isPendingScrape ? (
-              <span className="text-xs text-amber-500 font-medium">Scrape to get price</span>
+              <span className="text-xs text-amber-500 font-medium">Checking price...</span>
             ) : (
-              <span className="text-xs text-slate-500 dark:text-slate-400 italic">Price not detected</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400 italic">Price not listed</span>
             )}
           </div>
 

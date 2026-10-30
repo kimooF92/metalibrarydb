@@ -220,23 +220,23 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
         }));
         showToast({
           type: "success",
-          title: data.cached ? "Product Linked (Cached)" : "Product Added to Hub!",
-          message: `${data.product.title || "Product"} ${data.product.currentPrice ? `(${data.product.currentPrice})` : ""} has been saved.`,
+          title: data.cached ? "Product Linked" : "Product Saved!",
+          message: `${data.product.title || "Product"} ${data.product.currentPrice ? `(${data.product.currentPrice})` : ""} saved to your products list.`,
           link: "/products",
-          linkLabel: "View in Products Hub ↗",
+          linkLabel: "View in Products ↗",
         });
       } else {
         showToast({
           type: "error",
-          title: "Extraction Failed",
-          message: data.error || "Could not extract product details from this landing page.",
+          title: "Could Not Read Page",
+          message: data.error || "Could not read product details from this page.",
         });
       }
     } catch (err: any) {
       showToast({
         type: "error",
-        title: "Network Error",
-        message: err.message || "Failed to contact extraction service.",
+        title: "Connection Error",
+        message: err.message || "Failed to reach the product service.",
       });
     } finally {
       setIsExtractingProduct(false);
@@ -687,17 +687,17 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
                 onClick={handleFetchProduct}
                 disabled={isExtractingProduct}
                 className="inline-flex items-center justify-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200/60 dark:border-indigo-800/60 px-3 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer shrink-0 disabled:opacity-50"
-                title="Scan Landing Page with Firecrawl to Extract Product, Price & Offers"
+                title="Scan landing page to save product details, price & offers"
               >
                 {isExtractingProduct ? (
                   <>
                     <RotateCw className="w-3 h-3 animate-spin text-indigo-500" />
-                    <span>Extracting...</span>
+                    <span>Saving...</span>
                   </>
                 ) : (
                   <>
                     <ShoppingBag className="w-3.5 h-3.5 text-indigo-500" />
-                    <span>Fetch Product</span>
+                    <span>Save Product</span>
                   </>
                 )}
               </button>

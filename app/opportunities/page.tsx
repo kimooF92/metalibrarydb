@@ -122,7 +122,7 @@ export default function OpportunitiesPage() {
             }`}
           >
             <Sparkles className="w-4 h-4" />
-            <span>Frontier Prompt Wizard</span>
+            <span>Research Wizard</span>
           </button>
 
           <button
@@ -135,7 +135,7 @@ export default function OpportunitiesPage() {
             }`}
           >
             <FileText className="w-4 h-4" />
-            <span>Archived Reports</span>
+            <span>Saved Reports</span>
             {report && (
               <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                 Saved
@@ -160,18 +160,17 @@ export default function OpportunitiesPage() {
             <div className="glass-card rounded-2xl p-12 border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-950/40 text-center space-y-3">
               <ShoppingBag className="w-10 h-10 text-slate-400 mx-auto" />
               <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                No Archived In-App Report Found
+                No Saved Reports Found
               </h3>
               <p className="text-xs text-slate-500 max-w-md mx-auto">
-                In-app serverless AI inference has been upgraded to the Frontier Prompt Wizard.
-                Switch to the Prompt Wizard to generate full market research dossiers for Claude 3.7 or ChatGPT.
+                Use the Research Wizard to create comprehensive market research prompts tailored for ChatGPT or Claude.
               </p>
               <button
                 type="button"
                 onClick={() => setActiveTab("wizard")}
                 className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold shadow-sm cursor-pointer mt-2"
               >
-                Go to Frontier Prompt Wizard
+                Open Research Wizard
               </button>
             </div>
           )}
@@ -191,11 +190,11 @@ export default function OpportunitiesPage() {
                     <div className="flex items-center space-x-2">
                       <Flame className="w-4 h-4 text-indigo-500" />
                       <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white tracking-tight">
-                        Archived Product Test Blueprints
+                        Saved Product Opportunities
                       </h2>
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Saved testing recipes with realistic TND pricing, Darija/French hooks, and margin forecasts.
+                      Recommended products with local pricing, ad hooks, and estimated profit margins.
                     </p>
                   </div>
 

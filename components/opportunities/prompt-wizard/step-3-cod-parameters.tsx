@@ -41,11 +41,11 @@ export function Step3CodParameters() {
         <div className="flex items-center space-x-2 mb-2">
           <DollarSign className="w-4 h-4 text-indigo-500" />
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-            Target Price Sweet Spots
+            Target Price Ranges
           </h3>
         </div>
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-          Select which Tunisian COD price tiers the AI model should prioritize for product testing.
+          Select which price ranges the AI should focus on for product recommendations.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -84,7 +84,7 @@ export function Step3CodParameters() {
       {/* 2. Margin Goal */}
       <div>
         <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 mb-2">
-          Target Minimum Net Margin (per unit delivered)
+          Target Profit per Delivered Order
         </h4>
         <div className="flex items-center gap-3">
           {[15, 25, 35].map((margin) => {
@@ -112,14 +112,14 @@ export function Step3CodParameters() {
         <div className="flex items-center space-x-2">
           <Truck className="w-4 h-4 text-indigo-500" />
           <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
-            COD Logistics Assumptions
+            Cash-on-Delivery Assumptions
           </h4>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-slate-600 dark:text-slate-400">Phone Confirmation</span>
+              <span className="text-slate-600 dark:text-slate-400">Order Confirmation</span>
               <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
                 {cod.confirmationRatePct}%
               </span>
@@ -137,7 +137,7 @@ export function Step3CodParameters() {
 
           <div>
             <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-slate-600 dark:text-slate-400">Delivery Success</span>
+              <span className="text-slate-600 dark:text-slate-400">Successful Delivery</span>
               <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
                 {cod.deliveryRatePct}%
               </span>
@@ -155,7 +155,7 @@ export function Step3CodParameters() {
 
           <div>
             <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-slate-600 dark:text-slate-400">Return Loss Buffer</span>
+              <span className="text-slate-600 dark:text-slate-400">Return Cost Buffer</span>
               <span className="font-mono font-bold text-rose-600 dark:text-rose-400">
                 {cod.returnBufferTnd} TND / return
               </span>
@@ -177,7 +177,7 @@ export function Step3CodParameters() {
           <Calculator className="w-4 h-4 text-indigo-500 mt-0.5 shrink-0" />
           <div className="text-[11px] text-slate-600 dark:text-slate-400 space-y-1">
             <span className="font-semibold text-slate-800 dark:text-slate-200">
-              Injected Margin Estimation Formula:
+              Estimated Profit Calculation:
             </span>
             <p className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
               Est. Net Profit = (Selling Price * Conf% * Del%) - COGS - (Selling Price * Conf% * (1 - Del%) * ReturnBuffer) - Est. AdCost

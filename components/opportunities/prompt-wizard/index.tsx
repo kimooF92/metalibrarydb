@@ -20,11 +20,11 @@ import {
 } from "lucide-react";
 
 const STEPS = [
-  { id: 1, title: "Telemetry Scope", icon: Clock },
-  { id: 2, title: "Brand Signals", icon: TrendingUp },
-  { id: 3, title: "COD Strategy", icon: DollarSign },
-  { id: 4, title: "LLM & Theme", icon: Palette },
-  { id: 5, title: "Export & Audit", icon: CheckCircle2 },
+  { id: 1, title: "Timeframe & Scope", icon: Clock },
+  { id: 2, title: "Brand Scaling", icon: TrendingUp },
+  { id: 3, title: "Pricing & Margins", icon: DollarSign },
+  { id: 4, title: "AI Model & Style", icon: Palette },
+  { id: 5, title: "Review & Generate", icon: CheckCircle2 },
 ];
 
 function WizardShell() {
@@ -42,12 +42,12 @@ function WizardShell() {
                 <Sparkles className="w-5 h-5" />
               </span>
               <h2 className="text-lg font-black text-slate-900 dark:text-slate-100">
-                Frontier AI Market Opportunity Prompt Wizard
+                Market Opportunity Prompt Builder
               </h2>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 max-w-2xl">
-              Synthesize empirical market telemetry (scaling deltas, active ad counts, clone traps, and COD price tiers)
-              into a high-conviction prompt for Claude 3.7 Sonnet, ChatGPT o3, or Gemini 2.5 Pro to generate a complete interactive HTML dossier.
+              Combine live market data (trending ads, brand growth, price points, and cash-on-delivery patterns)
+              into a comprehensive prompt ready for Claude or ChatGPT to generate an interactive market research report.
             </p>
           </div>
 

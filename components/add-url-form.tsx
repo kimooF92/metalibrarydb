@@ -178,7 +178,7 @@ export function AddUrlForm({ onSuccess }: AddUrlFormProps) {
           type: "success",
           message: force
             ? "URL added as a separate entry!"
-            : "URL successfully added to monitoring queue!",
+            : "Added! We're now tracking this page.",
         });
         setUrl("");
         setDuplicatePage(null);
@@ -228,7 +228,7 @@ export function AddUrlForm({ onSuccess }: AddUrlFormProps) {
           "existing page";
         setFeedback({
           type: "success",
-          message: `Enqueued refresh scan for existing page "${brandLabel}".`,
+          message: `Refreshing ads for "${brandLabel}" now.`,
         });
         setDuplicatePage(null);
         setLiveDuplicate(null);
@@ -394,10 +394,10 @@ export function AddUrlForm({ onSuccess }: AddUrlFormProps) {
             <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 px-0.5">
               <span className="flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                Apex domain resolved: <strong className="text-slate-700 dark:text-slate-300">{parsedPreview.targetDomain}</strong>
+                Store domain: <strong className="text-slate-700 dark:text-slate-300">{parsedPreview.targetDomain}</strong>
               </span>
               <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">
-                Click "Track URL" to enqueue
+                Click "Track URL" to start
               </span>
             </div>
           )}

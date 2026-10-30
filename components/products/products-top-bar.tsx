@@ -317,8 +317,8 @@ export function ProductsTopBar({
             }`}
             title={
               hideInactive
-                ? "Currently showing only active products (off-air products hidden). Click to show all."
-                : "Filter to only products with active ads currently running."
+                ? "Showing only active products with ads running right now. Click to show all."
+                : "Show only products that have active ads running right now."
             }
           >
             {hideInactive ? (

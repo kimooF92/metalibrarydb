@@ -30,14 +30,14 @@ export function FreshWinnersHeader({
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-                  Fresh Winners Radar
+                  Fresh Winners
                 </h1>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 shadow-xs">
-                  Live Velocity
+                  Trending Now
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Surfacing newly launched ad creatives & products showing verified scaling signals in Tunisia.
+                New ads and products quickly gaining traction across Tunisia.
               </p>
             </div>
           </div>
@@ -63,7 +63,7 @@ export function FreshWinnersHeader({
         {/* Card 1: Fresh Scalers */}
         <div className="relative overflow-hidden rounded-2xl border border-rose-500/20 bg-gradient-to-br from-rose-500/[0.04] via-pink-500/[0.02] to-amber-500/[0.04] p-4 dark:border-rose-500/25 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Fresh Scalers</span>
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Rising Ads</span>
             <div className="w-7 h-7 rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center">
               <Flame className="w-4 h-4 fill-rose-500/20" />
             </div>
@@ -77,14 +77,14 @@ export function FreshWinnersHeader({
             </span>
           </div>
           <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 truncate">
-            {stats?.activeBrandsCount ?? 0} active brands scaling
+            {stats?.activeBrandsCount ?? 0} brands scaling up
           </p>
         </div>
 
         {/* Card 2: Video Rate */}
         <div className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Video Dominance</span>
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Video Share</span>
             <div className="w-7 h-7 rounded-xl bg-purple-500/15 text-purple-600 dark:text-purple-400 flex items-center justify-center">
               <Video className="w-4 h-4" />
             </div>
@@ -98,14 +98,14 @@ export function FreshWinnersHeader({
             </span>
           </div>
           <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 truncate">
-            High-production video ads
+            Video ad creatives
           </p>
         </div>
 
         {/* Card 3: Top Scaling Niche */}
         <div className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Hottest Niche</span>
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Top Category</span>
             <div className="w-7 h-7 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center">
               <TrendingUp className="w-4 h-4" />
             </div>
@@ -116,14 +116,14 @@ export function FreshWinnersHeader({
             </span>
           </div>
           <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 truncate">
-            Fastest scaling product category
+            Fastest growing category
           </p>
         </div>
 
         {/* Card 4: Median Winning Price */}
         <div className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Median Price</span>
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Average Price</span>
             <div className="w-7 h-7 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
               <Tag className="w-4 h-4" />
             </div>
@@ -133,11 +133,11 @@ export function FreshWinnersHeader({
               {stats?.medianPrice || "—"}
             </span>
             <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-              avg checkout
+              typical order
             </span>
           </div>
           <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 truncate">
-            Sweet spot for Tunisian COD
+            Optimal price for Tunisian COD
           </p>
         </div>
       </div>

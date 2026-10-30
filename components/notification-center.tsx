@@ -404,7 +404,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
             <div className="flex items-center space-x-2">
               <span className="text-sm font-bold text-slate-900 dark:text-white">
-                Live Activity & Summaries
+                Activity & Updates
               </span>
               {unreadCount > 0 && (
                 <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
@@ -476,7 +476,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
           <div className="flex items-center px-3 py-2 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/30 dark:bg-slate-900/30 gap-1.5 text-[11px] font-semibold">
             {[
               { id: "all", label: "All" },
-              { id: "breakout_alert", label: "Breakouts" },
+              { id: "breakout_alert", label: "Trending" },
               { id: "activity", label: "Activity" },
             ].map((tab) => (
               <button
@@ -498,7 +498,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
             {notifications.length === 0 ? (
               <div className="py-12 px-4 text-center flex flex-col items-center justify-center space-y-2 text-slate-400">
                 <Inbox className="w-8 h-8 opacity-40" />
-                <p className="text-xs">No activity notifications yet.</p>
+                <p className="text-xs">No notifications yet.</p>
               </div>
             ) : (
               notifications.map((n) => {

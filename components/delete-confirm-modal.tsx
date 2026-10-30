@@ -62,12 +62,12 @@ export function DeleteConfirmModal({
 
           <div className="flex-1">
             <h3 id="delete-modal-title" className="text-lg font-bold text-slate-900 dark:text-slate-100">
-              Delete Tracked Page
+              Delete Brand
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
               Are you sure you want to delete{" "}
               <strong className="text-slate-800 dark:text-slate-200">{page.displayName || page.url}</strong>?
-              This action cannot be undone and will permanently remove all scan history.
+              This will remove the brand and its saved ad history from your workspace.
             </p>
           </div>
         </div>
@@ -94,7 +94,7 @@ export function DeleteConfirmModal({
             ) : (
               <Trash2 className="w-4 h-4" />
             )}
-            <span>Delete Page</span>
+            <span>Delete Brand</span>
           </button>
         </div>
       </div>

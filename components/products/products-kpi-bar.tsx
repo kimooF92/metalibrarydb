@@ -51,7 +51,7 @@ export function ProductsKpiBar({
         {/* Total Products */}
         <div
           onClick={() => onSelectPreset("all")}
-          title={`View All Products (${stats.successfulProducts} fully scraped, ${stats.pendingProducts} pending)`}
+          title={`View All Products (${stats.successfulProducts} discovered, ${stats.pendingProducts} in queue)`}
           className={`px-3 py-2 rounded-lg bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-150 select-none ${
             smartPreset === "all"
               ? "border-indigo-500/60 ring-1 ring-indigo-500/25 bg-indigo-50/25 dark:bg-indigo-950/20"
@@ -71,7 +71,7 @@ export function ProductsKpiBar({
               {stats.totalProducts}
             </span>
             <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium truncate">
-              {stats.successfulProducts} scraped
+              {stats.successfulProducts} ready
             </span>
           </div>
         </div>
@@ -112,7 +112,7 @@ export function ProductsKpiBar({
       {/* Total Products */}
       <div
         onClick={() => onSelectPreset("all")}
-        title={`View All Products (${stats.successfulProducts} fully scraped, ${stats.pendingProducts} pending)`}
+        title={`View All Products (${stats.successfulProducts} discovered, ${stats.pendingProducts} in queue)`}
         className={`px-3 py-2 rounded-lg bg-white dark:bg-slate-950/60 border shadow-xs cursor-pointer transition-all duration-150 select-none ${
           smartPreset === "all"
             ? "border-indigo-500/60 ring-1 ring-indigo-500/25 bg-indigo-50/25 dark:bg-indigo-950/20"
@@ -132,7 +132,7 @@ export function ProductsKpiBar({
             {stats.totalProducts}
           </span>
           <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium truncate">
-            {stats.successfulProducts} scraped
+            {stats.successfulProducts} ready
           </span>
         </div>
       </div>

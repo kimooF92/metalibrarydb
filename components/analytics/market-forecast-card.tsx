@@ -133,17 +133,17 @@ export function MarketForecastCard() {
             <div>
               <div className="flex items-center flex-wrap gap-2">
                 <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-                  AI Market Health & Scaling Velocity Intelligence
+                  Market Trends &amp; Scaling Analysis
                 </h2>
                 <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20">
-                  DeepSeek
+                  AI Powered
                 </span>
                 <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                  Real Scaling Counts • Market Health • Video %
+                  Active Brands • Market Health • Video %
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                Analyze live scale vs descale velocity, platform creative shifts, and actionable media buying directives on demand.
+                See which brands are scaling up or cutting back, top ad formats, and tactical media buying tips.
               </p>
             </div>
           </div>
@@ -156,7 +156,7 @@ export function MarketForecastCard() {
             {generating ? (
               <>
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                <span>Analyzing Live Market Counts...</span>
+                <span>Analyzing Market...</span>
               </>
             ) : (
               <>
@@ -195,17 +195,17 @@ export function MarketForecastCard() {
           <div>
             <div className="flex items-center flex-wrap gap-2">
               <h2 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                AI Market Intelligence & Velocity Analysis
+                Market Trends &amp; Scaling Analysis
               </h2>
               <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${scoreColor}`}>
                 Score {healthScore}/100 • {research.marketSentiment}
               </span>
               <span className="px-2 py-0.5 text-[10px] font-mono font-bold rounded-full bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20">
-                {isDeepSeek ? "deepseek" : "heuristic"}
+                {isDeepSeek ? "AI" : "heuristic"}
               </span>
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-              Telemetry grounded analysis based on {research.telemetrySnapshot?.scalingPagesCount ?? 0} scaling vs {research.telemetrySnapshot?.descalingPagesCount ?? 0} descaling pages
+              Based on {research.telemetrySnapshot?.scalingPagesCount ?? 0} scaling vs {research.telemetrySnapshot?.descalingPagesCount ?? 0} descaling brands
               {research.generatedAt && (
                 <span className="ml-1 opacity-75">• {new Date(research.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
               )}
@@ -333,7 +333,7 @@ export function MarketForecastCard() {
             <div className="p-3.5 rounded-xl bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-slate-900/20 border border-indigo-500/20 space-y-2">
               <h3 className="text-xs font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
                 <Zap className="w-3.5 h-3.5 text-indigo-500" />
-                <span>Actionable Directives for Media Buying</span>
+                <span>Media Buying Recommendations</span>
               </h3>
               <ul className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {research.actionableDirectives.map((directive, idx) => (
@@ -351,7 +351,7 @@ export function MarketForecastCard() {
 
           {/* Live Telemetry Grounding Snapshot */}
           <div className="flex items-center flex-wrap gap-2 pt-1 text-[10px] text-slate-500 dark:text-slate-400">
-            <span className="font-semibold text-slate-600 dark:text-slate-300">Grounded in Live Telemetry:</span>
+            <span className="font-semibold text-slate-600 dark:text-slate-300">Live Data Snapshot:</span>
             <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
               {research.telemetrySnapshot?.totalActiveAds?.toLocaleString() ?? 0} Total Active Ads
             </span>
@@ -359,10 +359,10 @@ export function MarketForecastCard() {
               {research.telemetrySnapshot?.newAdsLast7Days?.toLocaleString() ?? 0} New (7D)
             </span>
             <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-              {research.telemetrySnapshot?.monitoredPages ?? 0} Monitored Stores
+              {research.telemetrySnapshot?.monitoredPages ?? 0} Tracked Brands
             </span>
             <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-              {research.telemetrySnapshot?.stablePagesCount ?? 0} Stable Stores
+              {research.telemetrySnapshot?.stablePagesCount ?? 0} Stable Brands
             </span>
           </div>
         </div>

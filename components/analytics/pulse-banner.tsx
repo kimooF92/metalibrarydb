@@ -39,7 +39,7 @@ export function PulseBanner({
         </span>
         <div className="flex items-center space-x-1.5 font-extrabold text-slate-900 dark:text-white">
           <Sparkles className="w-4 h-4 text-indigo-500 animate-pulse" />
-          <span>Market Intelligence Pulse</span>
+          <span>Market Snapshot</span>
         </div>
       </div>
 
@@ -49,7 +49,7 @@ export function PulseBanner({
         <div className="flex items-center space-x-1.5 bg-white/70 dark:bg-slate-900/70 px-2.5 py-1 rounded-xl border border-slate-200/60 dark:border-slate-800/60">
           <Flame className="w-3.5 h-3.5 text-amber-500" />
           <span>
-            <strong>{breakoutCount}</strong> Breakout Ads ({getDateRangeDescription(dateRange)})
+            <strong>{breakoutCount}</strong> Rising Ads ({getDateRangeDescription(dateRange)})
           </span>
         </div>
 
@@ -57,7 +57,7 @@ export function PulseBanner({
         <div className="flex items-center space-x-1.5 bg-white/70 dark:bg-slate-900/70 px-2.5 py-1 rounded-xl border border-slate-200/60 dark:border-slate-800/60">
           <ShoppingBag className="w-3.5 h-3.5 text-indigo-500" />
           <span>
-            Top Niche: <strong className="text-indigo-600 dark:text-indigo-400">{topNiche}</strong>{" "}
+            Top Category: <strong className="text-indigo-600 dark:text-indigo-400">{topNiche}</strong>{" "}
             {topNichePrice > 0 && <span className="text-[11px] text-slate-500 font-mono">({topNichePrice} TND avg)</span>}
           </span>
         </div>
@@ -67,7 +67,7 @@ export function PulseBanner({
           <div className="flex items-center space-x-1.5 bg-white/70 dark:bg-slate-900/70 px-2.5 py-1 rounded-xl border border-slate-200/60 dark:border-slate-800/60">
             <Zap className="w-3.5 h-3.5 text-purple-500" />
             <span>
-              Top CTA: <strong className="text-purple-600 dark:text-purple-400">{dominantCTA}</strong>
+              Top Button: <strong className="text-purple-600 dark:text-purple-400">{dominantCTA}</strong>
               {dominantCTAPct > 0 && <span className="text-[11px] text-slate-500 font-mono"> ({dominantCTAPct}%)</span>}
             </span>
           </div>
@@ -77,7 +77,7 @@ export function PulseBanner({
         <div className="flex items-center space-x-1.5 bg-white/70 dark:bg-slate-900/70 px-2.5 py-1 rounded-xl border border-slate-200/60 dark:border-slate-800/60">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
           <span>
-            Catalog Health: <strong className="text-emerald-600 dark:text-emerald-400">{catalogHealthPct}%</strong>
+            Data Coverage: <strong className="text-emerald-600 dark:text-emerald-400">{catalogHealthPct}%</strong>
           </span>
         </div>
 
@@ -87,7 +87,7 @@ export function PulseBanner({
           className="flex items-center space-x-1 px-2.5 py-1 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 shadow-xs transition-all"
         >
           <Sparkles className="w-3 h-3" />
-          <span>Opportunity Seeker</span>
+          <span>Opportunities</span>
           <ArrowRight className="w-3 h-3" />
         </Link>
       </div>

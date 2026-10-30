@@ -302,13 +302,13 @@ export const ProductRow = memo(function ProductRow({
             {isPageOnHold && (
               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-500 text-slate-950 shadow-xs border border-amber-400">
                 <span className="w-1.5 h-1.5 rounded-full bg-slate-950 animate-pulse" />
-                <span>⏸️ On Hold (Paused)</span>
+                <span>⏸️ Paused</span>
               </span>
             )}
 
             {isInactive && !isPageOnHold && (
               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                ⚫ Inactive (Off-Air)
+                ⚫ Ended
               </span>
             )}
 
@@ -413,16 +413,16 @@ export const ProductRow = memo(function ProductRow({
           {isPageOnHold ? (
             <span
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/80"
-              title="Brand account is on pause / hold (under grace period recheck)"
+              title="Brand account is paused"
             >
-              ⏸️ On Hold
+              ⏸️ Paused
             </span>
           ) : isPageInactive ? (
             <span
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
-              title="Brand has shut down advertising (confirmed inactive)"
+              title="Brand has shut down advertising"
             >
-              ⚫ Off-Air
+              ⚫ Ended
             </span>
           ) : typeof product.activeAdsCount === "number" && product.activeAdsCount > 0 ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
@@ -486,7 +486,7 @@ export const ProductRow = memo(function ProductRow({
             onClick={handleQueueVerify}
             disabled={isQueueingVerify}
             className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors cursor-pointer"
-            title="Mark all linked ads as Pending for next verifier scan"
+            title="Check if ads are still active"
           >
             <CheckCircle2 className={`w-3.5 h-3.5 ${isQueueingVerify ? "animate-pulse text-indigo-500" : ""}`} />
           </button>
@@ -498,7 +498,7 @@ export const ProductRow = memo(function ProductRow({
             onClick={handleRefresh}
             disabled={isRefreshing}
             className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            title={isRefreshing ? "Re-extracting landing page..." : "Re-extract Landing Page"}
+            title={isRefreshing ? "Refreshing product page..." : "Refresh Product Page"}
           >
             <RotateCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-indigo-500" : ""}`} />
           </button>
@@ -510,7 +510,7 @@ export const ProductRow = memo(function ProductRow({
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
           className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors"
-          title="Open Landing Page"
+          title="Open Product Page"
         >
           <ExternalLink className="w-3.5 h-3.5" />
         </a>

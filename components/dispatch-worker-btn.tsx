@@ -19,28 +19,28 @@ const WORKER_OPTIONS: Array<{
 }> = [
   {
     id: "worker",
-    label: "Meta Ad Count Worker",
-    description: "4-Shard Playwright cluster scanning active ad counts",
+    label: "Ad Count Scanner",
+    description: "Scan active ad counts across all tracked brands",
     icon: Zap,
-    badge: "4 Shards",
+    badge: "Cloud Fleet",
   },
   {
     id: "spy",
-    label: "Apify Creative Spy",
-    description: "Deep creative extraction for pages with ad spikes (+1)",
+    label: "New Ads Scanner",
+    description: "Find new creatives for brands scaling up",
     icon: Eye,
-    badge: "Apify",
+    badge: "Fast",
   },
   {
     id: "scraper",
-    label: "Product Pages Scraper",
-    description: "Direct landing page & store data extraction",
+    label: "Product Page Scraper",
+    description: "Extract product images, prices, and offers",
     icon: ShoppingBag,
   },
   {
     id: "favorites",
-    label: "Verify Favorite Ads",
-    description: "Active check on starred product creative pages",
+    label: "Check Favorite Ads",
+    description: "Verify active status of saved products",
     icon: Star,
   },
 ];
@@ -76,26 +76,24 @@ export function DispatchWorkerBtn({ variant = "navbar", className = "" }: Dispat
       if (res.success) {
         showToast({
           type: "success",
-          title: `🚀 GitHub Worker Dispatched!`,
-          message: res.message || (res.mode === "trigger.dev"
-            ? `Trigger.dev routed workflow_dispatch to GitHub Actions for '${target}'.`
-            : `Directly dispatched workflow to GitHub Actions (4 Shards).`),
+          title: `🚀 Background Scan Started!`,
+          message: res.message || "Background workers are scanning your tracked brands now.",
           link: "https://github.com/kimooF92/metalibrarydb/actions",
-          linkLabel: "Open GitHub Actions Live Runs",
+          linkLabel: "View Live Activity",
           duration: 6000,
         });
       } else {
         showToast({
           type: "error",
-          title: "Dispatch Failed",
-          message: res.error || "Could not trigger workflow. Check GitHub token permissions.",
+          title: "Scan Failed to Start",
+          message: res.error || "Could not start background scan. Please check your credentials.",
           duration: 6000,
         });
       }
     } catch (err: any) {
       showToast({
         type: "error",
-        title: "Dispatch Error",
+        title: "Scan Error",
         message: err.message || "An unexpected error occurred.",
       });
     } finally {
@@ -111,10 +109,10 @@ export function DispatchWorkerBtn({ variant = "navbar", className = "" }: Dispat
           <div className="space-y-1">
             <div className="flex items-center space-x-2">
               <Zap className="w-4 h-4 text-amber-500 fill-amber-500/20" />
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">GitHub Actions Fleet Dispatch</h3>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Cloud Scan Actions</h3>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Launch cloud scraping jobs on-demand without consuming Trigger.dev compute credits. Uses GitHub&apos;s 2,000 monthly free runner minutes.
+              Run cloud scans anytime in the background using your GitHub Actions quota.
             </p>
           </div>
           <a
@@ -123,7 +121,7 @@ export function DispatchWorkerBtn({ variant = "navbar", className = "" }: Dispat
             rel="noopener noreferrer"
             className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 shrink-0"
           >
-            <span>Live Runs</span>
+            <span>Live Activity</span>
             <ExternalLink className="w-3 h-3" />
           </a>
         </div>
@@ -171,7 +169,7 @@ export function DispatchWorkerBtn({ variant = "navbar", className = "" }: Dispat
       <button
         onClick={() => setIsOpen((prev) => !prev)}
         disabled={isDispatching}
-        title="Dispatch GitHub Actions Worker Fleet"
+        title="Run background scans"
         className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-all cursor-pointer shadow-xs select-none ${
           isOpen
             ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700"
@@ -183,7 +181,7 @@ export function DispatchWorkerBtn({ variant = "navbar", className = "" }: Dispat
         ) : (
           <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500/20 shrink-0" />
         )}
-        <span>{isDispatching ? "Dispatching..." : "Run Worker"}</span>
+        <span>{isDispatching ? "Starting..." : "Run Scans"}</span>
         <ChevronDown
           className={`w-3 h-3 text-slate-400 transition-transform duration-150 ${
             isOpen ? "rotate-180 text-slate-600 dark:text-slate-200" : ""
@@ -195,8 +193,8 @@ export function DispatchWorkerBtn({ variant = "navbar", className = "" }: Dispat
       {isOpen && (
         <div className="absolute top-full right-0 mt-1.5 w-68 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150 p-1.5 space-y-1">
           <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-            <span>Dispatch Fleet</span>
-            <span className="text-[9px] lowercase font-mono text-slate-400">via Trigger.dev</span>
+            <span>Background Scans</span>
+            <span className="text-[9px] lowercase font-mono text-slate-400">Cloud Runners</span>
           </div>
 
           {WORKER_OPTIONS.map((opt) => {
@@ -241,7 +239,7 @@ export function DispatchWorkerBtn({ variant = "navbar", className = "" }: Dispat
               rel="noopener noreferrer"
               className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center justify-between font-semibold py-0.5"
             >
-              <span>GitHub Actions Live Runs</span>
+              <span>View Live Activity</span>
               <ExternalLink className="w-3 h-3" />
             </a>
           </div>
