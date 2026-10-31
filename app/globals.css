@@ -102,11 +102,13 @@ html.theme-fade-running::before {
 .glass-panel {
   background: var(--card);
   border: 1px solid var(--border);
+  color: var(--card-foreground);
 }
 
 .glass-card {
   background: var(--card);
   border: 1px solid var(--border);
+  color: var(--card-foreground);
 }
 
 .glass-card:hover {
@@ -145,34 +147,39 @@ html.theme-fade-running::before {
 }
 
 :root {
-  --background: oklch(0.98 0.005 240);
-  /* Soft light gray/blue #f8fafc */
-  --foreground: oklch(0.15 0.015 240);
-  /* Deep slate text #0f172a */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.03 0.002 240);
   --card: oklch(1 0 0);
-  /* White #ffffff */
-  --card-foreground: oklch(0.15 0.015 240);
+  --card-foreground: oklch(0.03 0.002 240);
   --popover: oklch(1 0 0);
-  /* White */
-  --popover-foreground: oklch(0.15 0.015 240);
+  --popover-foreground: oklch(0.03 0.002 240);
+  /* Brand purple primary & focus accent */
   --primary: oklch(0.55 0.16 260);
-  /* Brand purple #5e6ad2 */
   --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.96 0.01 240);
-  /* #f1f5f9 */
-  --secondary-foreground: oklch(0.15 0.015 240);
-  --muted: oklch(0.96 0.01 240);
-  --muted-foreground: oklch(0.40 0.015 240);
-  /* Slate-600 #475569 - Passes WCAG AAA (7.0:1) */
-  --accent: oklch(0.94 0.015 240);
-  --accent-foreground: oklch(0.15 0.015 240);
-  --destructive: oklch(0.55 0.22 25);
-  --border: oklch(0.92 0.01 240);
-  /* Crisp border #e2e8f0 */
-  --input: oklch(0.92 0.01 240);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.03 0.002 240);
+  --muted: oklch(0.963 0.002 197.1);
+  --muted-foreground: oklch(0.20 0.005 240);
+  --accent: oklch(0.963 0.002 197.1);
+  --accent-foreground: oklch(0.03 0.002 240);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.925 0.005 214.3);
+  --input: oklch(0.925 0.005 214.3);
   --ring: oklch(0.55 0.16 260);
+  --chart-1: oklch(0.872 0.007 219.6);
+  --chart-2: oklch(0.56 0.021 213.5);
+  --chart-3: oklch(0.45 0.017 213.2);
+  --chart-4: oklch(0.378 0.015 216);
+  --chart-5: oklch(0.275 0.011 216.9);
   --radius: 0.25rem;
-  /* 4px */
+  --sidebar: oklch(0.987 0.002 197.1);
+  --sidebar-foreground: oklch(0.03 0.002 240);
+  --sidebar-primary: oklch(0.55 0.16 260);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.963 0.002 197.1);
+  --sidebar-accent-foreground: oklch(0.03 0.002 240);
+  --sidebar-border: oklch(0.925 0.005 214.3);
+  --sidebar-ring: oklch(0.55 0.16 260);
 }
 
 .dark {
@@ -197,6 +204,19 @@ html.theme-fade-running::before {
   /* Dark border #1f2028 */
   --input: oklch(0.18 0.005 240);
   --ring: oklch(0.55 0.16 260);
+  --chart-1: oklch(0.872 0.007 219.6);
+  --chart-2: oklch(0.56 0.021 213.5);
+  --chart-3: oklch(0.45 0.017 213.2);
+  --chart-4: oklch(0.378 0.015 216);
+  --chart-5: oklch(0.275 0.011 216.9);
+  --sidebar: oklch(0.10 0.005 240);
+  --sidebar-foreground: oklch(0.98 0.005 260);
+  --sidebar-primary: oklch(0.55 0.16 260);
+  --sidebar-primary-foreground: oklch(0.98 0.005 260);
+  --sidebar-accent: oklch(0.16 0.01 240);
+  --sidebar-accent-foreground: oklch(0.98 0.005 260);
+  --sidebar-border: oklch(0.18 0.005 240);
+  --sidebar-ring: oklch(0.55 0.16 260);
 }
 
 @theme inline {
@@ -220,6 +240,19 @@ html.theme-fade-running::before {
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
