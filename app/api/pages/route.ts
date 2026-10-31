@@ -8,7 +8,7 @@ import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 import { validateAdminRole, validateApiSecret } from "@/lib/api-guard";
-import { getCached, setCached, deleteByPrefix, deleteCached, buildCanonicalFilterHash } from "@/lib/cache-service";
+import { getCached, setCached, deleteByPrefix, deleteCached, buildCanonicalFilterHash, getEntityCacheVersion } from "@/lib/cache-service";
 
 const ALLOWED_PAGES_FILTERS = [
   "search", "status", "searchType", "tab", "tag", "sortBy", "sortOrder", "range", "page", "limit", "lean"
@@ -64,7 +64,9 @@ export async function GET(request: Request) {
     // Hybrid Cache Check (L1 Memory + L2 Upstash Redis) to eliminate duplicate DB waterfalls
     const forceRefresh = searchParams.get("_t") !== null || searchParams.get("refresh") === "true";
     const filterHash = buildCanonicalFilterHash(searchParams, ALLOWED_PAGES_FILTERS);
-    const cacheKey = `cache:pages:${activeWorkspace.id}:${filterHash}`;
+    // Generational cache versioning enables O(1) workspace invalidation without full keyspace SCANs
+    const cacheVersion = await getEntityCacheVersion(activeWorkspace.id, "pages");
+    const cacheKey = `cache:pages:${activeWorkspace.id}:v${cacheVersion}:${filterHash}`;
 
     if (!forceRefresh) {
       const cached = await getCached<any>(cacheKey);

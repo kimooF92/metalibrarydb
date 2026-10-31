@@ -16,6 +16,11 @@ function createRedisClient(): Redis | null {
     ? new Redis({
         url: url!,
         token: token!,
+        // Fail-fast timeout (1500ms): prevents network jitter from stalling Next.js SSR/API routes
+        signal: () => AbortSignal.timeout(1500),
+        retry: {
+          retries: 1,
+        },
       })
     : null;
 }

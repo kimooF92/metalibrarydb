@@ -73,9 +73,20 @@ export function ScanProgressWidget({
     };
 
     fetchProgress();
-    const interval = setInterval(fetchProgress, 1800);
+    // Throttled 3.5s polling loop pauses when tab is in background to protect API & Upstash quota
+    const interval = setInterval(() => {
+      if (!document.hidden) fetchProgress();
+    }, 3500);
 
-    return () => clearInterval(interval);
+    const handleVisibility = () => {
+      if (!document.hidden) fetchProgress();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [scanningPageIds, onScanFinished]);
 
   const activeEntries = Object.values(stepsMap);

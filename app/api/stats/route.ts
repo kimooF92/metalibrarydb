@@ -114,8 +114,9 @@ export async function GET(request: Request) {
         : null,
     };
 
-    // Store in Hybrid L1 (Memory) and L2 (Upstash Redis) cache
-    await setCached(cacheKey, responseData, STATS_CACHE_TTL_SECONDS);
+    // Adaptive TTL: 10s during active scans for fresh UI counts, 60s when idle
+    const effectiveTtl = countsMap.scanning > 0 || countsMap.pending > 0 ? 10 : STATS_CACHE_TTL_SECONDS;
+    await setCached(cacheKey, responseData, effectiveTtl);
 
     return NextResponse.json(responseData, {
       headers: { "Cache-Control": PRIVATE_READ_CACHE_CONTROL, Vary: PRIVATE_AUTH_VARY },

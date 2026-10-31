@@ -172,6 +172,7 @@ function DashboardContent() {
   const [pages, setPages] = useState<TrackedPage[]>([]);
   const [pagesLoading, setPagesLoading] = useState(true);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const realtimeStatsDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const [search, setSearch] = useState(initialLoaded.search);
   const [statusFilter, setStatusFilter] = useState(initialLoaded.statusFilter);
@@ -479,24 +480,45 @@ function DashboardContent() {
             })
           );
 
-          // Silently sync the top summary stats (pending, scanning, completed) with fresh data
-          fetchStats(true, true);
+          // Debounced silent stats refresh: coalesces rapid batch updates (e.g. 20 rows in a scan)
+          // into a single cached stats fetch after 3 seconds instead of 20 parallel queries.
+          if (realtimeStatsDebounceRef.current) {
+            clearTimeout(realtimeStatsDebounceRef.current);
+          }
+          realtimeStatsDebounceRef.current = setTimeout(() => {
+            fetchStats(true, false);
+          }, 3000);
         }
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
+      if (realtimeStatsDebounceRef.current) {
+        clearTimeout(realtimeStatsDebounceRef.current);
+      }
     };
   }, [fetchStats]);
 
-  // Active scan sync loop: while scans are in progress (scanning or pending > 0), poll stats every 3s
+  // Active scan sync loop: while scans are in progress, poll stats at a relaxed 12s interval (using cache)
+  // and strictly pause when the tab is hidden.
   useEffect(() => {
     if (!stats || (stats.scanning === 0 && stats.pending === 0)) return;
     const interval = setInterval(() => {
-      fetchStats(true, true);
-    }, 3000);
-    return () => clearInterval(interval);
+      if (!document.hidden) {
+        fetchStats(true, false);
+      }
+    }, 12000);
+
+    const handleVisibility = () => {
+      if (!document.hidden) fetchStats(true, false);
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [stats?.scanning, stats?.pending, fetchStats]);
 
   const handleRefresh = async (ids: string[]) => {

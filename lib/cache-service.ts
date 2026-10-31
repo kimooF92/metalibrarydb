@@ -139,6 +139,66 @@ export async function getCached<T>(
 }
 
 /**
+ * Retrieve multiple cached keys in a single round-trip with Hybrid L1 (Memory) -> L2 (Upstash MGET).
+ * Reduces up to N HTTP requests down to 1 single MGET call.
+ */
+export async function getManyCached<T>(
+  keys: string[],
+  options?: { l1MaxTtlMs?: number }
+): Promise<Record<string, T | null>> {
+  const result: Record<string, T | null> = {};
+  if (!keys || keys.length === 0) return result;
+
+  const now = Date.now();
+  const missingKeys: string[] = [];
+
+  // 1. Check L1 Memory for each key
+  for (const key of keys) {
+    const mem = memoryCache.get(key);
+    if (mem && mem.expiresAt > now) {
+      result[key] = mem.value as T;
+    } else {
+      if (mem) memoryCache.delete(key);
+      missingKeys.push(key);
+    }
+  }
+
+  if (missingKeys.length === 0 || !redis) {
+    for (const key of missingKeys) {
+      result[key] = null;
+    }
+    return result;
+  }
+
+  // 2. Fetch all missing keys from Upstash in a single MGET call
+  try {
+    const values = await redis.mget<(T | null)[]>(...missingKeys);
+    const maxL1 = options?.l1MaxTtlMs ?? L1_MAX_TTL_MS;
+
+    ensureMemoryCapacity();
+    for (let i = 0; i < missingKeys.length; i++) {
+      const key = missingKeys[i];
+      const val = values?.[i] ?? null;
+      result[key] = val;
+
+      if (val !== null && val !== undefined) {
+        memoryCache.set(key, {
+          value: val,
+          expiresAt: now + maxL1,
+        });
+      }
+    }
+  } catch (err: any) {
+    console.warn(`[Upstash Cache Warning] getManyCached failed:`, err?.message || err);
+    for (const key of missingKeys) {
+      result[key] = null;
+    }
+  }
+
+  return result;
+}
+
+/**
  * Store data into both L1 Memory and L2 Upstash Redis with a mandatory TTL.
  * Strictly enforces a 400 KB ceiling across both L1 and L2 to prevent quota and RAM bloat.
  *
@@ -243,6 +303,72 @@ export async function deleteByPrefix(prefix: string): Promise<void> {
     }
   } catch (err: any) {
     console.warn(`[Upstash Cache Warning] deleteByPrefix("${prefix}") failed:`, err?.message || err);
+  }
+}
+
+/**
+ * Retrieve the current generational cache version for an entity scoped to a workspace.
+ * O(1) in-memory check with fallback to Upstash.
+ */
+export async function getEntityCacheVersion(
+  workspaceId: string,
+  entity: string
+): Promise<number> {
+  const versionKey = `v:${entity}:${workspaceId}`;
+  const now = Date.now();
+  const mem = memoryCache.get(versionKey);
+  if (mem && mem.expiresAt > now) {
+    return Number(mem.value) || 1;
+  }
+
+  if (!redis) return 1;
+
+  try {
+    const v = await redis.get<number>(versionKey);
+    const num = v ? Number(v) : 1;
+    ensureMemoryCapacity();
+    memoryCache.set(versionKey, { value: num, expiresAt: now + 30_000 });
+    return num;
+  } catch {
+    return 1;
+  }
+}
+
+/**
+ * Invalidate all cached views for an entity in a workspace instantaneously (O(1)).
+ * Replaces expensive SCAN loops with a single atomic INCR command.
+ */
+export async function bumpEntityCacheVersion(
+  workspaceId: string,
+  entity: string
+): Promise<number> {
+  const versionKey = `v:${entity}:${workspaceId}`;
+  memoryCache.delete(versionKey);
+
+  // Clear matching keys from L1 memory
+  const prefix = `cache:${entity}:${workspaceId}:`;
+  for (const k of memoryCache.keys()) {
+    if (k.startsWith(prefix)) {
+      memoryCache.delete(k);
+    }
+  }
+
+  if (!redis) return 1;
+
+  try {
+    let newV = await redis.incr(versionKey);
+    // If key did not exist before INCR, Redis initializes it to 1.
+    // Advance to 2 so all baseline v1 caches are guaranteed invalidated.
+    if (newV === 1) {
+      newV = await redis.incr(versionKey);
+    }
+    await redis.expire(versionKey, 7 * 86400).catch(() => {});
+    ensureMemoryCapacity();
+    memoryCache.set(versionKey, { value: newV, expiresAt: Date.now() + 30_000 });
+    return newV;
+  } catch (err: any) {
+    console.warn(`[Upstash Version Warning] bumpEntityCacheVersion("${versionKey}") failed:`, err?.message || err);
+    return 1;
   }
 }
 

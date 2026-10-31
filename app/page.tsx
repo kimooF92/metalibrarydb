@@ -140,6 +140,7 @@ interface OverviewData {
     severity: string;
     createdAt: string;
   }>;
+  activeScanningPageIds?: string[];
 }
 
 // Mini SVG Sparkline Component matching /products aesthetic
@@ -227,7 +228,7 @@ function DashboardOverviewContent() {
     loadOverview();
   }, [loadOverview, activeWorkspace?.id]);
 
-  const scanningIds = data?.kpi.scanningCount ? ["scanning-active"] : [];
+  const scanningIds = data?.activeScanningPageIds || [];
 
   return (
     <div className="w-full flex-1 flex flex-col space-y-4 pb-8">

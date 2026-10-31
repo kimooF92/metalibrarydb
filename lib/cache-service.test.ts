@@ -2,6 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   getCached,
+  getManyCached,
+  getEntityCacheVersion,
+  bumpEntityCacheVersion,
   setCached,
   deleteCached,
   deleteByPrefix,
@@ -334,6 +337,47 @@ test("Upstash Cache & Lock Service Suite", async (t) => {
       assert.strictEqual(await isLockOwner(lockKey, token1), false, "Token should no longer be owner after release");
     } finally {
       await forceReleaseLock(lockKey);
+    }
+  });
+
+  await t.test("getManyCached retrieves multiple keys across L1 and L2 Upstash in a single MGET call", async () => {
+    const key1 = "cache:test:mget-1";
+    const key2 = "cache:test:mget-2";
+    const key3 = "cache:test:mget-missing";
+
+    try {
+      await setCached(key1, { id: 1, name: "Item One" }, 30);
+      await setCached(key2, { id: 2, name: "Item Two" }, 30);
+
+      // Verify batch retrieval
+      const results = await getManyCached<{ id: number; name: string }>([key1, key2, key3]);
+      assert.deepStrictEqual(results[key1], { id: 1, name: "Item One" }, "Key 1 should be fetched");
+      assert.deepStrictEqual(results[key2], { id: 2, name: "Item Two" }, "Key 2 should be fetched");
+      assert.strictEqual(results[key3], null, "Missing key should resolve to null");
+    } finally {
+      await deleteCached(key1);
+      await deleteCached(key2);
+    }
+  });
+
+  await t.test("Generational cache versioning provides atomic O(1) invalidation", async () => {
+    const wsId = "ws-test-gen-123";
+    const entity = "pages";
+
+    try {
+      // 1. Initial version defaults to 1
+      const initialVersion = await getEntityCacheVersion(wsId, entity);
+      assert.strictEqual(initialVersion >= 1, true, "Initial version should be at least 1");
+
+      // 2. Bump version
+      const bumpedVersion = await bumpEntityCacheVersion(wsId, entity);
+      assert.strictEqual(bumpedVersion, initialVersion + 1, "Bumped version should increment by 1");
+
+      // 3. Next read reflects new version
+      const readAfterBump = await getEntityCacheVersion(wsId, entity);
+      assert.strictEqual(readAfterBump, bumpedVersion, "Version read after bump should match incremented value");
+    } finally {
+      await deleteCached(`v:${entity}:${wsId}`);
     }
   });
 });

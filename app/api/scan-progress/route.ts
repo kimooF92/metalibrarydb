@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCached } from "@/lib/cache-service";
+import { getCached, getManyCached } from "@/lib/cache-service";
 import { validateApiSecret } from "@/lib/api-guard";
 import { db } from "@/db";
 import { trackedPages } from "@/db/schema";
@@ -30,12 +30,15 @@ export async function GET(request: Request) {
     const singleId = searchParams.get("pageId")?.trim();
     const multiIdsRaw = searchParams.get("pageIds")?.trim();
 
+    // Strict UUID validation eliminates Postgres syntax errors and invalid query scans
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
     const ids: string[] = [];
-    if (singleId) ids.push(singleId);
+    if (singleId && UUID_REGEX.test(singleId)) ids.push(singleId);
     if (multiIdsRaw) {
       multiIdsRaw.split(",").forEach((id) => {
         const clean = id.trim();
-        if (clean && !ids.includes(clean)) ids.push(clean);
+        if (clean && UUID_REGEX.test(clean) && !ids.includes(clean)) ids.push(clean);
       });
     }
 
@@ -46,15 +49,13 @@ export async function GET(request: Request) {
     // Limit batch to 25 keys to prevent Redis abuse
     const targetIds = ids.slice(0, 25);
 
-    const results = await Promise.all(
-      targetIds.map(async (id) => {
-        const stepData = await getCached<ScanProgressStep>(`scan_step:${id}`);
-        return [id, stepData] as const;
-      })
-    );
+    // Single MGET round-trip replaces up to 25 parallel HTTP requests
+    const stepKeys = targetIds.map((id) => `scan_step:${id}`);
+    const stepDataMap = await getManyCached<ScanProgressStep>(stepKeys);
 
     const progressMap: Record<string, ScanProgressStep> = {};
-    for (const [id, step] of results) {
+    for (const id of targetIds) {
+      const step = stepDataMap[`scan_step:${id}`];
       if (step) {
         progressMap[id] = step;
       }

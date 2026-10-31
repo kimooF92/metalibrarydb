@@ -47,10 +47,12 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Partition-bounded 14-day window avoids full table history scans on scan_history
     const differenceSql = sql<number>`(
       SELECT s.difference
       FROM scan_history s
       WHERE s.tracked_page_id = ${trackedPages.id}
+        AND s.checked_at >= NOW() - INTERVAL '14 days'
       ORDER BY s.checked_at DESC
       LIMIT 1
     )`;
@@ -71,6 +73,7 @@ export async function GET(req: NextRequest) {
       recentDiscoveredRows,
       recentNotificationRows,
       scalingBrandsRows,
+      activeScanningRows,
     ] = await Promise.all([
       // 1. Brand KPIs
       db
@@ -357,6 +360,18 @@ export async function GET(req: NextRequest) {
         )
         .orderBy(desc(differenceSql), desc(trackedPages.currentResults))
         .limit(5),
+
+      // 15. Real Active Scanning IDs (eliminates dummy placeholder strings)
+      db
+        .select({ id: trackedPages.id })
+        .from(trackedPages)
+        .where(
+          and(
+            eq(trackedPages.workspaceId, activeWorkspace.id),
+            eq(trackedPages.status, "scanning")
+          )
+        )
+        .limit(10),
     ]);
 
     // Format fresh breakouts with winner scoring metrics
@@ -497,6 +512,7 @@ export async function GET(req: NextRequest) {
         recent: recentDiscoveredRows,
       },
       recentActivity: recentNotificationRows,
+      activeScanningPageIds: (activeScanningRows || []).map((r) => r.id),
     };
 
     // Cache in Redis/memory

@@ -34,11 +34,18 @@ export async function checkRateCaps(): Promise<{ allowed: boolean; reason?: stri
     return { allowed: true };
   }
 
-  // 1. Fast Redis check (sub-5ms, eliminates high-frequency DB waterfall)
+  // 1. Fast Redis check via single pipelined round-trip (eliminates high-frequency DB waterfall)
   if (redis) {
     try {
+      const pipe = redis.pipeline();
+      if (maxHour > 0) pipe.get<number>(getHourKey());
+      if (maxDay > 0) pipe.get<number>(getDayKey());
+
+      const results = await pipe.exec<number[]>();
+      let idx = 0;
+
       if (maxHour > 0) {
-        const hourCount = (await redis.get<number>(getHourKey())) || 0;
+        const hourCount = results[idx++] || 0;
         if (hourCount >= maxHour) {
           return {
             allowed: false,
@@ -48,7 +55,7 @@ export async function checkRateCaps(): Promise<{ allowed: boolean; reason?: stri
       }
 
       if (maxDay > 0) {
-        const dayCount = (await redis.get<number>(getDayKey())) || 0;
+        const dayCount = results[idx++] || 0;
         if (dayCount >= maxDay) {
           return {
             allowed: false,
@@ -103,23 +110,18 @@ export async function checkRateCaps(): Promise<{ allowed: boolean; reason?: stri
 }
 
 export async function recordSuccessfulScan() {
-  // 1. Atomic Redis increment (sub-5ms, zero DB writes)
+  // 1. Atomic Redis pipelined increment & TTL in 1 single HTTP request (zero risk of orphaned unexpired keys)
   if (redis) {
     try {
       const hourKey = getHourKey();
       const dayKey = getDayKey();
 
-      const [hCount, dCount] = await Promise.all([
-        redis.incr(hourKey),
-        redis.incr(dayKey),
-      ]);
-
-      if (hCount === 1) {
-        await redis.expire(hourKey, 7200); // 2 hours
-      }
-      if (dCount === 1) {
-        await redis.expire(dayKey, 172800); // 48 hours
-      }
+      const pipe = redis.pipeline();
+      pipe.incr(hourKey);
+      pipe.expire(hourKey, 7200); // 2 hours
+      pipe.incr(dayKey);
+      pipe.expire(dayKey, 172800); // 48 hours
+      await pipe.exec();
       return;
     } catch (err: any) {
       console.warn("[Throttle] Redis recordSuccessfulScan error, falling back to DB:", err?.message || err);
