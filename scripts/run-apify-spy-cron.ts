@@ -280,7 +280,9 @@ async function main() {
       continue;
     }
 
-    // Rule 2: Recurring Delta Scan
+    // Rule 2: Recurring Full Catalog Scan on Ad Expansion (diff >= 1 on 20+ ad pages)
+    // When a brand launches new ads, a full scan captures new creatives AND purges any dead ads via reconciliation.
+    // Negative diffs (diff < 0) are ignored to save Apify credits.
     const latestHistory = await db.query.scanHistory.findFirst({
       where: eq(scanHistory.trackedPageId, page.id),
       orderBy: [desc(scanHistory.checkedAt)],
@@ -289,7 +291,7 @@ async function main() {
     const diff = latestHistory?.difference || 0;
     const isCloudEligible = (page.currentResults || 0) >= 20 && diff >= 1;
 
-    // Micro-pages (< 20 ads) with small delta (< autoSpyThreshold) are handled by free local worker
+    // Micro-pages (< 20 ads) or pages without ad increases (diff <= 0) are skipped by Apify
     if (!isCloudEligible && diff < autoSpyThreshold) {
       skippedNoDiffCount++;
       continue;
@@ -303,13 +305,15 @@ async function main() {
       continue;
     }
 
-    // ELIGIBLE: New ads detected and not yet scanned!
+    // ELIGIBLE: New ads detected (+diff >= 1) on 20+ ad page!
+    // Trigger Full Catalog Scan to capture new ads AND reconcile/archive turned-off ads.
     const lastScanTimeStr = page.lastCreativeScan ? page.lastCreativeScan.toLocaleTimeString() : "Never";
+    const fullScanCount = Math.max(page.currentResults || 30, 20);
     eligiblePlans.push({
       page,
-      reason: `+${diff} new ad(s) detected (Diff logged at ${checkedAt.toLocaleTimeString()}, Last spy scan: ${lastScanTimeStr})`,
-      delta: diff,
-      isFullScan: false, // Delta scan only (does not archive active catalog)
+      reason: `+${diff} new ad(s) detected (Full Catalog Sync: ~${fullScanCount} ads, Last spy scan: ${lastScanTimeStr})`,
+      delta: fullScanCount,
+      isFullScan: true, // Triggers reconcileArchivedAds to clean up dead ads
     });
   }
 
@@ -426,6 +430,7 @@ async function main() {
         pageUrl: sortedUrl,
         delta,
         creativeScanId: newScan.id,
+        isFullScan: Boolean(isFullScan),
       });
 
       if (!runRes?.id) {
