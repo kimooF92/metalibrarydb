@@ -6,10 +6,28 @@ import { refreshSchema } from "@/lib/validators";
 import { triggerGitHubWorkflow } from "@/lib/github";
 import { validateAdminRole } from "@/lib/api-guard";
 import { tasks } from "@trigger.dev/sdk";
+import {
+  scanRateLimiter,
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+  isTrustedInternalRequest,
+} from "@/lib/ratelimit";
 
 export async function POST(request: Request) {
   const authError = await validateAdminRole(request);
   if (authError) return authError;
+
+  if (!isTrustedInternalRequest(request)) {
+    const clientIp = getClientIp(request);
+    const rateLimit = await checkRateLimit(scanRateLimiter, clientIp);
+    if (!rateLimit.success) {
+      return rateLimitResponse(
+        rateLimit.retryAfterSeconds,
+        `Ad refresh rate limit reached. Please wait ${rateLimit.retryAfterSeconds}s before queuing more scans.`
+      );
+    }
+  }
 
   try {
     const body = await request.json();

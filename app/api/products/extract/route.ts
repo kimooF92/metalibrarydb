@@ -21,10 +21,28 @@ import { buildProductExtractionNotification } from "@/lib/product-extraction";
 import { enhanceProductWithJev } from "@/lib/product-enhancer";
 import { validateAndGatekeepProduct, resolveEffectiveScrapeStatus } from "@/lib/product-validator";
 import { deleteByPrefix, deleteCached } from "@/lib/cache-service";
+import {
+  scraperRateLimiter,
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+  isTrustedInternalRequest,
+} from "@/lib/ratelimit";
 
 export async function POST(req: NextRequest) {
   const authError = await validateApiSecret(req);
   if (authError) return authError;
+
+  if (!isTrustedInternalRequest(req)) {
+    const clientIp = getClientIp(req);
+    const rateLimit = await checkRateLimit(scraperRateLimiter, clientIp);
+    if (!rateLimit.success) {
+      return rateLimitResponse(
+        rateLimit.retryAfterSeconds,
+        `Product extraction rate limit reached. Please wait ${rateLimit.retryAfterSeconds}s before extracting another product.`
+      );
+    }
+  }
 
   let notificationContext: {
     url: string;

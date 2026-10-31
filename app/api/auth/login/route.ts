@@ -9,15 +9,29 @@ import {
   resetLoginRateLimit,
   UserRole,
 } from "@/lib/auth";
+import {
+  loginRateLimiter,
+  checkRateLimit,
+  resetRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/lib/ratelimit";
 
 export async function POST(request: Request) {
   try {
     // Extract client IP for brute force throttling
-    const forwardedFor = request.headers.get("x-forwarded-for");
-    const realIp = request.headers.get("x-real-ip");
-    const clientIp = forwardedFor ? forwardedFor.split(",")[0].trim() : realIp || "127.0.0.1";
+    const clientIp = getClientIp(request);
 
-    // Check rate limiter
+    // 1. Check Upstash distributed rate limiter (works across all serverless instances)
+    const upstashRate = await checkRateLimit(loginRateLimiter, clientIp);
+    if (!upstashRate.success) {
+      return rateLimitResponse(
+        upstashRate.retryAfterSeconds,
+        `Too many login attempts from this IP. Please wait ${upstashRate.retryAfterSeconds}s before trying again.`
+      );
+    }
+
+    // 2. Fallback check local in-memory rate limiter
     const rateCheck = checkLoginRateLimit(clientIp);
     if (!rateCheck.allowed) {
       return NextResponse.json(
@@ -76,8 +90,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Reset rate limiter on successful authentication
+    // Reset rate limiters on successful authentication
     resetLoginRateLimit(clientIp);
+    await resetRateLimit(loginRateLimiter, clientIp);
 
     const role: UserRole = isAdmin ? "admin" : "staff";
 

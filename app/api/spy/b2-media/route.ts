@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { isB2Configured } from "@/lib/b2-storage";
+import {
+  mediaProxyRateLimiter,
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/lib/ratelimit";
 
 const keyId = process.env.B2_KEY_ID?.trim() || process.env.B2_APPLICATION_KEY_ID?.trim();
 const appKey = process.env.B2_APPLICATION_KEY?.trim();
@@ -22,6 +28,12 @@ const s3Client = isB2Configured()
   : null;
 
 export async function GET(req: NextRequest) {
+  const clientIp = getClientIp(req);
+  const rateLimit = await checkRateLimit(mediaProxyRateLimiter, clientIp);
+  if (!rateLimit.success) {
+    return rateLimitResponse(rateLimit.retryAfterSeconds, "Media rate limit exceeded. Please wait a moment.");
+  }
+
   const key = req.nextUrl.searchParams.get("key");
   if (!key || !s3Client) {
     return new NextResponse("Missing key parameter or B2 not configured", { status: 400 });

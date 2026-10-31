@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateApiSecret, getRoleFromRequest } from "@/lib/api-guard";
+import {
+  exportRateLimiter,
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+  isTrustedInternalRequest,
+} from "@/lib/ratelimit";
 import { getActiveWorkspace, getTunisianWorkspace } from "@/lib/workspace-server";
 import { serializeToCsv } from "@/lib/csv-utils";
 import {
@@ -32,6 +39,18 @@ export async function GET(req: NextRequest) {
   // 1. Auth Guard
   const authError = await validateApiSecret(req);
   if (authError) return authError;
+
+  // 2. Upstash Rate Limit (prevent database pool exhaustion / egress spikes)
+  if (!isTrustedInternalRequest(req)) {
+    const clientIp = getClientIp(req);
+    const rateLimit = await checkRateLimit(exportRateLimiter, clientIp);
+    if (!rateLimit.success) {
+      return rateLimitResponse(
+        rateLimit.retryAfterSeconds,
+        `Export limit reached (max 5 exports/min). Please wait ${rateLimit.retryAfterSeconds}s before exporting again.`
+      );
+    }
+  }
 
   try {
     const { searchParams } = req.nextUrl;

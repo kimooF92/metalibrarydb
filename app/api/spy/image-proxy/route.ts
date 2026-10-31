@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateApiSecret } from "@/lib/api-guard";
+import {
+  mediaProxyRateLimiter,
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/lib/ratelimit";
 
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB maximum image size
 
@@ -53,6 +59,12 @@ export function isPrivateOrLocalHost(host: string): boolean {
 export async function GET(req: NextRequest) {
   const authError = await validateApiSecret(req);
   if (authError) return authError;
+
+  const clientIp = getClientIp(req);
+  const rateLimit = await checkRateLimit(mediaProxyRateLimiter, clientIp);
+  if (!rateLimit.success) {
+    return rateLimitResponse(rateLimit.retryAfterSeconds, "Image proxy rate limit exceeded. Please wait a moment.");
+  }
 
   const urlStr = req.nextUrl.searchParams.get("url");
   if (!urlStr) {
