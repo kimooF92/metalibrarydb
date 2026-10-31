@@ -17,6 +17,7 @@ import { validateAndGatekeepProduct, resolveEffectiveScrapeStatus } from "@/lib/
 import { classifyProductOffline } from "@/lib/product-classifier";
 import { detectExtractionDoubt, resolvePriceDoubtWithJev } from "@/lib/doubt-detector";
 import { enhanceProductWithJev } from "@/lib/product-enhancer";
+import { isQStashConfigured, enqueueProductScrape } from "@/lib/qstash";
 
 // In-flight URL scrape deduplication map to prevent redundant concurrent Firecrawl requests
 const inFlightScrapes = new Map<string, Promise<any>>();
@@ -61,8 +62,13 @@ function queueBackgroundScrape(task: () => Promise<void>) {
 
 /**
  * Awaits until all queued background product scrapes complete or until the timeout is reached.
+ * When QStash is active, scrapes are durably managed in the cloud without stalling serverless requests.
  */
 export async function waitForScrapeQueueDrain(timeoutMs: number = 45000): Promise<{ drained: number; remaining: number }> {
+  if (isQStashConfigured()) {
+    return { drained: totalDrainedCount, remaining: 0 };
+  }
+
   if (activeScrapesCount === 0 && scrapeQueue.length === 0) {
     return { drained: totalDrainedCount, remaining: 0 };
   }
@@ -323,23 +329,37 @@ export async function linkAndAutoScrapeProduct({
     }
 
     // 3. Queue asynchronous background scraping (Non-blocking)
-    queueBackgroundScrape(async () => {
-      // Check if already in-flight
-      if (inFlightScrapes.has(normalizedUrl)) {
-        await inFlightScrapes.get(normalizedUrl);
-        return;
-      }
-
-      const scrapePromise = processProductExtraction(targetProductId, normalizedUrl, {
+    if (isQStashConfigured()) {
+      // Offload to QStash serverless queue with max parallelism = 2 and automatic retries
+      enqueueProductScrape({
+        url: normalizedUrl,
+        productId: targetProductId,
+        pageId,
+        adId,
         workspaceId: resolvedWorkspaceId,
-        adCopy,
-      }).finally(() => {
-        inFlightScrapes.delete(normalizedUrl);
+      }).catch((err) => {
+        console.warn("[Product Ingest] QStash enqueue notice:", err?.message || err);
       });
+    } else {
+      // Fallback to in-process memory queue when QStash is not configured
+      queueBackgroundScrape(async () => {
+        // Check if already in-flight
+        if (inFlightScrapes.has(normalizedUrl)) {
+          await inFlightScrapes.get(normalizedUrl);
+          return;
+        }
 
-      inFlightScrapes.set(normalizedUrl, scrapePromise);
-      await scrapePromise;
-    });
+        const scrapePromise = processProductExtraction(targetProductId, normalizedUrl, {
+          workspaceId: resolvedWorkspaceId,
+          adCopy,
+        }).finally(() => {
+          inFlightScrapes.delete(normalizedUrl);
+        });
+
+        inFlightScrapes.set(normalizedUrl, scrapePromise);
+        await scrapePromise;
+      });
+    }
 
     return { productId: targetProductId, isNew: true };
   } catch (err: any) {

@@ -35,7 +35,9 @@
     "db:backup": "npx tsx --env-file=.env.local scripts/backup-db.ts",
     "db:restore": "npx tsx --env-file=.env.local scripts/restore-db.ts",
     "trigger:dev": "trigger dev",
-    "trigger:deploy": "trigger deploy --prod"
+    "trigger:deploy": "trigger deploy --prod",
+    "qstash:crons": "npx tsx scripts/setup-qstash-crons.ts",
+    "qstash:crons:list": "npx tsx scripts/setup-qstash-crons.ts --list-only"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1111.0",
@@ -48,6 +50,7 @@
     "@tanstack/react-table": "^8.21.3",
     "@trigger.dev/sdk": "4.7.6",
     "@types/ws": "^8.18.1",
+    "@upstash/qstash": "^2.12.1",
     "@upstash/ratelimit": "^2.2.0",
     "@upstash/redis": "^1.39.0",
     "@vercel/analytics": "^2.0.1",
