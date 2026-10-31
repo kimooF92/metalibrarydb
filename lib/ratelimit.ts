@@ -35,9 +35,9 @@ export const loginRateLimiter = createLimiter(5, "10 m", "rl:auth:login");
 export const mediaProxyRateLimiter = createLimiter(60, "1 m", "rl:media:proxy");
 
 /**
- * 3. Paid scraping / Firecrawl extraction protection (10 requests / 1 minute per IP/user)
+ * 3. Paid scraping / Firecrawl extraction protection (30 requests / 1 minute per IP/user)
  */
-export const scraperRateLimiter = createLimiter(10, "1 m", "rl:scraper:extract");
+export const scraperRateLimiter = createLimiter(30, "1 m", "rl:scraper:extract");
 
 /**
  * 4. Heavy CSV / Analytics database export protection (5 requests / 1 minute per IP/user)
