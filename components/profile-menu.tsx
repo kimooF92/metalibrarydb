@@ -17,7 +17,7 @@ import { useSidebar } from "@/components/sidebar-context";
 import { applyTheme, getStoredTheme, onThemeChange, type Theme } from "@/lib/theme-controller";
 
 interface ProfileMenuProps {
-  layout?: "sidebar";
+  layout?: "sidebar" | "topbar";
   className?: string;
 }
 
@@ -69,56 +69,96 @@ export function ProfileMenu({ layout = "sidebar", className = "" }: ProfileMenuP
   const displayRole = isStaff ? "Restricted Access" : "Full Control";
   const initials = isStaff ? "ST" : "SA";
 
+  const getPopoverPositionClass = () => {
+    if (layout === "topbar") {
+      return "top-full right-0 mt-2";
+    }
+    // Sidebar placement
+    if (isCollapsed) {
+      return "bottom-0 left-full ml-3";
+    }
+    return "bottom-full left-0 mb-2";
+  };
+
   return (
     <div ref={menuRef} className={`relative ${className}`}>
-      {/* Sidebar Trigger */}
-      {isCollapsed ? (
+      {/* TopBar Trigger (Staff Only) */}
+      {layout === "topbar" ? (
         <button
           type="button"
           onClick={() => setIsOpen((prev) => !prev)}
-          aria-label={`${displayName} menu`}
-          title={`${displayName} - Settings, Theme & Session`}
-          className="w-9 h-9 mx-auto rounded-lg flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors relative cursor-pointer group outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+          className="flex items-center space-x-2 p-1 pl-1.5 pr-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 transition-all cursor-pointer group"
+          title={`${displayName} - Theme & Session`}
+          aria-expanded={isOpen}
         >
-          {/* Solid Mono Avatar */}
-          <div className="w-7 h-7 rounded-md bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-950 flex items-center justify-center text-[10px] font-mono font-bold tracking-tight shadow-xs border border-slate-700/60 dark:border-slate-300">
-            {initials}
+          <div className="relative">
+            <div className="w-6 h-6 rounded-md bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-950 flex items-center justify-center text-[10px] font-mono font-bold tracking-tight shadow-xs border border-slate-700/60 dark:border-slate-300">
+              {initials}
+            </div>
+            <span className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#010202]" />
           </div>
-          <span className="absolute bottom-1 right-1 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#010202]" />
+
+          <div className="hidden sm:flex flex-col text-left">
+            <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-tight group-hover:text-slate-950 dark:group-hover:text-white transition-colors">
+              {displayName}
+            </span>
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium leading-none">
+              {isStaff ? "Staff" : "Admin"}
+            </span>
+          </div>
+
+          <ChevronsUpDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 ml-0.5" />
         </button>
       ) : (
-        <button
-          type="button"
-          onClick={() => setIsOpen((prev) => !prev)}
-          className="w-full flex items-center justify-between p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/[0.05] border border-transparent hover:border-slate-200/60 dark:hover:border-slate-800 transition-all cursor-pointer group text-left outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
-        >
-          <div className="flex items-center space-x-2.5 min-w-0">
-            {/* Solid Mono Avatar */}
-            <div className="relative shrink-0">
-              <div className="w-7 h-7 rounded-md bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-950 flex items-center justify-center text-[11px] font-mono font-bold tracking-tight shadow-xs border border-slate-700/60 dark:border-slate-300">
+        /* Sidebar Trigger (Desktop & Mobile Drawer) */
+        <>
+          {isCollapsed ? (
+            <button
+              type="button"
+              onClick={() => setIsOpen((prev) => !prev)}
+              aria-label={`${displayName} menu`}
+              title={`${displayName} - Settings, Theme & Session`}
+              className="w-9 h-9 mx-auto rounded-lg flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors relative cursor-pointer group outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+            >
+              {/* Solid Mono Avatar */}
+              <div className="w-7 h-7 rounded-md bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-950 flex items-center justify-center text-[10px] font-mono font-bold tracking-tight shadow-xs border border-slate-700/60 dark:border-slate-300">
                 {initials}
               </div>
-              <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#010202]" />
-            </div>
-            <div className="min-w-0 flex-1 truncate">
-              <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 block truncate group-hover:text-slate-950 dark:group-hover:text-white transition-colors">
-                {displayName}
-              </span>
-              <span className="text-[10px] text-slate-400 dark:text-slate-500 block truncate font-medium">
-                {displayRole}
-              </span>
-            </div>
-          </div>
-          <ChevronsUpDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 shrink-0" />
-        </button>
+              <span className="absolute bottom-1 right-1 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#010202]" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsOpen((prev) => !prev)}
+              className="w-full flex items-center justify-between p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/[0.05] border border-transparent hover:border-slate-200/60 dark:hover:border-slate-800 transition-all cursor-pointer group text-left outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+            >
+              <div className="flex items-center space-x-2.5 min-w-0">
+                {/* Solid Mono Avatar */}
+                <div className="relative shrink-0">
+                  <div className="w-7 h-7 rounded-md bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-950 flex items-center justify-center text-[11px] font-mono font-bold tracking-tight shadow-xs border border-slate-700/60 dark:border-slate-300">
+                    {initials}
+                  </div>
+                  <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#010202]" />
+                </div>
+                <div className="min-w-0 flex-1 truncate">
+                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 block truncate group-hover:text-slate-950 dark:group-hover:text-white transition-colors">
+                    {displayName}
+                  </span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 block truncate font-medium">
+                    {displayRole}
+                  </span>
+                </div>
+              </div>
+              <ChevronsUpDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 shrink-0" />
+            </button>
+          )}
+        </>
       )}
 
-      {/* Popover Dropdown Card (Opens upwards or sideways from sidebar) */}
+      {/* Popover Dropdown Card */}
       {isOpen && (
         <div
-          className={`absolute ${
-            isCollapsed ? "bottom-0 left-full ml-3" : "bottom-full left-0 mb-2"
-          } w-68 rounded-2xl bg-white dark:bg-[#0B0F17] border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-900/10 dark:shadow-black/50 z-50 p-2 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md select-none`}
+          className={`absolute ${getPopoverPositionClass()} w-68 rounded-2xl bg-white dark:bg-[#0B0F17] border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-900/10 dark:shadow-black/50 z-50 p-2 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md select-none`}
         >
           {/* Section 1: User Identity Card */}
           <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80 mb-2">
@@ -182,28 +222,29 @@ export function ProfileMenu({ layout = "sidebar", className = "" }: ProfileMenuP
 
           <div className="h-px bg-slate-200/80 dark:bg-slate-800/80 my-1 mx-1" />
 
-          {/* Section 3: Navigation Links */}
-          <div className="flex flex-col space-y-0.5 my-1">
-            {!isStaff && (
-              <Link
-                href="/settings"
-                onClick={() => setIsOpen(false)}
-                className={`flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-medium transition-colors ${
-                  pathname === "/settings"
-                    ? "bg-slate-100 dark:bg-slate-800/80 text-slate-900 dark:text-white font-semibold"
-                    : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                }`}
-              >
-                <div className="flex items-center space-x-2.5">
-                  <Settings className="w-4 h-4 text-slate-400 dark:text-slate-400" />
-                  <span>Settings & System</span>
-                </div>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-              </Link>
-            )}
-          </div>
-
-          <div className="h-px bg-slate-200/80 dark:bg-slate-800/80 my-1 mx-1" />
+          {/* Section 3: Navigation Links (Admin Only) */}
+          {!isStaff && (
+            <>
+              <div className="flex flex-col space-y-0.5 my-1">
+                <Link
+                  href="/settings"
+                  onClick={() => setIsOpen(false)}
+                  className={`flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-medium transition-colors ${
+                    pathname === "/settings"
+                      ? "bg-slate-100 dark:bg-slate-800/80 text-slate-900 dark:text-white font-semibold"
+                      : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                  }`}
+                >
+                  <div className="flex items-center space-x-2.5">
+                    <Settings className="w-4 h-4 text-slate-400 dark:text-slate-400" />
+                    <span>Settings & System</span>
+                  </div>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                </Link>
+              </div>
+              <div className="h-px bg-slate-200/80 dark:bg-slate-800/80 my-1 mx-1" />
+            </>
+          )}
 
           {/* Section 4: Lock Session / Sign Out */}
           <div className="p-1">

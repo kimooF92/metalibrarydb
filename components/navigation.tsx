@@ -299,8 +299,10 @@ export function Navigation() {
 
         <div className="flex items-center space-x-2">
           {!isStaff && <SmallPagesScanBadge />}
-          <NotificationCenter layout="navbar" />
-          {!isStaff && (
+          {!isStaff && <NotificationCenter layout="navbar" />}
+          {isStaff ? (
+            <ProfileMenu layout="topbar" />
+          ) : (
             <button
               onClick={() => setIsOpen(!isOpen)}
               aria-label={isOpen ? "Close menu" : "Open menu"}
