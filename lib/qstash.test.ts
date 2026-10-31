@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
+
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import {
@@ -24,7 +27,7 @@ describe("Upstash QStash Utility Suite", () => {
 
     assert.strictEqual(id1, id2, "Identical URLs must yield the exact same deduplication ID");
     assert.notStrictEqual(id1, id3, "Different URLs must yield distinct deduplication IDs");
-    assert.ok(id1.startsWith("prod-scrape:"), "Deduplication ID should have the expected prefix");
+    assert.ok(id1.startsWith("prod-scrape_"), "Deduplication ID should have the expected prefix");
   });
 
   it("should resolve app base URL cleanly", () => {

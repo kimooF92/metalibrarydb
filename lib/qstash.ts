@@ -61,7 +61,8 @@ export function getAppBaseUrl(): string {
  */
 export function getDeduplicationId(prefix: string, key: string): string {
   const hash = crypto.createHash("sha256").update(key.trim().toLowerCase()).digest("hex").slice(0, 32);
-  return `${prefix}:${hash}`;
+  // Upstash QStash disallows ':' in deduplicationId; use '_' as delimiter
+  return `${prefix}_${hash}`;
 }
 
 let isQueueInitialized = false;
