@@ -9,13 +9,11 @@ import {
   Bookmark,
   Play,
   Image as ImageIcon,
-  Globe,
   Search,
   Layers,
   Sparkles,
   ExternalLink,
-  ChevronRight,
-  TrendingUp,
+  Tag,
 } from "lucide-react";
 import type { FreshWinnerProduct } from "@/types";
 import { useToast } from "@/components/toast-context";
@@ -40,10 +38,15 @@ export function FreshWinnerProductCard({
 
   const [isFavorite, setIsFavorite] = useState(Boolean(product.isFavorite));
   const [isFavoriting, setIsFavoriting] = useState(false);
+  const [imgError, setImgError] = useState(false);
 
   const brand = product.brand;
   const metrics = product.metrics;
   const creatives = product.creatives || [];
+
+  // Main showcase product image: product main photo first, fallback to #1 hero creative thumbnail
+  const heroCreativeThumb = creatives[0]?.thumbnailUrl;
+  const displayMainImage = (!imgError && product.mainImageUrl) ? product.mainImageUrl : heroCreativeThumb;
 
   const brandSpyUrl = brand.pageId
     ? `/spy/brand/${encodeURIComponent(brand.pageId)}`
@@ -149,25 +152,94 @@ export function FreshWinnerProductCard({
         </button>
       </div>
 
-      {/* 2. Visual Creative Portfolio Filmstrip (The Core Feature) */}
-      <div className="relative bg-muted/30 p-2.5 border-b border-border/70">
-        <div className="flex items-center justify-between mb-1.5 px-0.5">
-          <span className="text-[10.5px] font-bold text-foreground flex items-center gap-1">
-            <Layers className="w-3 h-3 text-indigo-500" />
-            <span>Creative Angles ({metrics.activeCreativesCount})</span>
+      {/* 2. MAIN PRODUCT HERO SHOWCASE (Large, Clear Product Image) */}
+      <div
+        onClick={() => onInspectCreatives(product)}
+        className="relative aspect-4/3 w-full bg-slate-900/95 dark:bg-slate-950 overflow-hidden cursor-pointer group/hero border-b border-border/70 flex items-center justify-center"
+        title="Click to inspect all creative angles"
+      >
+        {displayMainImage ? (
+          <>
+            {/* Ambient Blurred Background for visual richness */}
+            <img
+              src={displayMainImage}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover blur-xl opacity-35 scale-110 pointer-events-none select-none"
+              aria-hidden="true"
+            />
+
+            {/* Crisp Main Product Image */}
+            <div className="relative w-full h-full p-2 flex items-center justify-center z-10">
+              <img
+                src={displayMainImage}
+                alt={product.title}
+                className="w-full h-full object-contain drop-shadow-md transition-transform duration-300 group-hover/hero:scale-105"
+                loading="lazy"
+                onError={() => setImgError(true)}
+              />
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col items-center justify-center text-muted-foreground gap-2 z-10">
+            <ShoppingBag className="w-10 h-10 opacity-30" />
+            <span className="text-[11px] font-medium">No Product Image</span>
+          </div>
+        )}
+
+        {/* Top-Left: Scale Volume Badge */}
+        <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-600 text-white shadow-md">
+          <Flame className="w-3 h-3 fill-white" />
+          <span>{metrics.totalCopies} COPIES</span>
+        </div>
+
+        {/* Top-Right: Creatives Count Pill */}
+        <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-950/80 text-white backdrop-blur-md shadow-md border border-white/10">
+          <Layers className="w-3 h-3 text-indigo-400" />
+          <span>{metrics.activeCreativesCount} Creatives</span>
+        </div>
+
+        {/* Bottom Bar: Price & Days Running */}
+        <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/85 via-black/45 to-transparent p-2.5 pt-6 flex items-center justify-between text-white">
+          <div className="flex items-baseline gap-1.5">
+            {product.currentPrice ? (
+              <span className="text-sm font-black text-emerald-400 drop-shadow-xs">
+                {formatPrice(product.currentPrice, sym)}
+              </span>
+            ) : (
+              <span className="text-[11px] font-semibold text-slate-200">Active Offer</span>
+            )}
+            {product.originalPrice && (
+              <span className="text-[10px] text-slate-300 line-through">
+                {formatPrice(product.originalPrice, sym)}
+              </span>
+            )}
+          </div>
+
+          <span className="text-[10px] font-medium text-slate-200">
+            {metrics.daysRunning === 0 ? "Started Today" : `${metrics.daysRunning}d old`}
           </span>
-          <span className="text-[10px] font-semibold text-muted-foreground">
+        </div>
+      </div>
+
+      {/* 3. Tested Creative Angles Filmstrip (Mini Row below Product Image) */}
+      <div className="bg-muted/30 p-2.5 border-b border-border/70">
+        <div className="flex items-center justify-between mb-1.5 px-0.5">
+          <span className="text-[10px] font-bold text-foreground flex items-center gap-1">
+            <Layers className="w-3 h-3 text-indigo-500" />
+            <span>Tested Angles ({metrics.activeCreativesCount})</span>
+          </span>
+          <span className="text-[9.5px] font-semibold text-muted-foreground">
             {metrics.videoCount > 0 && `${metrics.videoCount} Video${metrics.videoCount > 1 ? "s" : ""}`}
             {metrics.videoCount > 0 && metrics.imageCount > 0 && " • "}
             {metrics.imageCount > 0 && `${metrics.imageCount} Static`}
           </span>
         </div>
 
-        {/* Visual Filmstrip Grid */}
+        {/* 4 Creative Preview Thumbnails */}
         <div
           onClick={() => onInspectCreatives(product)}
-          className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 cursor-pointer group/filmstrip"
-          title="Click to inspect all active creatives & copy"
+          className="grid grid-cols-4 gap-1.5 cursor-pointer group/filmstrip"
+          title="Click to inspect all creative angles & watch videos"
         >
           {creatives.length > 0 ? (
             creatives.slice(0, 4).map((creative, idx) => {
@@ -177,57 +249,44 @@ export function FreshWinnerProductCard({
               return (
                 <div
                   key={creative.id || idx}
-                  className="relative aspect-square rounded-lg overflow-hidden bg-muted border border-border/80 group-hover/filmstrip:border-indigo-500/50 transition-colors shadow-xs"
+                  className="relative aspect-square rounded-md overflow-hidden bg-muted border border-border/80 group-hover/filmstrip:border-indigo-500/60 transition-colors shadow-2xs"
                 >
                   {thumb ? (
                     <img
                       src={thumb}
                       alt={creative.headline || product.title}
-                      className="w-full h-full object-cover transition-transform duration-300 group-hover/filmstrip:scale-105"
+                      className="w-full h-full object-cover transition-transform duration-200 group-hover/filmstrip:scale-105"
                       loading="lazy"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                      <ImageIcon className="w-4 h-4 opacity-40" />
+                      <ImageIcon className="w-3.5 h-3.5 opacity-40" />
                     </div>
                   )}
 
-                  {/* Video Play Badge */}
+                  {/* Video Play Icon */}
                   {isVideo && (
-                    <div className="absolute top-1 left-1 flex items-center justify-center w-4 h-4 rounded bg-slate-950/80 text-white backdrop-blur-xs">
-                      <Play className="w-2 h-2 fill-white" />
+                    <div className="absolute top-0.5 left-0.5 flex items-center justify-center w-3.5 h-3.5 rounded bg-slate-950/80 text-white">
+                      <Play className="w-1.5 h-1.5 fill-white" />
                     </div>
                   )}
 
                   {/* Copy Count Badge */}
-                  <div className="absolute bottom-1 right-1 px-1 py-0.2 rounded text-[9px] font-black bg-rose-600/90 text-white shadow-xs">
+                  <div className="absolute bottom-0.5 right-0.5 px-1 py-0.2 rounded text-[8.5px] font-black bg-rose-600/90 text-white shadow-xs">
                     x{creative.duplicationCount}
                   </div>
                 </div>
               );
             })
           ) : (
-            <div className="col-span-3 sm:col-span-4 h-24 flex flex-col items-center justify-center text-muted-foreground gap-1.5 rounded-lg border border-dashed border-border">
-              <ImageIcon className="w-6 h-6 opacity-30" />
-              <span className="text-[11px]">No active preview</span>
+            <div className="col-span-4 h-10 flex items-center justify-center text-muted-foreground text-[10px] rounded border border-dashed border-border">
+              <span>View creative in details</span>
             </div>
           )}
         </div>
-
-        {/* Aggregate Creative Volume Bar */}
-        <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground bg-background/80 rounded-lg px-2 py-1 border border-border/60">
-          <span className="font-semibold text-foreground flex items-center gap-1">
-            <Flame className="w-3 h-3 text-rose-500 fill-rose-500/30" />
-            <span>{metrics.totalCopies} Total Copies Scaled</span>
-          </span>
-          <span className="font-medium text-slate-500 dark:text-slate-400">
-            Peak: <strong className="text-foreground">x{metrics.maxCopies}</strong> •{" "}
-            {metrics.daysRunning === 0 ? "Today" : `${metrics.daysRunning}d old`}
-          </span>
-        </div>
       </div>
 
-      {/* 3. Product Body: Title, Price, Offer */}
+      {/* 4. Product Info & Action Buttons */}
       <div className="p-3 flex-1 flex flex-col justify-between space-y-2.5">
         <div>
           <h3
@@ -238,48 +297,29 @@ export function FreshWinnerProductCard({
             {product.title}
           </h3>
 
-          {/* Pricing & Offer */}
-          <div className="mt-1.5 flex items-center justify-between gap-2">
-            <div className="flex items-baseline gap-1.5">
-              {product.currentPrice ? (
-                <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">
-                  {formatPrice(product.currentPrice, sym)}
-                </span>
-              ) : (
-                <span className="text-[11px] font-medium text-muted-foreground">Direct Ad Offer</span>
-              )}
-              {product.originalPrice && (
-                <span className="text-[10px] text-muted-foreground line-through">
-                  {formatPrice(product.originalPrice, sym)}
-                </span>
-              )}
-            </div>
-
+          {/* Niche & Store Platform Badges */}
+          <div className="mt-1.5 flex items-center gap-1.5 flex-wrap text-[10px] text-muted-foreground">
+            {product.category && (
+              <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-semibold truncate max-w-[120px]">
+                {product.category}
+              </span>
+            )}
+            {product.storePlatform && (
+              <span className="px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold uppercase text-[9px]">
+                {product.storePlatform}
+              </span>
+            )}
             {product.discountOrOffer && (
-              <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 truncate max-w-[120px]">
+              <span className="px-1.5 py-0.5 rounded font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 truncate max-w-[120px]">
                 {product.discountOrOffer}
               </span>
             )}
           </div>
         </div>
 
-        {/* Niche & Platform */}
-        <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-muted-foreground pt-1.5 border-t border-border/60">
-          {product.category && (
-            <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-semibold truncate max-w-[120px]">
-              {product.category}
-            </span>
-          )}
-          {product.storePlatform && (
-            <span className="px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold uppercase text-[9px]">
-              {product.storePlatform}
-            </span>
-          )}
-        </div>
-
-        {/* 4. Action Row */}
+        {/* Action Row */}
         <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-border">
-          {/* Inspect Creatives Trigger */}
+          {/* Inspect Creatives Drawer */}
           <button
             type="button"
             onClick={() => onInspectCreatives(product)}
@@ -307,7 +347,7 @@ export function FreshWinnerProductCard({
             href={product.supplierUrls?.[0] || aliExpressSearchUrl}
             target="_blank"
             rel="noopener noreferrer"
-            title="Search product suppliers on AliExpress"
+            title="Search suppliers on AliExpress"
             className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 transition-colors text-center cursor-pointer"
           >
             <Search className="w-3 h-3" />
@@ -318,4 +358,3 @@ export function FreshWinnerProductCard({
     </div>
   );
 }
-

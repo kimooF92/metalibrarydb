@@ -38,7 +38,7 @@ export function FreshWinnerProductRow({
   const brand = product.brand;
   const metrics = product.metrics;
   const heroThumb =
-    product.creatives?.[0]?.thumbnailUrl || product.mainImageUrl;
+    product.mainImageUrl || product.creatives?.[0]?.thumbnailUrl;
   const isHeroVideo = product.creatives?.[0]?.mediaType === "video";
 
   const brandSpyUrl = brand.pageId

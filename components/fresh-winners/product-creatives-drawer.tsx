@@ -101,13 +101,24 @@ export function ProductCreativesDrawer({
         {/* 1. Drawer Header */}
         <div className="p-4 sm:p-5 border-b border-border bg-card flex flex-col gap-3 shrink-0">
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">
-                {product.brand.displayName} • Creative Portfolio
-              </span>
-              <h2 className="text-base sm:text-lg font-black text-foreground line-clamp-2 mt-0.5 leading-snug">
-                {product.title}
-              </h2>
+            <div className="flex items-center gap-3 min-w-0">
+              {product.mainImageUrl && (
+                <div className="w-12 h-12 rounded-lg bg-muted overflow-hidden shrink-0 border border-border">
+                  <img
+                    src={product.mainImageUrl}
+                    alt={product.title}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
+              <div className="min-w-0">
+                <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">
+                  {product.brand.displayName} • Creative Portfolio
+                </span>
+                <h2 className="text-base sm:text-lg font-black text-foreground line-clamp-2 mt-0.5 leading-snug">
+                  {product.title}
+                </h2>
+              </div>
             </div>
 
             <button
