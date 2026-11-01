@@ -1,41 +1,44 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { FreshWinnersHeader } from "@/components/fresh-winners/fresh-winners-header";
 import { FreshWinnersToolbar } from "@/components/fresh-winners/fresh-winners-toolbar";
-import { FreshWinnerCard } from "@/components/fresh-winners/fresh-winner-card";
-import { FreshWinnerRow } from "@/components/fresh-winners/fresh-winner-row";
+import { FreshWinnerProductCard } from "@/components/fresh-winners/fresh-winner-product-card";
+import { FreshWinnerProductRow } from "@/components/fresh-winners/fresh-winner-product-row";
 import { FreshWinnersEmpty } from "@/components/fresh-winners/fresh-winners-empty";
-import { useToast } from "@/components/toast-context";
+import { ProductCreativesDrawer } from "@/components/fresh-winners/product-creatives-drawer";
 import { ChevronLeft, ChevronRight, AlertCircle } from "lucide-react";
-import type { FreshWinnerItem, FreshWinnersStats } from "@/types";
+import type { FreshWinnerProduct, FreshWinnersStats } from "@/types";
 
 function FreshWinnersContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { showToast } = useToast();
 
   const highlightId = searchParams.get("highlight");
 
   // State
-  const [winners, setWinners] = useState<FreshWinnerItem[]>([]);
+  const [products, setProducts] = useState<FreshWinnerProduct[]>([]);
   const [stats, setStats] = useState<FreshWinnersStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Creative Inspection Drawer State
+  const [selectedProductForDrawer, setSelectedProductForDrawer] =
+    useState<FreshWinnerProduct | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
   // Filters
   const [windowFilter, setWindowFilter] = useState<"3d" | "7d" | "14d">("7d");
+  const [minCreatives, setMinCreatives] = useState<number>(1);
   const [minCopies, setMinCopies] = useState<number>(2);
   const [mediaType, setMediaType] = useState<"all" | "video" | "image">("all");
-  const [hasProduct, setHasProduct] = useState(false);
   const [category, setCategory] = useState("all");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sortBy, setSortBy] = useState("velocity");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [groupMode, setGroupMode] = useState<"creative" | "product">("creative");
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({
     page: 1,
@@ -55,8 +58,8 @@ function FreshWinnersContent() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Fetch Winners from API
-  const fetchWinners = useCallback(
+  // Fetch Winners Products from API
+  const fetchProducts = useCallback(
     async (isManualRefresh = false) => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -74,6 +77,7 @@ function FreshWinnersContent() {
       try {
         const params = new URLSearchParams({
           window: windowFilter,
+          minCreatives: minCreatives.toString(),
           minCopies: minCopies.toString(),
           sortBy,
           page: page.toString(),
@@ -81,7 +85,6 @@ function FreshWinnersContent() {
         });
 
         if (mediaType !== "all") params.set("mediaType", mediaType);
-        if (hasProduct) params.set("hasProduct", "true");
         if (category !== "all") params.set("category", category);
         if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
         if (isManualRefresh) params.set("refresh", "true");
@@ -96,47 +99,49 @@ function FreshWinnersContent() {
 
         const data = await res.json();
         if (data.success) {
-          setWinners(data.winners || []);
+          setProducts(data.products || data.winners || []);
           setStats(data.stats || null);
-          setPagination(data.pagination || { page: 1, limit: 24, total: 0, totalPages: 1 });
+          setPagination(
+            data.pagination || { page: 1, limit: 24, total: 0, totalPages: 1 }
+          );
         } else {
-          throw new Error(data.error || "Failed to load fresh winners");
+          throw new Error(data.error || "Failed to load fresh winning products");
         }
       } catch (err: any) {
         if (err.name !== "AbortError") {
           console.error("[Fresh Winners Page] Error fetching data:", err);
-          setError(err.message || "Failed to load fresh winners.");
+          setError(err.message || "Failed to load fresh winning products.");
         }
       } finally {
         setIsLoading(false);
         setIsRefreshing(false);
       }
     },
-    [windowFilter, minCopies, mediaType, hasProduct, category, debouncedSearch, sortBy, page]
+    [windowFilter, minCreatives, minCopies, mediaType, category, debouncedSearch, sortBy, page]
   );
 
   useEffect(() => {
-    fetchWinners();
-  }, [fetchWinners]);
+    fetchProducts();
+  }, [fetchProducts]);
 
-  // Scroll to highlighted ad if requested via URL
+  // Scroll to highlighted product if requested via URL
   useEffect(() => {
-    if (highlightId && !isLoading && winners.length > 0) {
+    if (highlightId && !isLoading && products.length > 0) {
       setTimeout(() => {
-        const el = document.getElementById(`winner-${highlightId}`);
+        const el = document.getElementById(`product-${highlightId}`);
         if (el) {
           el.scrollIntoView({ behavior: "smooth", block: "center" });
         }
       }, 250);
     }
-  }, [highlightId, isLoading, winners]);
+  }, [highlightId, isLoading, products]);
 
   // Reset filters helper
   const handleResetFilters = () => {
     setWindowFilter("7d");
+    setMinCreatives(1);
     setMinCopies(2);
     setMediaType("all");
-    setHasProduct(false);
     setCategory("all");
     setSearch("");
     setDebouncedSearch("");
@@ -144,46 +149,18 @@ function FreshWinnersContent() {
     setPage(1);
   };
 
-  // Group winners by product landing page if in "product" groupMode
-  const displayedItems = useMemo(() => {
-    if (groupMode === "creative") return winners;
-
-    // Group items by product ID or clean destination URL
-    const productGroups = new Map<string, FreshWinnerItem>();
-    const productTotalCopiesMap = new Map<string, number>();
-
-    for (const item of winners) {
-      const key = item.product?.id || item.linkUrl || item.id;
-      const existing = productGroups.get(key);
-
-      productTotalCopiesMap.set(key, (productTotalCopiesMap.get(key) || 0) + item.duplicationCount);
-
-      if (
-        !existing ||
-        item.duplicationCount > existing.duplicationCount ||
-        item.winnerScore > existing.winnerScore
-      ) {
-        productGroups.set(key, item);
-      }
-    }
-
-    // Return the hero items enriched with combined total copies
-    return Array.from(productGroups.entries()).map(([key, hero]) => {
-      const totalCopies = productTotalCopiesMap.get(key) || hero.duplicationCount;
-      return {
-        ...hero,
-        duplicationCount: totalCopies,
-      };
-    });
-  }, [winners, groupMode]);
+  const handleOpenDrawer = (product: FreshWinnerProduct) => {
+    setSelectedProductForDrawer(product);
+    setIsDrawerOpen(true);
+  };
 
   return (
     <div className="flex-1 min-w-0 h-full overflow-y-auto p-4 md:px-6 md:py-5 flex flex-col space-y-4">
-      {/* 1. Header with Live Velocity KPIs */}
+      {/* 1. Header with Product-Level KPIs */}
       <FreshWinnersHeader
         stats={stats}
         isLoading={isLoading || isRefreshing}
-        onRefresh={() => fetchWinners(true)}
+        onRefresh={() => fetchProducts(true)}
         windowDays={windowFilter}
       />
 
@@ -194,6 +171,11 @@ function FreshWinnersContent() {
           setWindowFilter(w);
           setPage(1);
         }}
+        minCreatives={minCreatives}
+        onChangeMinCreatives={(mc) => {
+          setMinCreatives(mc);
+          setPage(1);
+        }}
         minCopies={minCopies}
         onChangeMinCopies={(c) => {
           setMinCopies(c);
@@ -202,11 +184,6 @@ function FreshWinnersContent() {
         mediaType={mediaType}
         onChangeMediaType={(m) => {
           setMediaType(m);
-          setPage(1);
-        }}
-        hasProduct={hasProduct}
-        onToggleHasProduct={() => {
-          setHasProduct(!hasProduct);
           setPage(1);
         }}
         category={category}
@@ -223,8 +200,6 @@ function FreshWinnersContent() {
         }}
         viewMode={viewMode}
         onChangeViewMode={setViewMode}
-        groupMode={groupMode}
-        onChangeGroupMode={setGroupMode}
         onResetFilters={handleResetFilters}
         totalResults={pagination.total}
       />
@@ -237,7 +212,7 @@ function FreshWinnersContent() {
             <span>{error}</span>
           </div>
           <button
-            onClick={() => fetchWinners(true)}
+            onClick={() => fetchProducts(true)}
             className="font-bold underline hover:no-underline cursor-pointer"
           >
             Retry
@@ -251,32 +226,36 @@ function FreshWinnersContent() {
           {Array.from({ length: 8 }).map((_, idx) => (
             <div
               key={idx}
-              className="h-80 rounded-xl bg-muted/50 border border-border"
+              className="h-96 rounded-xl bg-muted/50 border border-border"
             />
           ))}
         </div>
-      ) : displayedItems.length === 0 ? (
+      ) : products.length === 0 ? (
         /* 5. Empty State */
         <FreshWinnersEmpty onResetFilters={handleResetFilters} windowDays={windowFilter} />
       ) : (
-        /* 6. Winners Grid / List Display */
+        /* 6. Products Grid / List Display */
         <div className="space-y-4">
           {viewMode === "grid" ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-              {displayedItems.map((winner) => (
-                <div key={winner.id} id={`winner-${winner.id}`}>
-                  <FreshWinnerCard
-                    winner={winner}
-                    isHighlighted={highlightId === winner.id || highlightId === winner.adArchiveId}
+              {products.map((product) => (
+                <div key={product.id} id={`product-${product.id}`}>
+                  <FreshWinnerProductCard
+                    product={product}
+                    onInspectCreatives={handleOpenDrawer}
+                    isHighlighted={highlightId === product.id}
                   />
                 </div>
               ))}
             </div>
           ) : (
             <div className="space-y-2">
-              {displayedItems.map((winner) => (
-                <div key={winner.id} id={`winner-${winner.id}`}>
-                  <FreshWinnerRow winner={winner} />
+              {products.map((product) => (
+                <div key={product.id} id={`product-${product.id}`}>
+                  <FreshWinnerProductRow
+                    product={product}
+                    onInspectCreatives={handleOpenDrawer}
+                  />
                 </div>
               ))}
             </div>
@@ -288,7 +267,7 @@ function FreshWinnersContent() {
               <span className="text-xs text-muted-foreground">
                 Showing page <strong className="text-foreground">{page}</strong> of{" "}
                 <strong className="text-foreground">{pagination.totalPages}</strong> (
-                {pagination.total} total fresh winners)
+                {pagination.total} total winning products)
               </span>
 
               <div className="flex items-center gap-1.5">
@@ -341,10 +320,11 @@ function FreshWinnersContent() {
                         <button
                           key={pageNum}
                           onClick={() => setPage(pageNum)}
-                          className={`w-7 h-7 rounded-md text-xs font-bold transition-all cursor-pointer ${page === pageNum
-                            ? "bg-indigo-600 text-white shadow-xs"
-                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                            }`}
+                          className={`w-7 h-7 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                            page === pageNum
+                              ? "bg-indigo-600 text-white shadow-xs"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                          }`}
                         >
                           {pageNum}
                         </button>
@@ -366,6 +346,16 @@ function FreshWinnersContent() {
           )}
         </div>
       )}
+
+      {/* 8. Slide-over Creative Portfolio Drawer */}
+      <ProductCreativesDrawer
+        product={selectedProductForDrawer}
+        isOpen={isDrawerOpen}
+        onClose={() => {
+          setIsDrawerOpen(false);
+          setSelectedProductForDrawer(null);
+        }}
+      />
     </div>
   );
 }
@@ -382,7 +372,7 @@ function FreshWinnersSkeleton() {
       <div className="h-16 bg-muted rounded-xl" />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
         {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="h-80 bg-muted rounded-xl" />
+          <div key={i} className="h-96 bg-muted rounded-xl" />
         ))}
       </div>
     </div>

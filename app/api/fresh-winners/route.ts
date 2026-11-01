@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ads, adObservations, trackedPages, scrapedProducts } from "@/db/schema";
-import { eq, and, sql, desc, asc, or, ilike } from "drizzle-orm";
+import { eq, and, sql, desc, or, ilike, inArray } from "drizzle-orm";
 import { validateApiSecret, getRoleFromRequest } from "@/lib/api-guard";
-import { calculateWinnerScore } from "@/lib/winner-score";
-import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
-import type { FreshWinnerItem, FreshWinnersStats } from "@/types";
+import type { FreshWinnerProduct, FreshWinnersStats, FreshWinnersProductResponse } from "@/types";
 import { getCached, setCached } from "@/lib/cache-service";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const maxDuration = 60;
 
-const FRESH_WINNERS_REDIS_TTL = 60; // 60 seconds global Redis cache
+const FRESH_WINNERS_REDIS_TTL = 60; // 60 seconds workspace cache
 
 export async function GET(req: NextRequest) {
   const authError = await validateApiSecret(req);
@@ -25,10 +23,10 @@ export async function GET(req: NextRequest) {
 
     const windowParam = searchParams.get("window") || "7d";
     const windowDays = windowParam === "3d" ? 3 : windowParam === "14d" ? 14 : 7;
+    const minCreatives = Math.max(1, parseInt(searchParams.get("minCreatives") || "1", 10));
     const minCopies = Math.max(1, parseInt(searchParams.get("minCopies") || "2", 10));
     const mediaType = searchParams.get("mediaType");
     const category = searchParams.get("category");
-    const hasProduct = searchParams.get("hasProduct") === "true";
     const search = searchParams.get("search")?.trim();
     const sortBy = searchParams.get("sortBy") || "velocity";
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
@@ -41,13 +39,13 @@ export async function GET(req: NextRequest) {
     const role = (await getRoleFromRequest(req)) || "admin";
     const favColumn = role === "staff" ? scrapedProducts.isFavoriteStaff : scrapedProducts.isFavorite;
 
-    // Harmonized cache keys under workspace namespace so worker deleteByPrefix invalidates both
-    const baseCacheKey = `${role}:${windowDays}:${minCopies}:${mediaType || 'all'}:${category || 'all'}:${hasProduct}:${search || ''}:${sortBy}`;
-    const pageCacheKey = `cache:fresh_winners:${activeWorkspace.id}:p${page}:l${limit}:${baseCacheKey}`;
-    const statsCacheKey = `cache:fresh_winners:${activeWorkspace.id}:stats:${baseCacheKey}`;
+    // Harmonized cache keys under workspace namespace
+    const baseCacheKey = `${role}:${windowDays}:${minCreatives}:${minCopies}:${mediaType || "all"}:${category || "all"}:${search || ""}:${sortBy}`;
+    const pageCacheKey = `cache:fresh_winners_v2:${activeWorkspace.id}:p${page}:l${limit}:${baseCacheKey}`;
+    const statsCacheKey = `cache:fresh_winners_v2:${activeWorkspace.id}:stats:${baseCacheKey}`;
 
     if (!forceRefresh) {
-      const cachedPage = await getCached<any>(pageCacheKey);
+      const cachedPage = await getCached<FreshWinnersProductResponse>(pageCacheKey);
       if (cachedPage) {
         return NextResponse.json(cachedPage, {
           headers: {
@@ -58,305 +56,355 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Build conditions for query
-    const conditions: any[] = [
+    // 1. Genuine latest observation subquery
+    const latestObsSql = sql`(
+      SELECT DISTINCT ON (ad_id)
+        id AS obs_id,
+        ad_id,
+        tracked_page_id,
+        duplication_count,
+        is_active,
+        observed_at
+      FROM ${adObservations}
+      ORDER BY ad_id, observed_at DESC
+    ) AS latest_obs`;
+
+    // 2. Build WHERE filters
+    const whereConditions: any[] = [
+      sql`latest_obs.is_active = true`,
       sql`(${ads.isArchived} = false OR ${ads.isArchived} IS NULL)`,
-      sql`COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}) >= ${cutoffDate.toISOString()}::timestamptz`,
+      eq(scrapedProducts.workspaceId, activeWorkspace.id),
       eq(trackedPages.workspaceId, activeWorkspace.id),
     ];
 
-    if (mediaType && mediaType !== "all") {
-      conditions.push(eq(ads.mediaType, mediaType));
-    }
-
-    if (hasProduct) {
-      conditions.push(sql`${ads.productId} IS NOT NULL`);
-    }
-
     if (category && category !== "all") {
-      conditions.push(eq(scrapedProducts.category, category));
+      whereConditions.push(eq(scrapedProducts.category, category));
     }
 
     if (search && search !== "") {
       const term = `%${search}%`;
       const searchCondition = or(
-        ilike(ads.caption, term),
-        ilike(ads.title, term),
         ilike(scrapedProducts.title, term),
         ilike(scrapedProducts.domain, term),
         ilike(trackedPages.displayName, term)
       );
-      if (searchCondition) conditions.push(searchCondition);
+      if (searchCondition) whereConditions.push(searchCondition);
     }
 
-    const whereSql = and(...conditions);
+    const whereSql = and(...whereConditions);
 
-    // Reusable latest observation subquery:
-    // Finds the genuine latest observation per ad FIRST, then filters by active & minCopies.
-    // This prevents descaled or paused ads from resurrecting older observations!
-    const latestObsSql = sql`(
-      SELECT * FROM (
-        SELECT DISTINCT ON (ad_id)
-          id AS obs_id,
-          ad_id,
-          tracked_page_id,
-          duplication_count,
-          is_active,
-          observed_at
-        FROM ${adObservations}
-        ORDER BY ad_id, observed_at DESC
-      ) AS per_ad
-      WHERE per_ad.is_active = true
-        AND per_ad.duplication_count >= ${minCopies}
-    ) AS latest_obs`;
+    // 3. Build HAVING filters
+    const havingConditions: any[] = [
+      sql`count(distinct ${ads.id}) >= ${minCreatives}`,
+      sql`sum(latest_obs.duplication_count) >= ${minCopies}`,
+      sql`max(coalesce(${ads.startedRunningOn}, ${ads.firstSeenAt})) >= ${cutoffDate.toISOString()}::timestamptz`,
+    ];
 
-    // 1. Resolve aggregate market stats in a single consolidated query (reducing DB egress)
+    if (mediaType === "video") {
+      havingConditions.push(sql`count(case when ${ads.mediaType} = 'video' then 1 end) > 0`);
+    } else if (mediaType === "image") {
+      havingConditions.push(
+        sql`count(case when ${ads.mediaType} != 'video' or ${ads.mediaType} is null then 1 end) > 0`
+      );
+    }
+
+    const havingSql = and(...havingConditions);
+
+    // 4. Resolve stats & total product count
     let stats: FreshWinnersStats;
-    let totalBreakouts = 0;
-    const cachedStats = !forceRefresh ? await getCached<{ stats: FreshWinnersStats; total: number }>(statsCacheKey) : null;
+    let totalProducts = 0;
+    const cachedStats = !forceRefresh
+      ? await getCached<{ stats: FreshWinnersStats; total: number }>(statsCacheKey)
+      : null;
 
     if (cachedStats) {
       stats = cachedStats.stats;
-      totalBreakouts = cachedStats.total;
+      totalProducts = cachedStats.total;
     } else {
-      const [statsRow] = await db
-        .select({
-          totalBreakouts: sql<number>`count(*)`.mapWith(Number),
-          activeBrandsCount: sql<number>`count(distinct latest_obs.tracked_page_id)`.mapWith(Number),
-          videoCount: sql<number>`count(case when ${ads.mediaType} = 'video' then 1 end)`.mapWith(Number),
-          avgPrice: sql<number | null>`ROUND(AVG(NULLIF(regexp_replace(${scrapedProducts.currentPrice}, '[^0-9.]', '', 'g'), '')::numeric), 0)`.mapWith(Number),
-        })
-        .from(ads)
-        .innerJoin(latestObsSql, sql`latest_obs.ad_id = ${ads.id}`)
-        .leftJoin(scrapedProducts, eq(ads.productId, scrapedProducts.id))
-        .leftJoin(trackedPages, sql`tracked_pages.id = latest_obs.tracked_page_id`)
-        .where(whereSql);
+      // Aggregate stats in a grouped subquery wrapper
+      const statsQuery = await db.execute<{
+        total_products: number;
+        total_active_creatives: number;
+        avg_creatives: number;
+        total_videos: number;
+        avg_price: number | null;
+      }>(sql`
+        SELECT
+          COUNT(*)::int AS total_products,
+          COALESCE(SUM(sub.active_creatives_count), 0)::int AS total_active_creatives,
+          COALESCE(ROUND(AVG(sub.active_creatives_count), 1), 0)::numeric AS avg_creatives,
+          COALESCE(SUM(sub.video_count), 0)::int AS total_videos,
+          COALESCE(ROUND(AVG(NULLIF(regexp_replace(sub.current_price, '[^0-9.]', '', 'g'), '')::numeric), 0), 0)::int AS avg_price
+        FROM (
+          SELECT
+            ${scrapedProducts.id} AS product_id,
+            ${scrapedProducts.currentPrice} AS current_price,
+            COUNT(DISTINCT ${ads.id}) AS active_creatives_count,
+            COUNT(CASE WHEN ${ads.mediaType} = 'video' THEN 1 END) AS video_count
+          FROM ${scrapedProducts}
+          INNER JOIN ${ads} ON ${ads.productId} = ${scrapedProducts.id}
+          INNER JOIN ${latestObsSql} ON latest_obs.ad_id = ${ads.id}
+          LEFT JOIN ${trackedPages} ON ${trackedPages.id} = latest_obs.tracked_page_id
+          WHERE ${whereSql}
+          GROUP BY ${scrapedProducts.id}
+          HAVING ${havingSql}
+        ) sub
+      `);
 
-      totalBreakouts = Number(statsRow?.totalBreakouts || 0);
-      const videoCount = Number(statsRow?.videoCount || 0);
-      const videoRatePercent = totalBreakouts > 0 ? Math.round((videoCount / totalBreakouts) * 100) : 0;
+      const statsRow = statsQuery[0] || ({} as any);
+      totalProducts = Number(statsRow.total_products || 0);
+      const totalActiveCreatives = Number(statsRow.total_active_creatives || 0);
+      const avgCreatives = Number(statsRow.avg_creatives || 0);
+      const totalVideos = Number(statsRow.total_videos || 0);
+      const videoSharePercent =
+        totalActiveCreatives > 0 ? Math.round((totalVideos / totalActiveCreatives) * 100) : 0;
 
       let topCategory: string | null = null;
       let medianPrice: string | null = null;
 
-      if (totalBreakouts > 0) {
-        // Resolve top category only if records exist
-        const [topCatRow] = await db
-          .select({
-            category: scrapedProducts.category,
-          })
-          .from(ads)
-          .innerJoin(latestObsSql, sql`latest_obs.ad_id = ${ads.id}`)
-          .leftJoin(scrapedProducts, eq(ads.productId, scrapedProducts.id))
-          .leftJoin(trackedPages, sql`tracked_pages.id = latest_obs.tracked_page_id`)
-          .where(and(whereSql, sql`${scrapedProducts.category} IS NOT NULL`))
-          .groupBy(scrapedProducts.category)
-          .orderBy(desc(sql`count(*)`))
-          .limit(1);
+      if (totalProducts > 0) {
+        // Resolve top category
+        const topCatResult = await db.execute<{ category: string }>(sql`
+          SELECT sub.category
+          FROM (
+            SELECT ${scrapedProducts.category} AS category
+            FROM ${scrapedProducts}
+            INNER JOIN ${ads} ON ${ads.productId} = ${scrapedProducts.id}
+            INNER JOIN ${latestObsSql} ON latest_obs.ad_id = ${ads.id}
+            LEFT JOIN ${trackedPages} ON ${trackedPages.id} = latest_obs.tracked_page_id
+            WHERE ${whereSql} AND ${scrapedProducts.category} IS NOT NULL
+            GROUP BY ${scrapedProducts.id}
+            HAVING ${havingSql}
+          ) sub
+          GROUP BY sub.category
+          ORDER BY COUNT(*) DESC
+          LIMIT 1
+        `);
 
-        topCategory = topCatRow?.category || null;
+        topCategory = topCatResult[0]?.category || null;
 
-        if (statsRow?.avgPrice && statsRow.avgPrice > 0) {
+        if (statsRow.avg_price && statsRow.avg_price > 0) {
           const sym = activeWorkspace.currencySymbol || "DT";
-          medianPrice = `${statsRow.avgPrice} ${sym}`;
+          medianPrice = `${statsRow.avg_price} ${sym}`;
         }
       }
 
       stats = {
-        totalBreakouts,
-        videoRatePercent,
-        topCategory: topCategory || null,
-        medianPrice: medianPrice || null,
-        activeBrandsCount: Number(statsRow?.activeBrandsCount || 0),
+        totalProducts,
+        totalActiveCreatives,
+        avgCreativesPerProduct: avgCreatives,
+        videoSharePercent,
+        topCategory,
+        medianPrice,
+        totalBreakouts: totalProducts,
+        activeBrandsCount: totalProducts,
+        videoRatePercent: videoSharePercent,
       };
 
-      await setCached(statsCacheKey, { stats, total: totalBreakouts }, FRESH_WINNERS_REDIS_TTL).catch(() => { });
-    }
-
-    if (totalBreakouts === 0) {
-      return NextResponse.json(
-        {
-          success: true,
-          winners: [],
-          stats,
-          pagination: {
-            page,
-            limit,
-            total: 0,
-            totalPages: 1,
-          },
-        },
-        {
-          headers: {
-            "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
-            Vary: PRIVATE_AUTH_VARY,
-          },
-        }
+      await setCached(statsCacheKey, { stats, total: totalProducts }, FRESH_WINNERS_REDIS_TTL).catch(
+        () => {}
       );
     }
 
-    // 2. Sort directly in SQL with distinct behavior for each option
+    if (totalProducts === 0) {
+      const emptyPayload = {
+        success: true,
+        products: [],
+        winners: [], // Backward compatibility
+        stats,
+        pagination: {
+          page,
+          limit,
+          total: 0,
+          totalPages: 1,
+        },
+      };
+
+      return NextResponse.json(emptyPayload, {
+        headers: {
+          "Cache-Control": PRIVATE_READ_CACHE_CONTROL,
+          Vary: PRIVATE_AUTH_VARY,
+        },
+      });
+    }
+
+    // 5. Build dynamic SQL ORDER BY with tie-breaker
     let sqlOrderBy;
-    if (sortBy === "duplication_count") {
+    if (sortBy === "creatives") {
       sqlOrderBy = [
-        desc(sql`latest_obs.duplication_count`),
-        desc(sql`COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt})`),
+        desc(sql`count(distinct ${ads.id})`),
+        desc(sql`sum(latest_obs.duplication_count)`),
+        desc(scrapedProducts.id),
+      ];
+    } else if (sortBy === "copies") {
+      sqlOrderBy = [
+        desc(sql`sum(latest_obs.duplication_count)`),
+        desc(sql`count(distinct ${ads.id})`),
+        desc(scrapedProducts.id),
       ];
     } else if (sortBy === "newest") {
       sqlOrderBy = [
-        desc(sql`COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt})`),
-        desc(sql`latest_obs.duplication_count`),
-      ];
-    } else if (sortBy === "winner_score") {
-      // Direct SQL approximation of the composite winner score:
-      // Combines scale volume (duplication count) + freshness velocity (copies / day)
-      sqlOrderBy = [
-        desc(sql`(
-          LEAST(50, latest_obs.duplication_count * 8) + 
-          LEAST(50, (latest_obs.duplication_count::numeric / GREATEST(1, EXTRACT(DAY FROM NOW() - COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt})))) * 15)
-        )`),
-        desc(sql`latest_obs.duplication_count`),
-        desc(sql`COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt})`),
+        desc(sql`max(coalesce(${ads.startedRunningOn}, ${ads.firstSeenAt}))`),
+        desc(sql`sum(latest_obs.duplication_count)`),
+        desc(scrapedProducts.id),
       ];
     } else {
       // Default: velocity (copies scaled relative to campaign launch age)
       sqlOrderBy = [
-        desc(sql`(latest_obs.duplication_count::numeric / GREATEST(1, EXTRACT(DAY FROM NOW() - COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt}))))`),
-        desc(sql`latest_obs.duplication_count`),
+        desc(
+          sql`(sum(latest_obs.duplication_count)::numeric / GREATEST(1, EXTRACT(DAY FROM NOW() - MIN(COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt})))))`
+        ),
+        desc(sql`sum(latest_obs.duplication_count)`),
+        desc(scrapedProducts.id),
       ];
     }
 
-    // Lean indexed select: Omit massive raw extracts, strictly bounded by LIMIT & OFFSET
-    const pageRows = await db
+    // 6. Query the paginated product slice
+    const productRows = await db
       .select({
-        adId: ads.id,
-        adArchiveId: ads.adArchiveId,
-        pageId: ads.pageId,
-        pageName: ads.pageName,
-        startedRunningOn: ads.startedRunningOn,
-        firstSeenAt: ads.firstSeenAt,
-        lastSeenAt: ads.lastSeenAt,
-        caption: ads.caption,
-        title: ads.title,
-        ctaText: ads.ctaText,
-        linkUrl: ads.linkUrl,
-        mediaType: ads.mediaType,
-        mediaUrls: ads.mediaUrls,
-        thumbnailUrl: ads.thumbnailUrl,
-        isArchived: ads.isArchived,
-        obsId: sql<string>`latest_obs.obs_id`,
-        duplicationCount: sql<number>`latest_obs.duplication_count`,
-        observedAt: sql<Date>`latest_obs.observed_at`,
-        trackedPageId: sql<string>`latest_obs.tracked_page_id`,
         productId: scrapedProducts.id,
+        productTitle: scrapedProducts.title,
         productUrl: scrapedProducts.url,
         productDomain: scrapedProducts.domain,
-        productTitle: scrapedProducts.title,
+        productMainImage: scrapedProducts.mainImageUrl,
         productCurrentPrice: scrapedProducts.currentPrice,
         productOriginalPrice: scrapedProducts.originalPrice,
         productCurrency: scrapedProducts.currency,
-        productDiscountOrOffer: scrapedProducts.discountOrOffer,
-        productMainImageUrl: scrapedProducts.mainImageUrl,
+        productDiscount: scrapedProducts.discountOrOffer,
         productCategory: scrapedProducts.category,
         productStorePlatform: scrapedProducts.storePlatform,
-        productIsFavorite: favColumn,
         productSupplierUrls: scrapedProducts.supplierUrls,
-        pageDisplayName: trackedPages.displayName,
-        pageCurrentResults: trackedPages.currentResults,
-        pageWatchlisted: trackedPages.isWatchlisted,
+        productIsFavorite: favColumn,
+        brandPageId: scrapedProducts.pageId,
+        brandDisplayName: sql<string | null>`MAX(${trackedPages.displayName})`,
+        brandWatchlisted: sql<boolean | null>`BOOL_OR(${trackedPages.isWatchlisted})`,
+        activeCreativesCount: sql<number>`count(distinct ${ads.id})`.mapWith(Number),
+        uniqueVisualsCount: sql<number>`count(distinct coalesce(${ads.thumbnailUrl}, ${ads.id}::text))`.mapWith(Number),
+        videoCount: sql<number>`count(case when ${ads.mediaType} = 'video' then 1 end)`.mapWith(Number),
+        imageCount: sql<number>`count(case when ${ads.mediaType} != 'video' or ${ads.mediaType} is null then 1 end)`.mapWith(Number),
+        totalCopies: sql<number>`sum(latest_obs.duplication_count)`.mapWith(Number),
+        maxCopies: sql<number>`max(latest_obs.duplication_count)`.mapWith(Number),
+        earliestAdDate: sql<Date | null>`min(coalesce(${ads.startedRunningOn}, ${ads.firstSeenAt}))`,
+        latestAdDate: sql<Date | null>`max(coalesce(${ads.startedRunningOn}, ${ads.firstSeenAt}))`,
       })
-      .from(ads)
+      .from(scrapedProducts)
+      .innerJoin(ads, eq(ads.productId, scrapedProducts.id))
       .innerJoin(latestObsSql, sql`latest_obs.ad_id = ${ads.id}`)
-      .leftJoin(scrapedProducts, eq(ads.productId, scrapedProducts.id))
       .leftJoin(trackedPages, sql`tracked_pages.id = latest_obs.tracked_page_id`)
       .where(whereSql)
+      .groupBy(scrapedProducts.id)
+      .having(havingSql)
       .orderBy(...sqlOrderBy)
       .limit(limit)
       .offset(offset);
 
-    // Enrich only the paginated slice
-    const paginatedItems: FreshWinnerItem[] = pageRows.map((row) => {
-      const dup = row.duplicationCount || 1;
-      const metrics = calculateWinnerScore({
-        startedRunningOn: row.startedRunningOn,
-        firstSeenAt: row.firstSeenAt,
-        lastSeenAt: row.lastSeenAt,
-        duplicationCount: dup,
-        isActive: true,
-        isArchived: Boolean(row.isArchived),
-        mediaType: row.mediaType,
-      });
+    const productIds = productRows.map((r) => r.productId);
 
-      const days = metrics.daysRunning;
-      // Clean normalized velocity score (0-100) representing copies scaled per day
-      const velocityScore = Math.min(100, Math.round((dup / Math.max(1, days)) * 20));
-      const scalingPattern = classifyScalingPattern(null, row.pageCurrentResults);
+    // 7. Resolve filmstrip (top 4 visual creatives with distinct thumbnails)
+    const filmstripByProduct = new Map<string, any[]>();
+    if (productIds.length > 0) {
+      const creativeRows = await db
+        .select({
+          id: ads.id,
+          adArchiveId: ads.adArchiveId,
+          productId: ads.productId,
+          thumbnailUrl: ads.thumbnailUrl,
+          mediaType: ads.mediaType,
+          duplicationCount: sql<number>`latest_obs.duplication_count`,
+          headline: sql<string | null>`LEFT(${ads.title}, 60)`,
+          startedRunningOn: ads.startedRunningOn,
+        })
+        .from(ads)
+        .innerJoin(latestObsSql, sql`latest_obs.ad_id = ${ads.id}`)
+        .where(
+          and(
+            inArray(ads.productId, productIds),
+            sql`latest_obs.is_active = true`,
+            sql`(${ads.isArchived} = false OR ${ads.isArchived} IS NULL)`
+          )
+        )
+        .orderBy(desc(sql`latest_obs.duplication_count`), desc(ads.id));
+
+      for (const c of creativeRows) {
+        if (!c.productId) continue;
+        const list = filmstripByProduct.get(c.productId) || [];
+        if (list.length >= 4) continue;
+        const thumbKey = c.thumbnailUrl || c.id;
+        if (!list.some((existing) => (existing.thumbnailUrl || existing.id) === thumbKey)) {
+          list.push({
+            id: c.id,
+            adArchiveId: c.adArchiveId,
+            thumbnailUrl: c.thumbnailUrl,
+            mediaType: (c.mediaType as any) || "unknown",
+            duplicationCount: c.duplicationCount,
+            headline: c.headline,
+            startedRunningOn: c.startedRunningOn ? c.startedRunningOn.toISOString() : null,
+          });
+          filmstripByProduct.set(c.productId, list);
+        }
+      }
+    }
+
+    // 8. Construct response items
+    const now = Date.now();
+    const products: FreshWinnerProduct[] = productRows.map((row) => {
+      const earliestT = row.earliestAdDate ? new Date(row.earliestAdDate).getTime() : now;
+      const daysRunning = Math.max(0, Math.floor((now - earliestT) / (1000 * 60 * 60 * 24)));
+      const velocityScore = Math.min(
+        100,
+        Math.round((row.totalCopies / Math.max(1, daysRunning)) * 12)
+      );
 
       return {
-        id: row.adId,
-        adArchiveId: row.adArchiveId,
-        pageId: row.pageId,
-        pageName: row.pageName || row.pageDisplayName,
-        startedRunningOn: row.startedRunningOn ? row.startedRunningOn.toISOString() : null,
-        firstSeenAt: row.firstSeenAt.toISOString(),
-        lastSeenAt: row.lastSeenAt.toISOString(),
-        caption: row.caption,
-        title: row.title,
-        ctaText: row.ctaText,
-        linkUrl: row.linkUrl,
-        mediaType: row.mediaType as any,
-        mediaUrls: row.mediaUrls,
-        thumbnailUrl: row.thumbnailUrl,
-        duplicationCount: dup,
-        isActive: true,
-        isArchived: Boolean(row.isArchived),
-        daysRunning: days,
-        winnerScore: metrics.winnerScore,
-        winnerTier: metrics.winnerTier,
-        isBreakout: metrics.isBreakout,
-        velocityScore,
-        product: row.productId
-          ? {
-            id: row.productId,
-            url: row.productUrl || "",
-            domain: row.productDomain || "",
-            title: row.productTitle || "",
-            currentPrice: row.productCurrentPrice,
-            originalPrice: row.productOriginalPrice,
-            currency: row.productCurrency,
-            discountOrOffer: row.productDiscountOrOffer,
-            mainImageUrl: row.productMainImageUrl,
-            category: row.productCategory,
-            storePlatform: row.productStorePlatform,
-            isFavorite: Boolean(row.productIsFavorite),
-            supplierUrls: row.productSupplierUrls,
-          }
-          : null,
+        id: row.productId,
+        url: row.productUrl || "",
+        domain: row.productDomain || "",
+        title: row.productTitle || "Untitled Product",
+        currentPrice: row.productCurrentPrice,
+        originalPrice: row.productOriginalPrice,
+        currency: row.productCurrency || activeWorkspace.currencySymbol || "DT",
+        discountOrOffer: row.productDiscount,
+        mainImageUrl: row.productMainImage,
+        category: row.productCategory,
+        storePlatform: row.productStorePlatform,
+        isFavorite: Boolean(row.productIsFavorite),
+        supplierUrls: row.productSupplierUrls,
         brand: {
-          id: row.trackedPageId,
-          displayName: row.pageDisplayName || row.pageName,
-          scalingPattern,
-          isWatchlisted: Boolean(row.pageWatchlisted),
+          pageId: row.brandPageId,
+          displayName: row.brandDisplayName || row.productDomain || "Store Brand",
+          domain: row.productDomain,
+          isWatchlisted: Boolean(row.brandWatchlisted),
         },
+        metrics: {
+          activeCreativesCount: row.activeCreativesCount,
+          uniqueVisualsCount: row.uniqueVisualsCount,
+          videoCount: row.videoCount,
+          imageCount: row.imageCount,
+          totalCopies: row.totalCopies,
+          maxCopies: row.maxCopies,
+          daysRunning,
+          velocityScore,
+        },
+        creatives: filmstripByProduct.get(row.productId) || [],
       };
     });
 
-    const totalPages = Math.ceil(totalBreakouts / limit);
+    const totalPages = Math.ceil(totalProducts / limit);
 
-    const responsePayload = {
+    const responsePayload: FreshWinnersProductResponse = {
       success: true,
-      winners: paginatedItems,
+      products,
       stats,
       pagination: {
         page,
         limit,
-        total: totalBreakouts,
+        total: totalProducts,
         totalPages,
       },
     };
 
     if (!forceRefresh) {
-      await setCached(pageCacheKey, responsePayload, FRESH_WINNERS_REDIS_TTL).catch(() => { });
+      await setCached(pageCacheKey, responsePayload, FRESH_WINNERS_REDIS_TTL).catch(() => {});
     }
 
     return NextResponse.json(responsePayload, {
@@ -366,7 +414,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error: any) {
-    console.error("[Fresh Winners API] Error:", error);
+    console.error("[Fresh Winners Product API] Error:", error);
     return NextResponse.json(
       { success: false, error: error.message || "Failed to fetch fresh winners" },
       { status: 500 }

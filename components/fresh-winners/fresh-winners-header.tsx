@@ -1,6 +1,6 @@
 "use client";
 
-import { Flame, Video, TrendingUp, Tag, RefreshCw } from "lucide-react";
+import { Flame, Video, TrendingUp, Tag, RefreshCw, Layers, ShoppingBag } from "lucide-react";
 import type { FreshWinnersStats } from "@/types";
 
 interface FreshWinnersHeaderProps {
@@ -19,9 +19,14 @@ export function FreshWinnersHeader({
   const windowLabel =
     windowDays === "3d" ? "Last 72 Hours" : windowDays === "14d" ? "Past 14 Days" : "Past 7 Days";
 
+  const totalProducts = stats?.totalProducts ?? stats?.totalBreakouts ?? 0;
+  const totalCreatives = stats?.totalActiveCreatives ?? 0;
+  const avgCreatives = stats?.avgCreativesPerProduct ?? 0;
+  const videoPercent = stats?.videoSharePercent ?? stats?.videoRatePercent ?? 0;
+
   return (
     <div className="space-y-3">
-      {/* Header Row: Matching /products & /dashboard style */}
+      {/* Header Row */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-border">
         <div>
           <div className="flex items-center gap-2">
@@ -39,7 +44,7 @@ export function FreshWinnersHeader({
             </div>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Recently launched ad creatives and products gaining rapid scale across competitor stores.
+            Recently launched e-commerce products gaining scale through active multi-creative testing.
           </p>
         </div>
 
@@ -59,14 +64,14 @@ export function FreshWinnersHeader({
         )}
       </div>
 
-      {/* 4 Executive KPI Cards (Matching /dashboard and /products theme) */}
+      {/* 4 Executive KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {/* KPI 1: Fresh Scalers */}
         <div className="group p-3.5 rounded-xl bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200 shadow-xs hover:shadow-sm">
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
             <span className="flex items-center gap-1.5">
-              <Flame className="w-3.5 h-3.5 text-rose-500" />
-              <span>Scaling Ads</span>
+              <ShoppingBag className="w-3.5 h-3.5 text-rose-500" />
+              <span>Scaling Products</span>
             </span>
             <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded-md">
               {windowLabel}
@@ -74,55 +79,55 @@ export function FreshWinnersHeader({
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <span className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              {stats?.totalBreakouts ?? (isLoading ? "--" : 0)}
+              {isLoading ? "--" : totalProducts}
             </span>
           </div>
           <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
             <span>
-              <strong className="text-slate-700 dark:text-slate-200">{stats?.activeBrandsCount ?? 0}</strong> brands scaling
+              <strong className="text-slate-700 dark:text-slate-200">{avgCreatives}</strong> avg creatives/product
             </span>
           </div>
         </div>
 
-        {/* KPI 2: Video Rate */}
+        {/* KPI 2: Creative Volume */}
         <div className="group p-3.5 rounded-xl bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200 shadow-xs hover:shadow-sm">
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
             <span className="flex items-center gap-1.5">
-              <Video className="w-3.5 h-3.5 text-indigo-500" />
-              <span>Video Share</span>
+              <Layers className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Creative Volume</span>
             </span>
             <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 rounded-md">
-              Creatives
+              Active Ads
             </span>
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <span className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              {stats?.videoRatePercent ?? 0}%
+              {isLoading ? "--" : totalCreatives}
             </span>
           </div>
           <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-            <span>Video ad formats</span>
+            <span>Distinct scaling creatives</span>
           </div>
         </div>
 
-        {/* KPI 3: Top Category */}
+        {/* KPI 3: Video Rate */}
         <div className="group p-3.5 rounded-xl bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200 shadow-xs hover:shadow-sm">
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
             <span className="flex items-center gap-1.5">
-              <TrendingUp className="w-3.5 h-3.5 text-amber-500" />
-              <span>Top Category</span>
+              <Video className="w-3.5 h-3.5 text-amber-500" />
+              <span>Video Share</span>
             </span>
             <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-md">
-              Niche
+              Formats
             </span>
           </div>
           <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-base md:text-lg font-black text-slate-900 dark:text-white tracking-tight truncate max-w-[180px]">
-              {stats?.topCategory || "—"}
+            <span className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+              {videoPercent}%
             </span>
           </div>
           <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-            <span>Most duplicated niche</span>
+            <span>Video & UGC formats</span>
           </div>
         </div>
 
@@ -143,7 +148,7 @@ export function FreshWinnersHeader({
             </span>
           </div>
           <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-            <span>Average store price</span>
+            <span>{stats?.topCategory ? `Top niche: ${stats.topCategory}` : "Average store offer"}</span>
           </div>
         </div>
       </div>

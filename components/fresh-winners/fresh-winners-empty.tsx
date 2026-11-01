@@ -16,12 +16,12 @@ export function FreshWinnersEmpty({ onResetFilters, windowDays = "7d" }: FreshWi
 
       <div className="max-w-md space-y-1">
         <h3 className="text-sm font-bold text-foreground">
-          No Fresh Winners Found
+          No Fresh Winning Products Found
         </h3>
         <p className="text-xs text-muted-foreground leading-relaxed">
-          No ad campaigns match your scale and freshness criteria in the{" "}
+          No products match your creative scale and freshness criteria in the{" "}
           {windowDays === "3d" ? "last 72 hours" : windowDays === "14d" ? "past 14 days" : "past 7 days"}.
-          Try switching to 14 days, lowering the copies threshold, or clearing your active filters.
+          Try switching to 14 days, lowering the minimum creatives threshold, or resetting your active filters.
         </p>
       </div>
 

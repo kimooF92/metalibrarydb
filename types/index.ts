@@ -408,22 +408,85 @@ export interface BreakoutAlertMetadata {
 
 export interface FreshWinnersFilterParams {
   window?: "3d" | "7d" | "14d";
+  minCreatives?: number;
   minCopies?: number;
-  mediaType?: "all" | "video" | "image" | "carousel";
+  mediaType?: "all" | "video" | "image";
   category?: string;
   hasProduct?: boolean;
   search?: string;
-  sortBy?: "velocity" | "winner_score" | "duplication_count" | "newest";
+  sortBy?: "creatives" | "velocity" | "copies" | "newest" | "winner_score" | "duplication_count";
   page?: number;
   limit?: number;
 }
 
 export interface FreshWinnersStats {
-  totalBreakouts: number;
-  videoRatePercent: number;
+  totalProducts: number;
+  totalActiveCreatives: number;
+  avgCreativesPerProduct: number;
+  videoSharePercent: number;
   topCategory: string | null;
   medianPrice: string | null;
-  activeBrandsCount: number;
+  totalBreakouts?: number;
+  activeBrandsCount?: number;
+  videoRatePercent?: number;
+}
+
+export interface FreshWinnerCreativeThumb {
+  id: string;
+  adArchiveId: string;
+  thumbnailUrl: string | null;
+  mediaType: "video" | "image" | "carousel" | "unknown";
+  duplicationCount: number;
+  headline: string | null;
+  startedRunningOn: string | null;
+}
+
+export interface FreshWinnerProduct {
+  id: string;
+  url: string;
+  domain: string;
+  title: string;
+  currentPrice: string | null;
+  originalPrice: string | null;
+  currency: string;
+  discountOrOffer: string | null;
+  mainImageUrl: string | null;
+  category: string | null;
+  storePlatform: string | null;
+  isFavorite: boolean;
+  supplierUrls: string[] | null;
+
+  brand: {
+    pageId: string | null;
+    displayName: string;
+    domain: string | null;
+    isWatchlisted?: boolean;
+  };
+
+  metrics: {
+    activeCreativesCount: number;
+    uniqueVisualsCount: number;
+    videoCount: number;
+    imageCount: number;
+    totalCopies: number;
+    maxCopies: number;
+    daysRunning: number;
+    velocityScore: number;
+  };
+
+  creatives: FreshWinnerCreativeThumb[];
+}
+
+export interface FreshWinnersProductResponse {
+  success: boolean;
+  products: FreshWinnerProduct[];
+  stats: FreshWinnersStats;
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
 }
 
 export interface FreshWinnerItem {
