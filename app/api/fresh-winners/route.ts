@@ -134,7 +134,7 @@ export async function GET(req: NextRequest) {
           COALESCE(SUM(sub.active_creatives_count), 0)::int AS total_active_creatives,
           COALESCE(ROUND(AVG(sub.active_creatives_count), 1), 0)::numeric AS avg_creatives,
           COALESCE(SUM(sub.video_count), 0)::int AS total_videos,
-          COALESCE(ROUND(AVG(NULLIF(regexp_replace(sub.current_price, '[^0-9.]', '', 'g'), '')::numeric), 0), 0)::int AS avg_price
+          COALESCE(ROUND(AVG(NULLIF(substring(regexp_replace(sub.current_price, ',', '.', 'g') from '([0-9]+(\\.[0-9]+)?)'), '')::numeric), 0), 0)::int AS avg_price
         FROM (
           SELECT
             ${scrapedProducts.id} AS product_id,
