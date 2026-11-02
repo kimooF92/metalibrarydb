@@ -64,13 +64,15 @@ export function classifyProductOffline(title: string): ProductClassificationResu
 
   // 2. Beauty, Health & Care
   if (
-    /(creme|crème|serum|sérum|visage|cheveux|shampoing|masque|parfum|savon|huile|epilateur|épilateur|brosse lissante|sechoir|sèche-cheveux|tondeuse|dent|massage|minceur|peau|anti-rides|rouge a levres|maquillage|soin|barbe|cire|anti-chute|acné|glow|collagene|vitamine|عناية|شعر|بشرة|كريم|عطر|ماكياج|مكياج|مساج|تجميل)/i.test(
+    /(creme|crème|serum|sérum|visage|cheveux|shampoing|masque|parfum|savon|huile|epilateur|épilateur|brosse lissante|sechoir|sèche-cheveux|tondeuse|dent|massage|minceur|peau|anti-rides|rouge a levres|maquillage|soin|barbe|cire|anti-chute|acné|glow|collagene|vitamine|عناية|شعر|بشرة|كريم|عطر|ماكياج|مكياج|مساج|تجميل|inhalat|nebulis|nébulis|استنشاق|تنفس)/i.test(
       text
     )
   ) {
     let sub = "Skincare & Body";
     let audience: "unisex" | "men" | "women" = "unisex";
-    if (/barbe|homme|tondeuse barbe/i.test(text)) {
+    if (/inhalat|nebulis|nébulis|استنشاق|تنفس/i.test(text)) {
+      sub = "Health & Wellness";
+    } else if (/barbe|homme|tondeuse barbe/i.test(text)) {
       sub = "Men's Grooming";
       audience = "men";
     } else if (/maquillage|مكياج|ماكياج|rouge a levres|anti-rides|lissante|epilateur/i.test(text)) {

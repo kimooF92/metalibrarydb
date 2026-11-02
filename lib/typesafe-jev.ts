@@ -185,7 +185,7 @@ function deriveSubCategory(title: string, category: ProductCategory): string {
       if (/creme|crème|serum|sérum|visage|peau|anti-rides|glow|بشرة|كريم|مكياج|ماكياج|maquillage/i.test(text)) return "Skincare & Face";
       if (/dent|dents|dentaire|blanchiment|hismile|أسنان/i.test(text)) return "Dental & Oral Care";
       if (/ongle|champignon|fongique|pied|diabétique|diabete|diabex|douleur|مرهم/i.test(text)) return "Foot & Nail Care";
-      if (/massage|minceur|santé|مساج/i.test(text)) return "Health & Wellness";
+      if (/massage|minceur|santé|مساج|inhalat|nebulis|nébulis|استنشاق|تنفس/i.test(text)) return "Health & Wellness";
       return "Personal Care & Beauty";
 
     case "Home, Kitchen & Living":
@@ -239,7 +239,7 @@ export const DECISION_SUBNICHE_CRITERIA: Record<string, string> = {
   "Men's Grooming": "Beard trimmer, shaver, razor, grooming kit, men's beard oil",
   "Fragrances & Perfumes": "Perfume, cologne, body mist, fragrance, bakhoor",
   "Dental & Oral Care": "Teeth whitening, toothbrush, dental care, oral hygiene",
-  "Health & Wellness": "Massagers, foot care, pain relief patches, wellness",
+  "Health & Wellness": "Massagers, foot care, pain relief patches, wellness, nebulizer, inhaler, respiratory care, جهاز استنشاق, رذاذ استنشاق",
 
   // Electronics & Tech
   "Smartwatches & Wearables": "Smartwatch, fitness tracker, smart band, watch strap",
@@ -390,7 +390,7 @@ export async function classifyProductWithJev(
   // 3. Compact criteria definitions to minimize input token billing
   const criteria: Record<string, string> = {
     "Electronics & Tech": "Gadgets, audio, phones, electronics, chargers, smartwatches, scales",
-    "Beauty, Health & Care": "Cosmetics, skincare, hair, wellness, pain relief, health, medical, dental, nails, feet, fungus, champignons",
+    "Beauty, Health & Care": "Cosmetics, skincare, hair, wellness, pain relief, health, medical, respiratory, inhaler, nebulizer, dental, nails, feet, fungus, champignons",
     "Home, Kitchen & Living": "Kitchen, appliances, decor, pest control, cleaning, household, furniture, garden, duster, Quran stand, tarps",
     "Fashion & Jewelry": "Clothing, shoes, crocos, clogs, bags, jewelry, accessories, apparel, watches",
     "Sports, Fitness & Outdoor": "Fitness, gym, workout, knee brace, outdoor, sports",
