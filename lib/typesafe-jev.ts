@@ -471,8 +471,8 @@ export async function classifyProductWithJev(
   let subCategory: string = "";
   if (subCategoryAnswer?.choice && DECISION_SUBNICHE_CRITERIA[subCategoryAnswer.choice]) {
     subCategory = subCategoryAnswer.choice;
-    // Cross-verify: if top-level category was General & Other or ambiguous, the AI-chosen sub-niche refines the category
-    if (matchedCategory === "General & Other" && SUBNICHE_TO_CATEGORY_MAP[subCategory]) {
+    // Strict hierarchy enforcement: The sub-niche selection strictly locks in its canonical parent niche
+    if (SUBNICHE_TO_CATEGORY_MAP[subCategory]) {
       matchedCategory = SUBNICHE_TO_CATEGORY_MAP[subCategory];
     }
   } else {

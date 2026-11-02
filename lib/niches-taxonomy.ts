@@ -30,7 +30,7 @@ export const NICHE_TAXONOMY: NicheDefinition[] = [
       {
         id: "skincare-anti-aging",
         label: "Skincare & Anti-Aging",
-        dbValues: ["Skincare & Anti-Aging", "Skincare & Body", "Personal Care & Beauty", "Skincare", "Skincare & Face", "Skin Care"],
+        dbValues: ["Skincare & Anti-Aging", "Skincare & Body", "Personal Care & Beauty", "Skincare", "Skincare & Face", "Skin Care", "Foot & Nail Care"],
       },
       {
         id: "hair-care-styling",
@@ -50,7 +50,18 @@ export const NICHE_TAXONOMY: NicheDefinition[] = [
       {
         id: "fragrances-perfumes",
         label: "Fragrances & Perfumes",
-        dbValues: ["Fragrance & Perfumes", "Fragrances & Perfumes", "Perfumes", "Health & Wellness"],
+        dbValues: ["Fragrance & Perfumes", "Fragrances & Perfumes", "Perfumes"],
+      },
+      {
+        id: "health-wellness",
+        label: "Health & Wellness",
+        dbValues: [
+          "Health & Wellness",
+          "Health & Pain Relief",
+          "Pain Relief",
+          "Respiratory Care",
+          "Prostate Health",
+        ],
       },
     ],
   },
@@ -63,7 +74,7 @@ export const NICHE_TAXONOMY: NicheDefinition[] = [
       {
         id: "smartwatches-wearables",
         label: "Smartwatches & Wearables",
-        dbValues: ["Smartwatches & Wearables", "Wearables", "Smartwatches"],
+        dbValues: ["Smartwatches & Wearables", "Wearables", "Smartwatches", "Smart Glasses"],
       },
       {
         id: "audio-earbuds",
@@ -78,7 +89,7 @@ export const NICHE_TAXONOMY: NicheDefinition[] = [
       {
         id: "cameras-security",
         label: "Cameras & Security",
-        dbValues: ["Cameras & Security", "Security Cameras", "Action Cameras"],
+        dbValues: ["Cameras & Security", "Security Cameras", "Action Cameras", "Doorbells", "Telescopes"],
       },
       {
         id: "tablets-computers",
@@ -89,6 +100,11 @@ export const NICHE_TAXONOMY: NicheDefinition[] = [
         id: "led-lighting",
         label: "LED & Smart Lighting",
         dbValues: ["LED & Lighting", "Smart Lighting"],
+      },
+      {
+        id: "smart-scales-gadgets",
+        label: "Smart Scales & Gadgets",
+        dbValues: ["Smart Scales & Gadgets", "Smart Gadgets"],
       },
     ],
   },
@@ -108,22 +124,58 @@ export const NICHE_TAXONOMY: NicheDefinition[] = [
           "Kitchenware",
           "Kitchen & Cookware",
           "Juicer",
+          "Lunch Boxes",
         ],
       },
       {
         id: "cleaning-organization",
         label: "Cleaning & Organization",
-        dbValues: ["Cleaning & Organization", "Cleaning", "Cleaning & Maintenance", "Cleaning Tools", "Storage & Organization"],
+        dbValues: [
+          "Cleaning & Organization",
+          "Cleaning",
+          "Cleaning & Maintenance",
+          "Cleaning Tools",
+          "Storage & Organization",
+          "Moving & Storage",
+          "Bath Accessories",
+        ],
       },
       {
         id: "home-decor-lamps",
         label: "Home Decor & Lamps",
-        dbValues: ["Home Decor & Lamps", "Home Decor", "Home Decor & Lighting", "Lighting", "Lighting & Lamps"],
+        dbValues: [
+          "Home Decor & Lamps",
+          "Home Decor",
+          "Home Decor & Lighting",
+          "Lighting",
+          "Lighting & Lamps",
+          "Wall Accessories",
+          "Portable AC",
+        ],
       },
       {
         id: "bedroom-comfort",
         label: "Bedroom & Comfort",
-        dbValues: ["Bedroom & Comfort", "Bedding & Comfort", "Home Repair & Improvement", "Furniture"],
+        dbValues: ["Bedroom & Comfort", "Bedding & Comfort", "Furniture", "Bathroom Storage", "Bath Accessories"],
+      },
+      {
+        id: "pest-control-garden",
+        label: "Pest Control & Garden",
+        dbValues: [
+          "Pest Control & Garden",
+          "Garden & Outdoor Living",
+          "Garden Tools",
+        ],
+      },
+      {
+        id: "home-repair-diy",
+        label: "Home Repair & Improvement",
+        dbValues: [
+          "Home Repair & Improvement",
+          "Waterproof tape",
+          "Adhesive & Sealant",
+          "Fire Safety",
+        ],
       },
     ],
   },
@@ -141,12 +193,12 @@ export const NICHE_TAXONOMY: NicheDefinition[] = [
       {
         id: "womens-apparel",
         label: "Women's Apparel & Dresses",
-        dbValues: ["Women's Apparel & Dresses", "Women's Apparel", "Apparel & Accessories"],
+        dbValues: ["Women's Apparel & Dresses", "Women's Apparel", "Apparel & Accessories", "Shapewear & Underwear"],
       },
       {
         id: "shoes-footwear",
         label: "Shoes & Footwear",
-        dbValues: ["Shoes & Footwear", "Footwear", "Footwear & Shoes"],
+        dbValues: ["Shoes & Footwear", "Footwear", "Footwear & Shoes", "Height Enhancement"],
       },
       {
         id: "jewelry-luxury",
@@ -163,7 +215,7 @@ export const NICHE_TAXONOMY: NicheDefinition[] = [
       {
         id: "bags-accessories",
         label: "Bags, Wallets & Belts",
-        dbValues: ["Bags, Wallets & Belts", "Apparel & Accessories", "Bags & Wallets"],
+        dbValues: ["Bags, Wallets & Belts", "Apparel & Accessories", "Bags & Wallets", "Travel Bags", "Travel Accessories"],
       },
     ],
   },
@@ -176,22 +228,36 @@ export const NICHE_TAXONOMY: NicheDefinition[] = [
       {
         id: "fitness-equipment",
         label: "Fitness & Gym Equipment",
-        dbValues: ["Fitness & Gym Equipment", "Fitness & Training", "Gym Equipment", "Sports & Training", "Fitness & Workout", "Home Gym"],
+        dbValues: [
+          "Fitness & Gym Equipment",
+          "Fitness & Training",
+          "Gym Equipment",
+          "Sports & Training",
+          "Fitness & Workout",
+          "Home Gym",
+          "Yoga Mats",
+          "Resistance Bands",
+        ],
       },
       {
         id: "posture-body-support",
         label: "Posture & Body Support",
-        dbValues: ["Posture & Body Support", "Orthopedic & Support", "Supports & Braces", "Knee Supports"],
+        dbValues: ["Posture & Body Support", "Orthopedic & Support", "Supports & Braces", "Knee Supports", "Posture Correction", "Posture Support"],
       },
       {
         id: "pain-relief-massagers",
         label: "Pain Relief & Massagers",
-        dbValues: ["Pain Relief & Massagers", "Massagers & Therapy", "Massage Roller"],
+        dbValues: ["Pain Relief & Massagers", "Massagers & Therapy", "Massage Roller", "Health & Pain Relief", "Pain Relief", "Respiratory Care"],
       },
       {
         id: "weight-loss-sauna",
         label: "Weight Loss & Sauna",
         dbValues: ["Weight Loss & Sauna", "Slimming"],
+      },
+      {
+        id: "outdoor-camping",
+        label: "Outdoor & Camping",
+        dbValues: ["Outdoor & Camping", "Camping & Outdoor", "Camping & Outdoors", "Tactical & Survival", "Camping Furniture", "Fishing Gear"],
       },
     ],
   },
@@ -204,7 +270,16 @@ export const NICHE_TAXONOMY: NicheDefinition[] = [
       {
         id: "car-interior-accessories",
         label: "Car Interior & Accessories",
-        dbValues: ["Car Interior & Accessories", "Car Accessories & Tools", "Car Accessories", "Automotive & Tools", "Car Electronics"],
+        dbValues: [
+          "Car Interior & Accessories",
+          "Car Accessories & Tools",
+          "Car Accessories",
+          "Automotive & Tools",
+          "Car Electronics",
+          "Car Security & Protection",
+          "Motorcycle Accessories",
+          "Power Inverters",
+        ],
       },
       {
         id: "car-care-repair",
@@ -214,7 +289,16 @@ export const NICHE_TAXONOMY: NicheDefinition[] = [
       {
         id: "diy-tools-hardware",
         label: "DIY Tools & Hardware",
-        dbValues: ["DIY Tools & Hardware", "Tools & Hardware", "Tools & Automotive", "Car Tools"],
+        dbValues: [
+          "DIY Tools & Hardware",
+          "Tools & Hardware",
+          "Tools & Automotive",
+          "Car Tools",
+          "Flashlights & Worklights",
+          "Tool Kit",
+          "Power Tools",
+          "Demolition Tools",
+        ],
       },
     ],
   },
@@ -232,7 +316,7 @@ export const NICHE_TAXONOMY: NicheDefinition[] = [
       {
         id: "baby-care-safety",
         label: "Baby Care & Safety",
-        dbValues: ["Baby Care & Safety", "Baby Essentials", "Baby & Children"],
+        dbValues: ["Baby Care & Safety", "Baby Essentials", "Baby & Children", "Baby Carriers"],
       },
       {
         id: "interactive-toys",
@@ -250,7 +334,7 @@ export const NICHE_TAXONOMY: NicheDefinition[] = [
       {
         id: "gifts-novelty",
         label: "Gifts & Novelty Gadgets",
-        dbValues: ["Gifts & Novelty Gadgets", "Novelty Gifts"],
+        dbValues: ["Gifts & Novelty Gadgets", "Novelty Gifts", "Lifestyle & Goals", "Glow Sticks"],
       },
       {
         id: "seasonal-holiday",
