@@ -233,51 +233,51 @@ function deriveSubCategory(title: string, category: ProductCategory): string {
 
 export const DECISION_SUBNICHE_CRITERIA: Record<string, string> = {
   // Beauty, Health & Care
-  "Skincare & Face": "Face cream, serums, anti-aging, acne, mask, lotion, cleanser",
-  "Hair Care & Styling": "Shampoo, hair oil, hair dryer, straightener, styling, hair loss",
-  "Makeup & Cosmetics": "Lipstick, foundation, mascara, eye makeup, cosmetics",
-  "Men's Grooming": "Beard trimmer, shaver, razor, grooming kit, men's beard oil",
-  "Fragrances & Perfumes": "Perfume, cologne, body mist, fragrance, bakhoor",
-  "Dental & Oral Care": "Teeth whitening, toothbrush, dental care, oral hygiene",
-  "Health & Wellness": "Massagers, foot care, pain relief patches, wellness, nebulizer, inhaler, respiratory care",
+  "Skincare & Face": "Skincare, facial treatments, serums, creams, and cleansers",
+  "Hair Care & Styling": "Hair care, styling appliances, shampoos, and treatments",
+  "Makeup & Cosmetics": "Cosmetics, facial and eye makeup, and beauty products",
+  "Men's Grooming": "Men's beard care, shavers, trimmers, and grooming tools",
+  "Fragrances & Perfumes": "Perfumes, colognes, body mists, and fragrances",
+  "Dental & Oral Care": "Oral hygiene, teeth whitening, and dental care",
+  "Health & Wellness": "Personal health, therapy, respiratory care, and medical wellness devices",
 
   // Electronics & Tech
-  "Smartwatches & Wearables": "Smartwatch, fitness tracker, smart band, watch strap",
-  "Audio & Earbuds": "Wireless earbuds, bluetooth headphones, airpods, speakers",
-  "Chargers & Power": "Fast charger, power bank, magnetic charging cable, adapter",
-  "Cameras & Security": "Mini security camera, wifi camera, dashcam, surveillance",
-  "Tablets & Computers": "Tablet, keyboard, mouse, laptop stand, computer accessories",
-  "Smart Scales & Gadgets": "Digital weight scale, smart body fat scale, electronic gadgets",
+  "Smartwatches & Wearables": "Smartwatches, fitness bands, and wearable tech",
+  "Audio & Earbuds": "Audio equipment, wireless earbuds, headphones, and speakers",
+  "Chargers & Power": "Charging cables, power adapters, power banks, and charging docks",
+  "Cameras & Security": "Surveillance cameras, action cams, and security devices",
+  "Tablets & Computers": "Tablets, computers, and computer peripherals",
+  "Smart Scales & Gadgets": "Digital weight scales and electronic smart gadgets",
 
   // Home, Kitchen & Living
-  "Kitchen & Cookware": "Air fryer, blender, mixer, food chopper, frying pan, kitchen knife, cookware",
-  "Cleaning & Maintenance": "Vacuum cleaner, mop, cleaning brush, duster, stain remover",
-  "Home Decor & Lighting": "Aroma humidifier, essential oil diffuser, flame lamp, LED strip, ambient room lighting, home decor",
-  "Bedroom & Comfort": "Orthopedic pillow, bed sheets, mattress topper, blanket, comfort cushion",
-  "Pest Control & Garden": "Mosquito trap, pest repeller, insect killer, garden accessories",
-  "Home Repair & Improvement": "Waterproof tape, sealant, adhesive, wallpaper, silicone repair",
+  "Kitchen & Cookware": "Cooking appliances, kitchen gadgets, cookware, and food prep tools",
+  "Cleaning & Maintenance": "Cleaning tools, vacuums, mops, and household maintenance",
+  "Home Decor & Lighting": "Home decor, decorative lighting, and room fragrance",
+  "Bedroom & Comfort": "Bedding, comfort pillows, and bedroom furniture",
+  "Pest Control & Garden": "Insect killers, pest repellers, traps, and garden accessories",
+  "Home Repair & Improvement": "Waterproofing tapes, adhesives, sealants, and home DIY materials",
 
   // Fashion & Jewelry
-  "Apparel & Fashion": "Clothing, shirts, pants, hoodies, dresses, jackets, underwear",
-  "Footwear & Shoes": "Sneakers, running shoes, clogs, sandals, slides, boots",
-  "Bags & Wallets": "Leather wallet, backpack, handbag, shoulder bag, travel pouch",
-  "Jewelry & Accessories": "Ring, necklace, bracelet, luxury watch, sunglasses, belt",
+  "Apparel & Fashion": "Clothing, shirts, pants, dresses, jackets, and underwear",
+  "Footwear & Shoes": "Shoes, sneakers, sandals, boots, and footwear",
+  "Bags & Wallets": "Bags, backpacks, handbags, and wallets",
+  "Jewelry & Accessories": "Jewelry, luxury watches, eyewear, sunglasses, and belts",
 
   // Sports, Fitness & Outdoor
-  "Fitness & Workout": "Dumbbells, resistance bands, abs roller, gym equipment, yoga mat",
-  "Supports & Braces": "Knee brace, back posture corrector, ankle support, compression sleeve",
-  "Outdoor & Camping": "Camping tent, survival gear, outdoor lantern, tactical bag",
+  "Fitness & Workout": "Gym equipment, exercise gear, weights, and workout accessories",
+  "Supports & Braces": "Orthopedic body supports, posture correctors, and compression braces",
+  "Outdoor & Camping": "Camping gear, tents, survival tools, and outdoor equipment",
 
   // Automotive & Tools
-  "Car Accessories": "Car phone holder, seat organizer, sunshade, interior ambient light",
-  "Car Care & Maintenance": "Car scratch remover, car vacuum, ceramic coating, tire inflator",
-  "Tools & Hardware": "Cordless drill, screwdriver set, socket wrench, multi-tool kit",
-  "Flashlights & Worklights": "Tactical flashlight, headlamp, rechargeable work light",
+  "Car Accessories": "Car interior and exterior accessories, phone holders, and organizers",
+  "Car Care & Maintenance": "Car cleaning, scratch repair, inflators, and vehicle maintenance",
+  "Tools & Hardware": "Power tools, hand tools, drill bits, socket wrenches, and hardware",
+  "Flashlights & Worklights": "Portable flashlights, tactical torches, and work lights",
 
   // Kids, Baby & Toys
-  "Toys & Games": "RC car, drone, action figures, board games, building blocks",
-  "Educational & Montessori": "Magic drawing board, educational books, learning toys, puzzles",
-  "Baby Essentials": "Baby stroller, feeding bottle, baby carrier, baby monitor",
+  "Toys & Games": "Toys, RC vehicles, action figures, and recreational games",
+  "Educational & Montessori": "Educational toys, learning books, drawing boards, and puzzles",
+  "Baby Essentials": "Baby care essentials, strollers, baby monitors, and feeding gear",
 };
 
 export const SUBNICHE_TO_CATEGORY_MAP: Record<string, ProductCategory> = {
@@ -373,12 +373,18 @@ export async function classifyProductWithJev(
     }
   }
 
-  if (extraContext?.adText) {
-    statePayload.adSnippet = extraContext.adText.slice(0, 90);
+  // Include truncated ad copy if available (cleans URL links and limits to 120 chars)
+  if (extraContext?.adText && extraContext.adText.trim().length > 3) {
+    const cleanAdCopy = extraContext.adText
+      .replace(/https?:\/\/\S+/gi, "") // strip urls
+      .replace(/[\r\n\t]+/g, " ") // normalize whitespace
+      .trim();
+    if (cleanAdCopy.length > 5) {
+      statePayload.adCopy = cleanAdCopy.slice(0, 120);
+    }
   }
-  if (extraContext?.domain) {
-    statePayload.domain = extraContext.domain.slice(0, 30);
-  }
+
+  // NOTE: Domain and brandName are intentionally excluded to prevent misleading general-store bias
 
   // 2. Fast offline audience inference to save input tokens if unambiguous
   let resolvedAudience: "unisex" | "men" | "women" | "kids" | null = null;
@@ -389,13 +395,13 @@ export async function classifyProductWithJev(
 
   // 3. Compact criteria definitions to minimize input token billing
   const criteria: Record<string, string> = {
-    "Electronics & Tech": "Gadgets, audio, phones, electronics, chargers, smartwatches, scales",
-    "Beauty, Health & Care": "Cosmetics, skincare, hair, wellness, pain relief, health, medical, respiratory, inhaler, nebulizer, dental, nails, feet, fungus, champignons",
-    "Home, Kitchen & Living": "Kitchen, appliances, decor, pest control, cleaning, household, furniture, garden, duster, Quran stand, tarps",
-    "Fashion & Jewelry": "Clothing, shoes, crocos, clogs, bags, jewelry, accessories, apparel, watches",
-    "Sports, Fitness & Outdoor": "Fitness, gym, workout, knee brace, outdoor, sports",
-    "Kids, Baby & Toys": "Toys, baby items, games, educational books, magic pen, stylo, kids clothing, children",
-    "Automotive & Tools": "Car accessories, tools, hardware, DIY repair, scratch remover, steering lock, flashlights, safe box",
+    "Electronics & Tech": "Consumer electronics, smart devices, audio, computing and mobile accessories",
+    "Beauty, Health & Care": "Beauty, cosmetics, skincare, personal care, and health/wellness aids",
+    "Home, Kitchen & Living": "Home living, kitchenware, appliances, cleaning, decor, and garden care",
+    "Fashion & Jewelry": "Clothing, footwear, bags, jewelry, watches, and fashion accessories",
+    "Sports, Fitness & Outdoor": "Sports, gym, fitness equipment, body supports, and outdoor camping",
+    "Kids, Baby & Toys": "Toys, games, educational items, and baby care essentials",
+    "Automotive & Tools": "Car accessories, vehicle care, DIY hand tools, and hardware equipment",
   };
 
   // Only allow General & Other if explicitly requested
