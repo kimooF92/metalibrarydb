@@ -239,7 +239,7 @@ export const DECISION_SUBNICHE_CRITERIA: Record<string, string> = {
   "Men's Grooming": "Beard trimmer, shaver, razor, grooming kit, men's beard oil",
   "Fragrances & Perfumes": "Perfume, cologne, body mist, fragrance, bakhoor",
   "Dental & Oral Care": "Teeth whitening, toothbrush, dental care, oral hygiene",
-  "Health & Wellness": "Massagers, foot care, pain relief patches, wellness, nebulizer, inhaler, respiratory care, جهاز استنشاق, رذاذ استنشاق",
+  "Health & Wellness": "Massagers, foot care, pain relief patches, wellness, nebulizer, inhaler, respiratory care",
 
   // Electronics & Tech
   "Smartwatches & Wearables": "Smartwatch, fitness tracker, smart band, watch strap",
