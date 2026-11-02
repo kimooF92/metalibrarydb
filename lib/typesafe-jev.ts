@@ -353,19 +353,22 @@ export async function classifyProductWithJev(
     title: cleanTitle.slice(0, 90),
   };
 
-  // URL path slug inference for products with vague store/promo titles
+  // Only extract slug hint if the product title is extremely short or a generic placeholder
   let slugHint = "";
-  if (extraContext?.url) {
+  const isTitleVague = cleanTitle.length < 8 || /^(?:pack|kit|offre|produit|item|deal|promo)\b/i.test(cleanTitle);
+
+  if (isTitleVague && extraContext?.url) {
     try {
       const parsedUrl = new URL(
         extraContext.url.startsWith("http") ? extraContext.url : `https://${extraContext.url}`
       );
-      const rawPath = parsedUrl.pathname
-        .replace(/^\/(?:products?|product|p|detail|items?)\//i, "")
+      // Strip store prefixes like /tn/, /fr/, /collections/*/products/
+      const cleanPath = parsedUrl.pathname
+        .replace(/^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(?:collections\/[^/]+\/)?(?:products?|product|p|detail|items?)\//i, "")
         .replace(/[-_/]/g, " ")
         .trim();
-      if (rawPath && rawPath.length > 2 && !/^\d+$/.test(rawPath)) {
-        slugHint = decodeURIComponent(rawPath).slice(0, 70);
+      if (cleanPath && cleanPath.length > 2 && !/^\d+$/.test(cleanPath)) {
+        slugHint = decodeURIComponent(cleanPath).slice(0, 70);
         statePayload.slug = slugHint;
       }
     } catch {
