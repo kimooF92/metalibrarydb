@@ -90,6 +90,25 @@ export function NicheTreeSelect({
     return parentSelected || selectedSubNiches.includes(sub.id) || selectedSubNiches.includes(sub.label);
   };
 
+  /**
+   * Native ellipsis tooltip handler:
+   * Dynamically checks if the label text is actively overflowing/truncated
+   * by comparing scrollWidth > clientWidth. Sets the native `title` attribute
+   * only when truncated with an ellipsis, preventing redundant tooltips for short text.
+   */
+  const handleEllipsisTooltip = (e: React.MouseEvent<HTMLElement>, fullText: string) => {
+    const el = e.currentTarget;
+    const target = (el.classList.contains("truncate")
+      ? el
+      : el.querySelector(".truncate") || el) as HTMLElement;
+
+    if (target && target.scrollWidth > target.clientWidth) {
+      el.title = fullText;
+    } else {
+      el.removeAttribute("title");
+    }
+  };
+
   const handleNicheToggle = (niche: NicheDefinition) => {
     const isSelected = isNicheSelected(niche);
     const subNicheIds = niche.subNiches.map((s) => s.id);
@@ -209,6 +228,7 @@ export function NicheTreeSelect({
                     : "hover:bg-accent/50 text-foreground/80 hover:text-foreground"
                 }`}
                 onClick={() => handleNicheToggle(niche)}
+                onMouseEnter={(e) => handleEllipsisTooltip(e, niche.label)}
               >
                 <div className="flex items-center gap-1.5 min-w-0 flex-1">
                   {/* Expand Chevron */}
@@ -240,7 +260,13 @@ export function NicheTreeSelect({
                   </div>
 
                   <Icon className="w-3.5 h-3.5 shrink-0 opacity-70" />
-                  <span className="truncate text-xs">{niche.label}</span>
+                  <span
+                    className="truncate text-xs"
+                    title={niche.label}
+                    onMouseEnter={(e) => handleEllipsisTooltip(e, niche.label)}
+                  >
+                    {niche.label}
+                  </span>
                 </div>
 
                 {/* Count Badge */}
@@ -272,6 +298,7 @@ export function NicheTreeSelect({
                             : "hover:bg-accent/40 text-muted-foreground hover:text-foreground"
                         }`}
                         onClick={() => handleSubNicheToggle(niche, sub)}
+                        onMouseEnter={(e) => handleEllipsisTooltip(e, sub.label)}
                       >
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
                           <div
@@ -283,7 +310,13 @@ export function NicheTreeSelect({
                           >
                             {isSubSelected && <Check className="w-2 h-2 stroke-[3]" />}
                           </div>
-                          <span className="truncate">{sub.label}</span>
+                          <span
+                            className="truncate"
+                            title={sub.label}
+                            onMouseEnter={(e) => handleEllipsisTooltip(e, sub.label)}
+                          >
+                            {sub.label}
+                          </span>
                         </div>
 
                         {subCount > 0 && (
