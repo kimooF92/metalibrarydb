@@ -251,9 +251,10 @@ export async function POST(req: NextRequest) {
       adText: adCaptionText,
       html: rawHtml,
       markdown: extractionResult.raw?.markdown,
-      existingCategory: existingProduct?.category,
-      existingSubCategory: existingProduct?.subCategory,
+      existingCategory: forceRefresh ? undefined : existingProduct?.category,
+      existingSubCategory: forceRefresh ? undefined : existingProduct?.subCategory,
       existingTargetAudience: existingProduct?.targetAudience,
+      forceReclassify: Boolean(forceRefresh),
       fallbackCurrencySymbol,
     });
 
@@ -375,6 +376,7 @@ export async function POST(req: NextRequest) {
         );
         await Promise.allSettled([
           deleteByPrefix(`cache:products:${resolvedWorkspaceId}:`),
+          deleteByPrefix(`cache:fresh_winners_v2:${resolvedWorkspaceId}:`),
           deleteByPrefix(`cache:spy_ads:${resolvedWorkspaceId}:`),
           ...brandKeys.map((k) => deleteByPrefix(`cache:brand:${resolvedWorkspaceId}:${k}:`)),
           deleteCached(`cache:stats:${resolvedWorkspaceId}`),

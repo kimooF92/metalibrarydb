@@ -110,13 +110,20 @@ export function classifyProductOffline(title: string): ProductClassificationResu
 
   // 4. Home, Kitchen & Living
   if (
-    /(cuisine|poele|poêle|marmite|couteau|mixeur|blender|friteuse|air fryer|hachoir|nettoyeur|balai|rangement|organiseur|lampe|coussin|tapis|drap|lit|aspirateur|mop|gadget cuisine|repassage|brosse magique|humidificateur|diffuseur|tapisserie|مطبخ|منزل|تنظيف|أواني|مفرمة|خلاط)/i.test(
+    /(cuisine|poele|poêle|marmite|couteau|mixeur|blender|friteuse|air fryer|hachoir|nettoyeur|balai|rangement|organiseur|lampe|coussin|tapis|drap|lit|aspirateur|mop|gadget cuisine|repassage|brosse magique|humidificateur|humidifier|diffuseur|diffuser|aroma|tapisserie|مطبخ|منزل|تنظيف|أواني|مفرمة|خلاط)/i.test(
       text
     )
   ) {
+    let sub = "Kitchen & Cookware";
+    if (/humidificateur|diffuseur|humidifier|diffuser|aroma|flame|lampe|led|coussin|tapis|drap|lit/i.test(text)) {
+      sub = "Home Decor & Lighting";
+    } else if (/aspirateur|balai|nettoyeur|mop|تنظيف|rangement|organiseur|plumeau/i.test(text)) {
+      sub = "Cleaning & Maintenance";
+    }
+
     return {
       category: "Home, Kitchen & Living",
-      subCategory: "Kitchen & Home Appliances",
+      subCategory: sub,
       targetAudience: "unisex",
       modelUsed: "offline_rules",
     };
@@ -194,7 +201,7 @@ export async function classifyProductWithAI(
   if (!cleanTitle || cleanTitle.length < 2) {
     return {
       category: "Home, Kitchen & Living",
-      subCategory: "Kitchen & Home Living",
+      subCategory: "Home Decor & Lighting",
       targetAudience: "unisex",
       modelUsed: "empty_title",
     };

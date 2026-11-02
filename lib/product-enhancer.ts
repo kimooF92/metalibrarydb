@@ -1,5 +1,5 @@
 import { detectExtractionDoubt, resolvePriceDoubtWithJev, harvestPriceCandidates } from "./doubt-detector";
-import { classifyProductWithJev } from "./typesafe-jev";
+import { classifyProductWithJev, DECISION_SUBNICHE_CRITERIA } from "./typesafe-jev";
 import { classifyProductOffline } from "./product-classifier";
 import { formatPrice } from "./format-price";
 import { isUrgencyOrPromoBanner } from "./html-scraper";
@@ -17,6 +17,7 @@ export interface EnhanceProductInput {
   existingSubCategory?: string | null;
   existingTargetAudience?: string | null;
   fallbackCurrencySymbol?: string;
+  forceReclassify?: boolean;
 }
 
 export interface EnhanceProductResult {
@@ -159,13 +160,22 @@ export async function enhanceProductWithJev(
   }
 
   // 3. Classify Niche and Subcategory using TypeSafe Jev (Phase 4.1: Content-Hash Gated)
-  const hasSpecificCategory =
-    params.existingCategory &&
-    params.existingCategory.trim() !== "" &&
-    params.existingCategory !== "General & Other" &&
-    params.existingCategory.toLowerCase() !== "uncategorized" &&
+  const hasValidSubNiche = Boolean(
+    params.existingSubCategory &&
+    params.existingSubCategory.trim() !== "" &&
     params.existingSubCategory !== "General Merchandise" &&
-    Boolean(params.existingSubCategory);
+    params.existingSubCategory !== "General & Essentials" &&
+    params.existingSubCategory !== "Kitchen & Home Living" &&
+    DECISION_SUBNICHE_CRITERIA[params.existingSubCategory]
+  );
+
+  const existingCat = params.existingCategory ? params.existingCategory.trim() : "";
+  const hasSpecificCategory =
+    !params.forceReclassify &&
+    existingCat !== "" &&
+    existingCat !== "General & Other" &&
+    existingCat.toLowerCase() !== "uncategorized" &&
+    hasValidSubNiche;
 
   let category = params.existingCategory || "General & Other";
   let subCategory = params.existingSubCategory || "General Merchandise";

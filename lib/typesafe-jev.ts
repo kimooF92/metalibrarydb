@@ -196,7 +196,8 @@ function deriveSubCategory(title: string, category: ProductCategory): string {
       if (/nettoyeur|aspirateur|balai|mop|تنظيف|plumeau|غبرة/i.test(text)) return "Cleaning & Maintenance";
       if (/lampe|led|coussin|tapis|drap|lit|déco|منزل|mushaf|مصحف|حامل/i.test(text)) return "Home Decor & Lighting";
       if (/olive|زيتون|مفارش/i.test(text)) return "Garden & Outdoor Living";
-      return "Kitchen & Home Living";
+      if (/humidif|diffus|aroma|flame|encens/i.test(text)) return "Home Decor & Lighting";
+      return "Home Decor & Lighting";
 
     case "Fashion & Jewelry":
       if (/bague|collier|bracelet|bijoux|مجوهرات/i.test(text)) return "Jewelry & Accessories";
@@ -229,6 +230,104 @@ function deriveSubCategory(title: string, category: ProductCategory): string {
       return "General & Essentials";
   }
 }
+
+export const DECISION_SUBNICHE_CRITERIA: Record<string, string> = {
+  // Beauty, Health & Care
+  "Skincare & Face": "Face cream, serums, anti-aging, acne, mask, lotion, cleanser",
+  "Hair Care & Styling": "Shampoo, hair oil, hair dryer, straightener, styling, hair loss",
+  "Makeup & Cosmetics": "Lipstick, foundation, mascara, eye makeup, cosmetics",
+  "Men's Grooming": "Beard trimmer, shaver, razor, grooming kit, men's beard oil",
+  "Fragrances & Perfumes": "Perfume, cologne, body mist, fragrance, bakhoor",
+  "Dental & Oral Care": "Teeth whitening, toothbrush, dental care, oral hygiene",
+  "Health & Wellness": "Massagers, foot care, pain relief patches, wellness",
+
+  // Electronics & Tech
+  "Smartwatches & Wearables": "Smartwatch, fitness tracker, smart band, watch strap",
+  "Audio & Earbuds": "Wireless earbuds, bluetooth headphones, airpods, speakers",
+  "Chargers & Power": "Fast charger, power bank, magnetic charging cable, adapter",
+  "Cameras & Security": "Mini security camera, wifi camera, dashcam, surveillance",
+  "Tablets & Computers": "Tablet, keyboard, mouse, laptop stand, computer accessories",
+  "Smart Scales & Gadgets": "Digital weight scale, smart body fat scale, electronic gadgets",
+
+  // Home, Kitchen & Living
+  "Kitchen & Cookware": "Air fryer, blender, mixer, food chopper, frying pan, kitchen knife, cookware",
+  "Cleaning & Maintenance": "Vacuum cleaner, mop, cleaning brush, duster, stain remover",
+  "Home Decor & Lighting": "Aroma humidifier, essential oil diffuser, flame lamp, LED strip, ambient room lighting, home decor",
+  "Bedroom & Comfort": "Orthopedic pillow, bed sheets, mattress topper, blanket, comfort cushion",
+  "Pest Control & Garden": "Mosquito trap, pest repeller, insect killer, garden accessories",
+  "Home Repair & Improvement": "Waterproof tape, sealant, adhesive, wallpaper, silicone repair",
+
+  // Fashion & Jewelry
+  "Apparel & Fashion": "Clothing, shirts, pants, hoodies, dresses, jackets, underwear",
+  "Footwear & Shoes": "Sneakers, running shoes, clogs, sandals, slides, boots",
+  "Bags & Wallets": "Leather wallet, backpack, handbag, shoulder bag, travel pouch",
+  "Jewelry & Accessories": "Ring, necklace, bracelet, luxury watch, sunglasses, belt",
+
+  // Sports, Fitness & Outdoor
+  "Fitness & Workout": "Dumbbells, resistance bands, abs roller, gym equipment, yoga mat",
+  "Supports & Braces": "Knee brace, back posture corrector, ankle support, compression sleeve",
+  "Outdoor & Camping": "Camping tent, survival gear, outdoor lantern, tactical bag",
+
+  // Automotive & Tools
+  "Car Accessories": "Car phone holder, seat organizer, sunshade, interior ambient light",
+  "Car Care & Maintenance": "Car scratch remover, car vacuum, ceramic coating, tire inflator",
+  "Tools & Hardware": "Cordless drill, screwdriver set, socket wrench, multi-tool kit",
+  "Flashlights & Worklights": "Tactical flashlight, headlamp, rechargeable work light",
+
+  // Kids, Baby & Toys
+  "Toys & Games": "RC car, drone, action figures, board games, building blocks",
+  "Educational & Montessori": "Magic drawing board, educational books, learning toys, puzzles",
+  "Baby Essentials": "Baby stroller, feeding bottle, baby carrier, baby monitor",
+};
+
+export const SUBNICHE_TO_CATEGORY_MAP: Record<string, ProductCategory> = {
+  // Beauty, Health & Care
+  "Skincare & Face": "Beauty, Health & Care",
+  "Hair Care & Styling": "Beauty, Health & Care",
+  "Makeup & Cosmetics": "Beauty, Health & Care",
+  "Men's Grooming": "Beauty, Health & Care",
+  "Fragrances & Perfumes": "Beauty, Health & Care",
+  "Dental & Oral Care": "Beauty, Health & Care",
+  "Health & Wellness": "Beauty, Health & Care",
+
+  // Electronics & Tech
+  "Smartwatches & Wearables": "Electronics & Tech",
+  "Audio & Earbuds": "Electronics & Tech",
+  "Chargers & Power": "Electronics & Tech",
+  "Cameras & Security": "Electronics & Tech",
+  "Tablets & Computers": "Electronics & Tech",
+  "Smart Scales & Gadgets": "Electronics & Tech",
+
+  // Home, Kitchen & Living
+  "Kitchen & Cookware": "Home, Kitchen & Living",
+  "Cleaning & Maintenance": "Home, Kitchen & Living",
+  "Home Decor & Lighting": "Home, Kitchen & Living",
+  "Bedroom & Comfort": "Home, Kitchen & Living",
+  "Pest Control & Garden": "Home, Kitchen & Living",
+  "Home Repair & Improvement": "Home, Kitchen & Living",
+
+  // Fashion & Jewelry
+  "Apparel & Fashion": "Fashion & Jewelry",
+  "Footwear & Shoes": "Fashion & Jewelry",
+  "Bags & Wallets": "Fashion & Jewelry",
+  "Jewelry & Accessories": "Fashion & Jewelry",
+
+  // Sports, Fitness & Outdoor
+  "Fitness & Workout": "Sports, Fitness & Outdoor",
+  "Supports & Braces": "Sports, Fitness & Outdoor",
+  "Outdoor & Camping": "Sports, Fitness & Outdoor",
+
+  // Automotive & Tools
+  "Car Accessories": "Automotive & Tools",
+  "Car Care & Maintenance": "Automotive & Tools",
+  "Tools & Hardware": "Automotive & Tools",
+  "Flashlights & Worklights": "Automotive & Tools",
+
+  // Kids, Baby & Toys
+  "Toys & Games": "Kids, Baby & Toys",
+  "Educational & Montessori": "Kids, Baby & Toys",
+  "Baby Essentials": "Kids, Baby & Toys",
+};
 
 /**
  * Classifies an e-commerce product title and context using typesafe/jev-1.13.
@@ -310,6 +409,11 @@ export async function classifyProductWithJev(
       instructions: "Assign the product to exactly one valid niche",
       criteria,
     },
+    subCategory: {
+      type: "choice",
+      instructions: "Assign the product to its specific sub-niche",
+      criteria: DECISION_SUBNICHE_CRITERIA,
+    },
   };
 
   // Only query audience if not obvious from title keywords
@@ -336,6 +440,7 @@ export async function classifyProductWithJev(
   }
 
   const categoryAnswer = response.answers.category as JevChoiceAnswer | undefined;
+  const subCategoryAnswer = response.answers.subCategory as JevChoiceAnswer | undefined;
   const audienceAnswer = response.answers.targetAudience as JevChoiceAnswer | undefined;
 
   if (!categoryAnswer || categoryAnswer.type !== "choice" || !categoryAnswer.choice) {
@@ -362,7 +467,17 @@ export async function classifyProductWithJev(
       : "unisex");
 
   const contextForSubCategory = `${cleanTitle} ${slugHint} ${extraContext?.adText ? extraContext.adText.slice(0, 50) : ""}`.trim();
-  const subCategory = deriveSubCategory(contextForSubCategory, matchedCategory);
+
+  let subCategory: string = "";
+  if (subCategoryAnswer?.choice && DECISION_SUBNICHE_CRITERIA[subCategoryAnswer.choice]) {
+    subCategory = subCategoryAnswer.choice;
+    // Cross-verify: if top-level category was General & Other or ambiguous, the AI-chosen sub-niche refines the category
+    if (matchedCategory === "General & Other" && SUBNICHE_TO_CATEGORY_MAP[subCategory]) {
+      matchedCategory = SUBNICHE_TO_CATEGORY_MAP[subCategory];
+    }
+  } else {
+    subCategory = deriveSubCategory(contextForSubCategory, matchedCategory);
+  }
 
   return {
     category: matchedCategory,
