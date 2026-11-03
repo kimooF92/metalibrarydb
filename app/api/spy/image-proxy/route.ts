@@ -94,6 +94,12 @@ export async function GET(req: NextRequest) {
       return new NextResponse("Invalid image domain", { status: 403 });
     }
 
+    // Offload streaming and 30-day edge caching to Cloudflare Worker
+    const cfWorkerUrl = process.env.NEXT_PUBLIC_IMAGE_PROXY_URL || "https://meta-image-proxy.kareem-fezani.workers.dev";
+    if (cfWorkerUrl && !cfWorkerUrl.startsWith("/")) {
+      return NextResponse.redirect(`${cfWorkerUrl}?url=${encodeURIComponent(urlStr)}`, 307);
+    }
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 

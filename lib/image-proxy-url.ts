@@ -6,6 +6,8 @@ import { isFbCdnUrl, isPermanentMediaUrl } from "./fb-cdn";
  * Routes requests to high-performance Cloudflare Edge Worker (when NEXT_PUBLIC_IMAGE_PROXY_URL is set)
  * or seamlessly falls back to the local Next.js route (/api/spy/image-proxy).
  */
+export const CLOUDFLARE_IMAGE_PROXY_DEFAULT = "https://meta-image-proxy.kareem-fezani.workers.dev";
+
 export function getProxiedImageUrl(originalUrl: string | null | undefined): string {
   if (!originalUrl || typeof originalUrl !== "string") return "";
 
@@ -14,7 +16,7 @@ export function getProxiedImageUrl(originalUrl: string | null | undefined): stri
     return originalUrl;
   }
 
-  const proxyBase = process.env.NEXT_PUBLIC_IMAGE_PROXY_URL || "/api/spy/image-proxy";
+  const proxyBase = process.env.NEXT_PUBLIC_IMAGE_PROXY_URL || CLOUDFLARE_IMAGE_PROXY_DEFAULT;
   return `${proxyBase}?url=${encodeURIComponent(originalUrl)}`;
 }
 
