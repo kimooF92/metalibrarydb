@@ -260,13 +260,12 @@ export const AnalyticsTab = memo(function AnalyticsTab({
                     className="flex-1 flex flex-col items-center justify-end h-full group relative"
                   >
                     <div
-                      className={`w-full rounded-t transition-all ${
-                        isPositive
+                      className={`w-full rounded-t transition-all ${isPositive
                           ? "bg-emerald-500 hover:bg-emerald-400"
                           : isNegative
-                          ? "bg-rose-500 hover:bg-rose-400"
-                          : "bg-indigo-500/80 hover:bg-indigo-400"
-                      }`}
+                            ? "bg-rose-500 hover:bg-rose-400"
+                            : "bg-indigo-500/80 hover:bg-indigo-400"
+                        }`}
                       style={{ height: `${heightPct}%` }}
                     />
                     {/* Tooltip */}
@@ -394,8 +393,8 @@ export const AnalyticsTab = memo(function AnalyticsTab({
               {launchVelocity.launchedLast7Days >= 10
                 ? "⚡ High Velocity"
                 : launchVelocity.launchedLast7Days >= 3
-                ? "⚡ Active Testing"
-                : "🟢 Maintenance"}
+                  ? "⚡ Active Testing"
+                  : "🟢 Maintenance"}
             </span>
           </div>
 

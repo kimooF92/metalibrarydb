@@ -187,8 +187,8 @@ export function computeBrandCadence(
       prod.title && prod.title !== "Product Offer" && prod.title.trim() !== ""
         ? prod.title.trim()
         : matchedAds.find((a) => a.title && a.title.trim() !== "")?.title?.trim() ||
-          (prod.url ? extractTitleFromUrl(prod.url) : null) ||
-          "Product Offer";
+        (prod.url ? extractTitleFromUrl(prod.url) : null) ||
+        "Product Offer";
 
     // Real thumbnail resolution: scraped main image -> ad thumbnail -> null
     const resolvedImage =

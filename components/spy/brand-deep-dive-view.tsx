@@ -167,7 +167,7 @@ export function BrandDeepDiveView({
     searchParams?.get("id") ||
     (typeof window !== "undefined"
       ? new URLSearchParams(window.location.search).get("productId") ||
-        new URLSearchParams(window.location.search).get("id")
+      new URLSearchParams(window.location.search).get("id")
       : null);
   const resolvedInitialTab: BrandTabId =
     initialTab ||

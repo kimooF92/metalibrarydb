@@ -8,7 +8,7 @@ export default async function InterceptedBrandModalPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ tab?: string; [key: string]: string | string[] | undefined }>;
+  searchParams?: Promise<{ tab?: string;[key: string]: string | string[] | undefined }>;
 }) {
   const { id } = await params;
   const search = searchParams ? await searchParams : {};

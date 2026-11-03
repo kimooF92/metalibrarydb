@@ -170,11 +170,10 @@ export function BrandCadenceSection({
                 setGranularity("day");
                 setSelectedPeriodKey(null);
               }}
-              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
-                granularity === "day"
+              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${granularity === "day"
                   ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs font-bold"
                   : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
-              }`}
+                }`}
             >
               Day (30D)
             </button>
@@ -184,11 +183,10 @@ export function BrandCadenceSection({
                 setGranularity("week");
                 setSelectedPeriodKey(null);
               }}
-              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
-                granularity === "week"
+              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${granularity === "week"
                   ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs font-bold"
                   : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
-              }`}
+                }`}
             >
               Week (16W)
             </button>
@@ -198,11 +196,10 @@ export function BrandCadenceSection({
                 setGranularity("month");
                 setSelectedPeriodKey(null);
               }}
-              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
-                granularity === "month"
+              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${granularity === "month"
                   ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs font-bold"
                   : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
-              }`}
+                }`}
             >
               Month (12M)
             </button>
@@ -260,9 +257,8 @@ export function BrandCadenceSection({
                   onClick={() => {
                     setSelectedPeriodKey(isSelected ? null : bucket.periodKey);
                   }}
-                  className={`flex-1 min-w-[22px] sm:min-w-[28px] flex flex-col items-center justify-end h-full group relative cursor-pointer transition-opacity ${
-                    selectedPeriodKey && !isSelected ? "opacity-35 hover:opacity-75" : "opacity-100"
-                  }`}
+                  className={`flex-1 min-w-[22px] sm:min-w-[28px] flex flex-col items-center justify-end h-full group relative cursor-pointer transition-opacity ${selectedPeriodKey && !isSelected ? "opacity-35 hover:opacity-75" : "opacity-100"
+                    }`}
                 >
                   {/* Product Launch Indicator Badge */}
                   {bucket.newProductsLaunched > 0 && (
@@ -275,11 +271,10 @@ export function BrandCadenceSection({
 
                   {/* Stacked Bar */}
                   <div
-                    className={`w-full rounded-t overflow-hidden flex flex-col-reverse transition-all ${
-                      isSelected
+                    className={`w-full rounded-t overflow-hidden flex flex-col-reverse transition-all ${isSelected
                         ? "ring-2 ring-offset-1 ring-amber-500 dark:ring-offset-slate-950 scale-x-105"
                         : "group-hover:brightness-110"
-                    }`}
+                      }`}
                     style={{ height: `${heightPct}%` }}
                   >
                     {hasAds ? (
@@ -348,22 +343,20 @@ export function BrandCadenceSection({
                 <div key={day.dayIndex} className="flex flex-col items-center gap-1.5">
                   <div className="h-12 w-full bg-slate-200 dark:bg-slate-800 rounded-sm flex items-end overflow-hidden">
                     <div
-                      className={`w-full rounded-sm transition-all ${
-                        isPeak
+                      className={`w-full rounded-sm transition-all ${isPeak
                           ? "bg-amber-500"
                           : day.adCount > 0
-                          ? "bg-indigo-500"
-                          : "bg-transparent"
-                      }`}
+                            ? "bg-indigo-500"
+                            : "bg-transparent"
+                        }`}
                       style={{ height: `${Math.max(day.percentage, day.adCount > 0 ? 15 : 0)}%` }}
                     />
                   </div>
                   <span
-                    className={`text-[10px] font-mono ${
-                      isPeak
+                    className={`text-[10px] font-mono ${isPeak
                         ? "text-amber-600 dark:text-amber-400 font-bold"
                         : "text-slate-400"
-                    }`}
+                      }`}
                   >
                     {day.dayName} ({day.adCount})
                   </span>
@@ -409,19 +402,19 @@ export function BrandCadenceSection({
                 p.status === "winner"
                   ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
                   : p.status === "scaling"
-                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
-                  : p.status === "testing"
-                  ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20"
-                  : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20";
+                    ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                    : p.status === "testing"
+                      ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20"
+                      : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20";
 
               const statusLabel =
                 p.status === "winner"
                   ? "🌟 Scaled Winner"
                   : p.status === "scaling"
-                  ? "🔥 Scaling"
-                  : p.status === "testing"
-                  ? "⚡ Testing"
-                  : "❌ Killed";
+                    ? "🔥 Scaling"
+                    : p.status === "testing"
+                      ? "⚡ Testing"
+                      : "❌ Killed";
 
               return (
                 <div

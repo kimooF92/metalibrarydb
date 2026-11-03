@@ -283,26 +283,26 @@ export async function GET(
     const historyPromise =
       trackedPage && !isProductsOnly
         ? db
-            .select({
-              id: scanHistory.id,
-              results: scanHistory.results,
-              difference: scanHistory.difference,
-              checkedAt: scanHistory.checkedAt,
-              status: scanHistory.status,
-            })
-            .from(scanHistory)
-            .where(
-              and(
-                eq(scanHistory.trackedPageId, trackedPage.id),
-                sql`${scanHistory.checkedAt} >= NOW() - INTERVAL '30 days'`
-              )
+          .select({
+            id: scanHistory.id,
+            results: scanHistory.results,
+            difference: scanHistory.difference,
+            checkedAt: scanHistory.checkedAt,
+            status: scanHistory.status,
+          })
+          .from(scanHistory)
+          .where(
+            and(
+              eq(scanHistory.trackedPageId, trackedPage.id),
+              sql`${scanHistory.checkedAt} >= NOW() - INTERVAL '30 days'`
             )
-            .orderBy(asc(scanHistory.checkedAt))
-            .limit(60)
-            .then((rows) => {
-              tHistDuration = Math.round(performance.now() - tHistStart);
-              return rows;
-            })
+          )
+          .orderBy(asc(scanHistory.checkedAt))
+          .limit(60)
+          .then((rows) => {
+            tHistDuration = Math.round(performance.now() - tHistStart);
+            return rows;
+          })
         : Promise.resolve([]);
 
     // Distinct-on ads query restricted to candidate IDs using database-side UNION
@@ -942,8 +942,8 @@ export async function GET(
         launchedLast7Days >= 10
           ? "High Velocity Testing"
           : launchedLast7Days >= 3
-          ? "Active Testing"
-          : "Maintenance Mode",
+            ? "Active Testing"
+            : "Maintenance Mode",
     };
 
     // 11. Commercial Strategy & Pricing Intelligence
@@ -1100,7 +1100,7 @@ export async function GET(
     );
   } finally {
     if (lockToken && lockKey) {
-      await releaseLock(lockKey, lockToken).catch(() => {});
+      await releaseLock(lockKey, lockToken).catch(() => { });
     }
   }
 }

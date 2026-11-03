@@ -65,11 +65,10 @@ export const BrandDeepDiveTabs = memo(function BrandDeepDiveTabs({
           aria-selected={activeTab === "analytics"}
           aria-controls="tabpanel-analytics"
           onClick={() => onTabChange("analytics")}
-          className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
-            activeTab === "analytics"
+          className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${activeTab === "analytics"
               ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-300 shadow-xs"
               : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-          }`}
+            }`}
         >
           <BarChart3 className="w-3.5 h-3.5" />
           <span>Strategy &amp; Overview</span>
@@ -83,11 +82,10 @@ export const BrandDeepDiveTabs = memo(function BrandDeepDiveTabs({
           aria-selected={activeTab === "cadence"}
           aria-controls="tabpanel-cadence"
           onClick={() => onTabChange("cadence")}
-          className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
-            activeTab === "cadence"
+          className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${activeTab === "cadence"
               ? "bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-xs"
               : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-          }`}
+            }`}
         >
           <Flame className="w-3.5 h-3.5 text-amber-500" />
           <span>Testing Cadence</span>
@@ -106,11 +104,10 @@ export const BrandDeepDiveTabs = memo(function BrandDeepDiveTabs({
           aria-selected={activeTab === "products"}
           aria-controls="tabpanel-products"
           onClick={() => onTabChange("products")}
-          className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
-            activeTab === "products"
+          className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${activeTab === "products"
               ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-300 shadow-xs"
               : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-          }`}
+            }`}
         >
           <ShoppingBag className="w-3.5 h-3.5" />
           <span>Products ({productCount})</span>
@@ -129,11 +126,10 @@ export const BrandDeepDiveTabs = memo(function BrandDeepDiveTabs({
           aria-selected={activeTab === "creatives"}
           aria-controls="tabpanel-creatives"
           onClick={() => onTabChange("creatives")}
-          className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
-            activeTab === "creatives"
+          className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${activeTab === "creatives"
               ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-300 shadow-xs"
               : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-          }`}
+            }`}
         >
           <Layers className="w-3.5 h-3.5" />
           <span>Creatives ({totalAdsCaptured})</span>
