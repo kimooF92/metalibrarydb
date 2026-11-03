@@ -14,7 +14,7 @@ const ALLOWED_PAGES_FILTERS = [
   "search", "status", "searchType", "tab", "tag", "sortBy", "sortOrder", "range", "page", "limit", "lean"
 ];
 
-const PAGES_CACHE_TTL_SECONDS = 30; // 30 seconds global cache
+const PAGES_CACHE_TTL_SECONDS = 120; // 2 minutes global cache (shields Supabase pooler egress)
 
 export async function GET(request: Request) {
   const authError = await validateAdminRole(request);
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
     // Throttled self-healing check: automatically rescue any orphaned "scanning" pages older than 60 seconds
     const lastCleanupCheck = await getCached<number>("lock:pages_orphan_cleanup");
     if (!lastCleanupCheck) {
-      await setCached("lock:pages_orphan_cleanup", Date.now(), 30);
+      await setCached("lock:pages_orphan_cleanup", Date.now(), 120);
       try {
         await db.execute(sql`
           UPDATE tracked_pages

@@ -47,6 +47,42 @@ function getBroadcastChannel() {
 }
 
 /**
+ * Sends a broadcast event safely. If WebSocket is connected and subscribed,
+ * sends via WebSocket. If not connected (e.g. initial worker boot or background jobs),
+ * explicitly calls httpSend() to deliver via REST API without triggering Supabase's deprecation warning.
+ */
+async function sendBroadcastEvent(event: string, payload: any): Promise<void> {
+  const channel = getBroadcastChannel();
+  if (!channel) return;
+
+  try {
+    const isWebSocketReady = Boolean(
+      (channel.channelAdapter && typeof channel.channelAdapter.canPush === "function" && channel.channelAdapter.canPush()) ||
+      channel.state === "joined"
+    );
+
+    if (isWebSocketReady) {
+      await channel.send({
+        type: "broadcast",
+        event,
+        payload,
+      });
+    } else if (typeof channel.httpSend === "function") {
+      // Explicit REST delivery avoiding the deprecation warning
+      await channel.httpSend(event, payload);
+    } else {
+      await channel.send({
+        type: "broadcast",
+        event,
+        payload,
+      });
+    }
+  } catch {
+    // Non-blocking Realtime telemetry
+  }
+}
+
+/**
  * Broadcasts a live micro-step progress event over Supabase Realtime.
  * Also persists to Upstash Redis for instant cold-load hydration (zero DB WAL overhead).
  */
@@ -68,20 +104,7 @@ export async function broadcastScanStep(payload: ScanStepBroadcastPayload): Prom
   }
 
   // 2. Broadcast over Supabase Realtime channel
-  try {
-    const channel = getBroadcastChannel();
-    if (channel) {
-      channel.send({
-        type: "broadcast",
-        event: SCAN_STEP_EVENT,
-        payload,
-      }).catch((sendErr: any) => {
-        // Channel send might fail if disconnected; silent catch
-      });
-    }
-  } catch (broadcastErr) {
-    // Non-blocking Realtime warning
-  }
+  await sendBroadcastEvent(SCAN_STEP_EVENT, payload);
 }
 
 /**
@@ -94,14 +117,7 @@ export async function broadcastBatchSummary(payload: ScanBatchSummaryPayload): P
     // Remove active scan job pointer
     await deleteCached("active_scan_job").catch(() => {});
 
-    const channel = getBroadcastChannel();
-    if (channel) {
-      channel.send({
-        type: "broadcast",
-        event: SCAN_BATCH_EVENT,
-        payload,
-      }).catch(() => {});
-    }
+    await sendBroadcastEvent(SCAN_BATCH_EVENT, payload);
   } catch (err) {
     console.warn("[Realtime Telemetry] Failed to broadcast batch summary:", err);
   }
@@ -112,14 +128,7 @@ export async function broadcastBatchSummary(payload: ScanBatchSummaryPayload): P
  */
 export async function broadcastEngineState(payload: EngineStatePayload): Promise<void> {
   try {
-    const channel = getBroadcastChannel();
-    if (channel) {
-      channel.send({
-        type: "broadcast",
-        event: SCAN_STATE_EVENT,
-        payload,
-      }).catch(() => {});
-    }
+    await sendBroadcastEvent(SCAN_STATE_EVENT, payload);
   } catch (err) {
     console.warn("[Realtime Telemetry] Failed to broadcast engine state:", err);
   }
@@ -131,14 +140,7 @@ export async function broadcastEngineState(payload: EngineStatePayload): Promise
  */
 export async function broadcastCatalogInflow(payload: CatalogInflowBroadcastPayload): Promise<void> {
   try {
-    const channel = getBroadcastChannel();
-    if (channel) {
-      channel.send({
-        type: "broadcast",
-        event: CATALOG_INFLOW_EVENT,
-        payload,
-      }).catch(() => {});
-    }
+    await sendBroadcastEvent(CATALOG_INFLOW_EVENT, payload);
   } catch (err) {
     console.warn("[Realtime Telemetry] Failed to broadcast catalog inflow:", err);
   }

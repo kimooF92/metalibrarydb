@@ -8,7 +8,7 @@ import { validateAdminRole } from "@/lib/api-guard";
 
 import { getCached, setCached } from "@/lib/cache-service";
 
-const STATS_CACHE_TTL_SECONDS = 60; // 60 seconds global cache
+const STATS_CACHE_TTL_SECONDS = 180; // 3 minutes global cache (shields Supabase pooler egress)
 
 export async function GET(request: Request) {
   const authError = await validateAdminRole(request);

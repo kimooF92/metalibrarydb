@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const maxDuration = 30;
 
-const OVERVIEW_CACHE_TTL_SECONDS = 45; // 45 seconds cache
+const OVERVIEW_CACHE_TTL_SECONDS = 300; // 5 minutes cache (drastically shields shared pooler egress)
 
 export async function GET(req: NextRequest) {
   const authError = await validateApiSecret(req);
@@ -231,6 +231,7 @@ export async function GET(req: NextRequest) {
               is_active,
               observed_at
             FROM ad_observations
+            WHERE observed_at >= NOW() - INTERVAL '30 days'
             ORDER BY ad_id, observed_at DESC
           ) AS latest_obs`,
           sql`latest_obs.ad_id = ${ads.id}`

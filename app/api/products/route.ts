@@ -28,7 +28,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const maxDuration = 60;
 
-const PRODUCTS_REDIS_CACHE_TTL = 30; // 30 seconds global Upstash Redis cache
+const PRODUCTS_REDIS_CACHE_TTL = 180; // 3 minutes global Upstash Redis cache (protects Supabase egress)
 
 export async function GET(req: NextRequest) {
   const authError = await validateApiSecret(req);
