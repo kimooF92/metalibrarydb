@@ -4,17 +4,13 @@ import { useEffect, useState, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  Building2,
   Flame,
-  ShoppingBag,
   TrendingUp,
   TrendingDown,
-  Tag,
   RefreshCw,
   Plus,
   ChevronRight,
   Clock,
-  Zap,
 } from "lucide-react";
 import { useWorkspace } from "@/components/workspace-context";
 import { useAddUrlModal } from "@/components/add-url-modal";
@@ -59,12 +55,13 @@ interface OverviewData {
     totalCount: number;
   };
   inflow24h: Inflow24hData;
+  inflowToday?: Inflow24hData;
   scanOperations: ScanOperationsData;
   activeScanningPageIds?: string[];
   // Legacy / fallback fields:
-  scalingProducts?: any[];
-  hotOffers?: any[];
-  darkBrands?: any[];
+  scalingProducts?: Record<string, unknown>[];
+  hotOffers?: Record<string, unknown>[];
+  darkBrands?: Record<string, unknown>[];
   topCategories?: Array<{
     category: string;
     count: number;
@@ -120,6 +117,7 @@ function DashboardOverviewContent() {
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadOverview();
   }, [loadOverview, activeWorkspace?.id]);
 
@@ -176,15 +174,15 @@ function DashboardOverviewContent() {
 
       {/* 2. Top Executive KPI Strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* KPI 1: New in 24h */}
+        {/* KPI 1: New Today */}
         <Link
-          href="/products"
+          href="/products?discovery=today"
           className="group p-3.5 rounded-xl bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200 shadow-xs hover:shadow-sm cursor-pointer block"
         >
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
             <span className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-cyan-500" />
-              <span>New in 24h</span>
+              <span>New Today</span>
             </span>
             <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/25">
               FRESH
@@ -192,7 +190,7 @@ function DashboardOverviewContent() {
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <span className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              {loading ? "--" : data?.inflow24h?.totalAdded ?? 0}
+              {loading ? "--" : (data?.inflowToday?.totalAdded ?? data?.inflow24h?.totalAdded ?? 0)}
             </span>
             <span className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 rounded-md">
               Catalog Inflow
@@ -200,7 +198,7 @@ function DashboardOverviewContent() {
           </div>
           <div className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
             <span>
-              {data?.inflow24h?.offerPercentage ?? 0}% with bundle offers
+              {(data?.inflowToday?.offerPercentage ?? data?.inflow24h?.offerPercentage ?? 0)}% with bundle offers
             </span>
           </div>
         </Link>
@@ -291,7 +289,7 @@ function DashboardOverviewContent() {
 
       {/* 3. Core Intelligence Grid (12-column responsive layout) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* LEFT COLUMN: Fresh Winners & 24h Inflow (7 cols on lg, 8 cols on xl) */}
+        {/* LEFT COLUMN: Fresh Winners & Today's Inflow (7 cols on lg, 8 cols on xl) */}
         <div className="lg:col-span-7 xl:col-span-8 space-y-4">
           {/* Section 1: Fresh Winner Products (Top 5 Breakouts) */}
           <FreshWinnersList
@@ -300,9 +298,9 @@ function DashboardOverviewContent() {
             currencySymbol={currencySymbol}
           />
 
-          {/* Section 2: Last 24 Hours Market Inflow & Niche Analytics */}
+          {/* Section 2: Today's Market Inflow & Niche Analytics */}
           <Inflow24hCard
-            data={data?.inflow24h}
+            data={data?.inflowToday || data?.inflow24h}
             loading={loading}
             currencySymbol={currencySymbol}
           />

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Clock, Tag, ShoppingBag, Store, ArrowRight, BarChart2 } from "lucide-react";
+import { Clock, ArrowRight } from "lucide-react";
 import { formatPrice } from "@/lib/format-price";
 
 export interface Inflow24hData {
@@ -16,6 +16,8 @@ export interface Inflow24hData {
     percentage: number;
   }>;
 }
+
+export type InflowTodayData = Inflow24hData;
 
 interface Inflow24hCardProps {
   data?: Inflow24hData;
@@ -40,12 +42,12 @@ export function Inflow24hCard({ data, loading = false, currencySymbol = "DT" }: 
           </span>
           <div>
             <h2 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-              Last 24 Hours Market Inflow
+              Today&apos;s Market Inflow
             </h2>
           </div>
         </div>
         <Link
-          href="/products"
+          href="/products?discovery=today"
           className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 flex items-center gap-1 transition-colors"
         >
           <span>Catalog</span>
@@ -58,7 +60,7 @@ export function Inflow24hCard({ data, loading = false, currencySymbol = "DT" }: 
         {/* Metric 1: Total Products Added */}
         <div className="p-2.5 rounded-lg bg-slate-50/70 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800/60">
           <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block">
-            Added in 24h
+            Added Today
           </span>
           <div className="flex items-baseline gap-1 mt-0.5">
             <span className="text-lg font-black text-slate-900 dark:text-white">
@@ -110,10 +112,10 @@ export function Inflow24hCard({ data, loading = false, currencySymbol = "DT" }: 
         </div>
       </div>
 
-      {/* 24h Niche Breakdown (% Share) */}
+      {/* Today's Niche Breakdown (% Share) */}
       <div className="space-y-2">
         <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400 pb-1 border-b border-slate-100 dark:border-slate-800/60">
-          <span>24h Category Inflow</span>
+          <span>Today&apos;s Category Inflow</span>
           <span>Share (%)</span>
         </div>
 
@@ -125,7 +127,7 @@ export function Inflow24hCard({ data, loading = false, currencySymbol = "DT" }: 
           </div>
         ) : nicheShare.length === 0 ? (
           <div className="text-center py-4 text-xs text-slate-500">
-            No products categorized in the last 24 hours.
+            No products categorized today.
           </div>
         ) : (
           nicheShare.map((cat) => (
@@ -159,13 +161,15 @@ export function Inflow24hCard({ data, loading = false, currencySymbol = "DT" }: 
           Extracted directly from competitor landing pages
         </span>
         <Link
-          href="/products"
+          href="/products?discovery=today"
           className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 flex items-center gap-1 transition-colors"
         >
-          <span>Browse 24h catalog</span>
+          <span>Browse today&apos;s catalog</span>
           <span className="text-[11px]">→</span>
         </Link>
       </div>
     </div>
   );
 }
+
+export const InflowTodayCard = Inflow24hCard;

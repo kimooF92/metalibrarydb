@@ -3,7 +3,6 @@ import { db } from "@/db";
 import {
   trackedPages,
   ads,
-  adObservations,
   scrapedProducts,
   discoveredPages,
   discoveryRuns,
@@ -18,7 +17,6 @@ import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache"
 import { getActiveWorkspace } from "@/lib/workspace-server";
 import { getCached, setCached } from "@/lib/cache-service";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
-import { calculateWinnerScore } from "@/lib/winner-score";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -37,7 +35,7 @@ export async function GET(req: NextRequest) {
 
     const cacheKey = `cache:dashboard:overview:${activeWorkspace.id}`;
     if (!forceRefresh) {
-      const cached = await getCached<any>(cacheKey);
+      const cached = await getCached<Record<string, unknown>>(cacheKey);
       if (cached) {
         return NextResponse.json(cached, {
           headers: {
@@ -415,7 +413,7 @@ export async function GET(req: NextRequest) {
         )
         .limit(10),
 
-      // 16. Products Added in Last 24 Hours (Summary KPIs)
+      // 16. Products Added Today (Summary KPIs)
       db
         .select({
           totalAdded: sql<number>`count(*)`.mapWith(Number),
@@ -427,11 +425,11 @@ export async function GET(req: NextRequest) {
         .where(
           and(
             eq(scrapedProducts.workspaceId, activeWorkspace.id),
-            sql`${scrapedProducts.createdAt} >= NOW() - INTERVAL '24 hours'`
+            sql`${scrapedProducts.createdAt} >= date_trunc('day', NOW() AT TIME ZONE 'UTC')`
           )
         ),
 
-      // 17. Products Added in Last 24 Hours (Niche Breakdown)
+      // 17. Products Added Today (Niche Breakdown)
       db
         .select({
           category: scrapedProducts.category,
@@ -441,7 +439,7 @@ export async function GET(req: NextRequest) {
         .where(
           and(
             eq(scrapedProducts.workspaceId, activeWorkspace.id),
-            sql`${scrapedProducts.createdAt} >= NOW() - INTERVAL '24 hours'`,
+            sql`${scrapedProducts.createdAt} >= date_trunc('day', NOW() AT TIME ZONE 'UTC')`,
             isNotNull(scrapedProducts.category),
             ne(scrapedProducts.category, "")
           )
@@ -606,7 +604,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Process Scaling and Descaling Analytics Summary
-    const scalingStats = (scalingStatsRes as any)?.[0] || {};
+    const scalingStats = (scalingStatsRes as unknown as Array<Record<string, unknown>>)?.[0] || {};
     const scalingCount = Number(scalingStats.scalingBrandsCount || 0);
     const scalingNetAds = Number(scalingStats.totalAdsScaled || 0);
     const scalingAvgAds = scalingCount > 0 ? Number((scalingNetAds / scalingCount).toFixed(1)) : 0;
@@ -616,12 +614,12 @@ export async function GET(req: NextRequest) {
     const descalingAvgAds = descalingCount > 0 ? Number((descalingNetAds / descalingCount).toFixed(1)) : 0;
 
     // Process Dark & Revived Stats
-    const darkRevivedRow = (darkAndRevivedRes as any)?.[0] || {};
+    const darkRevivedRow = (darkAndRevivedRes as unknown as Array<Record<string, unknown>>)?.[0] || {};
     const darkCount = Number(darkRevivedRow.darkCount || 0);
     const revivedCount = Number(darkRevivedRow.revivedCount || 0);
 
     // Process Fresh Winners Total Count
-    const fwRow = (freshWinnersCountRes as any)?.[0] || {};
+    const fwRow = (freshWinnersCountRes as unknown as Array<Record<string, unknown>>)?.[0] || {};
     const freshWinnersTotal = Number(fwRow.total_products || 0);
     const totalBreakoutsCount = freshWinnersTotal > 0 ? freshWinnersTotal : freshBreakouts.length;
 
@@ -732,10 +730,10 @@ export async function GET(req: NextRequest) {
       successRate:
         (brandStatsRows[0]?.completedCount || 0) + (brandStatsRows[0]?.failedCount || 0) > 0
           ? Math.round(
-              ((brandStatsRows[0]?.completedCount || 0) /
-                ((brandStatsRows[0]?.completedCount || 0) + (brandStatsRows[0]?.failedCount || 0))) *
-                100
-            )
+            ((brandStatsRows[0]?.completedCount || 0) /
+              ((brandStatsRows[0]?.completedCount || 0) + (brandStatsRows[0]?.failedCount || 0))) *
+            100
+          )
           : 100,
       queuePending: queueMap.pending,
       queueRunning: queueMap.running,
@@ -780,6 +778,17 @@ export async function GET(req: NextRequest) {
       scalingBrands: scalingBrandsWithPattern,
       descalingBrands: descalingBrandsWithPattern,
       inflow24h: {
+        totalAdded: stats24h.totalAdded,
+        withOffersCount: stats24h.withOffersCount,
+        offerPercentage:
+          stats24h.totalAdded > 0
+            ? Math.round((stats24h.withOffersCount / stats24h.totalAdded) * 100)
+            : 0,
+        topPlatform: stats24h.topPlatform,
+        avgPrice: stats24h.avgPrice,
+        nicheShare: nicheShare24h,
+      },
+      inflowToday: {
         totalAdded: stats24h.totalAdded,
         withOffersCount: stats24h.withOffersCount,
         offerPercentage:
