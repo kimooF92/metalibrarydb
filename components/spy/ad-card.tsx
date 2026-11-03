@@ -113,8 +113,8 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
   const previewImages = isCarousel && imageSlides.length > 0
     ? imageSlides
     : displayThumbnail
-    ? [displayThumbnail]
-    : imageSlides;
+      ? [displayThumbnail]
+      : imageSlides;
 
   const activeSlideUrl = isCarousel && previewImages.length > 0
     ? previewImages[carouselIndex % previewImages.length]
@@ -342,32 +342,32 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
                 >
                   {currentAd.pageName || `Page ${currentAd.pageId}`}
                 </Link>
-              {currentAd.brandProductCount && currentAd.brandProductCount > 1 && (
-                <span
-                  title={`Brand tested ${currentAd.brandProductCount} distinct products (${currentAd.productSharePercent || 100}% creatives dedicated to this product)`}
-                  className="text-[9px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-medium shrink-0"
-                >
-                  {currentAd.brandProductCount} Products
-                </span>
-              )}
-              {onExcludeBrand && (
-                <button
-                  type="button"
-                  onClick={() => onExcludeBrand(currentAd.pageId)}
-                  title={`Hide "${currentAd.pageName || currentAd.pageId}" from feed`}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded shrink-0 cursor-pointer"
-                >
-                  <Ban className="w-3 h-3" />
-                </button>
-              )}
+                {currentAd.brandProductCount && currentAd.brandProductCount > 1 && (
+                  <span
+                    title={`Brand tested ${currentAd.brandProductCount} distinct products (${currentAd.productSharePercent || 100}% creatives dedicated to this product)`}
+                    className="text-[9px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-medium shrink-0"
+                  >
+                    {currentAd.brandProductCount} Products
+                  </span>
+                )}
+                {onExcludeBrand && (
+                  <button
+                    type="button"
+                    onClick={() => onExcludeBrand(currentAd.pageId)}
+                    title={`Hide "${currentAd.pageName || currentAd.pageId}" from feed`}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded shrink-0 cursor-pointer"
+                  >
+                    <Ban className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+              <span className="text-[10px] text-slate-600 dark:text-slate-400 font-mono">
+                ID: {currentAd.adArchiveId}
+              </span>
             </div>
-            <span className="text-[10px] text-slate-600 dark:text-slate-400 font-mono">
-              ID: {currentAd.adArchiveId}
-            </span>
           </div>
-        </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             {isArchived ? (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-600 dark:text-purple-400 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full">
                 <Archive className="w-3 h-3" /> Archived
@@ -397,17 +397,16 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
               onMouseEnter={() => setShowScoreTooltip(true)}
               onMouseLeave={() => setShowScoreTooltip(false)}
               onClick={() => setShowScoreTooltip((prev) => !prev)}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold cursor-pointer transition-all ${
-                winnerMetrics.isBreakout
+              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold cursor-pointer transition-all ${winnerMetrics.isBreakout
                   ? "bg-gradient-to-r from-pink-600 via-rose-500 to-amber-500 text-white shadow-sm shadow-pink-500/20 border border-pink-400/40 animate-pulse"
                   : winnerMetrics.winnerScore >= 85
-                  ? "bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-300 text-slate-950 shadow-sm shadow-amber-500/20 border border-amber-300"
-                  : winnerMetrics.winnerScore >= 68
-                  ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-sm shadow-orange-500/20"
-                  : winnerMetrics.winnerScore >= 45
-                  ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
-                  : "bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800"
-              }`}
+                    ? "bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-300 text-slate-950 shadow-sm shadow-amber-500/20 border border-amber-300"
+                    : winnerMetrics.winnerScore >= 68
+                      ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-sm shadow-orange-500/20"
+                      : winnerMetrics.winnerScore >= 45
+                        ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                        : "bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800"
+                }`}
             >
               {winnerMetrics.isBreakout ? (
                 <Rocket className="w-3 h-3 text-white fill-white/20" />
@@ -424,10 +423,10 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
                 {winnerMetrics.isBreakout
                   ? `Breakout (${winnerMetrics.winnerScore})`
                   : winnerMetrics.winnerScore >= 85
-                  ? `${winnerMetrics.winnerScore} Super Winner`
-                  : winnerMetrics.winnerScore >= 68
-                  ? `${winnerMetrics.winnerScore} Winner Score`
-                  : `${winnerMetrics.winnerScore} Score`}
+                    ? `${winnerMetrics.winnerScore} Super Winner`
+                    : winnerMetrics.winnerScore >= 68
+                      ? `${winnerMetrics.winnerScore} Winner Score`
+                      : `${winnerMetrics.winnerScore} Score`}
               </span>
             </button>
 
@@ -490,11 +489,10 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
               type="button"
               onClick={() => setIsCreativeClusterModalOpen(true)}
               title="Click to view all copycats, ad variations, and brands running this visual creative"
-              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold cursor-pointer transition-all shadow-sm ${
-                currentAd.creativeMetrics.isCrossBrand
+              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold cursor-pointer transition-all shadow-sm ${currentAd.creativeMetrics.isCrossBrand
                   ? "bg-purple-50 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-100 dark:hover:bg-purple-900"
                   : "bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900"
-              }`}
+                }`}
             >
               <Zap className={`w-3 h-3 ${currentAd.creativeMetrics.isCrossBrand ? "text-purple-500 fill-purple-500/20" : "text-amber-500 fill-amber-500/20"}`} />
               <span>
@@ -547,7 +545,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
           onClick={openPreview}
           onMouseEnter={() => {
             if (canPlayVideo && videoRef.current) {
-              videoRef.current.play().catch(() => {});
+              videoRef.current.play().catch(() => { });
               setIsPlayingVideo(true);
             }
           }}
@@ -721,9 +719,8 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
         {currentAd.caption && (
           <div className="mb-3">
             <p
-              className={`text-[11px] text-slate-600 dark:text-slate-400 whitespace-pre-line leading-relaxed ${
-                isExpanded ? "" : "line-clamp-3"
-              }`}
+              className={`text-[11px] text-slate-600 dark:text-slate-400 whitespace-pre-line leading-relaxed ${isExpanded ? "" : "line-clamp-3"
+                }`}
             >
               {currentAd.caption}
             </p>
@@ -807,11 +804,10 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
             <button
               onClick={toggleArchive}
               disabled={isArchiving}
-              className={`p-1 rounded-md transition-colors cursor-pointer ${
-                isArchived
+              className={`p-1 rounded-md transition-colors cursor-pointer ${isArchived
                   ? "text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
                   : "text-slate-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-slate-100 dark:hover:bg-slate-900"
-              }`}
+                }`}
               title={isArchived ? "Unarchive Ad (Move to Active Feed)" : "Archive Ad (Move to Vault)"}
             >
               {isArchived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
