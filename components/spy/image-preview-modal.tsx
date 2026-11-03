@@ -10,8 +10,11 @@ import {
   Globe,
   Maximize2,
   ZoomIn,
+  AlertTriangle,
+  RotateCw,
 } from "lucide-react";
 import { getCleanDomain } from "@/lib/utils";
+import { isFbCdnUrlExpired } from "@/lib/fb-cdn";
 
 interface ImagePreviewModalProps {
   isOpen: boolean;
@@ -23,6 +26,11 @@ interface ImagePreviewModalProps {
   caption?: string | null;
   destinationUrl?: string | null;
   adArchiveId?: string | null;
+  videoUrl?: string | null;
+  fallbackThumbnail?: string | null;
+  isVideoAd?: boolean;
+  onRefreshMedia?: () => void | Promise<void>;
+  isRefreshingMedia?: boolean;
 }
 
 export function ImagePreviewModal({
@@ -35,26 +43,48 @@ export function ImagePreviewModal({
   caption,
   destinationUrl,
   adArchiveId,
+  videoUrl,
+  fallbackThumbnail,
+  isVideoAd = false,
+  onRefreshMedia,
+  isRefreshingMedia = false,
 }: ImagePreviewModalProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [videoError, setVideoError] = useState(false);
 
   useEffect(() => {
     setCurrentIndex(initialIndex);
   }, [initialIndex, isOpen]);
+
+  useEffect(() => {
+    setVideoError(false);
+  }, [videoUrl, isOpen]);
+
+  const isVideoExpired = isFbCdnUrlExpired(videoUrl);
+  const activeVideo = videoUrl && !isVideoExpired && !videoError ? videoUrl : null;
+  const isExpiredVideo = isVideoAd && Boolean(videoUrl) && (isVideoExpired || videoError);
+
+  const displayMediaList = imageUrls.length > 0
+    ? imageUrls
+    : fallbackThumbnail
+    ? [fallbackThumbnail]
+    : activeVideo
+    ? [activeVideo]
+    : [];
 
   // Handle ESC key press
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (!isOpen) return;
       if (e.key === "Escape") onClose();
-      if (e.key === "ArrowLeft" && imageUrls.length > 1) {
-        setCurrentIndex((prev) => (prev > 0 ? prev - 1 : imageUrls.length - 1));
+      if (e.key === "ArrowLeft" && displayMediaList.length > 1) {
+        setCurrentIndex((prev) => (prev > 0 ? prev - 1 : displayMediaList.length - 1));
       }
-      if (e.key === "ArrowRight" && imageUrls.length > 1) {
-        setCurrentIndex((prev) => (prev < imageUrls.length - 1 ? prev + 1 : 0));
+      if (e.key === "ArrowRight" && displayMediaList.length > 1) {
+        setCurrentIndex((prev) => (prev < displayMediaList.length - 1 ? prev + 1 : 0));
       }
     },
-    [isOpen, onClose, imageUrls.length]
+    [isOpen, onClose, displayMediaList.length]
   );
 
   useEffect(() => {
@@ -62,10 +92,12 @@ export function ImagePreviewModal({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  if (!isOpen || imageUrls.length === 0) return null;
+  if (!isOpen || (displayMediaList.length === 0 && !activeVideo)) return null;
 
-  const currentImage = imageUrls[currentIndex] || imageUrls[0];
+  const currentMedia = displayMediaList[currentIndex] || displayMediaList[0];
   const targetDomain = destinationUrl ? getCleanDomain(destinationUrl) : null;
+  const downloadHref = activeVideo || currentMedia || fallbackThumbnail;
+  const fullSizeHref = activeVideo || currentMedia || fallbackThumbnail;
 
   return (
     <div
@@ -83,7 +115,7 @@ export function ImagePreviewModal({
           </div>
           <div className="flex flex-col min-w-0">
             <h3 className="text-sm font-bold text-white truncate">
-              {pageName || "Ad Image Preview"}
+              {pageName || (activeVideo ? "Ad Video Preview" : "Ad Media Preview")}
             </h3>
             {adArchiveId && (
               <span className="text-[11px] text-zinc-400 font-mono">
@@ -95,34 +127,38 @@ export function ImagePreviewModal({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
-          {imageUrls.length > 1 && (
+          {displayMediaList.length > 1 && !activeVideo && (
             <span className="text-xs font-semibold text-zinc-400 bg-zinc-800 px-2.5 py-1 rounded-md border border-zinc-700 mr-2">
-              {currentIndex + 1} / {imageUrls.length}
+              {currentIndex + 1} / {displayMediaList.length}
             </span>
           )}
 
-          <a
-            href={currentImage}
-            target="_blank"
-            rel="noopener noreferrer"
-            download
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800 hover:bg-zinc-700 hover:text-white rounded-lg border border-zinc-700 transition-all cursor-pointer"
-            title="Download full size image"
-          >
-            <Download className="w-4 h-4 text-indigo-400" />
-            <span className="hidden sm:inline">Download</span>
-          </a>
+          {downloadHref && (
+            <a
+              href={downloadHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800 hover:bg-zinc-700 hover:text-white rounded-lg border border-zinc-700 transition-all cursor-pointer"
+              title={activeVideo ? "Download Video Creative (.mp4)" : "Download Media File"}
+            >
+              <Download className="w-4 h-4 text-indigo-400" />
+              <span className="hidden sm:inline">Download</span>
+            </a>
+          )}
 
-          <a
-            href={currentImage}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800 hover:bg-zinc-700 hover:text-white rounded-lg border border-zinc-700 transition-all cursor-pointer"
-            title="Open high resolution original image in new tab"
-          >
-            <Maximize2 className="w-4 h-4 text-indigo-400" />
-            <span className="hidden sm:inline">Full Size</span>
-          </a>
+          {fullSizeHref && (
+            <a
+              href={fullSizeHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800 hover:bg-zinc-700 hover:text-white rounded-lg border border-zinc-700 transition-all cursor-pointer"
+              title="Open high resolution original media in new tab"
+            >
+              <Maximize2 className="w-4 h-4 text-indigo-400" />
+              <span className="hidden sm:inline">Full Size</span>
+            </a>
+          )}
 
           <button
             onClick={onClose}
@@ -134,16 +170,16 @@ export function ImagePreviewModal({
         </div>
       </div>
 
-      {/* Main Image Display Area */}
+      {/* Main Display Area */}
       <div
         className="relative flex-1 w-full max-w-6xl flex items-center justify-center my-4 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Previous Button */}
-        {imageUrls.length > 1 && (
+        {displayMediaList.length > 1 && !activeVideo && (
           <button
             onClick={() =>
-              setCurrentIndex((prev) => (prev > 0 ? prev - 1 : imageUrls.length - 1))
+              setCurrentIndex((prev) => (prev > 0 ? prev - 1 : displayMediaList.length - 1))
             }
             className="absolute left-2 sm:left-4 z-10 p-3 rounded-full bg-zinc-900/80 hover:bg-indigo-600 text-white border border-zinc-700/80 shadow-2xl transition-all hover:scale-110 cursor-pointer"
             title="Previous Image"
@@ -152,27 +188,61 @@ export function ImagePreviewModal({
           </button>
         )}
 
-        {/* Media Container (Image or Video) */}
+        {/* Media Container (Video or Fallback Image) */}
         <div className="relative max-h-[75vh] max-w-full rounded-xl overflow-hidden shadow-2xl border border-zinc-800/80 bg-zinc-950 flex items-center justify-center">
-          {currentImage && (currentImage.includes(".mp4") || currentImage.includes("video")) ? (
+          {/* Expired Video Notice Badge */}
+          {isExpiredVideo && (
+            <div className="absolute top-3 left-3 z-30 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-950/90 border border-amber-600/40 text-amber-200 text-xs shadow-lg backdrop-blur-md">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>Video link expired on Meta CDN • Showing snapshot thumbnail</span>
+              {adArchiveId && (
+                <a
+                  href={`https://www.facebook.com/ads/library/?id=${adArchiveId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-1 underline font-semibold text-amber-300 hover:text-white"
+                >
+                  View on Meta ↗
+                </a>
+              )}
+              {onRefreshMedia && (
+                <button
+                  type="button"
+                  onClick={onRefreshMedia}
+                  disabled={isRefreshingMedia}
+                  className="ml-2 px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-semibold border border-amber-400/30 flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  title="Request fresh media URLs from Meta Ad Library"
+                >
+                  <RotateCw className={`w-3 h-3 ${isRefreshingMedia ? "animate-spin" : ""}`} />
+                  <span>{isRefreshingMedia ? "Refreshing..." : "Refresh"}</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {activeVideo ? (
             <video
-              src={currentImage}
+              src={activeVideo}
+              poster={fallbackThumbnail || undefined}
               controls
               autoPlay
+              playsInline
               {...({ referrerPolicy: "no-referrer" } as any)}
               className="max-h-[75vh] max-w-full object-contain rounded-xl"
+              onError={() => setVideoError(true)}
             />
           ) : (
             /* eslint-disable-next-html-shortcut */
             <img
-              src={currentImage}
+              src={fallbackThumbnail || currentMedia}
               alt={title || pageName || "Ad preview"}
               referrerPolicy="no-referrer"
               className="max-h-[75vh] max-w-full object-contain rounded-xl select-none"
               onError={(e) => {
                 const target = e.currentTarget;
-                if (currentImage && !target.src.includes("/api/spy/image-proxy")) {
-                  target.src = `/api/spy/image-proxy?url=${encodeURIComponent(currentImage)}`;
+                const source = fallbackThumbnail || currentMedia;
+                if (source && !target.src.includes("/api/spy/image-proxy")) {
+                  target.src = `/api/spy/image-proxy?url=${encodeURIComponent(source)}`;
                 }
               }}
             />
@@ -180,10 +250,10 @@ export function ImagePreviewModal({
         </div>
 
         {/* Next Button */}
-        {imageUrls.length > 1 && (
+        {displayMediaList.length > 1 && !activeVideo && (
           <button
             onClick={() =>
-              setCurrentIndex((prev) => (prev < imageUrls.length - 1 ? prev + 1 : 0))
+              setCurrentIndex((prev) => (prev < displayMediaList.length - 1 ? prev + 1 : 0))
             }
             className="absolute right-2 sm:right-4 z-10 p-3 rounded-full bg-zinc-900/80 hover:bg-indigo-600 text-white border border-zinc-700/80 shadow-2xl transition-all hover:scale-110 cursor-pointer"
             title="Next Image"

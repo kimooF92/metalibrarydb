@@ -13,6 +13,7 @@ const ALLOWED_EXACT_HOSTS = new Set([
   "cdn.shopify.com",
   "res.cloudinary.com",
   "s3.amazonaws.com",
+  "files.catbox.moe",
 ]);
 
 const ALLOWED_SUFFIXES = [
@@ -28,6 +29,8 @@ const ALLOWED_SUFFIXES = [
   ".fbsbx.com",
   ".supabase.co",
   ".supabase.in",
+  ".backblazeb2.com",
+  ".catbox.moe",
 ];
 
 // Matches regional AWS S3 bucket patterns (e.g., bucket.s3.eu-west-1.amazonaws.com or bucket.s3-eu-west-1.amazonaws.com)

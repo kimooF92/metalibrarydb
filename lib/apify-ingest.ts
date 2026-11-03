@@ -105,9 +105,9 @@ export function extractMedia(item: any): {
   let mediaType: "image" | "video" | "carousel" | "unknown" = "unknown";
   if (hasVideoSource || item.video_hd_url || urls.some((u) => u.includes(".mp4") || u.includes("/videos/") || u.includes("video."))) {
     mediaType = "video";
-  } else if (urls.length > 1) {
+  } else if (Array.isArray(cards) && cards.length > 1) {
     mediaType = "carousel";
-  } else if (urls.length === 1) {
+  } else if (urls.length >= 1) {
     mediaType = "image";
   }
 

@@ -288,7 +288,11 @@ export async function GET(req: NextRequest) {
     }
 
     if (mediaType && mediaType !== "all" && smartPreset !== "viral_videos") {
-      conditions.push(eq(ads.mediaType, mediaType));
+      if (mediaType === "image") {
+        conditions.push(or(eq(ads.mediaType, "image"), eq(ads.mediaType, "carousel")));
+      } else {
+        conditions.push(eq(ads.mediaType, mediaType));
+      }
     }
 
     const includeArchived = searchParams.get("includeArchived") === "true" || !!productId;

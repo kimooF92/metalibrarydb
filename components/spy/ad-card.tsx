@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import NextImage from "next/image";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Ad, ScrapedProduct } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
 import { calculateWinnerScore } from "@/lib/winner-score";
+import { isFbCdnUrlExpired } from "@/lib/fb-cdn";
 import { ImagePreviewModal } from "./image-preview-modal";
 import { ProductClusterModal } from "./product-cluster-modal";
 import { CreativeClusterModal } from "./creative-cluster-modal";
@@ -43,6 +43,7 @@ import {
   Tag,
   ChevronLeft,
   ChevronRight,
+  Camera,
 } from "lucide-react";
 
 interface AdCardProps {
@@ -61,6 +62,9 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
   const [isProxied, setIsProxied] = useState(false);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [imgError, setImgError] = useState(false);
+  const [videoError, setVideoError] = useState(false);
+  const [isPlayingVideo, setIsPlayingVideo] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isLoadingMedia, setIsLoadingMedia] = useState(false);
   const [isClusterModalOpen, setIsClusterModalOpen] = useState(false);
@@ -77,6 +81,8 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
     setCurrentAd(ad);
     setIsArchived(Boolean(ad.isArchived));
     if (ad.product) setExtractedProduct(ad.product);
+    setVideoError(false);
+    setIsPlayingVideo(false);
   }, [ad]);
 
   const firstVideoUrl = currentAd.mediaUrls?.find(
@@ -86,6 +92,9 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
       url.includes("video.") ||
       url.includes("fbcdn.net/o1/v/")
   ) || (currentAd.mediaType === "video" && currentAd.mediaUrls?.[0]?.includes("http") ? currentAd.mediaUrls[0] : null);
+
+  const isVideoExpired = isFbCdnUrlExpired(firstVideoUrl);
+  const canPlayVideo = Boolean(firstVideoUrl) && !isVideoExpired && !videoError;
 
   // Keep historical storyboard-backed records classified as video so their
   // thumbnails remain static and non-downloadable without rendering frames.
@@ -166,8 +175,8 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
     }
   };
 
-  const handleRefreshMedia = async (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleRefreshMedia = async (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setIsRefreshingMedia(true);
     try {
       const res = await fetch(`/api/spy/ads/${currentAd.id}/refresh`, { method: "POST" });
@@ -182,6 +191,8 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
       if (data.success && data.ad) {
         setCurrentAd(data.ad);
         setImgError(false);
+        setVideoError(false);
+        setIsPlayingVideo(false);
         setIsProxied(false);
         onMediaRefreshed?.(data.ad);
       } else {
@@ -532,84 +543,146 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
 
         {/* Media Container */}
         <div
-          className="relative w-full h-[280px] sm:h-[320px] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800/80 bg-slate-900/95 dark:bg-slate-950 mb-3 flex items-center justify-center"
+          className="relative w-full h-[280px] sm:h-[320px] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800/80 bg-slate-900/95 dark:bg-slate-950 mb-3 flex items-center justify-center cursor-pointer"
+          onClick={openPreview}
+          onMouseEnter={() => {
+            if (canPlayVideo && videoRef.current) {
+              videoRef.current.play().catch(() => {});
+              setIsPlayingVideo(true);
+            }
+          }}
+          onMouseLeave={() => {
+            if (canPlayVideo && videoRef.current) {
+              videoRef.current.pause();
+              videoRef.current.currentTime = 0;
+              setIsPlayingVideo(false);
+            }
+          }}
         >
-            <div className="relative w-full h-full group/media flex items-center justify-center" onClick={isVideoAd ? undefined : openPreview}>
-              {isLoadingMedia ? (
-                <div className="text-[11px] text-slate-400">Loading media…</div>
-              ) : activeImageSrc && !imgError ? (
-                <>
-                  {/* Ambient Blurred Background Canvas */}
-                  <NextImage
-                    src={activeImageSrc}
+          <div className="relative w-full h-full group/media flex items-center justify-center">
+            {isLoadingMedia ? (
+              <div className="text-[11px] text-slate-400">Loading media…</div>
+            ) : canPlayVideo && firstVideoUrl ? (
+              <>
+                {/* Ambient Blurred Background Canvas */}
+                {displayThumbnail && (
+                  /* eslint-disable-next-html-shortcut */
+                  <img
+                    src={displayThumbnail}
                     alt=""
-                    fill
-                    unoptimized
+                    aria-hidden="true"
                     referrerPolicy="no-referrer"
-                    className="object-cover blur-2xl opacity-40 dark:opacity-30 scale-125 select-none pointer-events-none"
+                    className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-40 dark:opacity-30 scale-125 select-none pointer-events-none"
                   />
+                )}
 
-                  {/* Main Crisp Uncropped Image */}
-                  <div className="relative w-full h-full p-2 flex items-center justify-center z-10">
-                    <NextImage
-                      src={activeImageSrc}
-                      alt={currentAd.title || "Ad creative"}
-                      fill
-                      unoptimized
-                      referrerPolicy="no-referrer"
-                      className="object-contain transition-transform duration-300 group-hover/media:scale-[1.02] drop-shadow-md"
-                      onError={handleImageError}
-                    />
-                  </div>
-                </>
-              ) : (
-                <div className="flex flex-col items-center gap-2 text-slate-400 font-medium">
-                  {currentAd.mediaType === "video" ? (
-                    <Play className="w-8 h-8 text-indigo-400 opacity-70" />
-                  ) : (
-                    <ImageIcon className="w-8 h-8 opacity-60" />
-                  )}
-                  <span className="text-[11px] text-slate-400">
-                    {currentAd.mediaType === "video" ? "Video Creative" : "Image Creative"}
-                  </span>
+                {/* Main Crisp Video Player */}
+                <div className="relative w-full h-full p-2 flex items-center justify-center z-10">
+                  <video
+                    ref={videoRef}
+                    src={firstVideoUrl}
+                    poster={displayThumbnail || undefined}
+                    preload="none"
+                    playsInline
+                    muted
+                    loop
+                    {...({ referrerPolicy: "no-referrer" } as any)}
+                    className="w-full h-full object-contain transition-transform duration-300 group-hover/media:scale-[1.01] drop-shadow-md rounded-lg"
+                    onError={() => {
+                      setVideoError(true);
+                      setIsPlayingVideo(false);
+                    }}
+                  />
                 </div>
-              )}
 
-              {/* Carousel Multi-Slide Navigation Controls */}
-              {isCarousel && previewImages.length > 1 && (
-                <>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCarouselIndex((prev) => (prev > 0 ? prev - 1 : previewImages.length - 1));
-                    }}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/75 hover:bg-black text-white flex items-center justify-center transition-all cursor-pointer z-20 shadow-md border border-white/20 opacity-0 group-hover/media:opacity-100"
-                    title="Previous Slide"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCarouselIndex((prev) => (prev + 1) % previewImages.length);
-                    }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/75 hover:bg-black text-white flex items-center justify-center transition-all cursor-pointer z-20 shadow-md border border-white/20 opacity-0 group-hover/media:opacity-100"
-                    title="Next Slide"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
+                {/* Video Play Badge */}
+                <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-xs text-[10px] font-bold text-white shadow-md border border-white/10 pointer-events-none">
+                  <Play className={`w-2.5 h-2.5 text-indigo-400 fill-indigo-400 ${isPlayingVideo ? "animate-pulse" : ""}`} />
+                  <span>{isPlayingVideo ? "PLAYING" : "HOVER TO PLAY"}</span>
+                </div>
+              </>
+            ) : activeImageSrc && !imgError ? (
+              <>
+                {/* Ambient Blurred Background Canvas */}
+                {/* eslint-disable-next-html-shortcut */}
+                <img
+                  src={activeImageSrc}
+                  alt=""
+                  aria-hidden="true"
+                  referrerPolicy="no-referrer"
+                  className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-40 dark:opacity-30 scale-125 select-none pointer-events-none"
+                />
 
-                  {/* Slide Counter Pill */}
-                  <div className="absolute bottom-2 left-2 z-20 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/80 border border-white/15 text-[10px] font-bold text-white shadow-md pointer-events-none">
-                    <Layers className="w-3 h-3 text-indigo-400" />
-                    <span>{carouselIndex + 1}/{previewImages.length}</span>
+                {/* Main Crisp Uncropped Image */}
+                <div className="relative w-full h-full p-2 flex items-center justify-center z-10">
+                  {/* eslint-disable-next-html-shortcut */}
+                  <img
+                    src={activeImageSrc}
+                    alt={currentAd.title || "Ad creative"}
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-contain transition-transform duration-300 group-hover/media:scale-[1.02] drop-shadow-md select-none"
+                    onError={handleImageError}
+                  />
+                </div>
+
+                {/* Snapshot Indicator for Expired Video */}
+                {isVideoAd && (
+                  <div
+                    className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-xs text-[10px] font-medium text-slate-300 shadow-md border border-white/10 pointer-events-none"
+                    title="Video link expired on Meta CDN (24-48h token limit). Displaying original snapshot thumbnail."
+                  >
+                    <Camera className="w-2.5 h-2.5 text-amber-400" />
+                    <span>Snapshot (Video Expired)</span>
                   </div>
-                </>
-              )}
+                )}
+              </>
+            ) : (
+              <div className="flex flex-col items-center gap-2 text-slate-400 font-medium">
+                {currentAd.mediaType === "video" ? (
+                  <Play className="w-8 h-8 text-indigo-400 opacity-70" />
+                ) : (
+                  <ImageIcon className="w-8 h-8 opacity-60" />
+                )}
+                <span className="text-[11px] text-slate-400">
+                  {currentAd.mediaType === "video" ? "Video Creative" : "Image Creative"}
+                </span>
+              </div>
+            )}
 
-            </div>
+            {/* Carousel Multi-Slide Navigation Controls */}
+            {isCarousel && previewImages.length > 1 && !canPlayVideo && (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCarouselIndex((prev) => (prev > 0 ? prev - 1 : previewImages.length - 1));
+                  }}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/75 hover:bg-black text-white flex items-center justify-center transition-all cursor-pointer z-20 shadow-md border border-white/20 opacity-0 group-hover/media:opacity-100"
+                  title="Previous Slide"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCarouselIndex((prev) => (prev + 1) % previewImages.length);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/75 hover:bg-black text-white flex items-center justify-center transition-all cursor-pointer z-20 shadow-md border border-white/20 opacity-0 group-hover/media:opacity-100"
+                  title="Next Slide"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+
+                {/* Slide Counter Pill */}
+                <div className="absolute bottom-2 left-2 z-20 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/80 border border-white/15 text-[10px] font-bold text-white shadow-md pointer-events-none">
+                  <Layers className="w-3 h-3 text-indigo-400" />
+                  <span>{carouselIndex + 1}/{previewImages.length}</span>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Extracted Product Info Pill */}
@@ -744,18 +817,29 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
               {isArchived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
             </button>
 
-            {!isVideoAd && displayThumbnail && (
+            {canPlayVideo && firstVideoUrl ? (
+              <a
+                href={firstVideoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                download
+                className="p-1 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors"
+                title="Download Video Creative (.mp4)"
+              >
+                <Download className="w-3.5 h-3.5" />
+              </a>
+            ) : displayThumbnail ? (
               <a
                 href={displayThumbnail}
                 target="_blank"
                 rel="noopener noreferrer"
                 download
                 className="p-1 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors"
-                title="Download Media File"
+                title={isVideoAd ? "Download Snapshot Thumbnail (.jpg)" : "Download Media File"}
               >
                 <Download className="w-3.5 h-3.5" />
               </a>
-            )}
+            ) : null}
 
             <a
               href={`https://www.facebook.com/ads/library/?id=${currentAd.adArchiveId}`}
@@ -771,16 +855,21 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
         </div>
       </div>
 
-      {/* Image Preview Modal */}
+      {/* Image / Video Preview Modal */}
       <ImagePreviewModal
         isOpen={isPreviewOpen}
         onClose={() => setIsPreviewOpen(false)}
         imageUrls={previewImages}
+        videoUrl={canPlayVideo ? firstVideoUrl : null}
+        fallbackThumbnail={displayThumbnail}
+        isVideoAd={isVideoAd}
         title={currentAd.title}
         pageName={currentAd.pageName || `Page ${currentAd.pageId}`}
         caption={currentAd.caption}
         destinationUrl={destinationUrl}
         adArchiveId={currentAd.adArchiveId}
+        onRefreshMedia={handleRefreshMedia}
+        isRefreshingMedia={isRefreshingMedia}
       />
 
       {/* Product Creative Cluster Modal */}

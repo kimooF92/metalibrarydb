@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Ad, ScrapedProduct } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
 import { calculateWinnerScore } from "@/lib/winner-score";
+import { isFbCdnUrlExpired } from "@/lib/fb-cdn";
 import { ImagePreviewModal } from "./image-preview-modal";
 import { ProductClusterModal } from "./product-cluster-modal";
 import { CreativeClusterModal } from "./creative-cluster-modal";
@@ -40,6 +41,7 @@ import {
   Crown,
   ShoppingBag,
   Tag,
+  Camera,
 } from "lucide-react";
 
 interface AdRowProps {
@@ -81,6 +83,9 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
       url.includes("video.") ||
       url.includes("fbcdn.net/o1/v/")
   ) || (currentAd.mediaType === "video" && currentAd.mediaUrls?.[0]?.includes("http") ? currentAd.mediaUrls[0] : null);
+
+  const isVideoExpired = isFbCdnUrlExpired(firstVideoUrl);
+  const canPlayVideo = Boolean(firstVideoUrl) && !isVideoExpired;
 
   // Keep historical storyboard-backed records classified as video so their
   // thumbnails remain static and non-downloadable without rendering frames.
@@ -152,8 +157,8 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
     }
   };
 
-  const handleRefreshMedia = async (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleRefreshMedia = async (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setIsRefreshingMedia(true);
     try {
       const res = await fetch(`/api/spy/ads/${currentAd.id}/refresh`, { method: "POST" });
@@ -288,29 +293,43 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
       <div className="flex items-center gap-3.5 min-w-0 flex-1">
         {/* Media Thumbnail */}
         <div
-          className={`relative w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 shrink-0 flex items-center justify-center ${isVideoAd ? "" : "cursor-pointer"}`}
+          className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 shrink-0 flex items-center justify-center cursor-pointer"
         >
-          <div className="relative w-full h-full group/media flex items-center justify-center bg-slate-900 overflow-hidden" onClick={isVideoAd ? undefined : openPreview}>
-              {activeImageSrc && !imgError ? (
-                /* eslint-disable-next-html-shortcut */
-                <img
-                  src={activeImageSrc}
-                  alt={currentAd.title || "Ad creative"}
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-contain transition-transform duration-300 group-hover/media:scale-105"
-                  onError={handleImageError}
-                />
-              ) : (
-                <div className="flex flex-col items-center gap-1 text-slate-400">
-                  {currentAd.mediaType === "video" ? (
-                    <Play className="w-6 h-6 text-indigo-400 opacity-70" />
-                  ) : (
-                    <ImageIcon className="w-6 h-6 opacity-50" />
-                  )}
-                </div>
-              )}
-            </div>
+          <div className="relative w-full h-full group/media flex items-center justify-center bg-slate-900 overflow-hidden" onClick={openPreview}>
+            {activeImageSrc && !imgError ? (
+              /* eslint-disable-next-html-shortcut */
+              <img
+                src={activeImageSrc}
+                alt={currentAd.title || "Ad creative"}
+                referrerPolicy="no-referrer"
+                className="w-full h-full object-contain transition-transform duration-300 group-hover/media:scale-105"
+                onError={handleImageError}
+              />
+            ) : (
+              <div className="flex flex-col items-center gap-1 text-slate-400">
+                {currentAd.mediaType === "video" ? (
+                  <Play className="w-6 h-6 text-indigo-400 opacity-70" />
+                ) : (
+                  <ImageIcon className="w-6 h-6 opacity-50" />
+                )}
+              </div>
+            )}
+
+            {/* Video overlay badge on row thumbnail */}
+            {isVideoAd && (
+              <div
+                className="absolute bottom-1 right-1 z-10 flex items-center gap-0.5 px-1 py-0.5 rounded bg-black/80 backdrop-blur-xs text-[9px] font-bold text-white shadow-xs"
+                title={canPlayVideo ? "Video Creative (Click to watch)" : "Video Expired • Snapshot thumbnail"}
+              >
+                {canPlayVideo ? (
+                  <Play className="w-2.5 h-2.5 fill-white text-white" />
+                ) : (
+                  <Camera className="w-2.5 h-2.5 text-amber-400" />
+                )}
+              </div>
+            )}
           </div>
+        </div>
 
         {/* Info Column */}
         <div className="flex flex-col min-w-0 flex-1 gap-1">
@@ -601,18 +620,29 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
             {isArchived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
           </button>
 
-          {!isVideoAd && displayThumbnail && (
+          {canPlayVideo && firstVideoUrl ? (
+            <a
+              href={firstVideoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+              className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors"
+              title="Download Video Creative (.mp4)"
+            >
+              <Download className="w-3.5 h-3.5" />
+            </a>
+          ) : displayThumbnail ? (
             <a
               href={displayThumbnail}
               target="_blank"
               rel="noopener noreferrer"
               download
               className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors"
-              title="Download Media File"
+              title={isVideoAd ? "Download Snapshot Thumbnail (.jpg)" : "Download Media File"}
             >
               <Download className="w-3.5 h-3.5" />
             </a>
-          )}
+          ) : null}
 
           <a
             href={`https://www.facebook.com/ads/library/?id=${currentAd.adArchiveId}`}
@@ -627,16 +657,21 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
         </div>
       </div>
 
-      {/* Image Preview Modal */}
+      {/* Image / Video Preview Modal */}
       <ImagePreviewModal
         isOpen={isPreviewOpen}
         onClose={() => setIsPreviewOpen(false)}
         imageUrls={previewImages}
+        videoUrl={canPlayVideo ? firstVideoUrl : null}
+        fallbackThumbnail={displayThumbnail}
+        isVideoAd={isVideoAd}
         title={currentAd.title}
         pageName={currentAd.pageName || `Page ${currentAd.pageId}`}
         caption={currentAd.caption}
         destinationUrl={destinationUrl}
         adArchiveId={currentAd.adArchiveId}
+        onRefreshMedia={handleRefreshMedia}
+        isRefreshingMedia={isRefreshingMedia}
       />
 
       {/* Product Creative Cluster Modal */}

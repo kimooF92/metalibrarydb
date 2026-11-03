@@ -28,6 +28,9 @@ const nextConfig: NextConfig = {
       // Supabase Storage (signed thumbnails)
       { protocol: "https", hostname: "**.supabase.co" },
       { protocol: "https", hostname: "**.supabase.in" },
+      // Backblaze B2 & Catbox Storage
+      { protocol: "https", hostname: "**.backblazeb2.com" },
+      { protocol: "https", hostname: "files.catbox.moe" },
     ],
   },
 };
