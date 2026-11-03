@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Flame, Eye, ExternalLink, Video, Image as ImageIcon, Layers, Sparkles, ShoppingBag } from "lucide-react";
+import { Flame, Eye, ShoppingBag } from "lucide-react";
 import { formatPrice } from "@/lib/format-price";
 import { ProductDetailsModal } from "@/components/products/product-details-modal";
 import type { ScrapedProduct } from "@/types";
@@ -19,69 +19,24 @@ export interface FreshBreakout {
   firstSeenAt: string | null;
   daysRunning: number;
   winnerScore: number;
-  winnerTier: "super" | "high" | "promising" | "testing";
+  winnerTier?: "super" | "high" | "promising" | "testing";
   isBreakout: boolean;
   breakoutTier?: "hard" | "standard" | "soft" | null;
   productId: string | null;
   productTitle: string | null;
+  productUrl?: string | null;
   productPrice: string | null;
   productCurrency: string | null;
   productImageUrl: string | null;
   storePlatform: string | null;
   activeAdsCount?: number;
+  totalCopies?: number;
 }
 
 interface FreshWinnersListProps {
   products: FreshBreakout[];
   loading?: boolean;
   currencySymbol?: string;
-}
-
-function getTierBadge(tier: string, score: number) {
-  if (tier === "super" || score >= 85) {
-    return {
-      label: `Super Winner ${score}`,
-      className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25",
-    };
-  }
-  if (tier === "high" || score >= 68) {
-    return {
-      label: `High Breakout ${score}`,
-      className: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25",
-    };
-  }
-  if (tier === "promising" || score >= 45) {
-    return {
-      label: `Promising ${score}`,
-      className: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/25",
-    };
-  }
-  return {
-    label: `Testing ${score}`,
-    className: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/25",
-  };
-}
-
-function getMediaBadge(mediaType: string | null) {
-  if (mediaType === "video") {
-    return {
-      icon: <Video className="w-3 h-3 text-purple-500 shrink-0" />,
-      label: "Video Ad",
-      className: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
-    };
-  }
-  if (mediaType === "carousel") {
-    return {
-      icon: <Layers className="w-3 h-3 text-cyan-500 shrink-0" />,
-      label: "Carousel",
-      className: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20",
-    };
-  }
-  return {
-    icon: <ImageIcon className="w-3 h-3 text-blue-500 shrink-0" />,
-    label: "Image",
-    className: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-  };
 }
 
 export function FreshWinnersList({ products, loading = false, currencySymbol = "DT" }: FreshWinnersListProps) {
@@ -91,7 +46,7 @@ export function FreshWinnersList({ products, loading = false, currencySymbol = "
   const handleOpenProduct = async (item: FreshBreakout) => {
     const optimistic: ScrapedProduct = {
       id: item.productId || item.id,
-      url: "",
+      url: item.productUrl || "",
       domain: item.brandDisplayName || item.pageName || "",
       pageId: item.pageId,
       title: item.productTitle || item.pageName || "Winner Product",
@@ -121,7 +76,7 @@ export function FreshWinnersList({ products, loading = false, currencySymbol = "
         const res = await fetch(`/api/products?id=${encodeURIComponent(item.productId)}`);
         if (res.ok) {
           const json = await res.json();
-          const p = json.product || json.data || json;
+          const p = json.products?.[0] || json.product || json.data || json;
           if (p && p.id) {
             setSelectedProduct(p);
           }
@@ -194,8 +149,6 @@ export function FreshWinnersList({ products, loading = false, currencySymbol = "
             const title = item.productTitle || item.pageName || `Breakout Ad ${item.adArchiveId}`;
             const brand = item.brandDisplayName || item.pageName || "Competitor Store";
             const price = item.productPrice ? formatPrice(item.productPrice, currencySymbol) : null;
-            const tierBadge = getTierBadge(item.winnerTier, item.winnerScore);
-            const mediaBadge = getMediaBadge(item.mediaType);
             const spyLink = item.productId
               ? `/spy?productId=${encodeURIComponent(item.productId)}`
               : `/spy?adArchiveId=${encodeURIComponent(item.adArchiveId)}`;
@@ -239,25 +192,14 @@ export function FreshWinnersList({ products, loading = false, currencySymbol = "
                   {/* Identity & Badges */}
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                      {/* Winner Score Tier */}
-                      <span className={`text-[10px] font-black px-1.5 py-0.5 rounded border ${tierBadge.className}`}>
-                        {tierBadge.label}
-                      </span>
-
                       {/* Active Ads Velocity Count */}
-                      {item.activeAdsCount && item.activeAdsCount > 1 ? (
+                      {item.activeAdsCount && item.activeAdsCount > 0 ? (
                         <span className="text-[10px] font-black text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
                           🔥 {item.activeAdsCount} active ads
                         </span>
                       ) : null}
 
-                      {/* Format Badge */}
-                      <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border ${mediaBadge.className}`}>
-                        {mediaBadge.icon}
-                        <span>{mediaBadge.label}</span>
-                      </span>
-
-                      {/* Days running */}
+                      {/* Campaign Age / Launch Status */}
                       <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
                         {item.daysRunning === 0 ? "Launched today" : `${item.daysRunning}d running`}
                       </span>

@@ -198,43 +198,71 @@ export async function GET(req: NextRequest) {
         .orderBy(desc(scrapedProducts.updatedAt))
         .limit(4),
 
-      // 6. Fresh Breakouts (unique winner products with active ads)
+      // 6. Fresh Breakouts (Top products matching /fresh-winners velocity scoring)
       db
         .select({
           productId: scrapedProducts.id,
           productTitle: sql<string>`left(${scrapedProducts.title}, 100)`,
+          productUrl: scrapedProducts.url,
+          productDomain: scrapedProducts.domain,
           productPrice: scrapedProducts.currentPrice,
           productCurrency: scrapedProducts.currency,
           productImageUrl: scrapedProducts.mainImageUrl,
           storePlatform: scrapedProducts.storePlatform,
-          brandDisplayName: sql<string>`coalesce(${trackedPages.displayName}, ${scrapedProducts.domain})`,
+          brandDisplayName: sql<string | null>`max(${trackedPages.displayName})`,
           pageId: scrapedProducts.pageId,
           adArchiveId: sql<string>`max(${ads.adArchiveId})`,
           adId: sql<string>`max(${ads.id}::text)`,
           title: sql<string>`left(max(${ads.title}), 100)`,
           mediaType: sql<string>`case when count(case when ${ads.mediaType} = 'video' then 1 end) > 0 then 'video' when count(case when ${ads.mediaType} = 'carousel' then 1 end) > 0 then 'carousel' else 'image' end`,
           thumbnailUrl: sql<string | null>`coalesce(max(${ads.thumbnailUrl}), ${scrapedProducts.mainImageUrl})`,
-          startedRunningOn: sql<Date | null>`max(${ads.startedRunningOn})`,
-          firstSeenAt: sql<Date | null>`min(${ads.firstSeenAt})`,
-          lastSeenAt: sql<Date | null>`max(${ads.lastSeenAt})`,
+          earliestAdDate: sql<Date | null>`min(coalesce(${ads.startedRunningOn}, ${ads.firstSeenAt}))`,
+          latestAdDate: sql<Date | null>`max(coalesce(${ads.startedRunningOn}, ${ads.firstSeenAt}))`,
           activeAdsCount: sql<number>`count(distinct ${ads.id})`.mapWith(Number),
+          totalCopies: sql<number>`sum(latest_obs.duplication_count)`.mapWith(Number),
         })
         .from(scrapedProducts)
         .innerJoin(ads, eq(ads.productId, scrapedProducts.id))
-        .leftJoin(trackedPages, eq(trackedPages.pageId, scrapedProducts.pageId))
+        .innerJoin(
+          sql`(
+            SELECT DISTINCT ON (ad_id)
+              id AS obs_id,
+              ad_id,
+              tracked_page_id,
+              duplication_count,
+              is_active,
+              observed_at
+            FROM ad_observations
+            ORDER BY ad_id, observed_at DESC
+          ) AS latest_obs`,
+          sql`latest_obs.ad_id = ${ads.id}`
+        )
+        .leftJoin(trackedPages, sql`tracked_pages.id = latest_obs.tracked_page_id`)
         .where(
           and(
-            eq(scrapedProducts.workspaceId, activeWorkspace.id),
+            sql`latest_obs.is_active = true`,
             sql`(${ads.isArchived} = false or ${ads.isArchived} is null)`,
+            eq(scrapedProducts.workspaceId, activeWorkspace.id),
+            eq(trackedPages.workspaceId, activeWorkspace.id),
             sql`(${scrapedProducts.mainImageUrl} is not null and ${scrapedProducts.mainImageUrl} != '')`
           )
         )
-        .groupBy(scrapedProducts.id, trackedPages.displayName)
-        .orderBy(
-          desc(sql`max(coalesce(${ads.startedRunningOn}, ${ads.firstSeenAt}))`),
-          desc(sql`count(distinct ${ads.id})`)
+        .groupBy(scrapedProducts.id)
+        .having(
+          and(
+            sql`count(distinct ${ads.id}) >= 1`,
+            sql`sum(latest_obs.duplication_count) >= 2`,
+            sql`max(coalesce(${ads.startedRunningOn}, ${ads.firstSeenAt})) >= NOW() - INTERVAL '7 days'`
+          )
         )
-        .limit(15),
+        .orderBy(
+          desc(
+            sql`(sum(latest_obs.duplication_count)::numeric / GREATEST(1, EXTRACT(DAY FROM NOW() - MIN(COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt})))))`
+          ),
+          desc(sql`sum(latest_obs.duplication_count)`),
+          desc(scrapedProducts.id)
+        )
+        .limit(10),
 
       // 7. Category Distribution (top 5)
       db
@@ -530,17 +558,16 @@ export async function GET(req: NextRequest) {
     ]);
 
     // Format fresh breakouts with winner scoring metrics & strict deduplication (Top 5 Unique Products)
+    const nowMs = Date.now();
     const rawBreakouts = freshBreakoutRows.map((row) => {
-      const metrics = calculateWinnerScore({
-        startedRunningOn: row.startedRunningOn,
-        firstSeenAt: row.firstSeenAt,
-        lastSeenAt: row.lastSeenAt,
-        duplicationCount: Math.max(1, row.activeAdsCount),
-        productCreativeCount: row.activeAdsCount,
-        isActive: true,
-        isArchived: false,
-        mediaType: row.mediaType,
-      });
+      const earliestT = row.earliestAdDate ? new Date(row.earliestAdDate).getTime() : nowMs;
+      const daysRunning = Math.max(0, Math.floor((nowMs - earliestT) / (1000 * 60 * 60 * 24)));
+      const totalCopies = row.totalCopies || row.activeAdsCount || 1;
+      const velocityScore = Math.min(
+        100,
+        Math.round((totalCopies / Math.max(1, daysRunning)) * 12)
+      );
+
       return {
         id: row.adId || row.productId,
         adArchiveId: row.adArchiveId,
@@ -549,20 +576,21 @@ export async function GET(req: NextRequest) {
         brandDisplayName: row.brandDisplayName,
         mediaType: row.mediaType,
         thumbnailUrl: row.thumbnailUrl || row.productImageUrl,
-        startedRunningOn: row.startedRunningOn ? new Date(row.startedRunningOn).toISOString() : null,
-        firstSeenAt: row.firstSeenAt ? new Date(row.firstSeenAt).toISOString() : null,
-        daysRunning: metrics.daysRunning,
-        winnerScore: metrics.winnerScore,
-        winnerTier: metrics.winnerTier,
-        isBreakout: metrics.isBreakout,
-        breakoutTier: metrics.breakoutTier,
+        startedRunningOn: row.latestAdDate ? new Date(row.latestAdDate).toISOString() : null,
+        firstSeenAt: row.earliestAdDate ? new Date(row.earliestAdDate).toISOString() : null,
+        daysRunning,
+        winnerScore: velocityScore,
+        winnerTier: (velocityScore >= 70 ? "high" : "promising") as "high" | "promising",
+        isBreakout: true,
         productId: row.productId,
         productTitle: row.productTitle,
+        productUrl: row.productUrl,
         productPrice: row.productPrice,
         productCurrency: row.productCurrency,
         productImageUrl: row.productImageUrl,
         storePlatform: row.storePlatform,
         activeAdsCount: row.activeAdsCount,
+        totalCopies,
       };
     });
 
