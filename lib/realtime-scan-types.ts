@@ -10,6 +10,17 @@ export const SCAN_TELEMETRY_CHANNEL = "scan-telemetry";
 export const SCAN_STEP_EVENT = "scan:step";
 export const SCAN_BATCH_EVENT = "scan:batch_summary";
 export const SCAN_STATE_EVENT = "scan:state_change";
+export const CATALOG_INFLOW_EVENT = "catalog:inflow";
+
+export interface CatalogInflowBroadcastPayload {
+  workspaceId?: string | null;
+  productId?: string;
+  isNewProduct?: boolean;
+  hasOffer?: boolean;
+  domain?: string | null;
+  storePlatform?: string | null;
+  timestamp: number;
+}
 
 export interface ScanStepBroadcastPayload {
   jobId: string;

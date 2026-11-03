@@ -87,7 +87,7 @@ export function BrandVelocityBoard({
             )}
           </span>
           <h2 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-            Brand Ad Velocity
+            Competitor Ad Velocity
           </h2>
         </div>
 
@@ -111,7 +111,7 @@ export function BrandVelocityBoard({
           }`}
         >
           <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-          <span>Scaling Up (+)</span>
+          <span>Ramping Up (+)</span>
           <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-extrabold">
             {scalingBrands.length}
           </span>
@@ -126,7 +126,7 @@ export function BrandVelocityBoard({
           }`}
         >
           <TrendingDown className="w-3.5 h-3.5 text-rose-500" />
-          <span>Descaling / Cuts (-)</span>
+          <span>Scaling Down (-)</span>
           <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 font-extrabold">
             {descalingBrands.length}
           </span>
@@ -144,9 +144,9 @@ export function BrandVelocityBoard({
         ) : currentList.length === 0 ? (
           <div className="text-center py-8 text-xs text-slate-500">
             {activeTab === "scaling" ? (
-              <p>No brands actively scaling up this cycle.</p>
+              <p>All quiet on the scaling front! None of your tracked competitors have added new ads today.</p>
             ) : (
-              <p>No brands descaling or cutting ads detected.</p>
+              <p>No brands are cutting or pausing ad campaigns right now.</p>
             )}
           </div>
         ) : (

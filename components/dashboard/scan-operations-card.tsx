@@ -83,19 +83,19 @@ export function ScanOperationsCard({
 
   // Engine Status Badges
   const statusBadge = isActivelyScanning
-    ? { text: "Scanning", class: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30", pulse: true }
+    ? { text: "Scanning Live", class: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30", pulse: true }
     : isPaused
     ? { text: "Paused", class: "bg-amber-500/10 text-amber-500 border-amber-500/20", pulse: false }
     : circuitBreaker
-    ? { text: "Tripped", class: "bg-rose-500/10 text-rose-500 border-rose-500/20", pulse: false }
-    : { text: "Active", class: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20", pulse: false };
+    ? { text: "Cooling Down", class: "bg-rose-500/10 text-rose-500 border-rose-500/20", pulse: false }
+    : { text: "Ready & Active", class: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20", pulse: false };
 
   const handleTriggerNow = async () => {
     const res = await triggerScanNow(false);
     if (res.success) {
       showToast({
-        title: "⚡ Batch Scan Enqueued",
-        message: `${res.count ?? 0} eligible brand page(s) queued for refresh.`,
+        title: "⚡ Scan Started",
+        message: `${res.count ?? 0} competitor page(s) queued for refresh.`,
         type: "success",
       });
       onRefresh?.();
@@ -118,7 +118,7 @@ export function ScanOperationsCard({
           </span>
           <div>
             <h2 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-              Scan Operations & Mission Center
+              Scraper Activity & Health
             </h2>
           </div>
         </div>
@@ -146,10 +146,10 @@ export function ScanOperationsCard({
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
                 {isActivelyScanning
-                  ? "Scan in Progress"
+                  ? "Live Scrape Running"
                   : scheduleStatus?.nextScanReason === "stale_page_eligible"
-                  ? "Stale Pages Due"
-                  : "Next Scheduled Scan"}
+                  ? "Competitors Ready for Check"
+                  : "Next Scheduled Check"}
               </span>
               {scheduleStatus?.nextScanReason === "cron_schedule" && (
                 <span className="text-[9px] font-mono font-medium px-1 py-0.2 rounded bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
@@ -164,7 +164,7 @@ export function ScanOperationsCard({
                 </span>
               ) : secondsRemaining <= 0 ? (
                 <span className="text-amber-600 dark:text-amber-400 font-bold">
-                  Eligible for scan now
+                  Ready to scan now
                 </span>
               ) : (
                 <span>in {formattedCountdown}</span>
@@ -177,7 +177,7 @@ export function ScanOperationsCard({
         <button
           onClick={handleTriggerNow}
           disabled={isTriggering || isActivelyScanning}
-          title="Enqueue stale pages immediately and trigger scan runner"
+          title="Enqueue eligible competitor pages now and run scraper"
           className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-200 dark:disabled:bg-slate-800 text-white disabled:text-slate-400 text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:cursor-not-allowed shrink-0"
         >
           {isTriggering ? (
@@ -185,7 +185,7 @@ export function ScanOperationsCard({
           ) : (
             <Play className="w-3.5 h-3.5 fill-current" />
           )}
-          <span>{isTriggering ? "Queuing..." : "Scan Now"}</span>
+          <span>{isTriggering ? "Starting..." : "Scan Now"}</span>
         </button>
       </div>
 
@@ -251,7 +251,7 @@ export function ScanOperationsCard({
         {/* Metric 1: Scraper Runs Today */}
         <div className="p-2.5 rounded-lg bg-slate-50/70 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800/60">
           <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block">
-            Scraper Runs Today
+            Checks Completed
           </span>
           <div className="flex items-baseline justify-between mt-0.5">
             <span className="text-base font-black text-slate-900 dark:text-white">
@@ -262,32 +262,32 @@ export function ScanOperationsCard({
             </span>
           </div>
           <span className="text-[10px] text-slate-400 dark:text-slate-500 block mt-0.5">
-            Page and discovery checks
+            Page & ad scans today
           </span>
         </div>
 
         {/* Metric 2: Scan Health */}
         <div className="p-2.5 rounded-lg bg-slate-50/70 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800/60">
           <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block">
-            Scan Health
+            Success Rate
           </span>
           <div className="flex items-baseline justify-between mt-0.5">
             <span className="text-base font-black text-emerald-600 dark:text-emerald-400">
               {loading ? "--" : `${successRate}%`}
             </span>
             <span className="text-[10px] font-medium text-slate-400">
-              success
+              health
             </span>
           </div>
           <span className="text-[10px] text-slate-400 dark:text-slate-500 block mt-0.5">
-            Error-free execution
+            Clean, error-free runs
           </span>
         </div>
 
         {/* Metric 3: In-Flight Queue */}
         <div className="p-2.5 rounded-lg bg-slate-50/70 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800/60">
           <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block">
-            In-Flight Queue
+            Queued Checks
           </span>
           <div className="flex items-baseline justify-between mt-0.5">
             <span className="text-base font-black text-slate-900 dark:text-white">
@@ -298,29 +298,29 @@ export function ScanOperationsCard({
                 {running} active
               </span>
             ) : (
-              <span className="text-[10px] font-medium text-slate-400">idle</span>
+              <span className="text-[10px] font-medium text-slate-400">ready</span>
             )}
           </div>
           <span className="text-[10px] text-slate-400 dark:text-slate-500 block mt-0.5">
-            Jobs awaiting worker
+            Waiting for next run
           </span>
         </div>
 
         {/* Metric 4: Active Brand Coverage */}
         <div className="p-2.5 rounded-lg bg-slate-50/70 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800/60">
           <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block">
-            Active Brand Coverage
+            Monitored Brands
           </span>
           <div className="flex items-baseline justify-between mt-0.5">
             <span className="text-base font-black text-slate-900 dark:text-white">
               {loading ? "--" : `${completed}/${totalBrands}`}
             </span>
             <span className="text-[10px] font-medium text-slate-400">
-              healthy
+              active
             </span>
           </div>
           <span className="text-[10px] text-slate-400 dark:text-slate-500 block mt-0.5">
-            Brands with active ads
+            Competitors running ads
           </span>
         </div>
       </div>

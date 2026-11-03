@@ -42,7 +42,7 @@ export function Inflow24hCard({ data, loading = false, currencySymbol = "DT" }: 
           </span>
           <div>
             <h2 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-              Today&apos;s Market Inflow
+              Today&apos;s Catalog Discoveries
             </h2>
           </div>
         </div>
@@ -50,7 +50,7 @@ export function Inflow24hCard({ data, loading = false, currencySymbol = "DT" }: 
           href="/products?discovery=today"
           className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 flex items-center gap-1 transition-colors"
         >
-          <span>Catalog</span>
+          <span>Explore catalog</span>
           <ArrowRight className="w-3.5 h-3.5" />
         </Link>
       </div>
@@ -60,14 +60,14 @@ export function Inflow24hCard({ data, loading = false, currencySymbol = "DT" }: 
         {/* Metric 1: Total Products Added */}
         <div className="p-2.5 rounded-lg bg-slate-50/70 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800/60">
           <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block">
-            Added Today
+            Found Today
           </span>
           <div className="flex items-baseline gap-1 mt-0.5">
             <span className="text-lg font-black text-slate-900 dark:text-white">
               {loading ? "--" : total}
             </span>
             <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-              new
+              items
             </span>
           </div>
         </div>
@@ -75,14 +75,14 @@ export function Inflow24hCard({ data, loading = false, currencySymbol = "DT" }: 
         {/* Metric 2: Offer Penetration */}
         <div className="p-2.5 rounded-lg bg-slate-50/70 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800/60">
           <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block">
-            Offers Rate
+            Offers & Bundles
           </span>
           <div className="flex items-baseline gap-1 mt-0.5">
             <span className="text-lg font-black text-purple-600 dark:text-purple-400">
               {loading ? "--" : `${offerPct}%`}
             </span>
             <span className="text-[10px] font-medium text-slate-400">
-              bundles
+              discounted
             </span>
           </div>
         </div>
@@ -90,7 +90,7 @@ export function Inflow24hCard({ data, loading = false, currencySymbol = "DT" }: 
         {/* Metric 3: Average Entry Price */}
         <div className="p-2.5 rounded-lg bg-slate-50/70 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800/60">
           <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block">
-            Avg Entry Price
+            Average Price
           </span>
           <div className="flex items-baseline gap-1 mt-0.5">
             <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">
@@ -102,7 +102,7 @@ export function Inflow24hCard({ data, loading = false, currencySymbol = "DT" }: 
         {/* Metric 4: Leading Platform */}
         <div className="p-2.5 rounded-lg bg-slate-50/70 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800/60">
           <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block">
-            Top Platform
+            Top E-Com Engine
           </span>
           <div className="flex items-baseline gap-1 mt-0.5">
             <span className="text-sm font-black text-slate-800 dark:text-slate-200 truncate capitalize">
@@ -115,8 +115,8 @@ export function Inflow24hCard({ data, loading = false, currencySymbol = "DT" }: 
       {/* Today's Niche Breakdown (% Share) */}
       <div className="space-y-2">
         <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400 pb-1 border-b border-slate-100 dark:border-slate-800/60">
-          <span>Today&apos;s Category Inflow</span>
-          <span>Share (%)</span>
+          <span>Trending Niches Today</span>
+          <span>Category Share</span>
         </div>
 
         {loading ? (
@@ -127,7 +127,7 @@ export function Inflow24hCard({ data, loading = false, currencySymbol = "DT" }: 
           </div>
         ) : nicheShare.length === 0 ? (
           <div className="text-center py-4 text-xs text-slate-500">
-            No products categorized today.
+            No products categorized yet today. Once new competitor ads are scanned, category trends will show up here.
           </div>
         ) : (
           nicheShare.map((cat) => (

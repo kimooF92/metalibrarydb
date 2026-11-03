@@ -18,6 +18,7 @@ import { classifyProductOffline } from "@/lib/product-classifier";
 import { detectExtractionDoubt, resolvePriceDoubtWithJev } from "@/lib/doubt-detector";
 import { enhanceProductWithJev } from "@/lib/product-enhancer";
 import { isQStashConfigured, enqueueProductScrape } from "@/lib/qstash";
+import { broadcastCatalogInflow } from "@/lib/realtime-scan";
 
 // In-flight URL scrape deduplication map to prevent redundant concurrent Firecrawl requests
 const inFlightScrapes = new Map<string, Promise<any>>();
@@ -266,6 +267,17 @@ export async function linkAndAutoScrapeProduct({
       .returning({ id: scrapedProducts.id });
 
     const targetProductId = newProduct?.id;
+
+    if (targetProductId && newProduct) {
+      // Real-time catalog inflow telemetry (Method A: zero DB query overhead)
+      broadcastCatalogInflow({
+        workspaceId: resolvedWorkspaceId,
+        productId: targetProductId,
+        isNewProduct: true,
+        domain: domain || null,
+        timestamp: Date.now(),
+      }).catch(() => {});
+    }
 
     if (!targetProductId) {
       // Handled conflict: Fetch existing ID
@@ -580,6 +592,18 @@ export async function processProductExtraction(
         updatedAt: updateTime,
       })
       .where(eq(scrapedProducts.id, productId));
+
+    // Broadcast real-time catalog offer enrichment (Method A: zero DB query overhead)
+    if (extracted.discount_or_offer) {
+      broadcastCatalogInflow({
+        workspaceId: options?.workspaceId || null,
+        productId,
+        hasOffer: true,
+        domain: resolvedDomain || null,
+        storePlatform: storePlatform || null,
+        timestamp: Date.now(),
+      }).catch(() => {});
+    }
 
     // When foreign currency is captured in cloud, enqueue for local worker residential validation
     if (isForeignPrice) {

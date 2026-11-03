@@ -5,9 +5,11 @@ import {
   SCAN_STEP_EVENT,
   SCAN_BATCH_EVENT,
   SCAN_STATE_EVENT,
+  CATALOG_INFLOW_EVENT,
   type ScanStepBroadcastPayload,
   type ScanBatchSummaryPayload,
   type EngineStatePayload,
+  type CatalogInflowBroadcastPayload,
 } from "./realtime-scan-types";
 
 export * from "./realtime-scan-types";
@@ -122,4 +124,24 @@ export async function broadcastEngineState(payload: EngineStatePayload): Promise
     console.warn("[Realtime Telemetry] Failed to broadcast engine state:", err);
   }
 }
+
+/**
+ * Broadcasts a lightweight catalog inflow event when a new product is discovered or enriched.
+ * Zero database load, zero WAL replication, sub-millisecond client telemetry.
+ */
+export async function broadcastCatalogInflow(payload: CatalogInflowBroadcastPayload): Promise<void> {
+  try {
+    const channel = getBroadcastChannel();
+    if (channel) {
+      channel.send({
+        type: "broadcast",
+        event: CATALOG_INFLOW_EVENT,
+        payload,
+      }).catch(() => {});
+    }
+  } catch (err) {
+    console.warn("[Realtime Telemetry] Failed to broadcast catalog inflow:", err);
+  }
+}
+
 

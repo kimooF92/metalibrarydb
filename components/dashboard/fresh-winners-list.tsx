@@ -109,7 +109,7 @@ export function FreshWinnersList({ products, loading = false, currencySymbol = "
           </span>
           <div>
             <h2 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-              Fresh Winner Products (Top 5 Breakouts)
+              Top Trending Products (Fresh Breakouts)
             </h2>
           </div>
         </div>
@@ -137,10 +137,10 @@ export function FreshWinnersList({ products, loading = false, currencySymbol = "
           <div className="text-center py-10 px-4 text-xs text-slate-500">
             <ShoppingBag className="w-8 h-8 text-indigo-500/40 mx-auto mb-2" />
             <p className="font-semibold text-slate-700 dark:text-slate-300">
-              No breakout winners detected yet
+              No breakout products spotted yet today
             </p>
             <p className="text-slate-400 mt-1 max-w-sm mx-auto">
-              When competitors launch high-velocity ad campaigns with multiple active creatives, top performers will populate here.
+              As soon as competitors start scaling winning ads with multiple active creatives, the highest-momentum products will pop up here!
             </p>
           </div>
         ) : (
