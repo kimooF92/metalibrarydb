@@ -2,7 +2,10 @@
 
 import React, { memo } from "react";
 import { AdCard } from "@/components/spy/ad-card";
+import { BrandCadenceSection } from "@/components/spy/brand-cadence-section";
 import { Ad } from "@/types";
+import { BrandCadenceAnalytics } from "@/types/cadence";
+
 import {
   CheckCircle2,
   Flame,
@@ -77,9 +80,13 @@ export interface AnalyticsTabProps {
     whatsappNumbers: string[];
   };
   topWinners: Ad[];
+  cadence?: BrandCadenceAnalytics;
   onArchiveToggle?: () => void;
   onMediaRefreshed?: (ad: Ad) => void;
   onNavigateToProducts: () => void;
+  onNavigateToCreatives?: () => void;
+  onViewProductDetails?: (product: any) => void;
+  onViewCreativesForProduct?: (product: any) => void;
 }
 
 export const AnalyticsTab = memo(function AnalyticsTab({
@@ -91,9 +98,13 @@ export const AnalyticsTab = memo(function AnalyticsTab({
   commercialStrategy,
   storeTech,
   topWinners,
+  cadence,
   onArchiveToggle,
   onMediaRefreshed,
   onNavigateToProducts,
+  onNavigateToCreatives,
+  onViewProductDetails,
+  onViewCreativesForProduct,
 }: AnalyticsTabProps) {
   return (
     <div className="space-y-5">
@@ -151,6 +162,16 @@ export const AnalyticsTab = memo(function AnalyticsTab({
           </span>
         </div>
       </div>
+
+      {/* Competitor Cadence & Product Launch History */}
+      {cadence && (
+        <BrandCadenceSection
+          cadence={cadence}
+          onViewProductDetails={onViewProductDetails}
+          onViewCreativesForProduct={onViewCreativesForProduct}
+          onNavigateToCreatives={onNavigateToCreatives}
+        />
+      )}
 
       {/* Historical Ad Trajectory Chart (if history exists) */}
       {history.length > 1 && (

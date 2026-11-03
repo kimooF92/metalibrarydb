@@ -568,3 +568,5 @@ export interface FreshWinnersResponse {
 }
 
 export * from "./analytics";
+export * from "./cadence";
+

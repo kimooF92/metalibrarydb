@@ -10,6 +10,8 @@ import { getCleanDomain } from "@/lib/utils";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 import { getCached, setCached, acquireLock, releaseLock, isLockOwner } from "@/lib/cache-service";
+import { computeBrandCadence } from "@/lib/brand-cadence";
+
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -981,6 +983,9 @@ export async function GET(
       hasFreeDelivery,
     };
 
+    // 12. Brand Launch Cadence & Competitor Footprint (Pure in-memory computation)
+    const cadence = computeBrandCadence(allEnrichedAds, linkedProducts);
+
     const responsePayload = {
       success: true,
       brand: {
@@ -1030,6 +1035,7 @@ export async function GET(
       ctaDistribution,
       launchVelocity,
       commercialStrategy,
+      cadence,
       productClusters,
       products: isLean ? [] : brandProductsList,
       topWinners,

@@ -9,6 +9,8 @@ import { ManageDomainModal } from "@/components/manage-domain-modal";
 import { useToast } from "@/components/toast-context";
 import { getSupabase } from "@/lib/supabase";
 import { Ad, ScrapedProduct } from "@/types";
+import { BrandCadenceAnalytics } from "@/types/cadence";
+
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import { useBrandOverlay } from "@/components/spy/brand-overlay-sheet";
 import { BrandDeepDiveHeader } from "@/components/spy/brand-deep-dive-header";
@@ -95,6 +97,7 @@ interface BrandAnalyticsData {
     discountedProductsCount: number;
     hasFreeDelivery: boolean;
   };
+  cadence?: BrandCadenceAnalytics;
   productClusters: Array<{
     productKey: string;
     productName: string;
@@ -1062,6 +1065,10 @@ export function BrandDeepDiveView({
             commercialStrategy={commercialStrategy}
             storeTech={storeTech}
             topWinners={topWinners}
+            cadence={data?.cadence}
+            onViewProductDetails={handleOpenProductDetails}
+            onViewCreativesForProduct={handleViewCreativesForProduct}
+            onNavigateToCreatives={() => handleTabChange("creatives")}
             onArchiveToggle={() => fetchBrandData(true)}
             onNavigateToProducts={() => handleTabChange("products")}
           />
