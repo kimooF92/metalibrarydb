@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import Image from "next/image";
+import React, { useState, useMemo, useEffect } from "react";
+import { getProxiedImageUrl, getSmartMediaUrl } from "@/lib/image-proxy-url";
 import {
   BrandCadenceAnalytics,
   CadenceGranularity,
@@ -28,6 +28,62 @@ export interface BrandCadenceSectionProps {
   onViewProductDetails?: (product: any) => void;
   onViewCreativesForProduct?: (product: any) => void;
   onNavigateToCreatives?: () => void;
+}
+
+interface CadenceProductThumbnailProps {
+  src?: string | null;
+  alt: string;
+}
+
+function CadenceProductThumbnail({ src, alt }: CadenceProductThumbnailProps) {
+  const [imgSrc, setImgSrc] = useState<string | null>(() => {
+    if (!src || src.trim() === "" || src === "null") return null;
+    return getSmartMediaUrl(src.trim());
+  });
+  const [imgError, setImgError] = useState(false);
+  const [triedProxy, setTriedProxy] = useState(false);
+
+  useEffect(() => {
+    if (!src || src.trim() === "" || src === "null") {
+      setImgSrc(null);
+      setImgError(false);
+      setTriedProxy(false);
+      return;
+    }
+    setImgSrc(getSmartMediaUrl(src.trim()));
+    setImgError(false);
+    setTriedProxy(false);
+  }, [src]);
+
+  const handleError = () => {
+    if (!triedProxy && src && !src.includes("workers.dev") && !src.includes("/api/spy/image-proxy")) {
+      setTriedProxy(true);
+      setImgSrc(getProxiedImageUrl(src.trim()));
+    } else {
+      setImgError(true);
+    }
+  };
+
+  if (!imgSrc || imgError) {
+    return (
+      <div className="w-full h-full flex items-center justify-center text-slate-400 bg-slate-100 dark:bg-slate-900">
+        <ShoppingBag className="w-6 h-6 text-slate-400 opacity-60" />
+      </div>
+    );
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={imgSrc}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
+      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 select-none"
+      onError={handleError}
+    />
+  );
 }
 
 export function BrandCadenceSection({
@@ -423,20 +479,14 @@ export function BrandCadenceSection({
                 >
                   <div className="flex gap-3">
                     {/* Real Product / Ad Thumbnail */}
-                    <div className="w-16 h-16 rounded-lg bg-slate-100 dark:bg-slate-900 shrink-0 overflow-hidden relative border border-slate-200 dark:border-slate-800">
-                      {p.mainImageUrl ? (
-                        <Image
-                          src={p.mainImageUrl}
-                          alt={p.title}
-                          fill
-                          sizes="64px"
-                          className="object-cover group-hover:scale-105 transition-transform"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-slate-400 bg-slate-100 dark:bg-slate-900">
-                          <ShoppingBag className="w-6 h-6 text-slate-400" />
-                        </div>
-                      )}
+                    <div
+                      onClick={() => onViewProductDetails && onViewProductDetails(p)}
+                      className={`w-16 h-16 rounded-lg bg-slate-100 dark:bg-slate-900 shrink-0 overflow-hidden relative border border-slate-200 dark:border-slate-800 ${
+                        onViewProductDetails ? "cursor-pointer" : ""
+                      }`}
+                      title={p.title}
+                    >
+                      <CadenceProductThumbnail src={p.mainImageUrl} alt={p.title} />
                     </div>
 
                     {/* Metadata with Real Title */}

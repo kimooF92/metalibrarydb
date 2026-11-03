@@ -192,8 +192,8 @@ export function computeBrandCadence(
 
     // Real thumbnail resolution: scraped main image -> ad thumbnail -> null
     const resolvedImage =
-      prod.mainImageUrl ||
-      matchedAds.find((a) => a.thumbnailUrl)?.thumbnailUrl ||
+      (prod.mainImageUrl && prod.mainImageUrl.trim() !== "" ? prod.mainImageUrl.trim() : null) ||
+      matchedAds.find((a) => a.thumbnailUrl && a.thumbnailUrl.trim() !== "")?.thumbnailUrl?.trim() ||
       null;
 
     productLaunchRecords.push({
@@ -250,7 +250,8 @@ export function computeBrandCadence(
       extractTitleFromUrl(normUrl) ||
       "Product Offer";
 
-    const resolvedImage = matchedAds.find((a) => a.thumbnailUrl)?.thumbnailUrl || null;
+    const resolvedImage =
+      matchedAds.find((a) => a.thumbnailUrl && a.thumbnailUrl.trim() !== "")?.thumbnailUrl?.trim() || null;
 
     productLaunchRecords.push({
       id: `ad_url_${Buffer.from(normUrl).toString("base64").slice(0, 16)}`,
