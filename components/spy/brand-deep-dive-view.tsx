@@ -390,13 +390,21 @@ export function BrandDeepDiveView({
     }
   }, [activeTab, isProductsLoaded, isLoadingProductsTab]);
 
-  // Sync activeTab from URL searchParams or props
+  // Re-sync activeTab only if brand ID changes or initialTab prop changes from outside
+  const prevIdRef = useRef(id);
+  const prevInitialTabRef = useRef(initialTab);
   useEffect(() => {
-    const targetTab = initialTab || (searchTab === "products" || searchTab === "creatives" || searchTab === "analytics" ? searchTab : null);
-    if (targetTab && targetTab !== activeTabRef.current) {
+    if (prevIdRef.current !== id) {
+      prevIdRef.current = id;
+      prevInitialTabRef.current = initialTab;
+      const targetTab = initialTab || "analytics";
       handleTabChange(targetTab, false);
+    } else if (initialTab && initialTab !== prevInitialTabRef.current) {
+      prevInitialTabRef.current = initialTab;
+      handleTabChange(initialTab, false);
     }
-  }, [initialTab, searchTab]);
+  }, [id, initialTab]);
+
 
   // Sync activeTab from browser popstate (Back/Forward)
   useEffect(() => {
