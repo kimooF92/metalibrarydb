@@ -66,8 +66,6 @@ export function ScanOperationsCard({
   const circuitBreaker = scheduleStatus?.workerState?.circuitBreakerTripped ?? data?.circuitBreakerTripped ?? false;
   const scansToday = scheduleStatus?.workerState?.scansToday ?? data?.scansToday ?? 0;
   const scansThisHour = scheduleStatus?.workerState?.scansThisHour ?? data?.scansThisHour ?? 0;
-  const hourlyLimit = scheduleStatus?.workerState?.hourlyLimit ?? 100;
-  const quotaPercent = Math.min(100, Math.round((scansThisHour / hourlyLimit) * 100));
 
   const successRate = data?.successRate ?? 100;
   const completed = data?.completedCount ?? 0;
@@ -129,7 +127,7 @@ export function ScanOperationsCard({
         <span
           className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${statusBadge.class}`}
         >
-          <span className={`w-1.5 h-1.5 rounded-full bg-current ${statusBadge.pulse ? "animate-ping" : ""}`} />
+          <span className={`w-1.5 h-1.5 rounded-full bg-current ${statusBadge.pulse ? "animate-ping" : ""}`}></span>
           <span>{statusBadge.text}</span>
         </span>
       </div>
@@ -250,19 +248,22 @@ export function ScanOperationsCard({
 
       {/* 4. Operational 4-Metric Grid */}
       <div className="grid grid-cols-2 gap-2 text-xs">
-        {/* Metric 1: Scans Today */}
+        {/* Metric 1: Scraper Runs Today */}
         <div className="p-2.5 rounded-lg bg-slate-50/70 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800/60">
           <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block">
-            Scans Today
+            Scraper Runs Today
           </span>
           <div className="flex items-baseline justify-between mt-0.5">
             <span className="text-base font-black text-slate-900 dark:text-white">
               {loading ? "--" : scansToday}
             </span>
-            <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
+            <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400" title="Scraper executions per hour">
               +{scansThisHour}/hr
             </span>
           </div>
+          <span className="text-[10px] text-slate-400 dark:text-slate-500 block mt-0.5">
+            Page and discovery checks
+          </span>
         </div>
 
         {/* Metric 2: Scan Health */}
@@ -278,12 +279,15 @@ export function ScanOperationsCard({
               success
             </span>
           </div>
+          <span className="text-[10px] text-slate-400 dark:text-slate-500 block mt-0.5">
+            Error-free execution
+          </span>
         </div>
 
-        {/* Metric 3: Active Queue */}
+        {/* Metric 3: In-Flight Queue */}
         <div className="p-2.5 rounded-lg bg-slate-50/70 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800/60">
           <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block">
-            Pending Queue
+            In-Flight Queue
           </span>
           <div className="flex items-baseline justify-between mt-0.5">
             <span className="text-base font-black text-slate-900 dark:text-white">
@@ -297,49 +301,31 @@ export function ScanOperationsCard({
               <span className="text-[10px] font-medium text-slate-400">idle</span>
             )}
           </div>
+          <span className="text-[10px] text-slate-400 dark:text-slate-500 block mt-0.5">
+            Jobs awaiting worker
+          </span>
         </div>
 
-        {/* Metric 4: Brand Coverage */}
+        {/* Metric 4: Active Brand Coverage */}
         <div className="p-2.5 rounded-lg bg-slate-50/70 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800/60">
           <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block">
-            Brands Scanned
+            Active Brand Coverage
           </span>
           <div className="flex items-baseline justify-between mt-0.5">
             <span className="text-base font-black text-slate-900 dark:text-white">
               {loading ? "--" : `${completed}/${totalBrands}`}
             </span>
             <span className="text-[10px] font-medium text-slate-400">
-              active
+              healthy
             </span>
           </div>
+          <span className="text-[10px] text-slate-400 dark:text-slate-500 block mt-0.5">
+            Brands with active ads
+          </span>
         </div>
       </div>
 
-      {/* 5. Hourly Rate Limit Quota Usage Meter */}
-      <div className="px-2.5 py-2 rounded-lg bg-slate-50/70 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800/60 text-xs space-y-1.5">
-        <div className="flex items-center justify-between text-[10px]">
-          <span className="text-slate-500 dark:text-slate-400 font-semibold">
-            Hourly Meta Rate Limit Quota
-          </span>
-          <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
-            {scansThisHour} / {hourlyLimit} ({quotaPercent}%)
-          </span>
-        </div>
-        <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-1 overflow-hidden">
-          <div
-            className={`h-1 rounded-full transition-all duration-300 ${
-              quotaPercent > 80
-                ? "bg-rose-500"
-                : quotaPercent > 60
-                ? "bg-amber-500"
-                : "bg-indigo-500"
-            }`}
-            style={{ width: `${quotaPercent}%` }}
-          />
-        </div>
-      </div>
-
-      {/* 6. Last Completed Batch Summary (Rendered when idle and summary is available) */}
+      {/* 5. Last Completed Batch Summary (Rendered when idle and summary is available) */}
       {!activeScan && lastBatchSummary && (
         <div className="p-2 rounded-lg bg-slate-50/80 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/60 text-[11px] text-slate-600 dark:text-slate-300 flex items-center justify-between">
           <div className="flex items-center gap-1.5 truncate">
@@ -356,7 +342,7 @@ export function ScanOperationsCard({
         </div>
       )}
 
-      {/* 7. Coverage Drift: Went Dark vs. Revived Pages */}
+      {/* 6. Coverage Drift: Went Dark vs. Revived Pages */}
       <div className="grid grid-cols-2 gap-2 text-xs">
         {/* Went Dark */}
         <div className="p-2 rounded-lg bg-rose-500/5 dark:bg-rose-950/20 border border-rose-500/20 flex items-center justify-between">
@@ -364,8 +350,11 @@ export function ScanOperationsCard({
             <div className="flex items-center gap-1.5 text-rose-700 dark:text-rose-400 font-bold text-[11px]">
               <Moon className="w-3.5 h-3.5 shrink-0" />
               <span>Went Dark</span>
+              <span className="text-[9px] font-normal px-1 py-0.2 rounded bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400">
+                Current
+              </span>
             </div>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">On hold / 0 ads</p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">On hold / 0 active ads</p>
           </div>
           <span className="text-sm font-black text-rose-600 dark:text-rose-400 font-mono shrink-0">
             {loading ? "--" : darkCount}
@@ -378,8 +367,11 @@ export function ScanOperationsCard({
             <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-bold text-[11px]">
               <Sparkles className="w-3.5 h-3.5 shrink-0 text-emerald-500" />
               <span>Revived</span>
+              <span className="text-[9px] font-normal px-1 py-0.2 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                Last 7d
+              </span>
             </div>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">Active again</p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">Relaunched campaigns</p>
           </div>
           <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono shrink-0">
             {loading ? "--" : revivedCount}
@@ -404,7 +396,7 @@ export function ScanOperationsCard({
         <div className="p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15 flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400">
           <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
           <span className="text-[11px] font-semibold">
-            All active competitor brand pages are healthy & scanning normally.
+            All active competitor brand pages are healthy and scanning normally.
           </span>
         </div>
       )}
