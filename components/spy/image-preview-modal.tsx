@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { getCleanDomain } from "@/lib/utils";
 import { isFbCdnUrlExpired } from "@/lib/fb-cdn";
+import { getProxiedImageUrl, getSmartMediaUrl } from "@/lib/image-proxy-url";
 
 interface ImagePreviewModalProps {
   isOpen: boolean;
@@ -60,7 +61,7 @@ export function ImagePreviewModal({
     setVideoError(false);
   }, [videoUrl, isOpen]);
 
-  const isVideoExpired = isFbCdnUrlExpired(videoUrl);
+  const isVideoExpired = videoUrl ? isFbCdnUrlExpired(videoUrl) : false;
   const activeVideo = videoUrl && !isVideoExpired && !videoError ? videoUrl : null;
   const isExpiredVideo = isVideoAd && Boolean(videoUrl) && (isVideoExpired || videoError);
 
@@ -234,15 +235,15 @@ export function ImagePreviewModal({
           ) : (
             /* eslint-disable-next-html-shortcut */
             <img
-              src={fallbackThumbnail || currentMedia}
+              src={getSmartMediaUrl(fallbackThumbnail || currentMedia)}
               alt={title || pageName || "Ad preview"}
               referrerPolicy="no-referrer"
               className="max-h-[75vh] max-w-full object-contain rounded-xl select-none"
               onError={(e) => {
                 const target = e.currentTarget;
                 const source = fallbackThumbnail || currentMedia;
-                if (source && !target.src.includes("/api/spy/image-proxy")) {
-                  target.src = `/api/spy/image-proxy?url=${encodeURIComponent(source)}`;
+                if (source && !target.src.includes("/api/spy/image-proxy") && !target.src.includes("workers.dev")) {
+                  target.src = getProxiedImageUrl(source);
                 }
               }}
             />

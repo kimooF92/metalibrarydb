@@ -6,6 +6,7 @@ import { Ad, ScrapedProduct } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
 import { calculateWinnerScore } from "@/lib/winner-score";
 import { isFbCdnUrlExpired } from "@/lib/fb-cdn";
+import { getProxiedImageUrl, getSmartMediaUrl } from "@/lib/image-proxy-url";
 import { ImagePreviewModal } from "./image-preview-modal";
 import { ProductClusterModal } from "./product-cluster-modal";
 import { CreativeClusterModal } from "./creative-cluster-modal";
@@ -93,7 +94,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
       url.includes("fbcdn.net/o1/v/")
   ) || (currentAd.mediaType === "video" && currentAd.mediaUrls?.[0]?.includes("http") ? currentAd.mediaUrls[0] : null);
 
-  const isVideoExpired = isFbCdnUrlExpired(firstVideoUrl);
+  const isVideoExpired = firstVideoUrl ? isFbCdnUrlExpired(firstVideoUrl) : false;
   const canPlayVideo = Boolean(firstVideoUrl) && !isVideoExpired && !videoError;
 
   // Keep historical storyboard-backed records classified as video so their
@@ -120,8 +121,8 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
     ? previewImages[carouselIndex % previewImages.length]
     : displayThumbnail;
 
-  const activeImageSrc = isProxied && activeSlideUrl && activeSlideUrl.startsWith("http")
-    ? `/api/spy/image-proxy?url=${encodeURIComponent(activeSlideUrl)}`
+  const activeImageSrc = activeSlideUrl && activeSlideUrl.startsWith("http")
+    ? getSmartMediaUrl(activeSlideUrl, isProxied)
     : activeSlideUrl;
 
   const handleImageError = () => {
@@ -624,7 +625,7 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
                 </div>
 
                 {/* Snapshot Indicator for Expired Video */}
-                {isVideoAd && (
+                {isVideoAd && isVideoExpired && (
                   <div
                     className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-xs text-[10px] font-medium text-slate-300 shadow-md border border-white/10 pointer-events-none"
                     title="Video link expired on Meta CDN (24-48h token limit). Displaying original snapshot thumbnail."

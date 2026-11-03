@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Ad } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
+import { getSmartMediaUrl } from "@/lib/image-proxy-url";
 import {
   X,
   ExternalLink,
@@ -213,7 +214,7 @@ export function ProductClusterModal({
                       <div className="relative w-full h-44 rounded-lg overflow-hidden bg-slate-900 mb-2.5 flex items-center justify-center border border-slate-200 dark:border-slate-800">
                         {displayImg ? (
                           <img
-                            src={displayImg}
+                            src={getSmartMediaUrl(displayImg)}
                             alt={item.title || "Creative"}
                             referrerPolicy="no-referrer"
                             className="w-full h-full object-cover"

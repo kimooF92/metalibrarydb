@@ -333,9 +333,9 @@ export async function GET(req: NextRequest) {
         linkUrl: ads.linkUrl,
         productId: ads.productId,
         mediaType: ads.mediaType,
+        mediaUrls: ads.mediaUrls,
         ...(includeMedia
           ? {
-              mediaUrls: ads.mediaUrls,
               storyboardUrls: ads.storyboardUrls,
             }
           : {}),
@@ -569,11 +569,11 @@ export async function GET(req: NextRequest) {
         productId: row.productId,
         product: row.productId ? productMap.get(row.productId) || null : null,
         mediaType: row.mediaType,
+        mediaUrls: row.mediaUrls,
         thumbnailUrl: row.thumbnailUrl,
         thumbnailStoragePath: row.thumbnailStoragePath,
         ...(includeMedia
           ? {
-              mediaUrls: row.mediaUrls,
               storyboardUrls: row.storyboardUrls,
             }
           : {}),

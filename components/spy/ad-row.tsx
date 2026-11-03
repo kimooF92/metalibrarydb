@@ -6,6 +6,7 @@ import { Ad, ScrapedProduct } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
 import { calculateWinnerScore } from "@/lib/winner-score";
 import { isFbCdnUrlExpired } from "@/lib/fb-cdn";
+import { getProxiedImageUrl, getSmartMediaUrl } from "@/lib/image-proxy-url";
 import { ImagePreviewModal } from "./image-preview-modal";
 import { ProductClusterModal } from "./product-cluster-modal";
 import { CreativeClusterModal } from "./creative-cluster-modal";
@@ -84,7 +85,7 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
       url.includes("fbcdn.net/o1/v/")
   ) || (currentAd.mediaType === "video" && currentAd.mediaUrls?.[0]?.includes("http") ? currentAd.mediaUrls[0] : null);
 
-  const isVideoExpired = isFbCdnUrlExpired(firstVideoUrl);
+  const isVideoExpired = firstVideoUrl ? isFbCdnUrlExpired(firstVideoUrl) : false;
   const canPlayVideo = Boolean(firstVideoUrl) && !isVideoExpired;
 
   // Keep historical storyboard-backed records classified as video so their
@@ -102,8 +103,8 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
   const displayThumbnail = currentAd.signedThumbnailUrl || currentAd.thumbnailUrl || (imageSlides.length > 0 ? imageSlides[0] : null);
   const previewImages = imageSlides.length > 0 ? imageSlides : displayThumbnail ? [displayThumbnail] : [];
 
-  const activeImageSrc = isProxied && displayThumbnail && displayThumbnail.startsWith("http")
-    ? `/api/spy/image-proxy?url=${encodeURIComponent(displayThumbnail)}`
+  const activeImageSrc = displayThumbnail && displayThumbnail.startsWith("http")
+    ? getSmartMediaUrl(displayThumbnail, isProxied)
     : displayThumbnail;
 
   const handleImageError = () => {

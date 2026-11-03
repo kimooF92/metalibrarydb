@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Ad } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
+import { getSmartMediaUrl } from "@/lib/image-proxy-url";
 import {
   X,
   ExternalLink,
@@ -255,7 +256,7 @@ export function CreativeClusterModal({
                           {ad.thumbnailUrl || (ad.mediaUrls && ad.mediaUrls[0]) ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
-                              src={ad.thumbnailUrl || ad.mediaUrls![0]}
+                              src={getSmartMediaUrl(ad.thumbnailUrl || ad.mediaUrls![0])}
                               alt={ad.title || "Ad media"}
                               className="w-full h-full object-cover"
                             />
