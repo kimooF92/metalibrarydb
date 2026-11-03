@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   X,
   Download,
@@ -9,29 +9,46 @@ import {
   ChevronRight,
   Globe,
   Maximize2,
-  ZoomIn,
+  Minimize2,
   AlertTriangle,
   RotateCw,
+  Copy,
+  Check,
+  Video,
+  Image as ImageIcon,
+  Layers,
+  Sparkles,
 } from "lucide-react";
-import { getCleanDomain } from "@/lib/utils";
+import { cn, getCleanDomain, resolveDestinationUrl } from "@/lib/utils";
 import { isFbCdnUrlExpired } from "@/lib/fb-cdn";
 import { getProxiedImageUrl, getSmartMediaUrl } from "@/lib/image-proxy-url";
+import { BrandLogo } from "@/components/brand-logo";
+import { useToast } from "@/components/toast-context";
 
-interface ImagePreviewModalProps {
+export interface ImagePreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
   imageUrls: string[];
   initialIndex?: number;
   title?: string | null;
   pageName?: string | null;
+  pageId?: string | null;
   caption?: string | null;
   destinationUrl?: string | null;
   adArchiveId?: string | null;
   videoUrl?: string | null;
   fallbackThumbnail?: string | null;
   isVideoAd?: boolean;
+  startDate?: string | null;
+  startedRunningOn?: string | null;
+  isActive?: boolean;
   onRefreshMedia?: () => void | Promise<void>;
   isRefreshingMedia?: boolean;
+}
+
+function isRtlText(text?: string | null): boolean {
+  if (!text) return false;
+  return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text);
 }
 
 export function ImagePreviewModal({
@@ -41,17 +58,28 @@ export function ImagePreviewModal({
   initialIndex = 0,
   title,
   pageName,
+  pageId,
   caption,
   destinationUrl,
   adArchiveId,
   videoUrl,
   fallbackThumbnail,
   isVideoAd = false,
+  startDate,
+  startedRunningOn,
+  isActive,
   onRefreshMedia,
   isRefreshingMedia = false,
 }: ImagePreviewModalProps) {
+  const { showToast } = useToast();
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [videoError, setVideoError] = useState(false);
+  const [copiedText, setCopiedText] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
+
+  const hasDetails = Boolean(caption || title || destinationUrl);
+  // Default to Theater mode if there are no details, otherwise Split view
+  const [isTheaterMode, setIsTheaterMode] = useState(!hasDetails);
 
   useEffect(() => {
     setCurrentIndex(initialIndex);
@@ -61,31 +89,58 @@ export function ImagePreviewModal({
     setVideoError(false);
   }, [videoUrl, isOpen]);
 
+  useEffect(() => {
+    if (isOpen) {
+      setIsTheaterMode(!hasDetails);
+    }
+  }, [isOpen, hasDetails]);
+
   const isVideoExpired = videoUrl ? isFbCdnUrlExpired(videoUrl) : false;
   const activeVideo = videoUrl && !isVideoExpired && !videoError ? videoUrl : null;
   const isExpiredVideo = isVideoAd && Boolean(videoUrl) && (isVideoExpired || videoError);
 
-  const displayMediaList = imageUrls.length > 0
-    ? imageUrls
-    : fallbackThumbnail
-    ? [fallbackThumbnail]
-    : activeVideo
-    ? [activeVideo]
-    : [];
+  const displayMediaList = useMemo(() => {
+    if (imageUrls.length > 0) return imageUrls;
+    if (fallbackThumbnail) return [fallbackThumbnail];
+    if (activeVideo) return [activeVideo];
+    return [];
+  }, [imageUrls, fallbackThumbnail, activeVideo]);
 
-  // Handle ESC key press
+  const cleanDestUrl = useMemo(() => {
+    if (!destinationUrl) return null;
+    return resolveDestinationUrl(destinationUrl) || destinationUrl;
+  }, [destinationUrl]);
+
+  const targetDomain = useMemo(() => {
+    return cleanDestUrl ? getCleanDomain(cleanDestUrl) : null;
+  }, [cleanDestUrl]);
+
+  const isRtl = useMemo(() => {
+    return isRtlText(caption) || isRtlText(title);
+  }, [caption, title]);
+
+  // Handle keyboard shortcuts (Escape to close, Arrows for carousel, T for Theater toggle)
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (!isOpen) return;
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowLeft" && displayMediaList.length > 1) {
-        setCurrentIndex((prev) => (prev > 0 ? prev - 1 : displayMediaList.length - 1));
+      if (e.key === "Escape") {
+        onClose();
+        return;
       }
-      if (e.key === "ArrowRight" && displayMediaList.length > 1) {
+
+      // Skip navigation if typing in an input
+      const activeTag = (document.activeElement?.tagName || "").toLowerCase();
+      if (activeTag === "input" || activeTag === "textarea") return;
+
+      if (e.key === "ArrowLeft" && displayMediaList.length > 1 && !activeVideo) {
+        setCurrentIndex((prev) => (prev > 0 ? prev - 1 : displayMediaList.length - 1));
+      } else if (e.key === "ArrowRight" && displayMediaList.length > 1 && !activeVideo) {
         setCurrentIndex((prev) => (prev < displayMediaList.length - 1 ? prev + 1 : 0));
+      } else if ((e.key === "t" || e.key === "T") && hasDetails) {
+        setIsTheaterMode((prev) => !prev);
       }
     },
-    [isOpen, onClose, displayMediaList.length]
+    [isOpen, onClose, displayMediaList.length, activeVideo, hasDetails]
   );
 
   useEffect(() => {
@@ -96,207 +151,475 @@ export function ImagePreviewModal({
   if (!isOpen || (displayMediaList.length === 0 && !activeVideo)) return null;
 
   const currentMedia = displayMediaList[currentIndex] || displayMediaList[0];
-  const targetDomain = destinationUrl ? getCleanDomain(destinationUrl) : null;
   const downloadHref = activeVideo || currentMedia || fallbackThumbnail;
   const fullSizeHref = activeVideo || currentMedia || fallbackThumbnail;
 
+  const handleCopyAdCopy = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const textToCopy = [title, caption].filter(Boolean).join("\n\n");
+    if (!textToCopy) return;
+
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      setCopiedText(true);
+      setTimeout(() => setCopiedText(false), 2000);
+      showToast({
+        type: "success",
+        title: "Ad Copy Copied",
+        message: "Headline & caption copied to clipboard.",
+      });
+    } catch {
+      showToast({
+        type: "error",
+        title: "Copy Failed",
+        message: "Could not access clipboard.",
+      });
+    }
+  };
+
+  const handleCopyArchiveId = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!adArchiveId) return;
+
+    try {
+      await navigator.clipboard.writeText(adArchiveId);
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 2000);
+      showToast({
+        type: "success",
+        title: "Ad ID Copied",
+        message: `ID ${adArchiveId} copied to clipboard.`,
+      });
+    } catch {
+      // ignore
+    }
+  };
+
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-black/90 p-4 sm:p-6 animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-950/75 dark:bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
       onClick={onClose}
     >
-      {/* Top Bar */}
+      {/* Cohesive Modal Dialog */}
       <div
-        className="w-full max-w-6xl flex items-center justify-between gap-4 py-2 px-4 rounded-xl bg-zinc-900/80 border border-zinc-800 text-zinc-100 shadow-xl shrink-0"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shrink-0">
-            <ZoomIn className="w-5 h-5" />
-          </div>
-          <div className="flex flex-col min-w-0">
-            <h3 className="text-sm font-bold text-white truncate">
-              {pageName || (activeVideo ? "Ad Video Preview" : "Ad Media Preview")}
-            </h3>
-            {adArchiveId && (
-              <span className="text-[11px] text-zinc-400 font-mono">
-                Ad Archive ID: {adArchiveId}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Action Controls */}
-        <div className="flex items-center gap-2">
-          {displayMediaList.length > 1 && !activeVideo && (
-            <span className="text-xs font-semibold text-zinc-400 bg-zinc-800 px-2.5 py-1 rounded-md border border-zinc-700 mr-2">
-              {currentIndex + 1} / {displayMediaList.length}
-            </span>
-          )}
-
-          {downloadHref && (
-            <a
-              href={downloadHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              download
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800 hover:bg-zinc-700 hover:text-white rounded-lg border border-zinc-700 transition-all cursor-pointer"
-              title={activeVideo ? "Download Video Creative (.mp4)" : "Download Media File"}
-            >
-              <Download className="w-4 h-4 text-indigo-400" />
-              <span className="hidden sm:inline">Download</span>
-            </a>
-          )}
-
-          {fullSizeHref && (
-            <a
-              href={fullSizeHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800 hover:bg-zinc-700 hover:text-white rounded-lg border border-zinc-700 transition-all cursor-pointer"
-              title="Open high resolution original media in new tab"
-            >
-              <Maximize2 className="w-4 h-4 text-indigo-400" />
-              <span className="hidden sm:inline">Full Size</span>
-            </a>
-          )}
-
-          <button
-            onClick={onClose}
-            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer ml-1"
-            title="Close Preview (Esc)"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Main Display Area */}
-      <div
-        className="relative flex-1 w-full max-w-6xl flex items-center justify-center my-4 overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Previous Button */}
-        {displayMediaList.length > 1 && !activeVideo && (
-          <button
-            onClick={() =>
-              setCurrentIndex((prev) => (prev > 0 ? prev - 1 : displayMediaList.length - 1))
-            }
-            className="absolute left-2 sm:left-4 z-10 p-3 rounded-full bg-zinc-900/80 hover:bg-indigo-600 text-white border border-zinc-700/80 shadow-2xl transition-all hover:scale-110 cursor-pointer"
-            title="Previous Image"
-          >
-            <ChevronLeft className="w-6 h-6" />
-          </button>
+        className={cn(
+          "relative flex flex-col w-full bg-slate-900/95 dark:bg-slate-950/95 border border-slate-700/60 dark:border-slate-800/80 rounded-2xl shadow-2xl shadow-black/60 backdrop-blur-xl overflow-hidden transition-all duration-200 animate-in zoom-in-95 duration-150",
+          isTheaterMode || !hasDetails
+            ? "max-w-4xl max-h-[92vh]"
+            : "max-w-5xl xl:max-w-6xl max-h-[92vh]"
         )}
-
-        {/* Media Container (Video or Fallback Image) */}
-        <div className="relative max-h-[75vh] max-w-full rounded-xl overflow-hidden shadow-2xl border border-zinc-800/80 bg-zinc-950 flex items-center justify-center">
-          {/* Expired Video Notice Badge */}
-          {isExpiredVideo && (
-            <div className="absolute top-3 left-3 z-30 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-950/90 border border-amber-600/40 text-amber-200 text-xs shadow-lg backdrop-blur-md">
-              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>Video link expired on Meta CDN • Showing snapshot thumbnail</span>
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Modal Header */}
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-slate-800/80 bg-slate-900/90 dark:bg-slate-950/90 shrink-0">
+          {/* Brand Info */}
+          <div className="flex items-center gap-3 min-w-0">
+            <BrandLogo name={pageName} domain={targetDomain} pageId={pageId} size="sm" />
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white truncate max-w-[200px] sm:max-w-xs">
+                  {pageName || (activeVideo ? "Ad Video Preview" : "Ad Media Preview")}
+                </h3>
+                {isActive !== undefined && (
+                  <span
+                    className={cn(
+                      "px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0",
+                      isActive
+                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                        : "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                    )}
+                  >
+                    {isActive ? "Active" : "Archived"}
+                  </span>
+                )}
+              </div>
               {adArchiveId && (
-                <a
-                  href={`https://www.facebook.com/ads/library/?id=${adArchiveId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-1 underline font-semibold text-amber-300 hover:text-white"
-                >
-                  View on Meta ↗
-                </a>
-              )}
-              {onRefreshMedia && (
                 <button
                   type="button"
-                  onClick={onRefreshMedia}
-                  disabled={isRefreshingMedia}
-                  className="ml-2 px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-semibold border border-amber-400/30 flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                  title="Request fresh media URLs from Meta Ad Library"
+                  onClick={handleCopyArchiveId}
+                  className="text-[11px] text-slate-400 hover:text-slate-200 font-mono inline-flex items-center gap-1 transition-colors cursor-pointer w-fit group"
+                  title="Click to copy Ad Archive ID"
                 >
-                  <RotateCw className={`w-3 h-3 ${isRefreshingMedia ? "animate-spin" : ""}`} />
-                  <span>{isRefreshingMedia ? "Refreshing..." : "Refresh"}</span>
+                  <span>ID: {adArchiveId}</span>
+                  {copiedId ? (
+                    <Check className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                  ) : (
+                    <Copy className="w-2.5 h-2.5 text-slate-500 group-hover:text-slate-300 shrink-0" />
+                  )}
                 </button>
               )}
             </div>
-          )}
+          </div>
 
-          {activeVideo ? (
-            <video
-              src={activeVideo}
-              poster={fallbackThumbnail || undefined}
-              controls
-              autoPlay
-              playsInline
-              {...({ referrerPolicy: "no-referrer" } as any)}
-              className="max-h-[75vh] max-w-full object-contain rounded-xl"
-              onError={() => setVideoError(true)}
-            />
-          ) : (
-            /* eslint-disable-next-html-shortcut */
-            <img
-              src={getSmartMediaUrl(fallbackThumbnail || currentMedia)}
-              alt={title || pageName || "Ad preview"}
-              referrerPolicy="no-referrer"
-              className="max-h-[75vh] max-w-full object-contain rounded-xl select-none"
-              onError={(e) => {
-                const target = e.currentTarget;
-                const source = fallbackThumbnail || currentMedia;
-                if (source && !target.src.includes("/api/spy/image-proxy") && !target.src.includes("workers.dev")) {
-                  target.src = getProxiedImageUrl(source);
-                }
-              }}
-            />
-          )}
+          {/* Action Toolbar */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Multi-image slide counter */}
+            {displayMediaList.length > 1 && !activeVideo && (
+              <span className="text-xs font-semibold text-slate-300 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700/60 inline-flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                <span>
+                  {currentIndex + 1} / {displayMediaList.length}
+                </span>
+              </span>
+            )}
+
+            {/* Download Button */}
+            {downloadHref && (
+              <a
+                href={downloadHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                download
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-200 bg-slate-800/90 hover:bg-slate-700 hover:text-white rounded-lg border border-slate-700/80 transition-colors cursor-pointer"
+                title={activeVideo ? "Download Video Creative (.mp4)" : "Download Media File"}
+              >
+                <Download className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="hidden sm:inline">Download</span>
+              </a>
+            )}
+
+            {/* Full Size Tab */}
+            {fullSizeHref && (
+              <a
+                href={fullSizeHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1.5 sm:px-3 sm:py-1.5 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-200 bg-slate-800/90 hover:bg-slate-700 hover:text-white rounded-lg border border-slate-700/80 transition-colors cursor-pointer"
+                title="Open high resolution media in new tab"
+              >
+                <Maximize2 className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="hidden sm:inline">Full Size</span>
+              </a>
+            )}
+
+            {/* Theater Mode Toggle (Available when ad has details) */}
+            {hasDetails && (
+              <button
+                type="button"
+                onClick={() => setIsTheaterMode(!isTheaterMode)}
+                className={cn(
+                  "p-1.5 sm:px-3 sm:py-1.5 inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer",
+                  isTheaterMode
+                    ? "bg-indigo-600/20 text-indigo-300 border-indigo-500/30 hover:bg-indigo-600/30"
+                    : "bg-slate-800/90 text-slate-300 hover:text-white hover:bg-slate-700 border-slate-700/80"
+                )}
+                title={isTheaterMode ? "Show Details Panel (T)" : "Theater Mode (T)"}
+              >
+                {isTheaterMode ? (
+                  <>
+                    <Minimize2 className="w-3.5 h-3.5 text-indigo-400" />
+                    <span className="hidden sm:inline">Details</span>
+                  </>
+                ) : (
+                  <>
+                    <Maximize2 className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="hidden sm:inline">Theater</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            {/* Close Button */}
+            <button
+              onClick={onClose}
+              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800/90 rounded-lg transition-colors cursor-pointer ml-1"
+              title="Close Preview (Esc)"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
-        {/* Next Button */}
-        {displayMediaList.length > 1 && !activeVideo && (
-          <button
-            onClick={() =>
-              setCurrentIndex((prev) => (prev < displayMediaList.length - 1 ? prev + 1 : 0))
-            }
-            className="absolute right-2 sm:right-4 z-10 p-3 rounded-full bg-zinc-900/80 hover:bg-indigo-600 text-white border border-zinc-700/80 shadow-2xl transition-all hover:scale-110 cursor-pointer"
-            title="Next Image"
-          >
-            <ChevronRight className="w-6 h-6" />
-          </button>
-        )}
-      </div>
-
-      {/* Footer Info Banner */}
-      {(title || caption || destinationUrl) && (
+        {/* Modal Body Area */}
         <div
-          className="w-full max-w-6xl p-4 rounded-xl bg-zinc-900/90 border border-zinc-800 text-zinc-200 shadow-xl shrink-0 flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
-          onClick={(e) => e.stopPropagation()}
+          className={cn(
+            "flex flex-1 overflow-hidden min-h-0",
+            isTheaterMode || !hasDetails ? "flex-col" : "flex-col lg:flex-row"
+          )}
         >
-          <div className="flex flex-col min-w-0 max-w-3xl">
-            {title && (
-              <h4 className="text-xs font-bold text-white mb-0.5 line-clamp-1">
-                {title}
-              </h4>
+          {/* Main Media Stage */}
+          <div className="relative flex-1 bg-slate-950 flex flex-col items-center justify-center p-3 sm:p-5 select-none overflow-hidden min-h-[340px] sm:min-h-[460px]">
+            {/* Expired Video Notice Badge */}
+            {isExpiredVideo && (
+              <div className="absolute top-3 left-3 right-3 sm:right-auto z-30 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-950/90 border border-amber-600/40 text-amber-200 text-xs shadow-lg backdrop-blur-md">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="truncate">Video expired on Meta CDN • Showing snapshot</span>
+                {adArchiveId && (
+                  <a
+                    href={`https://www.facebook.com/ads/library/?id=${adArchiveId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-1 underline font-semibold text-amber-300 hover:text-white shrink-0"
+                  >
+                    Meta ↗
+                  </a>
+                )}
+                {onRefreshMedia && (
+                  <button
+                    type="button"
+                    onClick={onRefreshMedia}
+                    disabled={isRefreshingMedia}
+                    className="ml-auto sm:ml-2 px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-semibold border border-amber-400/30 flex items-center gap-1 cursor-pointer disabled:opacity-50 shrink-0"
+                  >
+                    <RotateCw className={`w-3 h-3 ${isRefreshingMedia ? "animate-spin" : ""}`} />
+                    <span>{isRefreshingMedia ? "Refreshing..." : "Refresh"}</span>
+                  </button>
+                )}
+              </div>
             )}
-            {caption && (
-              <p className="text-xs text-zinc-300 line-clamp-2 leading-relaxed font-normal">
-                {caption}
-              </p>
+
+            {/* Carousel Previous Button */}
+            {displayMediaList.length > 1 && !activeVideo && (
+              <button
+                type="button"
+                onClick={() =>
+                  setCurrentIndex((prev) => (prev > 0 ? prev - 1 : displayMediaList.length - 1))
+                }
+                className="absolute left-3 top-1/2 -translate-y-1/2 z-20 p-2.5 rounded-full bg-slate-900/80 hover:bg-indigo-600 text-white border border-slate-700/80 shadow-2xl backdrop-blur-sm transition-all hover:scale-110 cursor-pointer"
+                title="Previous Image (←)"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+            )}
+
+            {/* Media Player Element */}
+            <div className="relative flex items-center justify-center max-h-[75vh] max-w-full rounded-xl overflow-hidden shadow-2xl border border-slate-800/80 bg-slate-950">
+              {activeVideo ? (
+                <video
+                  src={activeVideo}
+                  poster={fallbackThumbnail || undefined}
+                  controls
+                  autoPlay
+                  playsInline
+                  {...({ referrerPolicy: "no-referrer" } as any)}
+                  className="max-h-[75vh] max-w-full object-contain rounded-xl"
+                  onError={() => setVideoError(true)}
+                />
+              ) : (
+                <img
+                  src={getSmartMediaUrl(fallbackThumbnail || currentMedia)}
+                  alt={title || pageName || "Ad preview"}
+                  referrerPolicy="no-referrer"
+                  className="max-h-[75vh] max-w-full object-contain rounded-xl select-none"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    const source = fallbackThumbnail || currentMedia;
+                    if (
+                      source &&
+                      !target.src.includes("/api/spy/image-proxy") &&
+                      !target.src.includes("workers.dev")
+                    ) {
+                      target.src = getProxiedImageUrl(source);
+                    }
+                  }}
+                />
+              )}
+            </div>
+
+            {/* Carousel Next Button */}
+            {displayMediaList.length > 1 && !activeVideo && (
+              <button
+                type="button"
+                onClick={() =>
+                  setCurrentIndex((prev) => (prev < displayMediaList.length - 1 ? prev + 1 : 0))
+                }
+                className="absolute right-3 top-1/2 -translate-y-1/2 z-20 p-2.5 rounded-full bg-slate-900/80 hover:bg-indigo-600 text-white border border-slate-700/80 shadow-2xl backdrop-blur-sm transition-all hover:scale-110 cursor-pointer"
+                title="Next Image (→)"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            )}
+
+            {/* Carousel Dots */}
+            {displayMediaList.length > 1 && !activeVideo && (
+              <div className="flex items-center gap-1.5 mt-3 z-10">
+                {displayMediaList.map((_, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setCurrentIndex(idx)}
+                    className={cn(
+                      "h-2 rounded-full transition-all cursor-pointer",
+                      idx === currentIndex ? "w-6 bg-indigo-500" : "w-2 bg-slate-700 hover:bg-slate-500"
+                    )}
+                    title={`Slide ${idx + 1}`}
+                  />
+                ))}
+              </div>
             )}
           </div>
 
-          {destinationUrl && (
-            <a
-              href={destinationUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg shadow-lg shadow-indigo-600/30 transition-all shrink-0 cursor-pointer"
-            >
-              <Globe className="w-4 h-4 text-indigo-200" />
-              <span>Visit Store {targetDomain ? `(${targetDomain})` : ""}</span>
-              <ExternalLink className="w-3.5 h-3.5 text-indigo-200" />
-            </a>
+          {/* Details & Ad Intel Panel (Split View on Desktop) */}
+          {!isTheaterMode && hasDetails && (
+            <div className="w-full lg:w-[380px] xl:w-[420px] flex flex-col shrink-0 border-t lg:border-t-0 lg:border-l border-slate-800/80 bg-slate-900/60 dark:bg-slate-950/60 backdrop-blur-xl overflow-y-auto max-h-[82vh] divide-y divide-slate-800/80">
+              {/* Primary CTA: Visit Store */}
+              {cleanDestUrl && (
+                <div className="p-4 sm:p-5">
+                  <a
+                    href={cleanDestUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group w-full inline-flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm shadow-lg shadow-indigo-600/25 transition-all cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="p-1.5 rounded-lg bg-white/10 shrink-0">
+                        <Globe className="w-4 h-4 text-white" />
+                      </div>
+                      <div className="flex flex-col text-left truncate">
+                        <span className="text-xs font-bold leading-tight">Visit Store</span>
+                        {targetDomain && (
+                          <span className="text-[11px] text-indigo-200/90 truncate font-mono">
+                            {targetDomain}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-indigo-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform shrink-0" />
+                  </a>
+                </div>
+              )}
+
+              {/* Meta Ad Library Row */}
+              {adArchiveId && (
+                <div className="px-4 sm:px-5 py-3 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Meta Ad Library</span>
+                  </div>
+                  <a
+                    href={`https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&id=${adArchiveId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 transition-colors cursor-pointer"
+                  >
+                    <span>View in Library</span>
+                    <ExternalLink className="w-3 h-3 text-slate-400" />
+                  </a>
+                </div>
+              )}
+
+              {/* Ad Headline & Caption Section */}
+              {(caption || title) && (
+                <div className="p-4 sm:p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      Ad Copy & Hooks
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleCopyAdCopy}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 transition-colors cursor-pointer"
+                    >
+                      {copiedText ? (
+                        <Check className="w-3 h-3 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-3 h-3" />
+                      )}
+                      <span>{copiedText ? "Copied!" : "Copy"}</span>
+                    </button>
+                  </div>
+
+                  {title && (
+                    <h4
+                      dir={isRtl ? "rtl" : "ltr"}
+                      className={cn(
+                        "text-xs font-bold text-white leading-snug",
+                        isRtl ? "text-right" : "text-left"
+                      )}
+                    >
+                      {title}
+                    </h4>
+                  )}
+
+                  {caption && (
+                    <div
+                      dir={isRtl ? "rtl" : "ltr"}
+                      className={cn(
+                        "p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 text-xs text-slate-300 leading-relaxed max-h-56 overflow-y-auto whitespace-pre-wrap select-text font-normal",
+                        isRtl ? "text-right" : "text-left"
+                      )}
+                    >
+                      {caption}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Creative Metadata / Specs */}
+              <div className="p-4 sm:p-5 flex items-center justify-between text-[11px] text-slate-400 font-mono mt-auto">
+                <span className="flex items-center gap-1.5">
+                  {isVideoAd || activeVideo ? (
+                    <>
+                      <Video className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Video (.mp4)</span>
+                    </>
+                  ) : (
+                    <>
+                      <ImageIcon className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Image Creative</span>
+                    </>
+                  )}
+                </span>
+                {(startedRunningOn || startDate) && (
+                  <span>
+                    Started:{" "}
+                    {new Date(startedRunningOn || startDate!).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </span>
+                )}
+              </div>
+            </div>
           )}
         </div>
-      )}
+
+        {/* Compact Bottom Bar (Only when in Theater Mode and has details) */}
+        {isTheaterMode && hasDetails && (
+          <div className="px-4 py-3 border-t border-slate-800/80 bg-slate-900/90 dark:bg-slate-950/90 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+            <div className="flex-1 min-w-0 flex items-center gap-2 w-full sm:w-auto">
+              {caption && (
+                <p
+                  dir={isRtl ? "rtl" : "ltr"}
+                  className="text-xs text-slate-300 line-clamp-1 truncate max-w-xl"
+                  title={caption}
+                >
+                  {caption}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+              {caption && (
+                <button
+                  type="button"
+                  onClick={handleCopyAdCopy}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors cursor-pointer"
+                >
+                  {copiedText ? (
+                    <Check className="w-3 h-3 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3 h-3" />
+                  )}
+                  <span>{copiedText ? "Copied" : "Copy"}</span>
+                </button>
+              )}
+              {cleanDestUrl && (
+                <a
+                  href={cleanDestUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
+                >
+                  <Globe className="w-3.5 h-3.5 text-indigo-200" />
+                  <span>Visit Store {targetDomain ? `(${targetDomain})` : ""}</span>
+                  <ExternalLink className="w-3 h-3 text-indigo-200" />
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

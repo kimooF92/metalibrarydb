@@ -862,9 +862,12 @@ export function AdCard({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }
         isVideoAd={isVideoAd}
         title={currentAd.title}
         pageName={currentAd.pageName || `Page ${currentAd.pageId}`}
+        pageId={currentAd.pageId}
         caption={currentAd.caption}
         destinationUrl={destinationUrl}
         adArchiveId={currentAd.adArchiveId}
+        startedRunningOn={currentAd.startedRunningOn}
+        isActive={!isArchived && currentAd.isActive !== false}
         onRefreshMedia={handleRefreshMedia}
         isRefreshingMedia={isRefreshingMedia}
       />
