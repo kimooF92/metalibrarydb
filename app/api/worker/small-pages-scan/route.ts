@@ -3,20 +3,9 @@ import { db } from "@/db";
 import { creativeScans, queue, trackedPages } from "@/db/schema";
 import { sql, eq } from "drizzle-orm";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
+import type { SmallPageNeedingScan } from "@/types";
 
-export interface SmallPageNeedingScan {
-  id: string;
-  displayName: string;
-  url: string;
-  pageId: string | null;
-  currentResults: number;
-  lastCreativeScan: string | null;
-  status: string;
-  holdStatus: string | null;
-  reason: "in_queue" | "never_scanned" | "new_ads";
-  latestDifference: number;
-  isInQueue: boolean;
-}
+export type { SmallPageNeedingScan };
 
 interface CachedSmallPages {
   data: any;

@@ -10,8 +10,8 @@ import {
   type ScanStepBroadcastPayload,
   type ScanBatchSummaryPayload,
   type EngineStatePayload,
-} from "@/lib/realtime-scan";
-import type { ScanScheduleStatus } from "@/lib/scan-scheduler";
+  type ScanScheduleStatus,
+} from "@/lib/realtime-scan-types";
 
 export function formatCountdown(totalSeconds: number): string {
   if (totalSeconds <= 0) return "Due Now";

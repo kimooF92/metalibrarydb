@@ -1,4 +1,4 @@
-import { normalizeProductUrl } from "./firecrawl";
+import { normalizeProductUrl } from "./url-parser";
 import {
   BrandCadenceAnalytics,
   AdInjectionBucket,

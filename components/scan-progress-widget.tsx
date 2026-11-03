@@ -13,9 +13,13 @@ import {
   ExternalLink,
   ShieldAlert,
 } from "lucide-react";
-import { ScanProgressStep } from "@/app/api/scan-progress/route";
 import { getSupabase } from "@/lib/supabase";
-import { SCAN_TELEMETRY_CHANNEL, SCAN_STEP_EVENT, type ScanStepBroadcastPayload } from "@/lib/realtime-scan";
+import {
+  SCAN_TELEMETRY_CHANNEL,
+  SCAN_STEP_EVENT,
+  type ScanStepBroadcastPayload,
+  type ScanProgressStep,
+} from "@/lib/realtime-scan-types";
 
 interface ScanProgressWidgetProps {
   scanningPageIds: string[];

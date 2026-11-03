@@ -1,52 +1,16 @@
 import { getSupabase } from "./supabase";
 import { setCached, deleteCached } from "./cache-service";
+import {
+  SCAN_TELEMETRY_CHANNEL,
+  SCAN_STEP_EVENT,
+  SCAN_BATCH_EVENT,
+  SCAN_STATE_EVENT,
+  type ScanStepBroadcastPayload,
+  type ScanBatchSummaryPayload,
+  type EngineStatePayload,
+} from "./realtime-scan-types";
 
-export interface ScanStepBroadcastPayload {
-  jobId: string;
-  pageId: string;
-  displayName: string;
-  country?: string;
-  profilePicUrl?: string | null;
-  jobType: "count" | "creative" | "discovery_count" | "discovery" | "product_scrape";
-  step:
-    | "locked"
-    | "launching"
-    | "navigating"
-    | "settling"
-    | "extracting"
-    | "saving"
-    | "completed"
-    | "failed";
-  label: string;
-  percent: number;
-  activeAds?: number | null;
-  previousAds?: number | null;
-  diff?: number | null;
-  batchIndex?: number;
-  batchTotal?: number;
-  timestamp: number;
-}
-
-export interface ScanBatchSummaryPayload {
-  finishedAt: number;
-  totalScanned: number;
-  newAdsCount: number;
-  moversCount: number;
-  durationSeconds: number;
-  shardInfo?: string;
-}
-
-export interface EngineStatePayload {
-  isPaused: boolean;
-  circuitBreakerTripped: boolean;
-  circuitBreakerReason?: string | null;
-  timestamp: number;
-}
-
-export const SCAN_TELEMETRY_CHANNEL = "scan-telemetry";
-export const SCAN_STEP_EVENT = "scan:step";
-export const SCAN_BATCH_EVENT = "scan:batch_summary";
-export const SCAN_STATE_EVENT = "scan:state_change";
+export * from "./realtime-scan-types";
 
 let broadcastChannelInstance: any = null;
 

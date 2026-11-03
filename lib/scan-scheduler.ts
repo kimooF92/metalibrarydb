@@ -2,24 +2,9 @@ import { db } from "@/db";
 import { trackedPages, queue, workerState, appSettings } from "@/db/schema";
 import { eq, and, ne, asc, sql } from "drizzle-orm";
 import { getCached } from "./cache-service";
+import type { ScanScheduleStatus } from "./realtime-scan-types";
 
-export interface ScanScheduleStatus {
-  nextScanAt: string; // ISO string
-  nextScanReason: "queue_pending" | "running" | "stale_page_eligible" | "cron_schedule" | "circuit_breaker" | "backoff";
-  secondsRemaining: number;
-  isQueueRunning: boolean;
-  pendingJobsCount: number;
-  runningJobsCount: number;
-  oldestBrandName?: string | null;
-  workerState: {
-    isPaused: boolean;
-    circuitBreakerTripped: boolean;
-    circuitBreakerReason?: string | null;
-    scansThisHour: number;
-    scansToday: number;
-    hourlyLimit: number;
-  };
-}
+export type { ScanScheduleStatus };
 
 /**
  * Computes the next scheduled daily cron window (06:00 UTC or 18:00 UTC).

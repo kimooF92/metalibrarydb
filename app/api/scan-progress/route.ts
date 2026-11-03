@@ -4,18 +4,11 @@ import { validateApiSecret } from "@/lib/api-guard";
 import { db } from "@/db";
 import { trackedPages } from "@/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
+import type { ScanProgressStep } from "@/lib/realtime-scan-types";
 
 export const dynamic = "force-dynamic";
 
-export interface ScanProgressStep {
-  pageId: string;
-  displayName?: string | null;
-  step: "locked" | "launching" | "navigating" | "settling" | "extracting" | "saving" | "completed" | "failed";
-  label: string;
-  percent: number;
-  activeAds?: number | null;
-  timestamp: number;
-}
+export type { ScanProgressStep };
 
 /**
  * GET /api/scan-progress?pageId=xxx OR ?pageIds=xxx,yyy

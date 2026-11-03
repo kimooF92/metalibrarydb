@@ -1,6 +1,11 @@
-import dotenv from "dotenv";
-dotenv.config({ path: ".env.local" });
-dotenv.config();
+if (typeof window === "undefined" && !process.env.UPSTASH_REDIS_REST_URL) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("dotenv").config({ path: ".env.local" });
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("dotenv").config();
+  } catch {}
+}
 
 import { Redis } from "@upstash/redis";
 

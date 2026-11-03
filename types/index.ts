@@ -567,6 +567,20 @@ export interface FreshWinnersResponse {
   };
 }
 
+export interface SmallPageNeedingScan {
+  id: string;
+  displayName: string;
+  url: string;
+  pageId: string | null;
+  currentResults: number;
+  lastCreativeScan: string | null;
+  status: string;
+  holdStatus: string | null;
+  reason: "in_queue" | "never_scanned" | "new_ads";
+  latestDifference: number;
+  isInQueue: boolean;
+}
+
 export * from "./analytics";
 export * from "./cadence";
 

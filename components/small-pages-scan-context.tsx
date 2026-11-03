@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
-import { SmallPageNeedingScan } from "@/app/api/worker/small-pages-scan/route";
+import type { SmallPageNeedingScan } from "@/types";
 import { useWorkspace } from "@/components/workspace-context";
 import { useAuth } from "@/components/auth-context";
 
