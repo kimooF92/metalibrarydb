@@ -124,6 +124,11 @@ export interface ProductsTopBarProps {
   adLaunchLabels?: Record<string, string>;
   stillRunningOnly: boolean;
 
+  // Carousel Grouping
+  groupCarousels?: boolean;
+  onToggleGroupCarousels?: () => void;
+  groupedCarouselsCount?: number;
+
   onResetFilters: () => void;
 }
 
@@ -138,6 +143,9 @@ export function ProductsTopBar({
   onChangeSortBy,
   viewMode,
   onChangeViewMode,
+  groupCarousels = true,
+  onToggleGroupCarousels,
+  groupedCarouselsCount = 0,
   onOpenMobileDrawer,
   activeFilterCount,
   isSidebarCollapsed,
@@ -402,6 +410,32 @@ export function ProductsTopBar({
               </div>
             )}
           </div>
+
+          {/* Group Carousels Toggle */}
+          {onToggleGroupCarousels && (
+            <button
+              type="button"
+              onClick={onToggleGroupCarousels}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all duration-150 cursor-pointer shadow-xs ${
+                groupCarousels
+                  ? "bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800"
+                  : "bg-background text-muted-foreground hover:text-foreground border-border"
+              }`}
+              title={
+                groupCarousels
+                  ? "Carousel products from the same brand are grouped into stacked cards. Click to show all flat."
+                  : "Click to group carousel products into stacked cards"
+              }
+            >
+              <Layers className={`w-3.5 h-3.5 ${groupCarousels ? "text-indigo-500 dark:text-indigo-400" : ""}`} />
+              <span className="hidden sm:inline">Group Carousels</span>
+              {groupCarousels && typeof groupedCarouselsCount === "number" && groupedCarouselsCount > 0 && (
+                <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-600 dark:text-indigo-300">
+                  {groupedCarouselsCount}
+                </span>
+              )}
+            </button>
+          )}
 
           {/* Grid / List View Toggle */}
           <div className="flex items-center bg-muted p-0.5 rounded-lg border border-border">

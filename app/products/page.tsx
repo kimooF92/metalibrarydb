@@ -85,6 +85,8 @@ export default function ProductsPage() {
   const [adLaunchFrom, setAdLaunchFrom] = useState("");
   const [adLaunchTo, setAdLaunchTo] = useState("");
   const [stillRunningOnly, setStillRunningOnly] = useState(false);
+  const [groupCarousels, setGroupCarousels] = useState(true);
+  const [groupedCarouselsCount, setGroupedCarouselsCount] = useState(0);
   const [sortBy, setSortBy] = useState<string>("latest");
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({
@@ -252,6 +254,8 @@ export default function ProductsPage() {
       if (stillRunningParam === "false") setStillRunningOnly(false);
       else if (stillRunningParam === "true") setStillRunningOnly(true);
       else if (adLaunchParam && adLaunchParam !== "all") setStillRunningOnly(true);
+      const groupCarouselsParam = params.get("groupCarousels");
+      if (groupCarouselsParam !== null) setGroupCarousels(groupCarouselsParam === "true");
 
       // Check for deep-linked product ID (?id=... or ?productId=...)
       const idParam = params.get("id") || params.get("productId");
@@ -418,6 +422,9 @@ export default function ProductsPage() {
     if (stillRunningOnly) {
       newParams.set("stillRunning", "true");
     }
+    if (!groupCarousels) {
+      newParams.set("groupCarousels", "false");
+    }
 
     const nextSearch = newParams.toString();
     const nextUrl = nextSearch ? `${url.pathname}?${nextSearch}` : url.pathname;
@@ -440,6 +447,7 @@ export default function ProductsPage() {
     adLaunchFrom,
     adLaunchTo,
     stillRunningOnly,
+    groupCarousels,
   ]);
 
   const fetchProducts = useCallback(
@@ -495,6 +503,7 @@ export default function ProductsPage() {
           if (adLaunchTo) query.set("adLaunchTo", adLaunchTo);
         }
         query.set("stillRunning", stillRunningOnly ? "true" : "false");
+        query.set("groupCarousels", groupCarousels ? "true" : "false");
 
         const res = await fetch(`/api/products?${query.toString()}`, {
           signal: currentController.signal,
@@ -507,6 +516,9 @@ export default function ProductsPage() {
         const data = await res.json();
         if (data.success) {
           const newItems: ScrapedProduct[] = data.products || [];
+          if (typeof data.groupedCarouselsCount === "number") {
+            setGroupedCarouselsCount(data.groupedCarouselsCount);
+          }
           if (append) {
             setProducts((prev) => {
               const existingIds = new Set(prev.map((p) => p.id));
@@ -553,6 +565,7 @@ export default function ProductsPage() {
       adLaunchFrom,
       adLaunchTo,
       stillRunningOnly,
+      groupCarousels,
     ]
   );
 
@@ -1175,6 +1188,12 @@ export default function ProductsPage() {
           }}
           viewMode={viewMode}
           onChangeViewMode={setViewMode}
+          groupCarousels={groupCarousels}
+          onToggleGroupCarousels={() => {
+            setGroupCarousels((prev) => !prev);
+            setPage(1);
+          }}
+          groupedCarouselsCount={groupedCarouselsCount}
           onOpenMobileDrawer={() => setIsMobileDrawerOpen(true)}
           activeFilterCount={activeFilterCount}
           isSidebarCollapsed={isSidebarCollapsed}

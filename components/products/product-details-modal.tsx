@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ScrapedProduct, Ad } from "@/types";
+import NextImage from "next/image";
+import { ScrapedProduct, Ad, CarouselItemSummary } from "@/types";
 import { useToast } from "@/components/toast-context";
 import {
   ChevronLeft,
@@ -276,6 +277,42 @@ export function ProductDetailsModal({
     }
   };
 
+  const handleSwitchCarouselItem = async (item: CarouselItemSummary) => {
+    if (item.id === currentProduct?.id) return;
+    const carouselItems = currentProduct?.carouselItems;
+    const optimistic: ScrapedProduct = {
+      ...currentProduct!,
+      id: item.id,
+      url: item.url,
+      title: item.title,
+      currentPrice: item.currentPrice,
+      originalPrice: item.originalPrice || currentProduct!.originalPrice,
+      mainImageUrl: item.mainImageUrl || currentProduct!.mainImageUrl,
+      discountOrOffer: item.discountOrOffer || currentProduct!.discountOrOffer,
+      activeAdsCount: item.activeAdsCount ?? currentProduct!.activeAdsCount,
+      linkedAdsCount: item.linkedAdsCount ?? currentProduct!.linkedAdsCount,
+      carouselItems: carouselItems,
+      isCarouselBundle: true,
+      carouselBundleCount: carouselItems?.length,
+    };
+    setCurrentProduct(optimistic);
+
+    try {
+      const res = await fetch(`/api/products?id=${encodeURIComponent(item.id)}`);
+      const data = await res.json();
+      if (data.success && data.products && data.products.length > 0) {
+        setCurrentProduct({
+          ...data.products[0],
+          carouselItems: carouselItems,
+          isCarouselBundle: true,
+          carouselBundleCount: carouselItems?.length,
+        });
+      }
+    } catch (err) {
+      console.warn("[Modal] Failed deep fetch for carousel sibling:", err);
+    }
+  };
+
   const allImages = [
     ...(currentProduct.mainImageUrl ? [currentProduct.mainImageUrl] : []),
     ...(currentProduct.galleryImages || []),
@@ -344,6 +381,60 @@ export function ProductDetailsModal({
           onNavigatePrev={onNavigatePrev}
           onNavigateNext={onNavigateNext}
         />
+
+        {/* Carousel Siblings Rail */}
+        {currentProduct?.carouselItems && currentProduct.carouselItems.length > 1 && (
+          <div className="mx-6 mt-3 p-2.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/70 dark:border-indigo-800/60 flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="p-1 rounded-md bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
+                <Layers className="w-3.5 h-3.5" />
+              </span>
+              <span className="font-bold text-slate-800 dark:text-slate-200">
+                Carousel Collection ({currentProduct.carouselItems.length} products):
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-none py-0.5">
+              {currentProduct.carouselItems.map((item, idx) => {
+                const isSelected = item.id === currentProduct.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSwitchCarouselItem(item)}
+                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer text-left shrink-0 ${
+                      isSelected
+                        ? "bg-white dark:bg-slate-900 border-indigo-500 text-indigo-600 dark:text-indigo-400 shadow-xs ring-1 ring-indigo-500/30 font-bold"
+                        : "bg-white/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
+                    }`}
+                    title={item.title || `Item ${idx + 1}`}
+                  >
+                    {item.mainImageUrl && (
+                      <div className="relative w-5 h-5 rounded overflow-hidden shrink-0 bg-slate-100 dark:bg-slate-800">
+                        <NextImage
+                          src={item.mainImageUrl}
+                          alt=""
+                          fill
+                          unoptimized
+                          referrerPolicy="no-referrer"
+                          className="object-cover"
+                        />
+                      </div>
+                    )}
+                    <span className="truncate max-w-[120px] text-[11px]">
+                      {item.title || `Product ${idx + 1}`}
+                    </span>
+                    {item.currentPrice && (
+                      <span className="text-[10px] opacity-75 font-mono">
+                        {item.currentPrice}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* On Hold Notification Banner */}
         {currentProduct?.brandHoldStatus === "on_hold" && (

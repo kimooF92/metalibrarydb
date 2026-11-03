@@ -12,6 +12,7 @@ import {
   parseSubNicheParam,
   resolveNicheDbCategories,
 } from "@/lib/niches-taxonomy";
+import { CarouselItemSummary } from "@/types";
 
 import { getCached, setCached, deleteByPrefix, deleteCached, buildCanonicalFilterHash } from "@/lib/cache-service";
 
@@ -20,7 +21,7 @@ const ALLOWED_PRODUCT_FILTERS = [
   "subCategory", "subNiche", "hasOffer", "isFavorite", "status", "hideInactive",
   "adLaunch", "adLaunchFilter", "adLaunchFrom", "adLaunchTo", "stillRunning",
   "activeStatus", "smartPreset", "preset", "discovery", "discoveryFrom", "discoveryTo",
-  "sortBy", "sortOrder", "includeStats", "page", "limit", "lean"
+  "sortBy", "sortOrder", "includeStats", "page", "limit", "lean", "groupCarousels"
 ];
 
 export const dynamic = "force-dynamic";
@@ -65,11 +66,14 @@ export async function GET(req: NextRequest) {
     const includeStats = searchParams.get("includeStats") === "true";
     // Full product fields are only allowed for a single on-demand detail read.
     const includeDetails = Boolean(id);
+    const groupCarouselsParam = searchParams.get("groupCarousels");
+    const groupCarousels = groupCarouselsParam !== null ? groupCarouselsParam === "true" : true;
 
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "24", 10)));
     const offset = (page - 1) * limit;
     const isLean = searchParams.get("lean") === "true" || limit > 50;
+    const rawLimit = groupCarousels && !includeDetails ? Math.min(100, Math.max(limit, limit * 2)) : limit;
 
     const activeWorkspace = await getActiveWorkspace(req);
 
@@ -488,7 +492,7 @@ export async function GET(req: NextRequest) {
         .from(scrapedProducts)
         .where(whereClause)
         .orderBy(...orderByClauses)
-        .limit(limit)
+        .limit(rawLimit)
         .offset(offset),
       db
         .select({ count: count() })
@@ -734,6 +738,9 @@ export async function GET(req: NextRequest) {
         breakoutScore,
         breakoutTier,
         breakoutSurge: effectiveSurge,
+        isCarouselBundle: false as boolean,
+        carouselBundleCount: 1 as number,
+        carouselItems: null as CarouselItemSummary[] | null,
       };
     });
 
@@ -752,18 +759,105 @@ export async function GET(req: NextRequest) {
       products.sort((a, b) => (b.daysRunning || 1) - (a.daysRunning || 1));
     }
 
+    // Carousel Products Grouping: Bundle sibling products from the same brand / carousel campaign into a single master card
+    let finalProducts = products;
+
+    if (groupCarousels && !includeDetails) {
+      const carouselGroups = new Map<string, typeof products>();
+
+      for (const p of products) {
+        if (p.hasCarouselAd) {
+          const groupKey = p.brandPageId
+            ? `brand:${p.brandPageId}`
+            : p.pageId
+            ? `page:${p.pageId}`
+            : p.domain
+            ? `domain:${p.domain.toLowerCase()}`
+            : null;
+
+          if (groupKey) {
+            const existing = carouselGroups.get(groupKey) || [];
+            existing.push(p);
+            carouselGroups.set(groupKey, existing);
+          }
+        }
+      }
+
+      const consolidated: typeof products = [];
+      const processedGroupKeys = new Set<string>();
+
+      for (const p of products) {
+        if (p.hasCarouselAd) {
+          const groupKey = p.brandPageId
+            ? `brand:${p.brandPageId}`
+            : p.pageId
+            ? `page:${p.pageId}`
+            : p.domain
+            ? `domain:${p.domain.toLowerCase()}`
+            : null;
+
+          if (groupKey) {
+            if (processedGroupKeys.has(groupKey)) continue;
+            processedGroupKeys.add(groupKey);
+
+            const group = carouselGroups.get(groupKey) || [p];
+            if (group.length > 1) {
+              // Rank within cluster so the highest active ads / strongest product serves as Hero (index 0)
+              group.sort(
+                (a, b) =>
+                  (b.activeAdsCount || 0) - (a.activeAdsCount || 0) ||
+                  (b.linkedAdsCount || 0) - (a.linkedAdsCount || 0) ||
+                  (b.maxDuplications || 1) - (a.maxDuplications || 1)
+              );
+
+              const hero = { ...group[0] };
+              hero.isCarouselBundle = true;
+              hero.carouselBundleCount = group.length;
+              hero.carouselItems = group.map((item) => ({
+                id: item.id,
+                url: item.url,
+                title: item.title,
+                currentPrice: item.currentPrice,
+                originalPrice: item.originalPrice,
+                currency: item.currency,
+                discountOrOffer: item.discountOrOffer,
+                mainImageUrl: item.mainImageUrl,
+                activeAdsCount: item.activeAdsCount,
+                linkedAdsCount: item.linkedAdsCount,
+                isFavorite: item.isFavorite,
+                createdAt: item.createdAt,
+              }));
+              consolidated.push(hero);
+              continue;
+            } else {
+              consolidated.push(p);
+              continue;
+            }
+          }
+        }
+        consolidated.push(p);
+      }
+
+      finalProducts = consolidated.slice(0, limit);
+    }
+
     const total = totalCountResult[0]?.count || 0;
     const totalPages = Math.ceil(total / limit);
 
     const responsePayload = {
       success: true,
-      products,
+      products: finalProducts,
       pagination: {
         page,
         limit,
         total,
         totalPages,
       },
+      groupedCarouselsCount: finalProducts.filter((p) => p.isCarouselBundle).length,
+      totalItemsRepresented: finalProducts.reduce(
+        (acc, p) => acc + (p.carouselBundleCount || 1),
+        0
+      ),
     };
 
     if (!forceRefresh && !includeDetails) {

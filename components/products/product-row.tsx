@@ -19,6 +19,7 @@ import {
   Rocket,
   Calendar,
   Pause,
+  Layers,
 } from "lucide-react";
 import { formatDiscoveryDate, formatDiscoveryLabel } from "@/lib/format-date";
 import { useWorkspace } from "@/components/workspace-context";
@@ -362,15 +363,26 @@ export const ProductRow = memo(function ProductRow({
             )}
           </div>
 
-          <h4
-            className={`text-xs font-bold truncate transition-colors mt-0.5 ${
-              isPageOnHold || isInactive
-                ? "text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200"
-                : "text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
-            }`}
-          >
-            {product.title || "Untitled Landing Page"}
-          </h4>
+          <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+            {product.isCarouselBundle && (
+              <span
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shrink-0"
+                title={`${product.carouselItems?.length || product.carouselBundleCount} carousel products bundled`}
+              >
+                <Layers className="w-3 h-3 text-indigo-500" />
+                <span>{product.carouselItems?.length || product.carouselBundleCount} in Carousel</span>
+              </span>
+            )}
+            <h4
+              className={`text-xs font-bold truncate transition-colors ${
+                isPageOnHold || isInactive
+                  ? "text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200"
+                  : "text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
+              }`}
+            >
+              {product.title || "Untitled Landing Page"}
+            </h4>
+          </div>
 
           {/* Offer / Delivery preview */}
           {product.discountOrOffer && (

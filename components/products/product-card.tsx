@@ -23,6 +23,8 @@ import {
   Flame,
   ArrowUpRight,
   Loader2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { formatDiscoveryDate } from "@/lib/format-date";
 import { useWorkspace } from "@/components/workspace-context";
@@ -76,6 +78,32 @@ export const ProductCard = memo(function ProductCard({
     setLocalPrice(product.currentPrice);
   }, [product.currentPrice]);
 
+  // Carousel Bundle / Stacked Swiper State
+  const isCarouselBundle = Boolean(product.isCarouselBundle && product.carouselItems && product.carouselItems.length > 1);
+  const carouselItems = product.carouselItems || [];
+  const [slideIndex, setSlideIndex] = useState(0);
+
+  // If slideIndex is out of range when props change, reset to 0
+  useEffect(() => {
+    if (slideIndex >= carouselItems.length) {
+      setSlideIndex(0);
+    }
+  }, [carouselItems.length, slideIndex]);
+
+  const activeSlideItem = isCarouselBundle && carouselItems[slideIndex] ? carouselItems[slideIndex] : null;
+
+  // Active reactive product properties based on currently selected slide
+  const activeProductId = activeSlideItem?.id || product.id;
+  const activeTitle = activeSlideItem?.title || product.title || "Untitled Product Landing Page";
+  const activeImageUrl = activeSlideItem?.mainImageUrl || product.mainImageUrl;
+  const activePrice = activeSlideItem?.currentPrice ?? localPrice;
+  const activeOriginalPrice = activeSlideItem?.originalPrice || product.originalPrice;
+  const activeDiscount = activeSlideItem?.discountOrOffer || product.discountOrOffer;
+  const activeUrl = activeSlideItem?.url || product.url;
+  const activeAdsCount = activeSlideItem?.activeAdsCount ?? product.activeAdsCount;
+  const activeLinkedAdsCount = activeSlideItem?.linkedAdsCount ?? product.linkedAdsCount;
+  const isSlideFavorite = activeSlideItem?.isFavorite !== undefined ? Boolean(activeSlideItem.isFavorite) : isFavorite;
+
   // Close 3-dots menu on outside click or Escape
   useEffect(() => {
     if (!isMenuOpen) return;
@@ -100,16 +128,17 @@ export const ProductCard = memo(function ProductCard({
   const handleToggleFavorite = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isTogglingFav) return;
-    const nextState = !isFavorite;
+    const targetId = activeProductId;
+    const nextState = !isSlideFavorite;
     setIsTogglingFav(true);
     try {
       if (onToggleFavorite) {
-        await onToggleFavorite(product.id, nextState);
+        await onToggleFavorite(targetId, nextState);
       } else {
         await fetch("/api/products", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: product.id, isFavorite: nextState }),
+          body: JSON.stringify({ id: targetId, isFavorite: nextState }),
         });
       }
     } finally {
@@ -254,7 +283,8 @@ export const ProductCard = memo(function ProductCard({
       : null);
 
   // Price formatting
-  const rawPrice = (localPrice ?? product.currentPrice ?? "").trim();
+  const effectivePrice = activePrice || "";
+  const rawPrice = effectivePrice.trim();
   const isZeroPrice = !rawPrice || /^0(\.0+)?\s*(dt|dh|mad|tnd|usd|eur)?$/i.test(rawPrice);
   const cleanPrice = !isZeroPrice ? formatPrice(rawPrice, sym) : "";
 
@@ -262,10 +292,28 @@ export const ProductCard = memo(function ProductCard({
     <div
       onClick={() => {
         if (!isRefreshing) {
-          onViewDetails?.(product);
+          const detailTarget = activeSlideItem
+            ? {
+                ...product,
+                id: activeSlideItem.id,
+                url: activeSlideItem.url,
+                title: activeSlideItem.title,
+                currentPrice: activeSlideItem.currentPrice,
+                originalPrice: activeSlideItem.originalPrice || product.originalPrice,
+                mainImageUrl: activeSlideItem.mainImageUrl || product.mainImageUrl,
+                discountOrOffer: activeSlideItem.discountOrOffer || product.discountOrOffer,
+                activeAdsCount: activeSlideItem.activeAdsCount ?? product.activeAdsCount,
+                linkedAdsCount: activeSlideItem.linkedAdsCount ?? product.linkedAdsCount,
+              }
+            : product;
+          onViewDetails?.(detailTarget);
         }
       }}
       className={`group relative flex flex-col justify-between rounded-xl border px-3.5 py-[19px] shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-lg ${
+        isCarouselBundle
+          ? "before:absolute before:-top-1.5 before:-right-1.5 before:w-full before:h-full before:rounded-xl before:border before:border-indigo-500/25 before:bg-slate-200/60 dark:before:bg-slate-900/60 before:-z-10 after:absolute after:-top-3 after:-right-3 after:w-full after:h-full after:rounded-xl after:border after:border-indigo-500/15 after:bg-slate-300/40 dark:after:bg-slate-950/40 after:-z-20 shadow-indigo-500/5 hover:shadow-indigo-500/10"
+          : ""
+      } ${
         isRefreshing
           ? "cursor-wait ring-2 ring-indigo-500/40"
           : "cursor-pointer"
@@ -369,13 +417,13 @@ export const ProductCard = memo(function ProductCard({
               onClick={handleToggleFavorite}
               disabled={isTogglingFav}
               className={`w-8 h-8 flex items-center justify-center rounded-lg border transition-all duration-200 ease-out hover:scale-105 active:scale-90 group/fav cursor-pointer shadow-xs ${
-                isFavorite
+                isSlideFavorite
                   ? "border-amber-500/50 bg-amber-500/15 text-amber-500 dark:text-amber-400 hover:bg-amber-500/25 hover:border-amber-500/70 shadow-amber-500/10 hover:shadow-sm"
                   : "border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/60 text-slate-400 hover:text-amber-500 hover:border-amber-500/35 hover:bg-amber-500/10 dark:hover:bg-amber-500/15"
               }`}
-              title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+              title={isSlideFavorite ? "Remove from Favorites" : "Add to Favorites"}
             >
-              <Bookmark className={`w-4 h-4 transition-transform duration-200 ease-out group-hover/fav:scale-115 group-hover/fav:-rotate-12 group-active/fav:scale-90 ${isFavorite ? "fill-current text-amber-500" : ""}`} />
+              <Bookmark className={`w-4 h-4 transition-transform duration-200 ease-out group-hover/fav:scale-115 group-hover/fav:-rotate-12 group-active/fav:scale-90 ${isSlideFavorite ? "fill-current text-amber-500" : ""}`} />
             </button>
 
             {/* 3-Dots Menu Trigger (Boxed) */}
@@ -489,24 +537,25 @@ export const ProductCard = memo(function ProductCard({
             </div>
           )}
 
-          {product.mainImageUrl && !imgError ? (
+          {activeImageUrl && !imgError ? (
             <>
               {/* Ambient Blurred Background Canvas */}
               <NextImage
-                src={product.mainImageUrl}
+                src={activeImageUrl}
                 alt=""
                 fill
                 unoptimized
                 referrerPolicy="no-referrer"
-                className={`object-cover blur-2xl scale-125 select-none pointer-events-none transition-all ${isInactive ? "grayscale opacity-15" : "opacity-40 dark:opacity-30"
+                className={`object-cover blur-2xl scale-125 select-none pointer-events-none transition-all duration-300 ${isInactive ? "grayscale opacity-15" : "opacity-40 dark:opacity-30"
                   }`}
               />
 
               {/* Main Crisp Uncropped Image (p-1 allows maximum image display size) */}
               <div className="relative w-full h-full p-1 flex items-center justify-center z-10">
                 <NextImage
-                  src={product.mainImageUrl}
-                  alt={product.title || "Product image"}
+                  key={activeImageUrl}
+                  src={activeImageUrl}
+                  alt={activeTitle || "Product image"}
                   fill
                   unoptimized
                   referrerPolicy="no-referrer"
@@ -527,9 +576,74 @@ export const ProductCard = memo(function ProductCard({
             </div>
           )}
 
+          {/* Carousel Bundle In-Card Controls */}
+          {isCarouselBundle && carouselItems.length > 1 && (
+            <>
+              {/* Left Arrow Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setImgError(false);
+                  setSlideIndex((prev) => (prev > 0 ? prev - 1 : carouselItems.length - 1));
+                }}
+                className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/80 hover:bg-black text-white flex items-center justify-center transition-all cursor-pointer z-25 shadow-md border border-white/20 opacity-0 group-hover:opacity-100 active:scale-95"
+                title="Previous Carousel Product"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              {/* Right Arrow Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setImgError(false);
+                  setSlideIndex((prev) => (prev + 1) % carouselItems.length);
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/80 hover:bg-black text-white flex items-center justify-center transition-all cursor-pointer z-25 shadow-md border border-white/20 opacity-0 group-hover:opacity-100 active:scale-95"
+                title="Next Carousel Product"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+
+              {/* Dot Pagination Rail */}
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-25 flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/75 backdrop-blur-md border border-white/15 shadow-md pointer-events-auto">
+                {carouselItems.slice(0, 8).map((_, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setImgError(false);
+                      setSlideIndex(idx);
+                    }}
+                    className={`transition-all rounded-full cursor-pointer ${
+                      idx === slideIndex
+                        ? "w-2.5 h-1.5 bg-indigo-400"
+                        : "w-1.5 h-1.5 bg-white/40 hover:bg-white/70"
+                    }`}
+                    title={`Product ${idx + 1}`}
+                  />
+                ))}
+                {carouselItems.length > 8 && (
+                  <span className="text-[9px] font-bold text-white/70 pl-0.5">+{carouselItems.length - 8}</span>
+                )}
+              </div>
+            </>
+          )}
+
           {/* Top-Left Dynamic Status Pill (High contrast dark-glass pill for 100% readability over white images) */}
           <div className="absolute top-2 left-2 z-20">
-            {isRefreshing ? (
+            {isCarouselBundle ? (
+              <span
+                className="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-300 bg-black/85 border border-indigo-500/60 px-2.5 py-0.5 rounded-full backdrop-blur-md shadow-md"
+                title={`${carouselItems.length} products bundled from this carousel`}
+              >
+                <Layers className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                <span>{slideIndex + 1}/{carouselItems.length} Products</span>
+              </span>
+            ) : isRefreshing ? (
               <span
                 className="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-300 bg-black/85 border border-indigo-500/60 px-2.5 py-0.5 rounded-full backdrop-blur-md shadow-md animate-pulse"
                 title="Updating product page information..."
@@ -615,14 +729,14 @@ export const ProductCard = memo(function ProductCard({
                 ? "text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200"
                 : "text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
               }`}
-            title={product.title || "Product Landing Page"}
+            title={activeTitle || "Product Landing Page"}
           >
-            {product.hasCarouselAd && (
+            {(product.hasCarouselAd || isCarouselBundle) && (
               <span title="Active in Meta Carousel Ad format" className="inline-flex items-center">
                 <Layers className="w-4 h-4 text-indigo-500 dark:text-indigo-400 shrink-0 mr-1.5 -mt-0.5" />
               </span>
             )}
-            {product.title || "Untitled Product Landing Page"}
+            {activeTitle || "Untitled Product Landing Page"}
           </h4>
         </div>
       </div>
@@ -669,9 +783,9 @@ export const ProductCard = memo(function ProductCard({
             )}
 
             {/* Direct Store Landing Page Link (w-8 h-8 matching Meta & Header button heights) */}
-            {product.url && (
+            {activeUrl && (
               <a
-                href={product.url}
+                href={activeUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
@@ -689,8 +803,8 @@ export const ProductCard = memo(function ProductCard({
           {/* Velocity: Green Dot (1-4 ads) vs Pulsing Flame (5+ ads) */}
           <div className="flex items-center min-w-0 shrink-0">
             {(() => {
-              const activeCount = product.activeAdsCount || 0;
-              const hasLinkedAds = (product.linkedAdsCount || 0) > 0;
+              const activeCount = activeAdsCount || 0;
+              const hasLinkedAds = (activeLinkedAdsCount || 0) > 0;
               const canViewAds = !isStaff && Boolean(onViewCreatives) && hasLinkedAds;
 
               const velocityContent = activeCount >= 5 ? (

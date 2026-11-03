@@ -166,6 +166,21 @@ export interface CreativeScan {
   finishedAt?: string | null;
 }
 
+export interface CarouselItemSummary {
+  id: string;
+  url: string;
+  title: string | null;
+  currentPrice: string | null;
+  originalPrice?: string | null;
+  currency?: string | null;
+  discountOrOffer?: string | null;
+  mainImageUrl: string | null;
+  activeAdsCount?: number;
+  linkedAdsCount?: number;
+  isFavorite?: boolean | null;
+  createdAt?: string | Date;
+}
+
 export interface ScrapedProduct {
   id: string;
   url: string;
@@ -215,6 +230,9 @@ export interface ScrapedProduct {
   brandHoldStatus?: "active" | "on_hold" | "inactive" | null;
   brandCurrentResults?: number | null;
   winnerScore?: number;
+  carouselItems?: CarouselItemSummary[] | null;
+  isCarouselBundle?: boolean;
+  carouselBundleCount?: number;
 }
 
 export interface Ad {
