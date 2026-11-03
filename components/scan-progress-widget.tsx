@@ -14,6 +14,8 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { ScanProgressStep } from "@/app/api/scan-progress/route";
+import { getSupabase } from "@/lib/supabase";
+import { SCAN_TELEMETRY_CHANNEL, SCAN_STEP_EVENT, type ScanStepBroadcastPayload } from "@/lib/realtime-scan";
 
 interface ScanProgressWidgetProps {
   scanningPageIds: string[];
@@ -88,6 +90,42 @@ export function ScanProgressWidget({
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [scanningPageIds, onScanFinished]);
+
+  // Real-time instant updates via Supabase Broadcast messages
+  useEffect(() => {
+    let channel: any = null;
+    try {
+      const supabase = getSupabase();
+      channel = supabase
+        .channel(SCAN_TELEMETRY_CHANNEL)
+        .on("broadcast", { event: SCAN_STEP_EVENT }, (msg: { payload: ScanStepBroadcastPayload }) => {
+          if (!msg?.payload) return;
+          const step = msg.payload;
+          setStepsMap((prev) => ({
+            ...prev,
+            [step.pageId]: {
+              pageId: step.pageId,
+              displayName: step.displayName,
+              step: step.step,
+              label: step.label,
+              percent: step.percent,
+              activeAds: step.activeAds,
+              timestamp: step.timestamp,
+            },
+          }));
+        })
+        .subscribe();
+    } catch {}
+
+    return () => {
+      if (channel) {
+        try {
+          const supabase = getSupabase();
+          supabase.removeChannel(channel);
+        } catch {}
+      }
+    };
+  }, []);
 
   const activeEntries = Object.values(stepsMap);
   if (activeEntries.length === 0 || isDismissed) return null;

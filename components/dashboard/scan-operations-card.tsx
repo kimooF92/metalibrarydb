@@ -1,6 +1,23 @@
 "use client";
 
-import { Zap, Activity, CheckCircle2, AlertTriangle, Play, RefreshCw, Sparkles, Moon } from "lucide-react";
+import { useState } from "react";
+import {
+  Zap,
+  Activity,
+  CheckCircle2,
+  AlertTriangle,
+  Play,
+  RefreshCw,
+  Sparkles,
+  Moon,
+  Clock,
+  Timer,
+  Loader2,
+  ShieldAlert,
+  ArrowUpRight,
+} from "lucide-react";
+import { useScanStatus } from "@/hooks/use-scan-status";
+import { useToast } from "@/components/toast-context";
 
 export interface ScanOperationsData {
   scansToday: number;
@@ -32,36 +49,78 @@ export function ScanOperationsCard({
   onRefresh,
   refreshing = false,
 }: ScanOperationsCardProps) {
-  const scansToday = data?.scansToday ?? 0;
-  const scansThisHour = data?.scansThisHour ?? 0;
-  const isPaused = data?.isPaused ?? false;
-  const circuitBreaker = data?.circuitBreakerTripped ?? false;
+  const { showToast } = useToast();
+  const {
+    scheduleStatus,
+    activeScan,
+    lastBatchSummary,
+    formattedCountdown,
+    secondsRemaining,
+    isTriggering,
+    triggerScanNow,
+    refreshStatus,
+  } = useScanStatus();
+
+  // Combine initial server props with live realtime telemetry
+  const isPaused = scheduleStatus?.workerState?.isPaused ?? data?.isPaused ?? false;
+  const circuitBreaker = scheduleStatus?.workerState?.circuitBreakerTripped ?? data?.circuitBreakerTripped ?? false;
+  const scansToday = scheduleStatus?.workerState?.scansToday ?? data?.scansToday ?? 0;
+  const scansThisHour = scheduleStatus?.workerState?.scansThisHour ?? data?.scansThisHour ?? 0;
+  const hourlyLimit = scheduleStatus?.workerState?.hourlyLimit ?? 100;
+  const quotaPercent = Math.min(100, Math.round((scansThisHour / hourlyLimit) * 100));
+
   const successRate = data?.successRate ?? 100;
   const completed = data?.completedCount ?? 0;
   const totalBrands = data?.totalBrands ?? 0;
-  const pending = data?.queuePending ?? 0;
-  const running = data?.queueRunning ?? 0;
+  const pending = scheduleStatus?.pendingJobsCount ?? data?.queuePending ?? 0;
+  const running = scheduleStatus?.runningJobsCount ?? data?.queueRunning ?? 0;
   const darkCount = data?.darkCount ?? ((data?.failedCount ?? 0) + (data?.onHoldCount ?? 0));
   const revivedCount = data?.revivedCount ?? 0;
   const attentionCount = darkCount;
 
-  const statusBadge = isPaused
-    ? { text: "Paused", class: "bg-amber-500/10 text-amber-500 border-amber-500/20" }
+  const isActivelyScanning =
+    Boolean(activeScan && activeScan.step !== "completed" && activeScan.step !== "failed") ||
+    running > 0 ||
+    scheduleStatus?.isQueueRunning;
+
+  // Engine Status Badges
+  const statusBadge = isActivelyScanning
+    ? { text: "Scanning", class: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30", pulse: true }
+    : isPaused
+    ? { text: "Paused", class: "bg-amber-500/10 text-amber-500 border-amber-500/20", pulse: false }
     : circuitBreaker
-    ? { text: "Tripped", class: "bg-rose-500/10 text-rose-500 border-rose-500/20" }
-    : { text: "Active", class: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" };
+    ? { text: "Tripped", class: "bg-rose-500/10 text-rose-500 border-rose-500/20", pulse: false }
+    : { text: "Active", class: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20", pulse: false };
+
+  const handleTriggerNow = async () => {
+    const res = await triggerScanNow(false);
+    if (res.success) {
+      showToast({
+        title: "⚡ Batch Scan Enqueued",
+        message: `${res.count ?? 0} eligible brand page(s) queued for refresh.`,
+        type: "success",
+      });
+      onRefresh?.();
+    } else {
+      showToast({
+        title: "Scan Trigger Failed",
+        message: res.error || "Could not enqueue scan batch.",
+        type: "error",
+      });
+    }
+  };
 
   return (
-    <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 shadow-xs p-4">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3.5">
+    <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 shadow-xs p-4 flex flex-col space-y-3.5">
+      {/* 1. Header & Live Engine Status */}
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="flex items-center justify-center w-5 h-5 rounded-md bg-blue-500/10 text-blue-500">
             <Zap className="w-3.5 h-3.5" />
           </span>
           <div>
             <h2 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-              Scan Operations & Coverage
+              Scan Operations & Mission Center
             </h2>
           </div>
         </div>
@@ -70,12 +129,126 @@ export function ScanOperationsCard({
         <span
           className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${statusBadge.class}`}
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+          <span className={`w-1.5 h-1.5 rounded-full bg-current ${statusBadge.pulse ? "animate-ping" : ""}`} />
           <span>{statusBadge.text}</span>
         </span>
       </div>
 
-      {/* Operational 4-Metric Grid */}
+      {/* 2. Next Scan Countdown Timer Bar & Action */}
+      <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/60 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-7 h-7 rounded-md bg-indigo-500/10 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+            {isActivelyScanning ? (
+              <Activity className="w-4 h-4 animate-spin" />
+            ) : (
+              <Timer className="w-4 h-4" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                {isActivelyScanning
+                  ? "Scan in Progress"
+                  : scheduleStatus?.nextScanReason === "stale_page_eligible"
+                  ? "Stale Pages Due"
+                  : "Next Scheduled Scan"}
+              </span>
+              {scheduleStatus?.nextScanReason === "cron_schedule" && (
+                <span className="text-[9px] font-mono font-medium px-1 py-0.2 rounded bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                  UTC Window
+                </span>
+              )}
+            </div>
+            <div className="text-xs font-extrabold text-slate-900 dark:text-white font-mono truncate">
+              {isActivelyScanning ? (
+                <span className="text-cyan-600 dark:text-cyan-400 flex items-center gap-1">
+                  Streaming Real-time
+                </span>
+              ) : secondsRemaining <= 0 ? (
+                <span className="text-amber-600 dark:text-amber-400 font-bold">
+                  Eligible for scan now
+                </span>
+              ) : (
+                <span>in {formattedCountdown}</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Trigger Scan Now CTA */}
+        <button
+          onClick={handleTriggerNow}
+          disabled={isTriggering || isActivelyScanning}
+          title="Enqueue stale pages immediately and trigger scan runner"
+          className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-200 dark:disabled:bg-slate-800 text-white disabled:text-slate-400 text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:cursor-not-allowed shrink-0"
+        >
+          {isTriggering ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Play className="w-3.5 h-3.5 fill-current" />
+          )}
+          <span>{isTriggering ? "Queuing..." : "Scan Now"}</span>
+        </button>
+      </div>
+
+      {/* 3. Live Scan Progression Visualizer (Rendered when actively scanning or recently completed) */}
+      {activeScan && (
+        <div className="p-3 rounded-lg bg-cyan-50/60 dark:bg-cyan-950/20 border border-cyan-200/80 dark:border-cyan-800/60 space-y-2 animate-in fade-in duration-300">
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 min-w-0">
+              {activeScan.profilePicUrl ? (
+                <img
+                  src={activeScan.profilePicUrl}
+                  alt=""
+                  className="w-5 h-5 rounded-full object-cover shrink-0 border border-cyan-300 dark:border-cyan-700"
+                />
+              ) : (
+                <div className="w-5 h-5 rounded-full bg-cyan-200 dark:bg-cyan-800 flex items-center justify-center text-[10px] font-bold text-cyan-900 dark:text-cyan-100 shrink-0">
+                  {activeScan.displayName?.charAt(0) || "B"}
+                </div>
+              )}
+              <span className="font-bold text-slate-900 dark:text-white truncate">
+                {activeScan.displayName}
+              </span>
+              {activeScan.country && (
+                <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-cyan-100 dark:bg-cyan-900/60 text-cyan-800 dark:text-cyan-300">
+                  {activeScan.country}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              {activeScan.activeAds !== undefined && activeScan.activeAds !== null && (
+                <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                  {activeScan.activeAds} ads
+                </span>
+              )}
+              <span className="text-[10px] font-mono font-bold text-cyan-600 dark:text-cyan-400">
+                {activeScan.percent}%
+              </span>
+            </div>
+          </div>
+
+          {/* Animated Gradient Progress Bar */}
+          <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="bg-gradient-to-r from-cyan-500 via-indigo-500 to-emerald-500 h-1.5 rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${Math.max(5, activeScan.percent)}%` }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+            <span className="truncate">{activeScan.label}</span>
+            {activeScan.batchIndex && (
+              <span className="font-mono text-[10px] font-semibold text-slate-400 shrink-0 ml-2">
+                Job #{activeScan.batchIndex}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 4. Operational 4-Metric Grid */}
       <div className="grid grid-cols-2 gap-2 text-xs">
         {/* Metric 1: Scans Today */}
         <div className="p-2.5 rounded-lg bg-slate-50/70 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800/60">
@@ -92,7 +265,7 @@ export function ScanOperationsCard({
           </div>
         </div>
 
-        {/* Metric 2: Success Rate */}
+        {/* Metric 2: Scan Health */}
         <div className="p-2.5 rounded-lg bg-slate-50/70 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800/60">
           <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block">
             Scan Health
@@ -142,8 +315,49 @@ export function ScanOperationsCard({
         </div>
       </div>
 
-      {/* Coverage Status Drift: Went Dark vs. Revived Pages */}
-      <div className="mt-2.5 grid grid-cols-2 gap-2 text-xs">
+      {/* 5. Hourly Rate Limit Quota Usage Meter */}
+      <div className="px-2.5 py-2 rounded-lg bg-slate-50/70 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800/60 text-xs space-y-1.5">
+        <div className="flex items-center justify-between text-[10px]">
+          <span className="text-slate-500 dark:text-slate-400 font-semibold">
+            Hourly Meta Rate Limit Quota
+          </span>
+          <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
+            {scansThisHour} / {hourlyLimit} ({quotaPercent}%)
+          </span>
+        </div>
+        <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-1 overflow-hidden">
+          <div
+            className={`h-1 rounded-full transition-all duration-300 ${
+              quotaPercent > 80
+                ? "bg-rose-500"
+                : quotaPercent > 60
+                ? "bg-amber-500"
+                : "bg-indigo-500"
+            }`}
+            style={{ width: `${quotaPercent}%` }}
+          />
+        </div>
+      </div>
+
+      {/* 6. Last Completed Batch Summary (Rendered when idle and summary is available) */}
+      {!activeScan && lastBatchSummary && (
+        <div className="p-2 rounded-lg bg-slate-50/80 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/60 text-[11px] text-slate-600 dark:text-slate-300 flex items-center justify-between">
+          <div className="flex items-center gap-1.5 truncate">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+            <span className="truncate">
+              Last batch: <strong>{lastBatchSummary.totalScanned}</strong> brands in {lastBatchSummary.durationSeconds}s
+            </span>
+          </div>
+          {lastBatchSummary.newAdsCount > 0 && (
+            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded shrink-0">
+              +{lastBatchSummary.newAdsCount} new ads
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* 7. Coverage Drift: Went Dark vs. Revived Pages */}
+      <div className="grid grid-cols-2 gap-2 text-xs">
         {/* Went Dark */}
         <div className="p-2 rounded-lg bg-rose-500/5 dark:bg-rose-950/20 border border-rose-500/20 flex items-center justify-between">
           <div className="min-w-0 pr-1">
@@ -173,9 +387,9 @@ export function ScanOperationsCard({
         </div>
       </div>
 
-      {/* Attention Required Banner (if any brands failed or are on hold) */}
+      {/* 8. Attention Required Banner */}
       {attentionCount > 0 ? (
-        <div className="mt-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-between text-xs">
+        <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-between text-xs">
           <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
             <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
             <span className="text-[11px] font-bold">
@@ -187,7 +401,7 @@ export function ScanOperationsCard({
           </span>
         </div>
       ) : (
-        <div className="mt-3 p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15 flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400">
+        <div className="p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15 flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400">
           <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
           <span className="text-[11px] font-semibold">
             All active competitor brand pages are healthy & scanning normally.

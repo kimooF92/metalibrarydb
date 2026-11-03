@@ -6,6 +6,7 @@ import { eq, and, or, inArray, sql } from "drizzle-orm";
 import { scanMetaAdPage } from "../../worker/scanner";
 import { markJobCompleted } from "../../worker/db";
 import { acquireLock, releaseLock, deleteCached, deleteByPrefix, setCached } from "../../lib/cache-service";
+import { broadcastScanStep } from "../../lib/realtime-scan";
 
 export interface ScanPageCountPayload {
   pageId?: string;
@@ -85,17 +86,16 @@ export const scanPageCountTask = task({
         if (ctx?.run?.id) {
           await releaseLock(`lock:scrape:${pageRecord.id}`, ctx.run.id).catch(() => {});
         }
-        await setCached(
-          `scan_step:${pageRecord.id}`,
-          {
-            pageId: pageRecord.id,
-            step: "failed",
-            label: `Scan failed: ${errMessage}`,
-            percent: 100,
-            timestamp: Date.now(),
-          },
-          60
-        ).catch(() => {});
+        await broadcastScanStep({
+          jobId: ctx?.run?.id || pageRecord.id,
+          pageId: pageRecord.id,
+          displayName: pageRecord.id,
+          jobType: "count",
+          step: "failed",
+          label: `Scan failed: ${errMessage}`,
+          percent: 100,
+          timestamp: Date.now(),
+        }).catch(() => {});
 
         if (pageRecord.workspaceId) {
           await deleteCached(`cache:stats:${pageRecord.workspaceId}`).catch(() => {});
@@ -227,18 +227,16 @@ export const scanPageCountTask = task({
         .set({ status: "scanning", updatedAt: new Date() })
         .where(eq(trackedPages.id, pageRecord.id));
 
-      await setCached(
-        `scan_step:${pageRecord.id}`,
-        {
-          pageId: pageRecord.id,
-          displayName: pageRecord.displayName || targetUrl,
-          step: "launching",
-          label: "1. Launching browser instance...",
-          percent: 15,
-          timestamp: Date.now(),
-        },
-        120
-      );
+      await broadcastScanStep({
+        jobId: ctx?.run?.id || pageRecord.id,
+        pageId: pageRecord.id,
+        displayName: pageRecord.displayName || targetUrl,
+        jobType: "count",
+        step: "launching",
+        label: "1. Launching browser instance...",
+        percent: 15,
+        timestamp: Date.now(),
+      });
 
       // 2. Launch headless browser with low-memory container flags (NO --single-process)
       const isHeadless = process.env.PLAYWRIGHT_HEADLESS !== "false";
@@ -290,18 +288,16 @@ export const scanPageCountTask = task({
         page,
         targetUrl,
         async (step, label, pct) => {
-          await setCached(
-            `scan_step:${pageRecord.id}`,
-            {
-              pageId: pageRecord.id,
-              displayName: pageRecord.displayName || targetUrl,
-              step,
-              label,
-              percent: pct,
-              timestamp: Date.now(),
-            },
-            120
-          );
+          await broadcastScanStep({
+            jobId: ctx?.run?.id || pageRecord.id,
+            pageId: pageRecord.id,
+            displayName: pageRecord.displayName || targetUrl,
+            jobType: "count",
+            step: step as any,
+            label,
+            percent: pct,
+            timestamp: Date.now(),
+          }).catch(() => {});
         },
         {
           previousCount: pageRecord.currentResults,
@@ -310,18 +306,16 @@ export const scanPageCountTask = task({
       );
       logger.info(`Scrape outcome for ${pageRecord.displayName || targetUrl}: ${JSON.stringify(outcome)}`);
 
-      await setCached(
-        `scan_step:${pageRecord.id}`,
-        {
-          pageId: pageRecord.id,
-          displayName: pageRecord.displayName || targetUrl,
-          step: "saving",
-          label: "4. Saving snapshot & updating sparkline...",
-          percent: 90,
-          timestamp: Date.now(),
-        },
-        120
-      );
+      await broadcastScanStep({
+        jobId: ctx?.run?.id || pageRecord.id,
+        pageId: pageRecord.id,
+        displayName: pageRecord.displayName || targetUrl,
+        jobType: "count",
+        step: "saving",
+        label: "4. Saving snapshot & updating sparkline...",
+        percent: 90,
+        timestamp: Date.now(),
+      }).catch(() => {});
 
       // 4. Save results to database using existing state machine
       if (outcome.status === "success" || outcome.status === "unclear") {
@@ -337,19 +331,17 @@ export const scanPageCountTask = task({
           }
         );
 
-        await setCached(
-          `scan_step:${pageRecord.id}`,
-          {
-            pageId: pageRecord.id,
-            displayName: pageRecord.displayName || targetUrl,
-            step: "completed",
-            label: `Scan complete: ${outcome.results ?? 0} active ads found`,
-            activeAds: outcome.results,
-            percent: 100,
-            timestamp: Date.now(),
-          },
-          60
-        );
+        await broadcastScanStep({
+          jobId: ctx?.run?.id || pageRecord.id,
+          pageId: pageRecord.id,
+          displayName: pageRecord.displayName || targetUrl,
+          jobType: "count",
+          step: "completed",
+          label: `Scan complete: ${outcome.results ?? 0} active ads found`,
+          activeAds: outcome.results,
+          percent: 100,
+          timestamp: Date.now(),
+        }).catch(() => {});
       } else {
         // Mark as failed in trackedPages and queue
         const now = new Date();
@@ -371,18 +363,16 @@ export const scanPageCountTask = task({
           })
           .where(and(eq(queue.trackedPageId, pageRecord.id), inArray(queue.status, ["pending", "running"])));
 
-        await setCached(
-          `scan_step:${pageRecord.id}`,
-          {
-            pageId: pageRecord.id,
-            displayName: pageRecord.displayName || targetUrl,
-            step: "failed",
-            label: `Scan failed: ${outcome.failureReason || "unknown error"}`,
-            percent: 100,
-            timestamp: Date.now(),
-          },
-          60
-        );
+        await broadcastScanStep({
+          jobId: ctx?.run?.id || pageRecord.id,
+          pageId: pageRecord.id,
+          displayName: pageRecord.displayName || targetUrl,
+          jobType: "count",
+          step: "failed",
+          label: `Scan failed: ${outcome.failureReason || "unknown error"}`,
+          percent: 100,
+          timestamp: Date.now(),
+        }).catch(() => {});
       }
 
       // Explicitly dispose of browser resources immediately

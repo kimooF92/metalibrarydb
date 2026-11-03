@@ -44,6 +44,7 @@ import {
   handleSuccess,
 } from "./backoff";
 import { acquireLock, acquireLockDetailed, releaseLock, deleteCached, deleteByPrefix } from "../lib/cache-service";
+import { broadcastScanStep, broadcastBatchSummary } from "../lib/realtime-scan";
 
 async function runWorker() {
   const shardIndex = process.env.SHARD_INDEX !== undefined ? parseInt(process.env.SHARD_INDEX, 10) : 0;
@@ -295,6 +296,7 @@ async function runWorker() {
     if (sessionScanned > 0) {
       try {
         const { logBatchSummaryNotification } = await import("../lib/notifications");
+        const durationSec = Math.round((Date.now() - sessionStartTime) / 1000);
         await logBatchSummaryNotification({
           runnerType: "count_worker",
           totalScanned: sessionScanned,
@@ -302,10 +304,20 @@ async function runWorker() {
           movers: sessionMovers,
           unchangedCount: sessionScanned - sessionMovers.length - sessionErrors,
           failedCount: sessionErrors,
-          durationSeconds: Math.round((Date.now() - sessionStartTime) / 1000),
+          durationSeconds: durationSec,
           actionUrl: "/?sortBy=difference&sortOrder=desc",
           shardInfo: isMultiShard ? `Shard ${shardIndex + 1}/${totalShards}` : undefined,
         });
+
+        // Broadcast session completion summary over Supabase Realtime to all active dashboards
+        await broadcastBatchSummary({
+          finishedAt: Date.now(),
+          totalScanned: sessionScanned,
+          newAdsCount: sessionMovers.reduce((acc, m) => acc + (m.diff || 0), 0),
+          moversCount: sessionMovers.length,
+          durationSeconds: durationSec,
+          shardInfo: isMultiShard ? `Shard ${shardIndex + 1}/${totalShards}` : undefined,
+        }).catch(() => {});
       } catch (err) {
         console.error("[Worker] Failed to emit batch summary:", err);
       }
@@ -881,7 +893,25 @@ async function runWorker() {
         }
       } else if (trackedPage) {
         // Run Result Count scan for Tracked Page
-        const outcome = await scanMetaAdPage(page, trackedPage.url, undefined, {
+        const onProgress = async (step: string, label: string, percent: number) => {
+          await broadcastScanStep({
+            jobId: queueJob.id,
+            pageId: trackedPage.id,
+            displayName: targetDisplayName,
+            country: trackedPage.country || "TN",
+            profilePicUrl: trackedPage.profilePicUrl,
+            jobType: "count",
+            step: step as any,
+            label,
+            percent,
+            batchIndex: ranJobs + 1,
+            timestamp: Date.now(),
+          }).catch(() => {});
+        };
+
+        await onProgress("launching", "1. Connecting browser session...", 15);
+
+        const outcome = await scanMetaAdPage(page, trackedPage.url, onProgress, {
           previousCount: trackedPage.currentResults,
           brandName: trackedPage.displayName,
         });
@@ -897,6 +927,23 @@ async function runWorker() {
             outcome.status,
             { failureReason: outcome.failureReason, page, profilePicUrl: outcome.profilePicUrl }
           );
+
+          await broadcastScanStep({
+            jobId: queueJob.id,
+            pageId: trackedPage.id,
+            displayName: targetDisplayName,
+            country: trackedPage.country || "TN",
+            profilePicUrl: outcome.profilePicUrl || trackedPage.profilePicUrl,
+            jobType: "count",
+            step: "completed",
+            label: `Scan complete: ${outcome.results ?? 0} active ads found.`,
+            percent: 100,
+            activeAds: outcome.results,
+            previousAds: trackedPage.currentResults,
+            diff: res?.difference ?? null,
+            batchIndex: ranJobs + 1,
+            timestamp: Date.now(),
+          }).catch(() => {});
 
           if (res?.circuitBreakerTripped) {
             console.warn(
@@ -1001,6 +1048,19 @@ async function runWorker() {
             trackedPage.id,
             outcome.failureReason || "navigation_error"
           );
+          await broadcastScanStep({
+            jobId: queueJob.id,
+            pageId: trackedPage.id,
+            displayName: targetDisplayName,
+            country: trackedPage.country || "TN",
+            profilePicUrl: trackedPage.profilePicUrl,
+            jobType: "count",
+            step: "failed",
+            label: `Scan failed: ${outcome.failureReason || "error"}`,
+            percent: 100,
+            batchIndex: ranJobs + 1,
+            timestamp: Date.now(),
+          }).catch(() => {});
           await handleFailure();
         }
       }
