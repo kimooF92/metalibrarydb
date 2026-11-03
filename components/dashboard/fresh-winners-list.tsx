@@ -25,6 +25,7 @@ export interface FreshBreakout {
   productCurrency: string | null;
   productImageUrl: string | null;
   storePlatform: string | null;
+  activeAdsCount?: number;
 }
 
 interface FreshWinnersListProps {
@@ -81,7 +82,17 @@ function getMediaBadge(mediaType: string | null) {
 }
 
 export function FreshWinnersList({ products, loading = false, currencySymbol = "DT" }: FreshWinnersListProps) {
-  const displayItems = products.slice(0, 5);
+  // Deduplication safeguard: Ensure each product appears strictly once by productId or normalized title
+  const seenKeys = new Set<string>();
+  const displayItems: FreshBreakout[] = [];
+  for (const item of products) {
+    const key = (item.productId || item.productTitle?.toLowerCase().trim() || item.id).toLowerCase();
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      displayItems.push(item);
+    }
+    if (displayItems.length >= 5) break;
+  }
 
   return (
     <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 shadow-xs overflow-hidden">
@@ -179,6 +190,13 @@ export function FreshWinnersList({ products, loading = false, currencySymbol = "
                       <span className={`text-[10px] font-black px-1.5 py-0.5 rounded border ${tierBadge.className}`}>
                         {tierBadge.label}
                       </span>
+
+                      {/* Active Ads Velocity Count */}
+                      {item.activeAdsCount && item.activeAdsCount > 1 ? (
+                        <span className="text-[10px] font-black text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
+                          🔥 {item.activeAdsCount} active ads
+                        </span>
+                      ) : null}
 
                       {/* Format Badge */}
                       <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border ${mediaBadge.className}`}>

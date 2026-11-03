@@ -194,38 +194,42 @@ export async function GET(req: NextRequest) {
         .orderBy(desc(scrapedProducts.updatedAt))
         .limit(4),
 
-      // 6. Fresh Breakouts (top ads with creative media)
+      // 6. Fresh Breakouts (unique winner products with active ads)
       db
         .select({
-          id: ads.id,
-          adArchiveId: ads.adArchiveId,
-          pageId: ads.pageId,
-          pageName: ads.pageName,
-          mediaType: ads.mediaType,
-          thumbnailUrl: ads.thumbnailUrl,
-          startedRunningOn: ads.startedRunningOn,
-          firstSeenAt: ads.firstSeenAt,
-          lastSeenAt: ads.lastSeenAt,
-          title: sql<string>`left(${ads.title}, 100)`,
           productId: scrapedProducts.id,
           productTitle: sql<string>`left(${scrapedProducts.title}, 100)`,
           productPrice: scrapedProducts.currentPrice,
           productCurrency: scrapedProducts.currency,
           productImageUrl: scrapedProducts.mainImageUrl,
           storePlatform: scrapedProducts.storePlatform,
-          brandDisplayName: sql<string>`coalesce(${trackedPages.displayName}, ${ads.pageName})`,
+          brandDisplayName: sql<string>`coalesce(${trackedPages.displayName}, ${scrapedProducts.domain})`,
+          pageId: scrapedProducts.pageId,
+          adArchiveId: sql<string>`max(${ads.adArchiveId})`,
+          adId: sql<string>`max(${ads.id}::text)`,
+          title: sql<string>`left(max(${ads.title}), 100)`,
+          mediaType: sql<string>`case when count(case when ${ads.mediaType} = 'video' then 1 end) > 0 then 'video' when count(case when ${ads.mediaType} = 'carousel' then 1 end) > 0 then 'carousel' else 'image' end`,
+          thumbnailUrl: sql<string | null>`coalesce(max(${ads.thumbnailUrl}), ${scrapedProducts.mainImageUrl})`,
+          startedRunningOn: sql<Date | null>`max(${ads.startedRunningOn})`,
+          firstSeenAt: sql<Date | null>`min(${ads.firstSeenAt})`,
+          lastSeenAt: sql<Date | null>`max(${ads.lastSeenAt})`,
+          activeAdsCount: sql<number>`count(distinct ${ads.id})`.mapWith(Number),
         })
-        .from(ads)
-        .innerJoin(trackedPages, eq(ads.pageId, trackedPages.pageId))
-        .leftJoin(scrapedProducts, eq(ads.productId, scrapedProducts.id))
+        .from(scrapedProducts)
+        .innerJoin(ads, eq(ads.productId, scrapedProducts.id))
+        .leftJoin(trackedPages, eq(trackedPages.pageId, scrapedProducts.pageId))
         .where(
           and(
-            eq(trackedPages.workspaceId, activeWorkspace.id),
+            eq(scrapedProducts.workspaceId, activeWorkspace.id),
             sql`(${ads.isArchived} = false or ${ads.isArchived} is null)`,
-            sql`(${ads.thumbnailUrl} is not null or ${scrapedProducts.mainImageUrl} is not null)`
+            sql`(${scrapedProducts.mainImageUrl} is not null and ${scrapedProducts.mainImageUrl} != '')`
           )
         )
-        .orderBy(desc(sql`coalesce(${ads.startedRunningOn}, ${ads.firstSeenAt})`))
+        .groupBy(scrapedProducts.id, trackedPages.displayName)
+        .orderBy(
+          desc(sql`max(coalesce(${ads.startedRunningOn}, ${ads.firstSeenAt}))`),
+          desc(sql`count(distinct ${ads.id})`)
+        )
         .limit(5),
 
       // 7. Category Distribution (top 5)
@@ -440,28 +444,29 @@ export async function GET(req: NextRequest) {
         .limit(5),
     ]);
 
-    // Format fresh breakouts with winner scoring metrics (Top 5)
+    // Format fresh breakouts with winner scoring metrics (Top 5 Unique Products)
     const freshBreakouts = freshBreakoutRows
       .map((row) => {
         const metrics = calculateWinnerScore({
           startedRunningOn: row.startedRunningOn,
           firstSeenAt: row.firstSeenAt,
           lastSeenAt: row.lastSeenAt,
-          duplicationCount: 3,
+          duplicationCount: Math.max(1, row.activeAdsCount),
+          productCreativeCount: row.activeAdsCount,
           isActive: true,
           isArchived: false,
           mediaType: row.mediaType,
         });
         return {
-          id: row.id,
+          id: row.adId || row.productId,
           adArchiveId: row.adArchiveId,
           pageId: row.pageId,
-          pageName: row.pageName,
-          brandDisplayName: row.brandDisplayName || row.pageName,
+          pageName: row.brandDisplayName,
+          brandDisplayName: row.brandDisplayName,
           mediaType: row.mediaType,
-          thumbnailUrl: row.thumbnailUrl,
-          startedRunningOn: row.startedRunningOn ? row.startedRunningOn.toISOString() : null,
-          firstSeenAt: row.firstSeenAt ? row.firstSeenAt.toISOString() : null,
+          thumbnailUrl: row.thumbnailUrl || row.productImageUrl,
+          startedRunningOn: row.startedRunningOn ? new Date(row.startedRunningOn).toISOString() : null,
+          firstSeenAt: row.firstSeenAt ? new Date(row.firstSeenAt).toISOString() : null,
           daysRunning: metrics.daysRunning,
           winnerScore: metrics.winnerScore,
           winnerTier: metrics.winnerTier,
@@ -473,6 +478,7 @@ export async function GET(req: NextRequest) {
           productCurrency: row.productCurrency,
           productImageUrl: row.productImageUrl,
           storePlatform: row.storePlatform,
+          activeAdsCount: row.activeAdsCount,
         };
       })
       .slice(0, 5);
