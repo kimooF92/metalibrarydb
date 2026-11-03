@@ -66,85 +66,193 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeTab, setActiveTab] = useState<string>("all");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
   const [confirmClearAll, setConfirmClearAll] = useState(false);
+
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
   const requestInFlightRef = useRef(false);
+  const isLoadingMoreRef = useRef(false);
+  isLoadingMoreRef.current = isLoadingMore;
+  const hasMoreRef = useRef(false);
+  hasMoreRef.current = hasMore;
+  const nextCursorRef = useRef<string | null>(null);
+  nextCursorRef.current = nextCursor;
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+
   const { showToast } = useToast();
 
-  const fetchNotifications = useCallback(async (showLoading = false) => {
-    if (requestInFlightRef.current || document.hidden) return;
-    requestInFlightRef.current = true;
-    if (showLoading) setIsRefreshing(true);
-    try {
-      if (!isOpen) {
-        const now = Date.now();
-        if (sharedSummaryCache && now - sharedSummaryCache.timestamp < 10000) {
-          setUnreadCount(sharedSummaryCache.count);
-          return;
-        }
+  const fetchNotifications = useCallback(
+    async (showLoading = false, isBackground = false) => {
+      if (requestInFlightRef.current || document.hidden) return;
+      requestInFlightRef.current = true;
+      if (showLoading) setIsRefreshing(true);
 
-        if (sharedSummaryPromise) {
+      try {
+        if (!isOpen) {
+          const now = Date.now();
+          if (sharedSummaryCache && now - sharedSummaryCache.timestamp < 10000) {
+            setUnreadCount(sharedSummaryCache.count);
+            return;
+          }
+
+          if (sharedSummaryPromise) {
+            const count = await sharedSummaryPromise;
+            setUnreadCount(count);
+            return;
+          }
+
+          sharedSummaryPromise = (async () => {
+            try {
+              const res = await fetch("/api/notifications?summary=true", {
+                signal: AbortSignal.timeout(8000),
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (data.success) {
+                  const count = data.unreadCount || 0;
+                  sharedSummaryCache = { count, timestamp: Date.now() };
+                  return count;
+                }
+              }
+            } catch (e) {
+              console.warn("[NotificationCenter] summary fetch failed:", e);
+            } finally {
+              sharedSummaryPromise = null;
+            }
+            return sharedSummaryCache?.count || 0;
+          })();
+
           const count = await sharedSummaryPromise;
           setUnreadCount(count);
           return;
         }
 
-        sharedSummaryPromise = (async () => {
-          try {
-            const res = await fetch("/api/notifications?summary=true", {
-              signal: AbortSignal.timeout(8000),
-            });
-            if (res.ok) {
-              const data = await res.json();
-              if (data.success) {
-                const count = data.unreadCount || 0;
-                sharedSummaryCache = { count, timestamp: Date.now() };
-                return count;
-              }
+        const query = `limit=20${activeTab === "all" ? "" : `&type=${encodeURIComponent(activeTab)}`}`;
+        const res = await fetch(`/api/notifications?${query}`, {
+          signal: AbortSignal.timeout(10000),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            const incoming: ActivityNotification[] = data.notifications || [];
+
+            if (isBackground) {
+              // In background poll, merge new items to top so the user's scroll state isn't reset
+              setNotifications((prev) => {
+                if (prev.length === 0) return incoming;
+                const existingIds = new Set(prev.map((n) => n.id));
+                const newItems = incoming.filter((n) => !existingIds.has(n.id));
+                if (newItems.length === 0) return prev;
+                return [...newItems, ...prev];
+              });
+            } else {
+              setNotifications(incoming);
+              setNextCursor(data.nextCursor || null);
+              setHasMore(Boolean(data.hasMore));
             }
-          } catch (e) {
-            console.warn("[NotificationCenter] summary fetch failed:", e);
-          } finally {
-            sharedSummaryPromise = null;
+
+            if (typeof data.unreadCount === "number") {
+              setUnreadCount(data.unreadCount);
+              sharedSummaryCache = { count: data.unreadCount, timestamp: Date.now() };
+            }
           }
-          return sharedSummaryCache?.count || 0;
-        })();
-
-        const count = await sharedSummaryPromise;
-        setUnreadCount(count);
-        return;
+        }
+      } catch (err) {
+        console.error("Error fetching notifications:", err);
+      } finally {
+        requestInFlightRef.current = false;
+        if (showLoading) {
+          setTimeout(() => setIsRefreshing(false), 400);
+        }
       }
+    },
+    [activeTab, isOpen]
+  );
 
-      const query = `limit=20${activeTab === "all" ? "" : `&type=${encodeURIComponent(activeTab)}`}`;
+  const loadMore = useCallback(async () => {
+    if (
+      isLoadingMoreRef.current ||
+      !hasMoreRef.current ||
+      !nextCursorRef.current ||
+      requestInFlightRef.current ||
+      document.hidden
+    ) {
+      return;
+    }
+
+    isLoadingMoreRef.current = true;
+    setIsLoadingMore(true);
+
+    try {
+      const currentTab = activeTabRef.current;
+      const cursorParam = encodeURIComponent(nextCursorRef.current);
+      const query = `limit=20&cursor=${cursorParam}${currentTab === "all" ? "" : `&type=${encodeURIComponent(currentTab)}`}`;
+
       const res = await fetch(`/api/notifications?${query}`, {
         signal: AbortSignal.timeout(10000),
       });
+
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
-          setNotifications(data.notifications || []);
-          setUnreadCount(data.unreadCount || 0);
-          sharedSummaryCache = { count: data.unreadCount || 0, timestamp: Date.now() };
+          const incoming: ActivityNotification[] = data.notifications || [];
+          setNotifications((prev) => {
+            const seen = new Set(prev.map((item) => item.id));
+            const fresh = incoming.filter((item) => !seen.has(item.id));
+            return [...prev, ...fresh];
+          });
+          setNextCursor(data.nextCursor || null);
+          setHasMore(Boolean(data.hasMore));
         }
       }
     } catch (err) {
-      console.error("Error fetching notifications:", err);
+      console.warn("[NotificationCenter] Load more error:", err);
     } finally {
-      requestInFlightRef.current = false;
-      if (showLoading) {
-        setTimeout(() => setIsRefreshing(false), 400);
-      }
+      isLoadingMoreRef.current = false;
+      setIsLoadingMore(false);
     }
-  }, [activeTab, isOpen]);
+  }, []);
 
-  // Adaptive polling: notifications are secondary UI state, so avoid frequent
-  // database reads and pause entirely while the tab is hidden.
+  // Infinite scroll intersection observer attached to the inner scroll container
   useEffect(() => {
-    fetchNotifications();
+    if (!isOpen || !hasMore || isLoadingMore) return;
+    const sentinel = sentinelRef.current;
+    const container = scrollContainerRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          loadMore();
+        }
+      },
+      {
+        root: container,
+        rootMargin: "80px",
+        threshold: 0.1,
+      }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [isOpen, hasMore, isLoadingMore, loadMore]);
+
+  // Adaptive polling: secondary UI state, pauses while tab is hidden
+  useEffect(() => {
+    fetchNotifications(false, false);
     const pollIntervalMs = isOpen ? 30000 : 180000;
-    const interval = setInterval(fetchNotifications, pollIntervalMs);
+    const interval = setInterval(() => {
+      fetchNotifications(false, isOpen);
+    }, pollIntervalMs);
     const handleVisibility = () => {
-      if (!document.hidden) fetchNotifications();
+      if (!document.hidden) fetchNotifications(false, isOpen);
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
@@ -218,6 +326,8 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
       if (res.ok) {
         setNotifications([]);
         setUnreadCount(0);
+        setNextCursor(null);
+        setHasMore(false);
         if (sharedSummaryCache) sharedSummaryCache.count = 0;
         setConfirmClearAll(false);
         showToast({ type: "info", title: "Cleared notification history" });
@@ -494,14 +604,18 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
           </div>
 
           {/* Notifications Scroll List */}
-          <div className="overflow-y-auto max-h-[480px] divide-y divide-slate-100 dark:divide-slate-800/60">
+          <div
+            ref={scrollContainerRef}
+            className="overflow-y-auto max-h-[480px] divide-y divide-slate-100 dark:divide-slate-800/60"
+          >
             {notifications.length === 0 ? (
               <div className="py-12 px-4 text-center flex flex-col items-center justify-center space-y-2 text-slate-400">
                 <Inbox className="w-8 h-8 opacity-40" />
                 <p className="text-xs">No notifications yet.</p>
               </div>
             ) : (
-              notifications.map((n) => {
+              <>
+                {notifications.map((n) => {
                 const movers = (n.metadata?.movers as any[]) || [];
                 const topBrands = (n.metadata?.topBrands as any[]) || [];
                 const isBreakout = n.type === "breakout_alert";
@@ -709,9 +823,33 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                     </div>
                   </div>
                 );
-              })
-            )}
-          </div>
+              })}
+
+              {/* Infinite Scroll Sentinel / Loading Spinner */}
+              {hasMore && (
+                <div
+                  ref={sentinelRef}
+                  className="py-3 px-4 flex items-center justify-center text-xs text-slate-400 bg-slate-50/40 dark:bg-slate-900/40"
+                >
+                  {isLoadingMore ? (
+                    <div className="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400 font-medium">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Loading earlier updates...</span>
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-slate-400">Loading more activity...</span>
+                  )}
+                </div>
+              )}
+
+              {!hasMore && notifications.length > 0 && (
+                <div className="py-2.5 text-center text-[10px] text-slate-400 dark:text-slate-500 bg-slate-50/20 dark:bg-slate-900/20">
+                  You&apos;re all caught up
+                </div>
+              )}
+            </>
+          )}
+        </div>
         </div>
       )}
     </div>
