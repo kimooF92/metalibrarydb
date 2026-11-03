@@ -6,7 +6,6 @@ import {
   DayOfWeekCadence,
 } from "../types/cadence";
 
-
 export interface CadenceAdInput {
   id: string;
   adArchiveId?: string | null;
@@ -20,6 +19,9 @@ export interface CadenceAdInput {
   isActive?: boolean | null;
   isArchived?: boolean | null;
   winnerScore?: number | null;
+  daysRunning?: number | null;
+  title?: string | null;
+  thumbnailUrl?: string | null;
 }
 
 export interface CadenceProductInput {
@@ -50,10 +52,36 @@ function toDateStr(d: Date): string {
 function getStartOfWeek(d: Date): Date {
   const copy = new Date(d);
   const day = copy.getDay();
-  const diff = copy.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+  const diff = copy.getDate() - day + (day === 0 ? -6 : 1);
   copy.setDate(diff);
   copy.setHours(0, 0, 0, 0);
   return copy;
+}
+
+/**
+ * Extract human-readable product title from a slug URL when scraped title is missing
+ */
+function extractTitleFromUrl(rawUrl: string): string | null {
+  try {
+    const url = new URL(rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`);
+    const segments = url.pathname.split("/").filter(Boolean);
+    if (segments.length === 0) return null;
+    const last = segments[segments.length - 1];
+    if (!last || last === "products" || last === "product" || last === "item" || last === "p") {
+      return null;
+    }
+    const clean = decodeURIComponent(last)
+      .replace(/[-_]+/g, " ")
+      .replace(/\.(html|php|asp|aspx)$/i, "")
+      .trim();
+    if (!clean || clean.length < 3) return null;
+    return clean
+      .split(" ")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(" ");
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -95,11 +123,12 @@ export function computeBrandCadence(
 
   // 2. Resolve True Product Launch Dates & Lifecycles
   const productLaunchRecords: ProductLaunchRecord[] = [];
-  const processedProductIds = new Set<string>();
+  const processedNormUrls = new Set<string>();
 
+  // A. Process explicitly linked/scraped products
   for (const prod of products) {
-    processedProductIds.add(prod.id);
     const normUrl = prod.url ? normalizeProductUrl(prod.url) : null;
+    if (normUrl) processedNormUrls.add(normUrl);
 
     // Collect all matching ads for this product
     const matchedAdsMap = new Map<string, CadenceAdInput>();
@@ -150,19 +179,28 @@ export function computeBrandCadence(
         status = "testing";
       }
     } else {
-      // Inactive product
-      if (daysSinceLaunch < 7 || totalAdsInjected <= 2) {
-        status = "killed";
-      } else {
-        status = "killed";
-      }
+      status = "killed";
     }
+
+    // Real title resolution: scraped title -> ad title -> url slug -> "Product Offer"
+    const resolvedTitle =
+      prod.title && prod.title !== "Product Offer" && prod.title.trim() !== ""
+        ? prod.title.trim()
+        : matchedAds.find((a) => a.title && a.title.trim() !== "")?.title?.trim() ||
+          (prod.url ? extractTitleFromUrl(prod.url) : null) ||
+          "Product Offer";
+
+    // Real thumbnail resolution: scraped main image -> ad thumbnail -> null
+    const resolvedImage =
+      prod.mainImageUrl ||
+      matchedAds.find((a) => a.thumbnailUrl)?.thumbnailUrl ||
+      null;
 
     productLaunchRecords.push({
       id: prod.id,
       url: prod.url || "",
-      title: prod.title || "Product Offer",
-      mainImageUrl: prod.mainImageUrl || null,
+      title: resolvedTitle,
+      mainImageUrl: resolvedImage,
       currentPrice: prod.currentPrice || null,
       currency: prod.currency || null,
       launchedAt: launchDate.toISOString(),
@@ -175,12 +213,68 @@ export function computeBrandCadence(
     });
   }
 
+  // B. Process detected ad product URLs not present in `products` list
+  for (const [normUrl, matchedAds] of adsByNormUrl.entries()) {
+    if (processedNormUrls.has(normUrl)) continue;
+    processedNormUrls.add(normUrl);
+
+    let earliestLaunchMs = Infinity;
+    let maxCopies = 1;
+    let activeAdsCount = 0;
+
+    for (const ad of matchedAds) {
+      const startStr = ad.startedRunningOn || ad.firstSeenAt;
+      if (startStr) {
+        const ms = new Date(startStr).getTime();
+        if (!isNaN(ms) && ms < earliestLaunchMs) earliestLaunchMs = ms;
+      }
+      const copies = Number(ad.duplicationCount || 1);
+      if (copies > maxCopies) maxCopies = copies;
+      if (ad.isActive && !ad.isArchived) activeAdsCount++;
+    }
+
+    const launchDate = earliestLaunchMs !== Infinity ? new Date(earliestLaunchMs) : now;
+    const daysSinceLaunch = Math.max(0, Math.floor((nowMs - launchDate.getTime()) / (1000 * 60 * 60 * 24)));
+
+    let status: ProductLaunchRecord["status"] = "testing";
+    if (activeAdsCount > 0) {
+      if (daysSinceLaunch >= 30 && maxCopies >= 3) status = "winner";
+      else if (daysSinceLaunch >= 14 || maxCopies >= 3) status = "scaling";
+      else status = "testing";
+    } else {
+      status = "killed";
+    }
+
+    const resolvedTitle =
+      matchedAds.find((a) => a.title && a.title.trim() !== "")?.title?.trim() ||
+      extractTitleFromUrl(normUrl) ||
+      "Product Offer";
+
+    const resolvedImage = matchedAds.find((a) => a.thumbnailUrl)?.thumbnailUrl || null;
+
+    productLaunchRecords.push({
+      id: `ad_url_${Buffer.from(normUrl).toString("base64").slice(0, 16)}`,
+      url: normUrl,
+      title: resolvedTitle,
+      mainImageUrl: resolvedImage,
+      currentPrice: null,
+      currency: null,
+      launchedAt: launchDate.toISOString(),
+      daysSinceLaunch,
+      totalAdsInjected: matchedAds.length,
+      activeAdsCount,
+      maxCopies,
+      status,
+      adIds: matchedAds.map((a) => a.id),
+    });
+  }
+
   // Sort launch records by launch date descending
   productLaunchRecords.sort(
     (a, b) => new Date(b.launchedAt).getTime() - new Date(a.launchedAt).getTime()
   );
 
-  // 3. Product Lifecycle Funnel Metrics
+  // 3. Product Lifecycle Funnel Metrics & Winning Rates
   const totalProductsTested = productLaunchRecords.length;
   let quickKills = 0;
   let activeTesting = 0;
@@ -192,8 +286,23 @@ export function computeBrandCadence(
     else if (p.status === "scaling" || p.status === "winner") scalingWinners++;
   }
 
-  const winRate =
-    totalProductsTested > 0 ? Math.round((scalingWinners / totalProductsTested) * 100) : 0;
+  // Creative Winner Rate calculation
+  let totalWinnerAds = 0;
+  for (const ad of ads) {
+    const days = ad.daysRunning || 0;
+    const copies = Number(ad.duplicationCount || 1);
+    const score = Number(ad.winnerScore || 0);
+    if ((ad.isActive && days >= 21) || copies >= 3 || score >= 60) {
+      totalWinnerAds++;
+    }
+  }
+
+  const productWinRate =
+    totalProductsTested > 0 ? Math.round((scalingWinners / totalProductsTested) * 1000) / 10 : 0;
+  const creativeWinRate =
+    ads.length > 0 ? Math.round((totalWinnerAds / ads.length) * 1000) / 10 : 0;
+  const killRate =
+    totalProductsTested > 0 ? Math.round((quickKills / totalProductsTested) * 1000) / 10 : 0;
 
   // 4. Day of Week Pattern (0 = Sun, 1 = Mon, ..., 6 = Sat)
   const dayCounts = [0, 0, 0, 0, 0, 0, 0];
@@ -220,8 +329,6 @@ export function computeBrandCadence(
   }));
 
   // 5. Time Series Bucketing (Days, Weeks, Months)
-
-  // Pre-parse ad timestamps for fast bucket tests
   const parsedAds = ads
     .map((ad) => {
       const timeStr = ad.startedRunningOn || ad.firstSeenAt;
@@ -234,13 +341,11 @@ export function computeBrandCadence(
     })
     .filter((a) => a.isValid);
 
-  // Pre-parse product launch timestamps
   const parsedProducts = productLaunchRecords.map((p) => ({
     record: p,
     ms: new Date(p.launchedAt).getTime(),
   }));
 
-  // Helper to aggregate ads and products within [startMs, endMs]
   function buildBucket(
     periodKey: string,
     label: string,
@@ -356,9 +461,14 @@ export function computeBrandCadence(
       quickKills,
       activeTesting,
       scalingWinners,
-      winRate,
+      winRate: Math.round(productWinRate),
+      productWinRate,
+      creativeWinRate,
+      killRate,
+      totalWinnerAds,
+      totalAdsAnalyzed: ads.length,
     },
     dayOfWeekPattern,
-    recentProductLaunches: productLaunchRecords.slice(0, 50),
+    recentProductLaunches: productLaunchRecords.slice(0, 100),
   };
 }

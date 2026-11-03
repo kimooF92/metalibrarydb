@@ -375,13 +375,15 @@ export async function GET(
     let linkedProducts: any[] = [];
     if (productQueryConditions.length > 0) {
       if (isLean) {
-        // Lean projection: fetch lightweight columns needed for pricing, platform, and counts
+        // Lean projection: fetch lightweight columns needed for pricing, platform, titles, and counts
         linkedProducts = await db
           .select({
             id: scrapedProducts.id,
             url: scrapedProducts.url,
             domain: scrapedProducts.domain,
             pageId: scrapedProducts.pageId,
+            title: scrapedProducts.title,
+            mainImageUrl: scrapedProducts.mainImageUrl,
             currentPrice: scrapedProducts.currentPrice,
             originalPrice: scrapedProducts.originalPrice,
             currency: scrapedProducts.currency,

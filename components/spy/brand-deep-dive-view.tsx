@@ -14,8 +14,9 @@ import { BrandCadenceAnalytics } from "@/types/cadence";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import { useBrandOverlay } from "@/components/spy/brand-overlay-sheet";
 import { BrandDeepDiveHeader } from "@/components/spy/brand-deep-dive-header";
-import { BrandDeepDiveTabs } from "@/components/spy/brand-deep-dive-tabs";
+import { BrandDeepDiveTabs, BrandTabId } from "@/components/spy/brand-deep-dive-tabs";
 import { AnalyticsTab } from "@/components/spy/analytics-tab";
+import { BrandCadenceSection } from "@/components/spy/brand-cadence-section";
 import { ProductsTab } from "@/components/spy/products-tab";
 import { CreativesTab } from "@/components/spy/creatives-tab";
 import {
@@ -144,7 +145,7 @@ interface BrandAnalyticsData {
 export interface BrandDeepDiveViewProps {
   id: string;
   isModal?: boolean;
-  initialTab?: "analytics" | "products" | "creatives";
+  initialTab?: BrandTabId;
   onClose?: () => void;
 }
 
@@ -168,16 +169,14 @@ export function BrandDeepDiveView({
       ? new URLSearchParams(window.location.search).get("productId") ||
         new URLSearchParams(window.location.search).get("id")
       : null);
-  const resolvedInitialTab: "analytics" | "products" | "creatives" =
+  const resolvedInitialTab: BrandTabId =
     initialTab ||
-    (searchTab === "products" || searchTab === "creatives" || searchTab === "analytics" ? searchTab : undefined) ||
+    (searchTab === "products" || searchTab === "creatives" || searchTab === "analytics" || searchTab === "cadence" ? (searchTab as BrandTabId) : undefined) ||
     (searchProductId ? "products" : undefined) ||
     (typeof window !== "undefined" && (new URLSearchParams(window.location.search).get("tab") as any)) ||
     "analytics";
 
-  const [activeTab, setActiveTab] = useState<"analytics" | "products" | "creatives">(
-    resolvedInitialTab === "products" || resolvedInitialTab === "creatives" ? resolvedInitialTab : "analytics"
-  );
+  const [activeTab, setActiveTab] = useState<BrandTabId>(resolvedInitialTab);
   const [data, setData] = useState<BrandAnalyticsData | null>(null);
   const pendingProductsRef = useRef<ScrapedProduct[] | null>(null);
 
@@ -266,9 +265,9 @@ export function BrandDeepDiveView({
   } | null>(null);
 
   const [feedRevision, setFeedRevision] = useState(0);
-  const [visitedTabs, setVisitedTabs] = useState<Set<"analytics" | "products" | "creatives">>(() => {
-    const set = new Set<"analytics" | "products" | "creatives">(["analytics"]);
-    if (resolvedInitialTab === "products" || resolvedInitialTab === "creatives") {
+  const [visitedTabs, setVisitedTabs] = useState<Set<BrandTabId>>(() => {
+    const set = new Set<BrandTabId>(["analytics"]);
+    if (resolvedInitialTab !== "analytics") {
       set.add(resolvedInitialTab);
     }
     return set;
@@ -276,12 +275,11 @@ export function BrandDeepDiveView({
 
   const tabScrollPositionsRef = useRef<Record<string, number>>({
     analytics: 0,
+    cadence: 0,
     products: 0,
     creatives: 0,
   });
-  const activeTabRef = useRef<"analytics" | "products" | "creatives">(
-    resolvedInitialTab === "products" || resolvedInitialTab === "creatives" ? resolvedInitialTab : "analytics"
-  );
+  const activeTabRef = useRef<BrandTabId>(resolvedInitialTab);
   activeTabRef.current = activeTab;
 
   // On-demand products fetcher (scope=products)
@@ -327,7 +325,7 @@ export function BrandDeepDiveView({
     }
   };
 
-  const handleTabChange = (nextTab: "analytics" | "products" | "creatives", pushHistory = true) => {
+  const handleTabChange = (nextTab: BrandTabId, pushHistory = true) => {
     const currentTab = activeTabRef.current;
     if (nextTab === currentTab) {
       if (nextTab === "products" && (!data?.products || data.products.length === 0) && !isLoadingProductsTab) {
@@ -412,8 +410,9 @@ export function BrandDeepDiveView({
       if (typeof window !== "undefined") {
         const urlParams = new URLSearchParams(window.location.search);
         const tab = urlParams.get("tab");
-        const resolvedTab = tab === "products" || tab === "creatives" ? tab : "analytics";
-        handleTabChange(resolvedTab as any, false);
+        const resolvedTab: BrandTabId =
+          tab === "products" || tab === "creatives" || tab === "cadence" ? tab : "analytics";
+        handleTabChange(resolvedTab, false);
       }
     };
 
@@ -1053,6 +1052,7 @@ export function BrandDeepDiveView({
             : (data?.products?.filter((p) => p.scrapeStatus === "pending").length || 0)
         }
         hasFilteredProductForCreatives={Boolean(filteredProductForCreatives)}
+        winRate={data?.cadence?.productLifecycleFunnel.productWinRate}
       />
 
       {/* 2. TAB CONTENT PANELS (Preserved DOM nodes to eliminate unmounting and scroll collapse) */}
@@ -1077,9 +1077,30 @@ export function BrandDeepDiveView({
             onViewProductDetails={handleOpenProductDetails}
             onViewCreativesForProduct={handleViewCreativesForProduct}
             onNavigateToCreatives={() => handleTabChange("creatives")}
+            onNavigateToCadence={() => handleTabChange("cadence")}
             onArchiveToggle={() => fetchBrandData(true)}
             onNavigateToProducts={() => handleTabChange("products")}
           />
+        </div>
+      )}
+
+      {/* 2b. TESTING CADENCE & LAUNCH HISTORY TAB */}
+      {visitedTabs.has("cadence") && (
+        <div
+          id="tabpanel-cadence"
+          role="tabpanel"
+          aria-labelledby="tab-cadence"
+          hidden={activeTab !== "cadence"}
+          className={activeTab === "cadence" ? "space-y-5" : "hidden"}
+        >
+          {data?.cadence && (
+            <BrandCadenceSection
+              cadence={data.cadence}
+              onViewProductDetails={handleOpenProductDetails}
+              onViewCreativesForProduct={handleViewCreativesForProduct}
+              onNavigateToCreatives={() => handleTabChange("creatives")}
+            />
+          )}
         </div>
       )}
 

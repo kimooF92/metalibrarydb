@@ -1,18 +1,21 @@
 "use client";
 
 import React, { memo } from "react";
-import { BarChart3, ShoppingBag, Layers } from "lucide-react";
+import { BarChart3, ShoppingBag, Layers, Flame } from "lucide-react";
+
+export type BrandTabId = "analytics" | "cadence" | "products" | "creatives";
 
 export interface BrandDeepDiveTabsProps {
-  activeTab: "analytics" | "products" | "creatives";
-  onTabChange: (nextTab: "analytics" | "products" | "creatives") => void;
+  activeTab: BrandTabId;
+  onTabChange: (nextTab: BrandTabId) => void;
   totalAdsCaptured: number;
   productCount: number;
   pendingProductCount: number;
   hasFilteredProductForCreatives: boolean;
+  winRate?: number;
 }
 
-const TAB_ORDER: Array<"analytics" | "products" | "creatives"> = ["analytics", "products", "creatives"];
+const TAB_ORDER: BrandTabId[] = ["analytics", "cadence", "products", "creatives"];
 
 export const BrandDeepDiveTabs = memo(function BrandDeepDiveTabs({
   activeTab,
@@ -21,6 +24,7 @@ export const BrandDeepDiveTabs = memo(function BrandDeepDiveTabs({
   productCount,
   pendingProductCount,
   hasFilteredProductForCreatives,
+  winRate,
 }: BrandDeepDiveTabsProps) {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const currentIndex = TAB_ORDER.indexOf(activeTab);
@@ -69,6 +73,29 @@ export const BrandDeepDiveTabs = memo(function BrandDeepDiveTabs({
         >
           <BarChart3 className="w-3.5 h-3.5" />
           <span>Strategy &amp; Overview</span>
+        </button>
+
+        <button
+          type="button"
+          id="tab-cadence"
+          role="tab"
+          tabIndex={activeTab === "cadence" ? 0 : -1}
+          aria-selected={activeTab === "cadence"}
+          aria-controls="tabpanel-cadence"
+          onClick={() => onTabChange("cadence")}
+          className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
+            activeTab === "cadence"
+              ? "bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-xs"
+              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+          }`}
+        >
+          <Flame className="w-3.5 h-3.5 text-amber-500" />
+          <span>Testing Cadence</span>
+          {typeof winRate === "number" && winRate > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[9.5px] font-black bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              {winRate}% Win Rate
+            </span>
+          )}
         </button>
 
         <button

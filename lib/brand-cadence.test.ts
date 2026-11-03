@@ -62,6 +62,37 @@ describe("computeBrandCadence", () => {
     assert.equal(result.recentProductLaunches[0].maxCopies, 3);
   });
 
+  it("resolves real titles and thumbnails from ads when scraped data is missing or generic", () => {
+    const now = new Date();
+    const mockAds: CadenceAdInput[] = [
+      {
+        id: "ad-real-1",
+        title: "Titanium Magnetic Shaver",
+        thumbnailUrl: "https://cdn.example.com/shaver.jpg",
+        startedRunningOn: now.toISOString(),
+        linkUrl: "https://shop.com/products/titanium-magnetic-shaver",
+        duplicationCount: 5,
+        isActive: true,
+      },
+    ];
+
+    // Product with generic "Product Offer" and missing image
+    const mockProducts: CadenceProductInput[] = [
+      {
+        id: "prod-generic",
+        url: "https://shop.com/products/titanium-magnetic-shaver",
+        title: "Product Offer",
+        mainImageUrl: null,
+      },
+    ];
+
+    const result = computeBrandCadence(mockAds, mockProducts);
+    assert.equal(result.recentProductLaunches.length, 1);
+    assert.equal(result.recentProductLaunches[0].title, "Titanium Magnetic Shaver");
+    assert.equal(result.recentProductLaunches[0].mainImageUrl, "https://cdn.example.com/shaver.jpg");
+    assert.equal(result.productLifecycleFunnel.productWinRate, 100);
+  });
+
   it("accurately computes day-of-week distribution", () => {
     // 2026-11-01 was a Sunday (day 0)
     const sundayDate = new Date("2026-11-01T12:00:00Z");

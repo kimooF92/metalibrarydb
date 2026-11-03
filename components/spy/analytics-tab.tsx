@@ -85,6 +85,7 @@ export interface AnalyticsTabProps {
   onMediaRefreshed?: (ad: Ad) => void;
   onNavigateToProducts: () => void;
   onNavigateToCreatives?: () => void;
+  onNavigateToCadence?: () => void;
   onViewProductDetails?: (product: any) => void;
   onViewCreativesForProduct?: (product: any) => void;
 }
@@ -103,6 +104,7 @@ export const AnalyticsTab = memo(function AnalyticsTab({
   onMediaRefreshed,
   onNavigateToProducts,
   onNavigateToCreatives,
+  onNavigateToCadence,
   onViewProductDetails,
   onViewCreativesForProduct,
 }: AnalyticsTabProps) {
@@ -163,14 +165,70 @@ export const AnalyticsTab = memo(function AnalyticsTab({
         </div>
       </div>
 
-      {/* Competitor Cadence & Product Launch History */}
+      {/* Competitor Testing Cadence & Winner Rate Intelligence Teaser Card */}
       {cadence && (
-        <BrandCadenceSection
-          cadence={cadence}
-          onViewProductDetails={onViewProductDetails}
-          onViewCreativesForProduct={onViewCreativesForProduct}
-          onNavigateToCreatives={onNavigateToCreatives}
-        />
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 p-4 shadow-sm space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <Flame className="w-4 h-4 text-amber-500" />
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Testing Cadence &amp; Winner Rate Intelligence
+              </h3>
+            </div>
+            {onNavigateToCadence && (
+              <button
+                type="button"
+                onClick={onNavigateToCadence}
+                className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+              >
+                <span>View Full Testing Cadence Tab</span>
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-2.5 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider block">Product Win Rate</span>
+              <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5 block">
+                {cadence.productLifecycleFunnel.productWinRate}%
+              </span>
+              <span className="text-[10px] text-slate-500 font-medium">
+                {cadence.productLifecycleFunnel.scalingWinners} of {cadence.productLifecycleFunnel.totalProductsTested} SKUs scaled
+              </span>
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/20">
+              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold uppercase tracking-wider block">Creative Win Rate</span>
+              <span className="text-xl font-black text-amber-600 dark:text-amber-400 mt-0.5 block">
+                {cadence.productLifecycleFunnel.creativeWinRate}%
+              </span>
+              <span className="text-[10px] text-slate-500 font-medium">
+                {cadence.productLifecycleFunnel.totalWinnerAds} scaling ads
+              </span>
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-rose-500/5 border border-rose-500/20">
+              <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold uppercase tracking-wider block">Fast Kill Rate</span>
+              <span className="text-xl font-black text-rose-600 dark:text-rose-400 mt-0.5 block">
+                {cadence.productLifecycleFunnel.killRate}%
+              </span>
+              <span className="text-[10px] text-slate-500 font-medium">
+                {cadence.productLifecycleFunnel.quickKills} SKUs cut in &lt; 7d
+              </span>
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-indigo-500/5 border border-indigo-500/20">
+              <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-wider block">Peak Testing Day</span>
+              <span className="text-xl font-black text-indigo-600 dark:text-indigo-400 mt-0.5 block">
+                {cadence.dayOfWeekPattern.slice().sort((a, b) => b.adCount - a.adCount)[0]?.dayName || "—"}
+              </span>
+              <span className="text-[10px] text-slate-500 font-medium">
+                highest creative launch volume
+              </span>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Historical Ad Trajectory Chart (if history exists) */}

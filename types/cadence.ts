@@ -51,6 +51,11 @@ export interface BrandCadenceAnalytics {
     activeTesting: number; // Active <= 21 days
     scalingWinners: number; // Active > 21 days or duplication >= 3
     winRate: number; // Percentage of scaling winners vs total tested
+    productWinRate: number; // Exact product win rate %
+    creativeWinRate: number; // Ad creative win rate %
+    killRate: number; // Percentage of quickly killed products %
+    totalWinnerAds: number; // Count of ads that scaled
+    totalAdsAnalyzed: number; // Total ads analyzed
   };
   dayOfWeekPattern: DayOfWeekCadence[];
   recentProductLaunches: ProductLaunchRecord[];
