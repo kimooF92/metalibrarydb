@@ -3,6 +3,7 @@ import { db } from "@/db";
 import {
   trackedPages,
   ads,
+  adObservations,
   scrapedProducts,
   discoveredPages,
   discoveryRuns,
@@ -77,6 +78,9 @@ export async function GET(req: NextRequest) {
       products24hStatsRows,
       products24hNicheRows,
       descalingBrandsRows,
+      scalingStatsRes,
+      darkAndRevivedRes,
+      freshWinnersCountRes,
     ] = await Promise.all([
       // 1. Brand KPIs
       db
@@ -230,7 +234,7 @@ export async function GET(req: NextRequest) {
           desc(sql`max(coalesce(${ads.startedRunningOn}, ${ads.firstSeenAt}))`),
           desc(sql`count(distinct ${ads.id})`)
         )
-        .limit(5),
+        .limit(15),
 
       // 7. Category Distribution (top 5)
       db
@@ -442,46 +446,156 @@ export async function GET(req: NextRequest) {
         )
         .orderBy(asc(differenceSql), desc(trackedPages.consecutiveZeroScans))
         .limit(5),
+
+      // 19. Scaling & Descaling Brand Velocity Totals (matches Analytics tab calculation)
+      db.execute<{
+        scalingBrandsCount?: number;
+        totalAdsScaled?: number;
+        descalingBrandsCount?: number;
+        totalAdsDescaled?: number;
+      }>(sql`
+        WITH latest_scans AS (
+          SELECT 
+            s.tracked_page_id, 
+            s.difference
+          FROM (
+            SELECT 
+              sh.tracked_page_id, 
+              sh.difference,
+              row_number() OVER (PARTITION BY sh.tracked_page_id ORDER BY sh.checked_at DESC) as rn
+            FROM scan_history sh
+            INNER JOIN tracked_pages tp ON tp.id = sh.tracked_page_id
+            WHERE sh.difference IS NOT NULL
+              AND sh.checked_at >= NOW() - INTERVAL '30 days'
+              AND tp.workspace_id = ${activeWorkspace.id}::uuid
+          ) s
+          WHERE s.rn = 1
+        )
+        SELECT 
+          COUNT(CASE WHEN difference > 0 THEN 1 END)::int AS "scalingBrandsCount",
+          COALESCE(SUM(CASE WHEN difference > 0 THEN difference ELSE 0 END), 0)::int AS "totalAdsScaled",
+          COUNT(CASE WHEN difference < 0 THEN 1 END)::int AS "descalingBrandsCount",
+          COALESCE(SUM(CASE WHEN difference < 0 THEN ABS(difference) ELSE 0 END), 0)::int AS "totalAdsDescaled"
+        FROM latest_scans;
+      `),
+
+      // 20. Dark vs Revived Pages (Went Dark: on hold, 2+ zero scans, or failed; Revived: active with recent successful scans after zeroes)
+      db.execute<{
+        darkCount?: number;
+        revivedCount?: number;
+      }>(sql`
+        SELECT
+          COUNT(CASE WHEN (hold_status = 'on_hold' OR consecutive_zero_scans >= 2 OR status IN ('failed', 'unclear')) THEN 1 END)::int AS "darkCount",
+          COUNT(CASE WHEN hold_status = 'active' AND consecutive_zero_scans = 0 AND current_results > 0 AND last_success_at >= NOW() - INTERVAL '48 hours' AND (
+            EXISTS (
+              SELECT 1 FROM scan_history sh
+              WHERE sh.tracked_page_id = tracked_pages.id
+                AND sh.checked_at >= NOW() - INTERVAL '7 days'
+                AND (sh.results = 0 OR sh.results IS NULL)
+            )
+          ) THEN 1 END)::int AS "revivedCount"
+        FROM tracked_pages
+        WHERE workspace_id = ${activeWorkspace.id}::uuid;
+      `),
+
+      // 21. Real Total Breakout Winners Count (matching fresh-winners API spec)
+      db.execute<{ total_products?: number }>(sql`
+        SELECT
+          COUNT(*)::int AS total_products
+        FROM (
+          SELECT
+            sp.id AS product_id
+          FROM scraped_products sp
+          INNER JOIN ads a ON a.product_id = sp.id
+          INNER JOIN (
+            SELECT DISTINCT ON (ad_id)
+              ad_id,
+              tracked_page_id,
+              duplication_count,
+              is_active
+            FROM ad_observations
+            ORDER BY ad_id, observed_at DESC
+          ) latest_obs ON latest_obs.ad_id = a.id
+          LEFT JOIN tracked_pages tp ON tp.id = latest_obs.tracked_page_id
+          WHERE latest_obs.is_active = true
+            AND (a.is_archived = false OR a.is_archived IS NULL)
+            AND sp.workspace_id = ${activeWorkspace.id}::uuid
+            AND tp.workspace_id = ${activeWorkspace.id}::uuid
+          GROUP BY sp.id
+          HAVING count(distinct a.id) >= 1
+            AND sum(latest_obs.duplication_count) >= 2
+            AND max(coalesce(a.started_running_on, a.first_seen_at)) >= NOW() - INTERVAL '7 days'
+        ) sub;
+      `),
     ]);
 
-    // Format fresh breakouts with winner scoring metrics (Top 5 Unique Products)
-    const freshBreakouts = freshBreakoutRows
-      .map((row) => {
-        const metrics = calculateWinnerScore({
-          startedRunningOn: row.startedRunningOn,
-          firstSeenAt: row.firstSeenAt,
-          lastSeenAt: row.lastSeenAt,
-          duplicationCount: Math.max(1, row.activeAdsCount),
-          productCreativeCount: row.activeAdsCount,
-          isActive: true,
-          isArchived: false,
-          mediaType: row.mediaType,
-        });
-        return {
-          id: row.adId || row.productId,
-          adArchiveId: row.adArchiveId,
-          pageId: row.pageId,
-          pageName: row.brandDisplayName,
-          brandDisplayName: row.brandDisplayName,
-          mediaType: row.mediaType,
-          thumbnailUrl: row.thumbnailUrl || row.productImageUrl,
-          startedRunningOn: row.startedRunningOn ? new Date(row.startedRunningOn).toISOString() : null,
-          firstSeenAt: row.firstSeenAt ? new Date(row.firstSeenAt).toISOString() : null,
-          daysRunning: metrics.daysRunning,
-          winnerScore: metrics.winnerScore,
-          winnerTier: metrics.winnerTier,
-          isBreakout: metrics.isBreakout,
-          breakoutTier: metrics.breakoutTier,
-          productId: row.productId,
-          productTitle: row.productTitle,
-          productPrice: row.productPrice,
-          productCurrency: row.productCurrency,
-          productImageUrl: row.productImageUrl,
-          storePlatform: row.storePlatform,
-          activeAdsCount: row.activeAdsCount,
-        };
-      })
-      .slice(0, 5);
+    // Format fresh breakouts with winner scoring metrics & strict deduplication (Top 5 Unique Products)
+    const rawBreakouts = freshBreakoutRows.map((row) => {
+      const metrics = calculateWinnerScore({
+        startedRunningOn: row.startedRunningOn,
+        firstSeenAt: row.firstSeenAt,
+        lastSeenAt: row.lastSeenAt,
+        duplicationCount: Math.max(1, row.activeAdsCount),
+        productCreativeCount: row.activeAdsCount,
+        isActive: true,
+        isArchived: false,
+        mediaType: row.mediaType,
+      });
+      return {
+        id: row.adId || row.productId,
+        adArchiveId: row.adArchiveId,
+        pageId: row.pageId,
+        pageName: row.brandDisplayName,
+        brandDisplayName: row.brandDisplayName,
+        mediaType: row.mediaType,
+        thumbnailUrl: row.thumbnailUrl || row.productImageUrl,
+        startedRunningOn: row.startedRunningOn ? new Date(row.startedRunningOn).toISOString() : null,
+        firstSeenAt: row.firstSeenAt ? new Date(row.firstSeenAt).toISOString() : null,
+        daysRunning: metrics.daysRunning,
+        winnerScore: metrics.winnerScore,
+        winnerTier: metrics.winnerTier,
+        isBreakout: metrics.isBreakout,
+        breakoutTier: metrics.breakoutTier,
+        productId: row.productId,
+        productTitle: row.productTitle,
+        productPrice: row.productPrice,
+        productCurrency: row.productCurrency,
+        productImageUrl: row.productImageUrl,
+        storePlatform: row.storePlatform,
+        activeAdsCount: row.activeAdsCount,
+      };
+    });
+
+    const seenProductKeys = new Set<string>();
+    const freshBreakouts: typeof rawBreakouts = [];
+    for (const b of rawBreakouts) {
+      const normKey = (b.productId || b.productTitle || b.id).toLowerCase().trim();
+      if (!seenProductKeys.has(normKey)) {
+        seenProductKeys.add(normKey);
+        freshBreakouts.push(b);
+      }
+      if (freshBreakouts.length >= 5) break;
+    }
+
+    // Process Scaling and Descaling Analytics Summary
+    const scalingStats = (scalingStatsRes as any)?.[0] || {};
+    const scalingCount = Number(scalingStats.scalingBrandsCount || 0);
+    const scalingNetAds = Number(scalingStats.totalAdsScaled || 0);
+    const scalingAvgAds = scalingCount > 0 ? Number((scalingNetAds / scalingCount).toFixed(1)) : 0;
+
+    const descalingCount = Number(scalingStats.descalingBrandsCount || 0);
+    const descalingNetAds = Number(scalingStats.totalAdsDescaled || 0);
+    const descalingAvgAds = descalingCount > 0 ? Number((descalingNetAds / descalingCount).toFixed(1)) : 0;
+
+    // Process Dark & Revived Stats
+    const darkRevivedRow = (darkAndRevivedRes as any)?.[0] || {};
+    const darkCount = Number(darkRevivedRow.darkCount || 0);
+    const revivedCount = Number(darkRevivedRow.revivedCount || 0);
+
+    // Process Fresh Winners Total Count
+    const fwRow = (freshWinnersCountRes as any)?.[0] || {};
+    const freshWinnersTotal = Number(fwRow.total_products || 0);
+    const totalBreakoutsCount = freshWinnersTotal > 0 ? freshWinnersTotal : freshBreakouts.length;
 
     // Resolve 14-day history points for scaling and descaling brands to generate sparklines & patterns
     const velocityPageIds = Array.from(
@@ -585,6 +699,8 @@ export async function GET(req: NextRequest) {
       scanningCount: brandStatsRows[0]?.scanningCount ?? 0,
       failedCount: brandStatsRows[0]?.failedCount ?? 0,
       onHoldCount: brandStatsRows[0]?.onHoldCount ?? 0,
+      darkCount,
+      revivedCount,
       successRate:
         (brandStatsRows[0]?.completedCount || 0) + (brandStatsRows[0]?.failedCount || 0) > 0
           ? Math.round(
@@ -612,6 +728,23 @@ export async function GET(req: NextRequest) {
         favoritesCount: productStatsRows[0]?.favoritesCount ?? 0,
         totalAds: adsStatsRows[0]?.totalAds ?? 0,
         activeAds: adsStatsRows[0]?.activeAds ?? 0,
+      },
+      scalingSummary: {
+        count: scalingCount,
+        netAds: scalingNetAds,
+        avgAds: scalingAvgAds,
+      },
+      descalingSummary: {
+        count: descalingCount,
+        netAds: descalingNetAds,
+        avgAds: descalingAvgAds,
+      },
+      freshWinnersSummary: {
+        totalCount: totalBreakoutsCount,
+      },
+      coverageStats: {
+        darkCount,
+        revivedCount,
       },
       scalingProducts: scalingProductsRows,
       hotOffers: hotOfferProductsRows,

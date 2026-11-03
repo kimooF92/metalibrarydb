@@ -8,6 +8,7 @@ import {
   Flame,
   ShoppingBag,
   TrendingUp,
+  TrendingDown,
   Tag,
   RefreshCw,
   Plus,
@@ -44,6 +45,19 @@ interface OverviewData {
   freshBreakouts: FreshBreakout[];
   scalingBrands: BrandVelocityItem[];
   descalingBrands: BrandVelocityItem[];
+  scalingSummary?: {
+    count: number;
+    netAds: number;
+    avgAds: number;
+  };
+  descalingSummary?: {
+    count: number;
+    netAds: number;
+    avgAds: number;
+  };
+  freshWinnersSummary?: {
+    totalCount: number;
+  };
   inflow24h: Inflow24hData;
   scanOperations: ScanOperationsData;
   activeScanningPageIds?: string[];
@@ -207,7 +221,9 @@ function DashboardOverviewContent() {
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <span className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              {loading ? "--" : data?.freshBreakouts?.length ? `${data.freshBreakouts.length}` : "0"}
+              {loading
+                ? "--"
+                : (data?.freshWinnersSummary?.totalCount ?? data?.freshBreakouts?.length ?? 0)}
             </span>
             <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-md">
               Top Breakouts
@@ -218,55 +234,57 @@ function DashboardOverviewContent() {
           </div>
         </Link>
 
-        {/* KPI 3: Scaling Competitors */}
+        {/* KPI 3: Scaling Pages (Matches Analytics) */}
         <Link
-          href="/brands"
+          href="/analytics?tab=pages&sub=scaling"
           className="group p-3.5 rounded-xl bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200 shadow-xs hover:shadow-sm cursor-pointer block"
         >
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
             <span className="flex items-center gap-1.5">
               <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-              <span>Scaling Brands</span>
+              <span>Scaling Pages</span>
             </span>
             <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
           </div>
           <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              {loading ? "--" : data?.scalingBrands?.length ?? 0}
+            <span className="text-xl md:text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">
+              {loading ? "--" : (data?.scalingSummary?.count ?? data?.scalingBrands?.length ?? 0)}
             </span>
-            {data?.kpi && (
-              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-md">
-                {data.kpi.completedCount} active
-              </span>
-            )}
+            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-md">
+              +{data?.scalingSummary?.netAds ?? 0} ads
+            </span>
           </div>
           <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-            <span>Avg: <strong className="text-slate-700 dark:text-slate-200">{data?.kpi.avgAds ?? 0}</strong> ads/brand</span>
+            <span>
+              Avg: <strong className="text-emerald-600 dark:text-emerald-400">+{data?.scalingSummary?.avgAds ?? 0}</strong> ads/page
+            </span>
           </div>
         </Link>
 
-        {/* KPI 4: Scan Operations Health */}
+        {/* KPI 4: Descaling Pages (Matches Analytics) */}
         <Link
-          href="/brands"
+          href="/analytics?tab=pages&sub=descaling"
           className="group p-3.5 rounded-xl bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200 shadow-xs hover:shadow-sm cursor-pointer block"
         >
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
             <span className="flex items-center gap-1.5">
-              <Zap className="w-3.5 h-3.5 text-blue-500" />
-              <span>Scans Today</span>
+              <TrendingDown className="w-3.5 h-3.5 text-rose-500" />
+              <span>Descaling Pages</span>
             </span>
             <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
           </div>
           <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              {loading ? "--" : data?.scanOperations?.scansToday ?? 0}
+            <span className="text-xl md:text-2xl font-black text-rose-600 dark:text-rose-400 tracking-tight">
+              {loading ? "--" : (data?.descalingSummary?.count ?? data?.descalingBrands?.length ?? 0)}
             </span>
-            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-md">
-              {data?.scanOperations?.successRate ?? 100}% health
+            <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded-md">
+              -{data?.descalingSummary?.netAds ?? 0} ads
             </span>
           </div>
-          <div className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-            <span>+{data?.scanOperations?.scansThisHour ?? 0} scans this hour</span>
+          <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+            <span>
+              Avg: <strong className="text-rose-600 dark:text-rose-400">-{data?.descalingSummary?.avgAds ?? 0}</strong> ads/page
+            </span>
           </div>
         </Link>
       </div>

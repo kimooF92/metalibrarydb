@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Flame, Eye, ExternalLink, Video, Image as ImageIcon, Layers, Sparkles, ShoppingBag } from "lucide-react";
 import { formatPrice } from "@/lib/format-price";
+import { ProductDetailsModal } from "@/components/products/product-details-modal";
+import type { ScrapedProduct } from "@/types";
 
 export interface FreshBreakout {
   id: string;
@@ -82,6 +85,53 @@ function getMediaBadge(mediaType: string | null) {
 }
 
 export function FreshWinnersList({ products, loading = false, currencySymbol = "DT" }: FreshWinnersListProps) {
+  const [selectedProduct, setSelectedProduct] = useState<ScrapedProduct | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleOpenProduct = async (item: FreshBreakout) => {
+    const optimistic: ScrapedProduct = {
+      id: item.productId || item.id,
+      url: "",
+      domain: item.brandDisplayName || item.pageName || "",
+      pageId: item.pageId,
+      title: item.productTitle || item.pageName || "Winner Product",
+      currentPrice: item.productPrice,
+      originalPrice: null,
+      currency: item.productCurrency || currencySymbol,
+      discountOrOffer: null,
+      mainImageUrl: item.productImageUrl || item.thumbnailUrl,
+      storePlatform: item.storePlatform,
+      category: null,
+      scrapeStatus: "success",
+      lastScrapedAt: item.startedRunningOn,
+      createdAt: item.firstSeenAt || new Date().toISOString(),
+      updatedAt: item.startedRunningOn || new Date().toISOString(),
+      activeAdsCount: item.activeAdsCount,
+      brandName: item.brandDisplayName,
+      isBreakout: item.isBreakout,
+      breakoutTier: item.breakoutTier,
+      winnerScore: item.winnerScore,
+    };
+
+    setSelectedProduct(optimistic);
+    setIsModalOpen(true);
+
+    if (item.productId) {
+      try {
+        const res = await fetch(`/api/products?id=${encodeURIComponent(item.productId)}`);
+        if (res.ok) {
+          const json = await res.json();
+          const p = json.product || json.data || json;
+          if (p && p.id) {
+            setSelectedProduct(p);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load full product:", err);
+      }
+    }
+  };
+
   // Deduplication safeguard: Ensure each product appears strictly once by productId or normalized title
   const seenKeys = new Set<string>();
   const displayItems: FreshBreakout[] = [];
@@ -163,7 +213,10 @@ export function FreshWinnersList({ products, loading = false, currencySymbol = "
                   </span>
 
                   {/* Thumbnail */}
-                  <div className="relative w-14 h-14 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-900 shrink-0 border border-slate-200 dark:border-slate-800">
+                  <div
+                    onClick={() => handleOpenProduct(item)}
+                    className="relative w-14 h-14 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-900 shrink-0 border border-slate-200 dark:border-slate-800 cursor-pointer"
+                  >
                     {imageSrc ? (
                       <img
                         src={imageSrc}
@@ -211,13 +264,14 @@ export function FreshWinnersList({ products, loading = false, currencySymbol = "
                     </div>
 
                     {/* Title */}
-                    <Link
-                      href={spyLink}
-                      className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-1"
+                    <button
+                      type="button"
+                      onClick={() => handleOpenProduct(item)}
+                      className="text-left text-xs font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-1 cursor-pointer block"
                       title={title}
                     >
                       {title}
-                    </Link>
+                    </button>
 
                     {/* Brand & Price */}
                     <div className="flex items-center gap-2 mt-0.5">
@@ -252,6 +306,18 @@ export function FreshWinnersList({ products, loading = false, currencySymbol = "
           })
         )}
       </div>
+
+      {/* Product Details Modal */}
+      {selectedProduct && (
+        <ProductDetailsModal
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+            setSelectedProduct(null);
+          }}
+          product={selectedProduct}
+        />
+      )}
     </div>
   );
 }

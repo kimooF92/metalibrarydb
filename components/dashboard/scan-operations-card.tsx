@@ -1,6 +1,6 @@
 "use client";
 
-import { Zap, Activity, CheckCircle2, AlertTriangle, Play, RefreshCw } from "lucide-react";
+import { Zap, Activity, CheckCircle2, AlertTriangle, Play, RefreshCw, Sparkles, Moon } from "lucide-react";
 
 export interface ScanOperationsData {
   scansToday: number;
@@ -12,6 +12,8 @@ export interface ScanOperationsData {
   scanningCount: number;
   failedCount: number;
   onHoldCount: number;
+  darkCount?: number;
+  revivedCount?: number;
   successRate: number;
   queuePending: number;
   queueRunning: number;
@@ -39,7 +41,9 @@ export function ScanOperationsCard({
   const totalBrands = data?.totalBrands ?? 0;
   const pending = data?.queuePending ?? 0;
   const running = data?.queueRunning ?? 0;
-  const attentionCount = (data?.failedCount ?? 0) + (data?.onHoldCount ?? 0);
+  const darkCount = data?.darkCount ?? ((data?.failedCount ?? 0) + (data?.onHoldCount ?? 0));
+  const revivedCount = data?.revivedCount ?? 0;
+  const attentionCount = darkCount;
 
   const statusBadge = isPaused
     ? { text: "Paused", class: "bg-amber-500/10 text-amber-500 border-amber-500/20" }
@@ -135,6 +139,37 @@ export function ScanOperationsCard({
               active
             </span>
           </div>
+        </div>
+      </div>
+
+      {/* Coverage Status Drift: Went Dark vs. Revived Pages */}
+      <div className="mt-2.5 grid grid-cols-2 gap-2 text-xs">
+        {/* Went Dark */}
+        <div className="p-2 rounded-lg bg-rose-500/5 dark:bg-rose-950/20 border border-rose-500/20 flex items-center justify-between">
+          <div className="min-w-0 pr-1">
+            <div className="flex items-center gap-1.5 text-rose-700 dark:text-rose-400 font-bold text-[11px]">
+              <Moon className="w-3.5 h-3.5 shrink-0" />
+              <span>Went Dark</span>
+            </div>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">On hold / 0 ads</p>
+          </div>
+          <span className="text-sm font-black text-rose-600 dark:text-rose-400 font-mono shrink-0">
+            {loading ? "--" : darkCount}
+          </span>
+        </div>
+
+        {/* Revived */}
+        <div className="p-2 rounded-lg bg-emerald-500/5 dark:bg-emerald-950/20 border border-emerald-500/20 flex items-center justify-between">
+          <div className="min-w-0 pr-1">
+            <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-bold text-[11px]">
+              <Sparkles className="w-3.5 h-3.5 shrink-0 text-emerald-500" />
+              <span>Revived</span>
+            </div>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">Active again</p>
+          </div>
+          <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono shrink-0">
+            {loading ? "--" : revivedCount}
+          </span>
         </div>
       </div>
 
