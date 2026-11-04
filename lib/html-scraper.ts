@@ -809,12 +809,12 @@ export function parseProductHtmlContent(
     const hasMoroccanHint =
       isMoroccoDomain ||
       /og:price:currency["'][^>]*content=["']MAD/i.test(html) ||
-      /(?:DH|MAD|د\.م|درهم)/i.test(html);
+      /(?:\bDH\b|\bMAD\b|د\.م|درهم)/.test(html);
 
     const isTunisiaDomain = /\.tn(\/|$)/i.test(url);
     const hasTunisianHint =
       isTunisiaDomain ||
-      /(?:DT|TND|dt|د\.ت|دت|دinar|Dinar)/i.test(html) ||
+      /(?:\bDT\b|\bTND\b|\bdt\b|د\.ت|دت|دinar|Dinar)/.test(html) ||
       html.includes("+216") ||
       /(?:livraison|توصيل|دينار)/i.test(html);
 
@@ -977,7 +977,7 @@ export function parseProductHtmlContent(
       }
     }
 
-    // 4f. Try Markdown prices (e.g. from Firecrawl rendered SPA body)
+    // 4f. Try Markdown prices (e.g. from Firecrawl rendered SPA body or Playwright innerText)
     if (!currentPrice && markdown) {
       // 1. Check discount pair in markdown: e.g. -38% 89,000 د.ت 55,000 د.ت or -20% 300 DH 240 DH
       const discountPairMatch = markdown.match(/-\d{1,2}%\s*(?:‎|\s)*(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:د\.ت|دت|DT|TND|د|DH|dh|MAD|د\.م|درهم)\s*(?:‎|\s)*(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:د\.ت|دت|DT|TND|د|DH|dh|MAD|د\.م|درهم)/i);
@@ -992,6 +992,23 @@ export function parseProductHtmlContent(
         if (currency === "TND" && currNum >= 1000) currNum = Math.round(currNum / 1000);
         originalPrice = `${origNum} ${currencySymbol}`;
         currentPrice = `${currNum} ${currencySymbol}`;
+      }
+
+      // 1b. Check labelled product price (e.g. "سعر المنتج\n19.900 دت", "Prix unitaire: 19 DT", "Price: 19 DT")
+      if (!currentPrice) {
+        const labeledPriceMatch = markdown.match(/(?:سعر(?:\s*المنتج)?|Prix(?:\s*unitaire)?|Price)\s*:?\s*(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:د\.ت|دت|DT|TND|DH|dh|MAD|د\.م|درهم)/i);
+        if (labeledPriceMatch && labeledPriceMatch[1] && Number(labeledPriceMatch[1].replace(",", ".")) > 0) {
+          if (/MAD|DH|dh|د\.م|درهم/i.test(labeledPriceMatch[0])) {
+            currency = "MAD";
+            currencySymbol = "DH";
+          }
+          let numStr = labeledPriceMatch[1].replace(",", ".");
+          let num = parseFloat(numStr);
+          if (currency === "TND" && num >= 1000 && (labeledPriceMatch[1].includes(",000") || labeledPriceMatch[1].includes(".000"))) {
+            num = Math.round(num / 1000);
+          }
+          currentPrice = `${num} ${currencySymbol}`;
+        }
       }
 
       // 2. Check checkout total or final price line
@@ -1010,12 +1027,31 @@ export function parseProductHtmlContent(
           currentPrice = `${num} ${currencySymbol}`;
         }
       }
+
+      // 3. Check adjacent prices: "19.900 دت 29.850 دت"
+      if (!currentPrice) {
+        const adjacentPriceMatch = markdown.match(/(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:د\.ت|دت|DT|TND|د|DH|dh|MAD|د\.م|درهم)\s+(\d{1,4}(?:[.,]\d{1,3})?)\s*(?:د\.ت|دت|DT|TND|د|DH|dh|MAD|د\.م|درهم)/i);
+        if (adjacentPriceMatch) {
+          if (/MAD|DH|dh|د\.م|درهم/i.test(adjacentPriceMatch[0])) {
+            currency = "MAD";
+            currencySymbol = "DH";
+          }
+          let p1 = parseFloat(adjacentPriceMatch[1].replace(",", "."));
+          let p2 = parseFloat(adjacentPriceMatch[2].replace(",", "."));
+          if (currency === "TND" && p1 >= 1000) p1 = Math.round(p1 / 1000);
+          if (currency === "TND" && p2 >= 1000) p2 = Math.round(p2 / 1000);
+          const curr = Math.min(p1, p2);
+          const orig = Math.max(p1, p2);
+          currentPrice = `${curr} ${currencySymbol}`;
+          if (orig > curr) originalPrice = `${orig} ${currencySymbol}`;
+        }
+      }
     }
 
-    // 4g. Price container with separate currency elements (e.g. Addy: <span class="...price..."><span class="currency...">د.ت</span>49.000 </span>)
+    // 4g. Price container with separate currency elements (e.g. Addy: <span class="...price..."><span class="currency...">د.ت</span>49.000 </span>, or <span id="price">19.900</span>)
     if (!currentPrice && html) {
       const priceContainerRegex =
-        /class=["'][^"']*\b(?:price|product-price|current-price|amount)\b[^"']*["'][^>]*>(?:<[^>]+>|[^\d<])*?(\d{1,4}(?:[.,]\d{1,3})?)/gi;
+        /(?:class|id)=["'][^"']*\b(?:price|product-price|current-price|amount)\b[^"']*["'][^>]*>(?:<[^>]+>|[^\d<])*?(\d{1,4}(?:[.,]\d{1,3})?)/gi;
       let pcMatch;
       while ((pcMatch = priceContainerRegex.exec(html)) !== null) {
         let numStr = pcMatch[1].replace(",", ".");
@@ -1067,10 +1103,10 @@ export function parseProductHtmlContent(
     }
 
     if (!currentPrice) {
-      // General price regex in page body
-      const generalPriceMatch = /(\d{1,4}(?:[.,]\d{2,3})?)\s*(?:TND|DT|dt|د\.ت|دت|MAD|DH|dh|د\.م|درهم)/i.exec(html);
+      // General price regex in page body (allows intervening tags like <sup>دت</sup> or <span class="currency">DT</span>)
+      const generalPriceMatch = /(\d{1,4}(?:[.,]\d{2,3})?)\s*(?:<\/[^>]+>\s*)*(?:<[^>]+>\s*)*(?:TND|DT|dt|د\.ت|دت|\bDH\b|\bdh\b|\bMAD\b|د\.م|درهم)/i.exec(html);
       if (generalPriceMatch && generalPriceMatch[1] && Number(generalPriceMatch[1].replace(",", ".")) > 0) {
-        if (/MAD|DH|dh|د\.م|درهم/i.test(generalPriceMatch[0])) {
+        if (/\bMAD\b|\bDH\b|\bdh\b|د\.م|درهم/i.test(generalPriceMatch[0])) {
           currency = "MAD";
           currencySymbol = "DH";
         }

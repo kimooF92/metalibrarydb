@@ -279,3 +279,31 @@ test("extractStoreLogoFromHtml extracts OpenGraph logo", () => {
   assert.equal(logo, "https://coolbrand.com/images/cool-logo.svg");
 });
 
+test("parseProductHtmlContent extracts tag-tolerant and Stocki Angular prices without misclassifying 'Made with' as MAD", () => {
+  const stockiAngularHtml = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Gadgety shop</title>
+      </head>
+      <body>
+        <h1>مصباح متعدد الوظائف</h1>
+        <div class="pricing">
+          <span id="price">19.900 </span><sup>دت</sup>
+          <span style="text-decoration: line-through;"> 29.850 <sup>دت</sup></span>
+        </div>
+        <footer>
+          <p>Made with ❤️ By Stocki</p>
+        </footer>
+      </body>
+    </html>
+  `;
+  const res = parseProductHtmlContent(stockiAngularHtml, "https://www.gad-gety.com/detail/54");
+  assert.equal(res.success, true);
+  assert.equal(res.data?.title, "مصباح متعدد الوظائف");
+  assert.equal(res.data?.current_price, "19.9 DT");
+  assert.equal(res.data?.original_price, "29.85 DT");
+  assert.equal(res.data?.currency, "TND");
+});
+
+

@@ -10,7 +10,11 @@ let localBrowserContext: any = null;
  */
 export async function scrapeUrlWithLocalPlaywright(
   url: string,
-  timeoutMs = 25000
+  timeoutMs = 25000,
+  options?: {
+    defaultCurrency?: string;
+    defaultCurrencySymbol?: string;
+  }
 ): Promise<{
   success: boolean;
   data?: ExtractedProductData;
@@ -92,13 +96,14 @@ export async function scrapeUrlWithLocalPlaywright(
       await page.waitForTimeout(5000);
     } else {
       // Allow dynamic SPA / price hydration
-      await page.waitForTimeout(1500);
+      await page.waitForTimeout(2000);
     }
 
     const html = await page.content();
     const finalUrl = page.url();
+    const innerText = await page.evaluate(() => document.body?.innerText || "").catch(() => "");
 
-    const parsed = parseProductHtmlContent(html, finalUrl);
+    const parsed = parseProductHtmlContent(html, finalUrl, innerText, options);
     const hasImage = Boolean(parsed.data?.main_image_url);
     const hasTitle = Boolean(parsed.data?.title);
     const hasPrice = Boolean(

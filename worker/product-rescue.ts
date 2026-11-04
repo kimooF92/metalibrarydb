@@ -15,6 +15,7 @@ import { formatPrice, formatDelivery } from "../lib/format-price";
 import { enhanceProductWithJev } from "../lib/product-enhancer";
 import { validateAndGatekeepProduct, resolveEffectiveScrapeStatus } from "../lib/product-validator";
 import { isCategoryUrl } from "../lib/url-parser";
+import { resolveMarketCurrency, TUNISIA_WORKSPACE_ID } from "../lib/workspace-constants";
 
 let isRescueRunning = false;
 let lastRescueAttemptTime = 0;
@@ -98,6 +99,11 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
       const targetUrl = item.url;
       if (!targetUrl || !targetUrl.startsWith("http")) continue;
 
+      const { isMorocco, currency: itemCurrency, currencySymbol: itemSym } = resolveMarketCurrency(
+        item.workspaceId,
+        targetUrl
+      );
+
       if (isCategoryUrl(targetUrl)) {
         console.warn(`[Local Rescue] 🛑 Skipping category URL: ${targetUrl}. Flagging as ignored.`);
         await db
@@ -116,7 +122,10 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
       console.log(`[Local Rescue] Attempting local recovery for: ${targetUrl}`);
 
       // 1. Try fast local direct HTML scrape first
-      let extractionResult: any = await scrapeProductDirectHtml(targetUrl).catch(() => null);
+      let extractionResult: any = await scrapeProductDirectHtml(targetUrl, 12000, 2, {
+        defaultCurrency: itemCurrency,
+        defaultCurrencySymbol: itemSym,
+      }).catch(() => null);
 
       // Check if direct fetch already detected a dead link / 404
       const isDirectDead =
@@ -153,7 +162,10 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
       // 2. If direct HTML didn't get image or price, trigger local Playwright browser
       if (!extractionResult?.success || !extractionResult.data || (!hasDirectImage && !hasDirectPrice)) {
         console.log(`[Local Rescue] Direct fetch incomplete. Launching local Playwright browser for: ${targetUrl}...`);
-        extractionResult = await scrapeUrlWithLocalPlaywright(targetUrl);
+        extractionResult = await scrapeUrlWithLocalPlaywright(targetUrl, 25000, {
+          defaultCurrency: itemCurrency,
+          defaultCurrencySymbol: itemSym,
+        });
       }
 
       // Check if Playwright confirmed a dead link / 404
@@ -198,10 +210,6 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
         const wa = extractWhatsAppNumbers(rawHtml);
         const pixels = extractMetaPixelIds(rawHtml);
         const delivery = extractDeliveryInfo(rawHtml, extracted.delivery_cost);
-
-        const isMorocco = item.workspaceId === "00000000-0000-0000-0000-000000000002" || /\.ma(\/|$)/i.test(targetUrl);
-        const itemCurrency = isMorocco ? "MAD" : "TND";
-        const itemSym = isMorocco ? "DH" : "DT";
 
         const formattedOffers = (extracted.all_offers || []).map((o: any) => ({
           tierName: o.tier_name,
@@ -344,6 +352,13 @@ export async function validateForeignCurrencyProductsBatch(limit = 5, force = fa
           sql`${scrapedProducts.scrapeStatus} NOT IN ('deleted', 'ignored')`,
           sql`LOWER(${scrapedProducts.url}) NOT LIKE '%/category%'`,
           sql`LOWER(${scrapedProducts.url}) NOT LIKE '%/categories%'`,
+          // Cooldown protection: Never re-check items validated or inspected within the last 24 hours
+          sql`(${scrapedProducts.lastScrapedAt} IS NULL OR ${scrapedProducts.lastScrapedAt} < NOW() - INTERVAL '24 hours')`,
+          // Filter out permanently unresolvable or completed validation records
+          sql`COALESCE(${scrapedProducts.failureReason}, '') NOT LIKE '%[Local validation: Price unresolvable]%'`,
+          sql`COALESCE(${scrapedProducts.failureReason}, '') NOT LIKE '%[Local validation completed%'`,
+          sql`COALESCE(${scrapedProducts.failureReason}, '') NOT LIKE '%[Dead link%'`,
+          sql`COALESCE(${scrapedProducts.failureReason}, '') NOT LIKE '%[Impossible%'`,
           or(
             // Foreign currency symbol in price ($ or € or £ or USD or EUR)
             sql`${scrapedProducts.currentPrice} ~* '(\\$|€|£|\\b(USD|EUR|GBP)\\b)'`,
@@ -351,7 +366,7 @@ export async function validateForeignCurrencyProductsBatch(limit = 5, force = fa
             sql`COALESCE(${scrapedProducts.failureReason}, '') ILIKE '%local worker%'`,
             // Fractional prices on local domains caused by cloud geo-conversion (e.g. 16.72 DT, 14.91 DT on .tn domain)
             sql`(
-              (${scrapedProducts.domain} LIKE '%.tn' OR ${scrapedProducts.url} LIKE '%.tn/%' OR ${scrapedProducts.workspaceId} = '00000000-0000-0000-0000-000000000001')
+              (${scrapedProducts.domain} LIKE '%.tn' OR ${scrapedProducts.url} LIKE '%.tn/%' OR ${scrapedProducts.workspaceId} = ${TUNISIA_WORKSPACE_ID})
               AND ${scrapedProducts.currentPrice} ~* '^[0-9]+\\.[0-9]{2}\\s*(dt|tnd)$'
               AND ${scrapedProducts.currentPrice} NOT LIKE '%.50%'
               AND ${scrapedProducts.currentPrice} NOT LIKE '%.90%'
@@ -375,9 +390,10 @@ export async function validateForeignCurrencyProductsBatch(limit = 5, force = fa
 
       console.log(`[Local Validator] 🔍 Rescanning: "${item.title || "Product"}" (current: ${item.currentPrice}) -> ${targetUrl}`);
 
-      const isMorocco = item.workspaceId === "00000000-0000-0000-0000-000000000002" || /\.ma(\/|$)/i.test(targetUrl);
-      const itemSym = isMorocco ? "DH" : "DT";
-      const itemCurr = isMorocco ? "MAD" : "TND";
+      const { isMorocco, currency: itemCurr, currencySymbol: itemSym } = resolveMarketCurrency(
+        item.workspaceId,
+        targetUrl
+      );
 
       // 1. Fast local residential direct HTML scrape
       let res: any = await scrapeProductDirectHtml(targetUrl, 12000, 2, {
@@ -395,7 +411,10 @@ export async function validateForeignCurrencyProductsBatch(limit = 5, force = fa
       // 2. If direct HTML didn't get a valid local price, launch local Playwright browser
       if (!res?.success || !res.data || !isDirectPriceValid) {
         console.log(`[Local Validator] Launching local Playwright browser to validate price for: ${targetUrl}...`);
-        res = await scrapeUrlWithLocalPlaywright(targetUrl);
+        res = await scrapeUrlWithLocalPlaywright(targetUrl, 25000, {
+          defaultCurrency: itemCurr,
+          defaultCurrencySymbol: itemSym,
+        });
       }
 
       const extractedPrice = res?.data?.current_price;
@@ -438,6 +457,39 @@ export async function validateForeignCurrencyProductsBatch(limit = 5, force = fa
         console.log(`[Local Validator] ✅ Validated: "${item.title || "Product"}" ➔ ${item.currentPrice} was updated to ${newPrice} (${itemCurr})!`);
       } else {
         console.warn(`[Local Validator] ⚠️ Could not validate local price for ${targetUrl}: ${res?.error || "Price still unresolvable"}`);
+
+        // Break the loop: record validation attempt and prevent infinite retries
+        const isAlreadyLocalPrice = Boolean(
+          item.currentPrice &&
+          (item.currentPrice.toUpperCase().includes("DT") ||
+           item.currentPrice.toUpperCase().includes("DH") ||
+           item.currentPrice.toUpperCase().includes("TND") ||
+           item.currentPrice.toUpperCase().includes("MAD")) &&
+          !/(?:\$|€|£|\b(?:USD|EUR|GBP)\b)/i.test(item.currentPrice)
+        );
+
+        if (isAlreadyLocalPrice) {
+          // If the item already has a local currency price (like '29.85 DT') and residential check didn't find an alternative,
+          // settle it so it's not repeatedly rescanned.
+          await db
+            .update(scrapedProducts)
+            .set({
+              failureReason: `[Local validation completed: Kept ${item.currentPrice}]`,
+              lastScrapedAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(eq(scrapedProducts.id, item.id));
+        } else {
+          // Truly unresolvable foreign price: record unresolvable status and update timestamps so it backs off
+          await db
+            .update(scrapedProducts)
+            .set({
+              failureReason: `[Local validation: Price unresolvable] ${res?.error || "Local and browser scrapers could not determine local price"}`,
+              lastScrapedAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(eq(scrapedProducts.id, item.id));
+        }
       }
     }
 
