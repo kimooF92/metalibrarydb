@@ -13,6 +13,7 @@ import {
   resolveNicheDbCategories,
 } from "@/lib/niches-taxonomy";
 import { CarouselItemSummary } from "@/types";
+import { resolveTimezone, getStartOfTodaySql, getStartOfYesterdaySql, getStartOfMonthSql } from "@/lib/timezone";
 
 import { getCached, setCached, deleteByPrefix, deleteCached, buildCanonicalFilterHash } from "@/lib/cache-service";
 
@@ -21,7 +22,7 @@ const ALLOWED_PRODUCT_FILTERS = [
   "subCategory", "subNiche", "hasOffer", "isFavorite", "status", "hideInactive",
   "adLaunch", "adLaunchFilter", "adLaunchFrom", "adLaunchTo", "stillRunning",
   "activeStatus", "smartPreset", "preset", "discovery", "discoveryFrom", "discoveryTo",
-  "sortBy", "sortOrder", "includeStats", "page", "limit", "lean", "groupCarousels"
+  "sortBy", "sortOrder", "includeStats", "page", "limit", "lean", "groupCarousels", "tz"
 ];
 
 export const dynamic = "force-dynamic";
@@ -76,6 +77,11 @@ export async function GET(req: NextRequest) {
     const rawLimit = groupCarousels && !includeDetails ? Math.min(100, Math.max(limit, limit * 2)) : limit;
 
     const activeWorkspace = await getActiveWorkspace(req);
+    const clientTz = searchParams.get("tz") || req.headers.get("x-timezone");
+    const userTz = resolveTimezone({
+      clientTz,
+      countryCode: activeWorkspace?.countryCode,
+    });
 
     // Hybrid Upstash Redis cache check to eliminate duplicate DB waterfalls across all serverless instances
     const forceRefresh = searchParams.get("_t") !== null || searchParams.get("refresh") === "true";
@@ -251,10 +257,10 @@ export async function GET(req: NextRequest) {
 
     // Discovery Date Filters (presets or custom range)
     if (discovery === "today") {
-      conditions.push(sql`${scrapedProducts.createdAt} >= date_trunc('day', NOW() AT TIME ZONE 'UTC')`);
+      conditions.push(sql`${scrapedProducts.createdAt} >= ${getStartOfTodaySql(userTz)}`);
     } else if (discovery === "yesterday") {
       conditions.push(
-        sql`${scrapedProducts.createdAt} >= date_trunc('day', NOW() AT TIME ZONE 'UTC' - INTERVAL '1 day') AND ${scrapedProducts.createdAt} < date_trunc('day', NOW() AT TIME ZONE 'UTC')`
+        sql`${scrapedProducts.createdAt} >= ${getStartOfYesterdaySql(userTz)} AND ${scrapedProducts.createdAt} < ${getStartOfTodaySql(userTz)}`
       );
     } else if (discovery === "last_3d") {
       conditions.push(sql`${scrapedProducts.createdAt} >= NOW() - INTERVAL '3 days'`);
@@ -265,7 +271,7 @@ export async function GET(req: NextRequest) {
     } else if (discovery === "last_30d") {
       conditions.push(sql`${scrapedProducts.createdAt} >= NOW() - INTERVAL '30 days'`);
     } else if (discovery === "this_month") {
-      conditions.push(sql`${scrapedProducts.createdAt} >= date_trunc('month', NOW() AT TIME ZONE 'UTC')`);
+      conditions.push(sql`${scrapedProducts.createdAt} >= ${getStartOfMonthSql(userTz)}`);
     } else if (discovery === "custom" || (!discovery && (discoveryFrom || discoveryTo))) {
       if (discoveryFrom && /^\d{4}-\d{2}-\d{2}$/.test(discoveryFrom.trim())) {
         conditions.push(sql`${scrapedProducts.createdAt} >= ${discoveryFrom.trim() + " 00:00:00"}::timestamptz`);

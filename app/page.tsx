@@ -105,8 +105,17 @@ function DashboardOverviewContent() {
     async (isManual = false) => {
       if (isManual) setRefreshing(true);
       try {
-        const bust = isManual ? `?refresh=true&_t=${Date.now()}` : "";
-        const res = await fetch(`/api/dashboard/overview${bust}`);
+        const tz = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "";
+        const params = new URLSearchParams();
+        if (isManual) {
+          params.set("refresh", "true");
+          params.set("_t", String(Date.now()));
+        }
+        if (tz) {
+          params.set("tz", tz);
+        }
+        const qs = params.toString() ? `?${params.toString()}` : "";
+        const res = await fetch(`/api/dashboard/overview${qs}`);
         if (res.ok) {
           const json = await res.json();
           setData(json);

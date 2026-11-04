@@ -504,6 +504,8 @@ export default function ProductsPage() {
         }
         query.set("stillRunning", stillRunningOnly ? "true" : "false");
         query.set("groupCarousels", groupCarousels ? "true" : "false");
+        const tz = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "";
+        if (tz) query.set("tz", tz);
 
         const res = await fetch(`/api/products?${query.toString()}`, {
           signal: currentController.signal,

@@ -17,6 +17,7 @@ import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache"
 import { getActiveWorkspace } from "@/lib/workspace-server";
 import { getCached, setCached } from "@/lib/cache-service";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
+import { resolveTimezone, getStartOfTodaySql } from "@/lib/timezone";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -32,8 +33,13 @@ export async function GET(req: NextRequest) {
     const activeWorkspace = await getActiveWorkspace(req);
     const { searchParams } = new URL(req.url);
     const forceRefresh = searchParams.get("refresh") === "true";
+    const clientTz = searchParams.get("tz") || req.headers.get("x-timezone");
+    const userTz = resolveTimezone({
+      clientTz,
+      countryCode: activeWorkspace.countryCode,
+    });
 
-    const cacheKey = `cache:dashboard:overview:${activeWorkspace.id}`;
+    const cacheKey = `cache:dashboard:overview:${activeWorkspace.id}:${userTz}`;
     if (!forceRefresh) {
       const cached = await getCached<Record<string, unknown>>(cacheKey);
       if (cached) {
@@ -426,7 +432,7 @@ export async function GET(req: NextRequest) {
         .where(
           and(
             eq(scrapedProducts.workspaceId, activeWorkspace.id),
-            sql`${scrapedProducts.createdAt} >= date_trunc('day', NOW() AT TIME ZONE 'UTC')`
+            sql`${scrapedProducts.createdAt} >= ${getStartOfTodaySql(userTz)}`
           )
         ),
 
@@ -440,7 +446,7 @@ export async function GET(req: NextRequest) {
         .where(
           and(
             eq(scrapedProducts.workspaceId, activeWorkspace.id),
-            sql`${scrapedProducts.createdAt} >= date_trunc('day', NOW() AT TIME ZONE 'UTC')`,
+            sql`${scrapedProducts.createdAt} >= ${getStartOfTodaySql(userTz)}`,
             isNotNull(scrapedProducts.category),
             ne(scrapedProducts.category, "")
           )
