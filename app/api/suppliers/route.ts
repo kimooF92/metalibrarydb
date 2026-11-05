@@ -78,6 +78,7 @@ export async function GET(req: NextRequest) {
         lastCheckedAt: suppliers.lastCheckedAt,
         lastPostDate: suppliers.lastPostDate,
         lastPostUrl: suppliers.lastPostUrl,
+        lastPostText: suppliers.lastPostText,
         lastAlbumUrl: suppliers.lastAlbumUrl,
         lastAlbumTitle: suppliers.lastAlbumTitle,
         lastAlbumPhotoCount: suppliers.lastAlbumPhotoCount,

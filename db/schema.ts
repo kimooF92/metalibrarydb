@@ -545,6 +545,7 @@ export const suppliers = pgTable(
     // Watermarking & Activity
     lastPostDate: timestamp("last_post_date", { withTimezone: true }),
     lastPostUrl: text("last_post_url"),
+    lastPostText: text("last_post_text"),
     lastAlbumUrl: text("last_album_url"),
     lastAlbumTitle: text("last_album_title"),
     lastAlbumPhotoCount: integer("last_album_photo_count").default(0),

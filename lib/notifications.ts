@@ -631,7 +631,7 @@ export async function pruneOldNotifications(maxKeep = 120) {
 }
 
 /**
- * Creates an unmissable high-priority notification for a new Supplier Album Drop.
+ * Creates a clean, refined notification for a new Supplier Facebook Drop or Post.
  */
 export async function logSupplierAlbumDropNotification(params: {
   supplierId: string;
@@ -640,25 +640,51 @@ export async function logSupplierAlbumDropNotification(params: {
   photoCount: number;
   previewImages?: string[];
   albumUrl?: string | null;
+  postUrl?: string | null;
+  postText?: string | null;
+  postDate?: string | null;
   workspaceId?: string | null;
 }) {
-  const { supplierId, supplierName, albumTitle, photoCount, previewImages = [], albumUrl, workspaceId } = params;
-  const titleText = albumTitle ? `New Album Drop: ${albumTitle}` : `New Photo Drop (${photoCount} photos)`;
+  const {
+    supplierId,
+    supplierName,
+    albumTitle,
+    photoCount,
+    previewImages = [],
+    albumUrl,
+    postUrl,
+    postText,
+    postDate,
+    workspaceId,
+  } = params;
+
+  const titleText = albumTitle
+    ? `New Album Drop: ${albumTitle}`
+    : photoCount > 0
+    ? `New Product Drop (${photoCount} ${photoCount === 1 ? "photo" : "photos"})`
+    : `New Facebook Post`;
+
+  const messageBody = postText
+    ? postText.slice(0, 160).replace(/[\r\n]+/g, " ")
+    : `${supplierName} published ${photoCount > 0 ? `${photoCount} new product photos` : "a new post"} on Facebook.`;
 
   return createNotification({
     type: "supplier_album_drop",
-    title: `📦 ${supplierName}: ${titleText}`,
-    message: `${supplierName} published a new product drop with ${photoCount} new photos. Review and source new winning items before stock depletes!`,
-    severity: "success",
-    actionUrl: `/suppliers?supplierId=${encodeURIComponent(supplierId)}`,
+    title: `${supplierName}: ${titleText}`,
+    message: messageBody,
+    severity: "info",
+    actionUrl: postUrl || `/suppliers?supplierId=${encodeURIComponent(supplierId)}`,
     workspaceId: workspaceId || null,
     metadata: {
       supplierId,
       supplierName,
-      albumTitle: albumTitle || "New Collection",
+      albumTitle: albumTitle || null,
       photoCount,
       previewImages: previewImages.slice(0, 4),
       albumUrl: albumUrl || null,
+      postUrl: postUrl || null,
+      postText: postText || null,
+      postDate: postDate || null,
       isSupplierDrop: true,
     },
   });

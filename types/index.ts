@@ -599,6 +599,7 @@ export interface Supplier {
   lastCheckedAt?: string | null;
   lastPostDate?: string | null;
   lastPostUrl?: string | null;
+  lastPostText?: string | null;
   lastAlbumUrl?: string | null;
   lastAlbumTitle?: string | null;
   lastAlbumPhotoCount: number;

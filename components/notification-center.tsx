@@ -53,6 +53,28 @@ export interface ActivityNotification {
   createdAt: string;
 }
 
+function isValidImageUrl(u?: string | null): boolean {
+  if (!u || typeof u !== "string") return false;
+  const clean = u.trim();
+  if (!clean.startsWith("http://") && !clean.startsWith("https://")) return false;
+  if (
+    clean.includes("permalink.php") ||
+    clean.includes("/posts/") ||
+    clean.includes("/story.php") ||
+    clean.includes("facebook.com/profile.php")
+  ) {
+    return false;
+  }
+  return (
+    clean.includes("fbcdn.net") ||
+    clean.includes("fbsbx.com") ||
+    clean.includes("cloudinary.com") ||
+    clean.includes("backblazeb2.com") ||
+    clean.includes("supabase.co") ||
+    /\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(clean)
+  );
+}
+
 interface NotificationCenterProps {
   layout?: "sidebar" | "navbar" | "collapsed";
   onOpenResolveModal?: (trackedPageId: string) => void;
@@ -393,8 +415,8 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
 
     if (type === "supplier_album_drop") {
       return (
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-fuchsia-600 to-indigo-600 text-white shadow-sm flex items-center justify-center shrink-0">
-          <Truck className="w-4 h-4 text-white" />
+        <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 flex items-center justify-center shrink-0 shadow-sm">
+          <Truck className="w-4 h-4" />
         </div>
       );
     }
@@ -674,64 +696,6 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
             ref={scrollContainerRef}
             className="overflow-y-auto max-h-[480px] divide-y divide-slate-100 dark:divide-slate-800/60"
           >
-            {/* Pinned Spotlight Banner for Unread Supplier Album Drops */}
-            {notifications.some((n) => n.type === "supplier_album_drop" && !n.isRead) && (
-              <div className="m-2.5 p-3 rounded-xl bg-gradient-to-r from-fuchsia-500/15 via-purple-500/10 to-indigo-500/15 border-2 border-fuchsia-500/30 dark:border-fuchsia-500/40 shadow-md space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-[11px] font-black text-fuchsia-600 dark:text-fuchsia-400 uppercase tracking-wider">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-fuchsia-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-fuchsia-500" />
-                    </span>
-                    ✨ New Supplier Product Drop
-                  </span>
-                  <Link
-                    href="/suppliers"
-                    onClick={() => setIsOpen(false)}
-                    className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-0.5"
-                  >
-                    View All <ChevronRight className="w-3 h-3" />
-                  </Link>
-                </div>
-                {notifications
-                  .filter((n) => n.type === "supplier_album_drop" && !n.isRead)
-                  .slice(0, 1)
-                  .map((drop) => {
-                    const previewImgs = (drop.metadata?.previewImages as string[]) || [];
-                    return (
-                      <div key={drop.id} className="space-y-1.5">
-                        <p className="text-xs font-semibold text-slate-900 dark:text-white line-clamp-1">
-                          {stripEmojis(drop.title)}
-                        </p>
-                        {previewImgs.length > 0 && (
-                          <div className="flex items-center gap-1.5 pt-0.5">
-                            {previewImgs.slice(0, 4).map((img, idx) => (
-                              <img
-                                key={idx}
-                                src={img}
-                                alt="Drop Preview"
-                                className="w-11 h-11 object-cover rounded-md border border-slate-200 dark:border-slate-800 shrink-0"
-                                loading="lazy"
-                              />
-                            ))}
-                          </div>
-                        )}
-                        <button
-                          onClick={() => {
-                            if (!drop.isRead) handleMarkSingleRead(drop.id);
-                            setIsOpen(false);
-                            router.push(drop.actionUrl || "/suppliers");
-                          }}
-                          className="w-full mt-1 py-1.5 px-3 bg-fuchsia-600 hover:bg-fuchsia-700 text-white text-[11px] font-bold rounded-lg shadow-xs transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                        >
-                          Browse New Photos ({drop.metadata?.photoCount || 0})
-                        </button>
-                      </div>
-                    );
-                  })}
-              </div>
-            )}
-
             {notifications.length === 0 ? (
               <div className="py-12 px-4 text-center flex flex-col items-center justify-center space-y-2 text-slate-400">
                 <Inbox className="w-8 h-8 opacity-40" />
@@ -777,7 +741,7 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                       n.isRead
                         ? "bg-transparent hover:bg-slate-100/70 dark:hover:bg-slate-800/50 opacity-75 hover:opacity-100"
                         : isSupplierDrop
-                        ? "bg-gradient-to-r from-fuchsia-500/[0.1] via-purple-500/[0.06] to-indigo-500/[0.08] hover:from-fuchsia-500/[0.16] hover:to-indigo-500/[0.16] border-l-2 border-fuchsia-500"
+                        ? "bg-indigo-500/[0.04] dark:bg-indigo-500/[0.07] hover:bg-indigo-500/[0.1] dark:hover:bg-indigo-500/[0.14] border-l-2 border-indigo-500"
                         : isBreakout
                         ? "bg-gradient-to-r from-rose-500/[0.08] via-pink-500/[0.06] to-amber-500/[0.08] hover:from-rose-500/[0.14] hover:to-amber-500/[0.14]"
                         : isWentDark
@@ -829,8 +793,9 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                             </span>
                           )}
                           {isSupplierDrop && (
-                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-gradient-to-r from-fuchsia-600 to-indigo-600 text-white shrink-0 shadow-xs shadow-fuchsia-500/20">
-                              NEW DROP
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 shrink-0 border border-indigo-500/30 inline-flex items-center gap-1">
+                              <Truck className="w-2.5 h-2.5 shrink-0" />
+                              <span>DROP</span>
                             </span>
                           )}
                           {isBreakout && (
@@ -876,17 +841,37 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                       </p>
 
                       {/* Supplier Drop Preview Thumbnails */}
-                      {isSupplierDrop && dropPreviewImages.length > 0 && (
+                      {isSupplierDrop && dropPreviewImages.filter(isValidImageUrl).length > 0 && (
                         <div className="flex items-center gap-1.5 pt-1">
-                          {dropPreviewImages.slice(0, 4).map((imgUrl, idx) => (
+                          {dropPreviewImages.filter(isValidImageUrl).slice(0, 4).map((imgUrl, idx) => (
                             <img
                               key={idx}
                               src={imgUrl}
-                              alt="Drop preview"
-                              className="w-10 h-10 object-cover rounded-md border border-slate-200 dark:border-slate-800 shrink-0"
+                              alt="Product thumbnail"
+                              referrerPolicy="no-referrer"
+                              className="w-9 h-9 object-cover rounded-md border border-slate-200 dark:border-slate-800 shrink-0"
                               loading="lazy"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLElement).style.display = "none";
+                              }}
                             />
                           ))}
+                        </div>
+                      )}
+
+                      {/* Direct Post Link for Supplier Drop */}
+                      {isSupplierDrop && n.metadata?.postUrl && (
+                        <div className="pt-0.5">
+                          <a
+                            href={n.metadata.postUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                          >
+                            <span>Open Facebook Post</span>
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
                         </div>
                       )}
 

@@ -35,13 +35,97 @@ interface ApifyRunItem {
     type?: string;
     url?: string;
     thumbnail?: string;
+    image?: any;
+    imageUrl?: string;
+    [key: string]: any;
   }>;
   imageUrl?: string;
-  image?: string;
+  image?: any;
   albumUrl?: string;
   albumName?: string;
   albumTitle?: string;
   [key: string]: any;
+}
+
+/**
+ * Validates that a string is a genuine image file URL, not an HTML page/permalink.
+ */
+export function isValidImageUrl(u: any): u is string {
+  if (!u || typeof u !== "string") return false;
+  const clean = u.trim();
+  if (!clean.startsWith("http://") && !clean.startsWith("https://")) return false;
+  // Disallow HTML Facebook web links
+  if (
+    clean.includes("permalink.php") ||
+    clean.includes("/posts/") ||
+    clean.includes("/story.php") ||
+    clean.includes("facebook.com/profile.php")
+  ) {
+    return false;
+  }
+  // Check if it's from a known CDN or has image extension
+  return (
+    clean.includes("fbcdn.net") ||
+    clean.includes("fbsbx.com") ||
+    clean.includes("cloudinary.com") ||
+    clean.includes("backblazeb2.com") ||
+    clean.includes("supabase.co") ||
+    /\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(clean)
+  );
+}
+
+/**
+ * Safely extracts authentic image URLs from post media objects or arrays,
+ * inspecting image uri, thumbnail, and nested shared post media.
+ */
+export function extractValidImagesFromPost(post: ApifyRunItem): string[] {
+  const images: string[] = [];
+
+  const addIfValid = (candidate: any) => {
+    if (isValidImageUrl(candidate) && !images.includes(candidate)) {
+      images.push(candidate);
+    }
+  };
+
+  // 1. Direct post fields
+  addIfValid(post.imageUrl);
+  addIfValid(post.thumbnail);
+  addIfValid(post.image);
+
+  // 2. post.media array
+  if (Array.isArray(post.media)) {
+    for (const m of post.media) {
+      if (!m) continue;
+      addIfValid(m.image?.uri);
+      addIfValid(m.thumbnail);
+      addIfValid(m.imageUrl);
+      if (isValidImageUrl(m.url)) addIfValid(m.url);
+    }
+  }
+
+  // 3. post.sharedPost media
+  if (post.sharedPost) {
+    addIfValid(post.sharedPost.imageUrl);
+    addIfValid(post.sharedPost.thumbnail);
+    if (Array.isArray(post.sharedPost.media)) {
+      for (const m of post.sharedPost.media) {
+        if (!m) continue;
+        addIfValid(m.image?.uri);
+        addIfValid(m.thumbnail);
+        addIfValid(m.imageUrl);
+        if (isValidImageUrl(m.url)) addIfValid(m.url);
+      }
+    }
+  }
+
+  // 4. mediaUrls array
+  if (Array.isArray(post.mediaUrls)) {
+    for (const u of post.mediaUrls) {
+      addIfValid(u);
+    }
+  }
+
+  return images;
 }
 
 /**
@@ -172,6 +256,8 @@ export async function scanSupplierNow(supplierId: string): Promise<{
       name: suppliers.name,
       facebookUrl: suppliers.facebookUrl,
       lastPostDate: suppliers.lastPostDate,
+      lastPostUrl: suppliers.lastPostUrl,
+      lastPostText: suppliers.lastPostText,
       workspaceId: suppliers.workspaceId,
       status: suppliers.status,
     })
@@ -232,6 +318,8 @@ export async function scanSupplierNow(supplierId: string): Promise<{
     // ==========================================
     let totalPhotosIngested = 0;
     let newestPostDate = supplier.lastPostDate ? new Date(supplier.lastPostDate) : new Date(0);
+    let latestPostUrl: string | null = null;
+    let latestPostText: string | null = null;
     let latestAlbumUrl: string | null = null;
     let latestAlbumTitle: string | null = null;
     let previewImages: string[] = [];
@@ -239,13 +327,33 @@ export async function scanSupplierNow(supplierId: string): Promise<{
     const photosActorId = process.env.APIFY_FB_PHOTOS_ACTOR_ID || DEFAULT_PHOTOS_ACTOR;
 
     for (const post of recentPosts) {
-      // Check date
-      const postDateStr = post.publishedAt || post.date || post.time;
+      // 1. Extract Post Date
+      const postDateStr =
+        post.time ||
+        (post.timestamp ? new Date(post.timestamp * 1000).toISOString() : null) ||
+        post.publishedAt ||
+        post.date;
+      let currentPostDate: Date | null = null;
       if (postDateStr) {
-        const postDate = new Date(postDateStr);
-        if (!isNaN(postDate.getTime()) && postDate > newestPostDate) {
-          newestPostDate = postDate;
+        const parsed = new Date(postDateStr);
+        if (!isNaN(parsed.getTime())) {
+          currentPostDate = parsed;
+          if (parsed > newestPostDate) {
+            newestPostDate = parsed;
+          }
         }
+      }
+
+      // 2. Extract Canonical Post URL
+      const postUrl = post.topLevelUrl || post.url || post.link || post.postUrl;
+      if (!latestPostUrl && postUrl) {
+        latestPostUrl = postUrl;
+      }
+
+      // 3. Extract Clean Post Text
+      const postText = post.text || post.postText || post.message || post.sharedPost?.text || null;
+      if (!latestPostText && postText) {
+        latestPostText = postText;
       }
 
       const { albumUrl, albumTitle } = extractAlbumUrlFromPost(post);
@@ -267,8 +375,13 @@ export async function scanSupplierNow(supplierId: string): Promise<{
         );
 
         for (const item of albumPhotos) {
-          const rawUrl = item.imageUrl || item.image || item.url || (item.media && item.media[0]?.url);
-          if (!rawUrl || typeof rawUrl !== "string") continue;
+          const rawUrl =
+            item.imageUrl ||
+            (typeof item.image === "object" ? item.image?.uri : item.image) ||
+            item.thumbnail ||
+            item.url ||
+            (item.media && item.media[0]?.url);
+          if (!isValidImageUrl(rawUrl)) continue;
 
           // Re-host image to permanent storage to survive Facebook CDN expiry
           const uploadRes = await uploadMediaWithHashing(rawUrl, "images", `supplier_${supplier.id}`).catch(() => null);
@@ -287,29 +400,18 @@ export async function scanSupplierNow(supplierId: string): Promise<{
               photoUrl: finalPhotoUrl,
               rawMetaUrl: rawUrl,
               mediaHash: uploadRes?.mediaHash || null,
-              caption: item.text || item.caption || post.postText || null,
-              postedAt: item.publishedAt ? new Date(item.publishedAt) : new Date(),
+              caption: item.text || item.caption || postText || null,
+              postedAt: item.publishedAt ? new Date(item.publishedAt) : (currentPostDate || new Date()),
             })
             .onConflictDoNothing();
 
           totalPhotosIngested++;
         }
       } else {
-        // Case B: Standard Post with direct mediaUrls
-        const mediaUrls: string[] = Array.isArray(post.mediaUrls) ? post.mediaUrls : [];
-        if (post.media && Array.isArray(post.media)) {
-          for (const m of post.media) {
-            if (m.url && !mediaUrls.includes(m.url)) {
-              mediaUrls.push(m.url);
-            }
-          }
-        }
-        if (post.imageUrl && !mediaUrls.includes(post.imageUrl)) {
-          mediaUrls.push(post.imageUrl);
-        }
+        // Case B: Standard Post with genuine image extraction (filtering out HTML permalinks)
+        const validPhotos = extractValidImagesFromPost(post);
 
-        for (const rawUrl of mediaUrls) {
-          if (!rawUrl || typeof rawUrl !== "string") continue;
+        for (const rawUrl of validPhotos) {
           const uploadRes = await uploadMediaWithHashing(rawUrl, "images", `supplier_${supplier.id}`).catch(() => null);
           const finalPhotoUrl = uploadRes?.url || rawUrl;
           if (previewImages.length < 4) {
@@ -320,11 +422,13 @@ export async function scanSupplierNow(supplierId: string): Promise<{
             .insert(supplierPhotos)
             .values({
               supplierId: supplier.id,
+              albumUrl: postUrl || null,
+              albumTitle: null,
               photoUrl: finalPhotoUrl,
               rawMetaUrl: rawUrl,
               mediaHash: uploadRes?.mediaHash || null,
-              caption: post.postText || post.text || null,
-              postedAt: postDateStr ? new Date(postDateStr) : new Date(),
+              caption: postText,
+              postedAt: currentPostDate || new Date(),
             })
             .onConflictDoNothing();
 
@@ -337,22 +441,26 @@ export async function scanSupplierNow(supplierId: string): Promise<{
     // STAGE 3: Finalize Supplier & Send Alert
     // ==========================================
     const hasNewPhotos = totalPhotosIngested > 0;
+    const hasActivity = hasNewPhotos || Boolean(latestPostUrl && latestPostUrl !== supplier.lastPostUrl);
+
     await db
       .update(suppliers)
       .set({
         lastCheckedAt: new Date(),
         lastPostDate: newestPostDate > new Date(0) ? newestPostDate : supplier.lastPostDate,
+        lastPostUrl: latestPostUrl || supplier.lastPostUrl,
+        lastPostText: latestPostText || supplier.lastPostText,
         lastAlbumUrl: latestAlbumUrl || undefined,
         lastAlbumTitle: latestAlbumTitle || undefined,
         lastAlbumPhotoCount: totalPhotosIngested > 0 ? totalPhotosIngested : undefined,
-        hasUnseenDrop: hasNewPhotos ? true : undefined,
+        hasUnseenDrop: hasActivity ? true : undefined,
         lastScrapeStatus: "success",
         lastScrapeError: null,
         updatedAt: new Date(),
       })
       .where(eq(suppliers.id, supplier.id));
 
-    if (hasNewPhotos) {
+    if (hasActivity) {
       await logSupplierAlbumDropNotification({
         supplierId: supplier.id,
         supplierName: supplier.name,
@@ -360,9 +468,12 @@ export async function scanSupplierNow(supplierId: string): Promise<{
         photoCount: totalPhotosIngested,
         previewImages,
         albumUrl: latestAlbumUrl,
+        postUrl: latestPostUrl,
+        postText: latestPostText,
+        postDate: newestPostDate > new Date(0) ? newestPostDate.toISOString() : null,
         workspaceId: supplier.workspaceId,
       });
-      console.log(`🎉 [Supplier Scraper] Successfully ingested ${totalPhotosIngested} photos for "${supplier.name}".`);
+      console.log(`🎉 [Supplier Scraper] Successfully recorded drop for "${supplier.name}" (${totalPhotosIngested} photos).`);
     }
 
     return {

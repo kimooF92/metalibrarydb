@@ -109,6 +109,7 @@ export function SupplierPhotoGalleryModal({
                   <img
                     src={photo.photoUrl}
                     alt={photo.caption || "Supplier product photo"}
+                    referrerPolicy="no-referrer"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                     loading="lazy"
                   />
@@ -176,6 +177,7 @@ export function SupplierPhotoGalleryModal({
                 <img
                   src={selectedPhoto.photoUrl}
                   alt={selectedPhoto.caption || "Full resolution photo"}
+                  referrerPolicy="no-referrer"
                   className="max-h-[65vh] max-w-full object-contain rounded-lg"
                 />
               </div>

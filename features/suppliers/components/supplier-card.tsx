@@ -43,6 +43,31 @@ export const SupplierCard = memo(function SupplierCard({
   const isFailed = supplier.lastScrapeStatus === "failed";
   const previews = supplier.previewPhotos || [];
 
+  const isValidImageUrl = (url?: string | null): boolean => {
+    if (!url || typeof url !== "string") return false;
+    const clean = url.trim();
+    if (!clean.startsWith("http://") && !clean.startsWith("https://")) return false;
+    if (
+      clean.includes("permalink.php") ||
+      clean.includes("/posts/") ||
+      clean.includes("/story.php") ||
+      clean.includes("facebook.com/profile.php")
+    ) {
+      return false;
+    }
+    return (
+      clean.includes("fbcdn.net") ||
+      clean.includes("fbsbx.com") ||
+      clean.includes("cloudinary.com") ||
+      clean.includes("backblazeb2.com") ||
+      clean.includes("supabase.co") ||
+      /\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(clean)
+    );
+  };
+
+  const validPreviews = previews.filter((p) => isValidImageUrl(p.photoUrl));
+  const postSnippet = supplier.lastPostText || previews.find((p) => p.caption)?.caption || null;
+
   const formatRelative = (dateStr?: string | null) => {
     if (!dateStr) return "Never";
     const date = new Date(dateStr);
@@ -52,6 +77,21 @@ export const SupplierCard = memo(function SupplierCard({
     const diffDays = Math.floor(diffHours / 24);
     if (diffDays === 1) return "Yesterday";
     return `${diffDays}d ago`;
+  };
+
+  const formatAbsoluteDate = (dateStr?: string | null) => {
+    if (!dateStr) return "";
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return "";
+    }
   };
 
   return (
@@ -137,32 +177,68 @@ export const SupplierCard = memo(function SupplierCard({
           </div>
         </div>
 
-        {/* Cadence & Watermark Badges */}
-        <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-50 dark:bg-slate-950/40 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800/60">
-          <div>
-            <span className="text-slate-400 block text-[10px] font-medium">Last Watchdog Check</span>
-            <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-              <Clock className="w-3 h-3 text-slate-400 shrink-0" />
-              {formatRelative(supplier.lastCheckedAt)}
-            </span>
-          </div>
-
-          <div>
-            <span className="text-slate-400 block text-[10px] font-medium">Check Schedule</span>
-            <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-              <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
-              Twice weekly
-            </span>
-          </div>
-
-          {supplier.lastAlbumTitle && (
-            <div className="col-span-2 pt-1 border-t border-slate-100 dark:border-slate-800/60">
-              <span className="text-slate-400 block text-[10px] font-medium">Latest Scraped Album</span>
-              <span className="font-semibold text-slate-900 dark:text-white truncate block">
-                {supplier.lastAlbumTitle} ({supplier.lastAlbumPhotoCount || 0} photos)
+        {/* Latest Post & Date Section (Prominent) */}
+        <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800/60 space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <span className="text-slate-400 block text-[10px] font-semibold uppercase tracking-wider">
+                Latest Facebook Post
+              </span>
+              <span className="font-semibold text-slate-900 dark:text-slate-100 text-xs flex items-center gap-1.5 mt-0.5">
+                <Calendar className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                {supplier.lastPostDate ? (
+                  <>
+                    <span>{formatRelative(supplier.lastPostDate)}</span>
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      ({formatAbsoluteDate(supplier.lastPostDate)})
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-slate-400 font-normal text-[11px]">No post detected yet</span>
+                )}
               </span>
             </div>
+
+            {supplier.lastPostUrl && (
+              <a
+                href={supplier.lastPostUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 inline-flex items-center gap-1 shrink-0 transition-colors"
+              >
+                <span>View Post</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
+
+          {/* Post Caption / Content Preview */}
+          {postSnippet && (
+            <div
+              className="pt-1.5 border-t border-slate-100 dark:border-slate-800/60 text-xs text-slate-700 dark:text-slate-300 leading-relaxed line-clamp-3 select-text"
+              dir="auto"
+            >
+              <bdi>{postSnippet}</bdi>
+            </div>
           )}
+
+          {supplier.lastAlbumTitle && (
+            <div className="pt-1 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 flex items-center justify-between">
+              <span className="truncate">Album: {supplier.lastAlbumTitle}</span>
+              {supplier.lastAlbumPhotoCount > 0 && (
+                <span className="font-mono font-medium">{supplier.lastAlbumPhotoCount} photos</span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Watchdog Cadence Muted Footer */}
+        <div className="flex items-center justify-between text-[10px] text-slate-400 px-1">
+          <span className="flex items-center gap-1">
+            <Clock className="w-3 h-3" />
+            Watchdog checked {formatRelative(supplier.lastCheckedAt)}
+          </span>
+          <span>Twice weekly</span>
         </div>
 
         {/* Scrape Error Warning if any */}
@@ -174,10 +250,10 @@ export const SupplierCard = memo(function SupplierCard({
         )}
 
         {/* Thumbnail Preview Gallery Strip */}
-        {previews.length > 0 ? (
+        {validPreviews.length > 0 ? (
           <div className="space-y-1">
             <div className="flex items-center justify-between text-[10px] text-slate-400">
-              <span>Latest Scraped Photos</span>
+              <span>Scraped Photos ({validPreviews.length})</span>
               <button
                 onClick={() => onViewPhotos(supplier)}
                 className="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold"
@@ -186,7 +262,7 @@ export const SupplierCard = memo(function SupplierCard({
               </button>
             </div>
             <div className="grid grid-cols-4 gap-1.5">
-              {previews.map((photo, idx) => (
+              {validPreviews.slice(0, 4).map((photo, idx) => (
                 <div
                   key={photo.id || idx}
                   onClick={() => onViewPhotos(supplier)}
@@ -195,17 +271,23 @@ export const SupplierCard = memo(function SupplierCard({
                   <img
                     src={photo.photoUrl}
                     alt={photo.caption || "Product photo"}
+                    referrerPolicy="no-referrer"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                     loading="lazy"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLElement).style.display = "none";
+                    }}
                   />
                 </div>
               ))}
             </div>
           </div>
         ) : (
-          <div className="py-4 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-lg text-slate-400 text-xs flex flex-col items-center justify-center space-y-1">
-            <Images className="w-5 h-5 opacity-40" />
-            <span>No photos scraped yet</span>
+          <div className="py-2.5 px-3 text-center border border-dashed border-slate-200 dark:border-slate-800/80 rounded-lg text-slate-400 text-xs flex items-center justify-center gap-2">
+            <Images className="w-4 h-4 opacity-40 shrink-0" />
+            <span className="text-[11px]">
+              {supplier.lastPostUrl ? "Facebook post link detected • Click View Post above" : "No photos scraped yet"}
+            </span>
           </div>
         )}
       </div>
