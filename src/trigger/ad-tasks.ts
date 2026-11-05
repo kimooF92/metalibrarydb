@@ -5,7 +5,7 @@ import { trackedPages, queue } from "../../db/schema";
 import { eq, and, or, inArray, sql } from "drizzle-orm";
 import { scanMetaAdPage } from "../../worker/scanner";
 import { markJobCompleted } from "../../worker/db";
-import { acquireLock, releaseLock, deleteCached, deleteByPrefix, setCached } from "../../lib/cache-service";
+import { acquireLock, acquireLockDetailed, releaseLock, deleteCached, deleteByPrefix, setCached } from "../../lib/cache-service";
 import { broadcastScanStep } from "../../lib/realtime-scan";
 
 export interface ScanPageCountPayload {
@@ -55,10 +55,14 @@ export const scanPageCountTask = task({
           workspaceId: trackedPages.workspaceId,
         })
         .from(trackedPages)
-        .where(or(eq(trackedPages.id, cleanId), eq(trackedPages.pageId, cleanId)))
+        .where(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId)
+            ? or(eq(trackedPages.id, cleanId), eq(trackedPages.pageId, cleanId))
+            : eq(trackedPages.pageId, cleanId)
+        )
         .limit(1);
 
-      if (pageRecord && pageRecord.status === "scanning") {
+      if (pageRecord && (pageRecord.status === "scanning" || pageRecord.status === "pending")) {
         const now = new Date();
         const fallbackStatus =
           pageRecord.lastSuccessAt !== null || pageRecord.currentResults !== null ? "success" : "failed";
@@ -209,11 +213,20 @@ export const scanPageCountTask = task({
       await releaseLock(lockKey, runToken).catch(() => {});
     }
 
-    const lockToken = await acquireLock(lockKey, 60, runToken);
-    if (!lockToken) {
-      logger.warn(`Page ${pageRecord.id} (${pageRecord.displayName || targetUrl}) is already locked by another worker.`);
-      // Throw an error so Trigger.dev retries with backoff rather than falsely recording success
-      throw new Error(`Page ${pageRecord.id} is currently locked by another worker.`);
+    let lockToken: string | null = null;
+    const lockResult = await acquireLockDetailed(lockKey, 60, runToken);
+    if (!lockResult.acquired) {
+      if (lockResult.reason === "unavailable") {
+        logger.warn(
+          `[scan-page-count] Redis lock unavailable (unconfigured or unreachable) for "${pageRecord.displayName || targetUrl}". Proceeding with task execution.`
+        );
+      } else {
+        logger.warn(`Page ${pageRecord.id} (${pageRecord.displayName || targetUrl}) is already locked by another worker.`);
+        // Throw an error so Trigger.dev retries with backoff rather than falsely recording success
+        throw new Error(`Page ${pageRecord.id} is currently locked by another worker.`);
+      }
+    } else {
+      lockToken = lockResult.token;
     }
 
     let browser: Browser | null = null;

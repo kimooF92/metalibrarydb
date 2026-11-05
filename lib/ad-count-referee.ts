@@ -280,6 +280,20 @@ export async function resolveAdCountWithSpanJev(
     }
   }
 
+  // Heuristic 1b: If drop to zero was flagged but NO positive candidate ad counts (> 0)
+  // exist in the DOM, the 0 is authentic (brand has 0 active ads on Meta).
+  // Immediately confirm 0 ($0 tokens) so the downstream 3-scan grace period in worker/db.ts can handle it safely.
+  const hasPositiveCandidates = candidates.some((c) => c.count > 0);
+  if (params.scannedCount === 0 && !hasPositiveCandidates) {
+    return {
+      resolvedCount: 0,
+      modelUsed: "authentic_zero_confirmation",
+      confidence: 1.0,
+      wasRefereed: true,
+      doubtReasons: doubt.reasons,
+    };
+  }
+
   // Build compact criteria map for Span/Jev
   const criteriaMap: Record<string, string> = {};
 

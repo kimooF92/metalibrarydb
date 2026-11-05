@@ -8,8 +8,24 @@ import { inArray, eq } from "drizzle-orm";
 /**
  * Server Action: Trigger a single page ad-count scan
  */
-export async function triggerSinglePageRefresh(pageId: string) {
+export async function triggerSinglePageRefresh(targetId: string) {
   try {
+    const cleanTarget = targetId.trim();
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanTarget);
+    const whereCondition = isUuid ? eq(trackedPages.id, cleanTarget) : eq(trackedPages.pageId, cleanTarget);
+
+    const [pageRecord] = await db
+      .select({ id: trackedPages.id })
+      .from(trackedPages)
+      .where(whereCondition)
+      .limit(1);
+
+    if (!pageRecord) {
+      return { success: false, error: "Tracked page not found" };
+    }
+
+    const pageId = pageRecord.id;
+
     // 1. Mark page as pending in DB
     await db
       .update(trackedPages)

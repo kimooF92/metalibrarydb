@@ -35,9 +35,18 @@ export async function POST(request: Request) {
 
     const targetIds = validated.ids;
 
-    // 1. Verify target pages exist
+    // 1. Verify target pages exist (support both UUIDs and Facebook Page IDs)
+    const isUuid = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+    const uuidIds = targetIds.filter(isUuid);
+    const nonUuidIds = targetIds.filter((id) => !isUuid(id));
+
     const pages = await db.query.trackedPages.findMany({
-      where: inArray(trackedPages.id, targetIds),
+      where: (p, { or, inArray }) => {
+        const conditions = [];
+        if (uuidIds.length > 0) conditions.push(inArray(p.id, uuidIds));
+        if (nonUuidIds.length > 0) conditions.push(inArray(p.pageId, nonUuidIds));
+        return conditions.length > 1 ? or(...conditions) : conditions[0];
+      },
       columns: { id: true },
     });
 

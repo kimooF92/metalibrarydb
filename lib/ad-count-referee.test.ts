@@ -50,6 +50,20 @@ test("detectAdCountDoubt flags sudden drop to 0 on active brand (drop_to_zero)",
   assert.ok(doubt.doubtTypes.includes("drop_to_zero"));
 });
 
+test("resolveAdCountWithSpanJev confirms authentic 0 when no positive candidate ad counts exist", async () => {
+  const result = await resolveAdCountWithSpanJev({
+    scannedCount: 0,
+    previousCount: 43,
+    bodyText: "Active status: Active ads\nNo ads match your search criteria\nAdjust your filters",
+    brandName: "MK BEST DECO",
+    hasTilde: false,
+  });
+
+  assert.equal(result.resolvedCount, 0);
+  assert.equal(result.modelUsed, "authentic_zero_confirmation");
+  assert.equal(result.confidence, 1.0);
+});
+
 test("detectAdCountDoubt flags missing authentic Meta '~' prefix (missing_tilde)", () => {
   const doubt = detectAdCountDoubt({
     scannedCount: 18,
