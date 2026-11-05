@@ -32,6 +32,7 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
+  ArrowUpDown,
   Flame,
   Star,
   AlertTriangle,
@@ -163,6 +164,8 @@ interface PagesTableProps {
   onResetFilters?: () => void;
   stats?: DashboardStats | null;
   searchTabCounts?: SearchTabCounts | null;
+  hasPendingReSort?: boolean;
+  onApplySort?: () => void;
 }
 
 export function PagesTable({
@@ -195,6 +198,8 @@ export function PagesTable({
   onWatchlistToggle,
   onResetFilters,
   stats,
+  hasPendingReSort = false,
+  onApplySort,
 }: PagesTableProps) {
   const { showToast } = useToast();
   const [watchlisted, setWatchlisted] = useState<Record<string, boolean>>(
@@ -456,13 +461,21 @@ export function PagesTable({
           }`}
         >
           <span className="uppercase tracking-wider">{label}</span>
-          <span className="transition-transform">
+          <span className="transition-transform flex items-center gap-1">
             {active ? (
-              sortOrder === "asc" ? (
-                <ChevronUp className="w-3.5 h-3.5 text-indigo-500" />
-              ) : (
-                <ChevronDown className="w-3.5 h-3.5 text-indigo-500" />
-              )
+              <>
+                {sortOrder === "asc" ? (
+                  <ChevronUp className="w-3.5 h-3.5 text-indigo-500" />
+                ) : (
+                  <ChevronDown className="w-3.5 h-3.5 text-indigo-500" />
+                )}
+                {hasPendingReSort && (
+                  <span
+                    className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"
+                    title="Order frozen for updated rows. Click 'Apply Sort' or header to re-sort."
+                  />
+                )}
+              </>
             ) : (
               <ChevronsUpDown className="w-3 h-3 opacity-40 group-hover:opacity-80" />
             )}
@@ -1015,6 +1028,18 @@ export function PagesTable({
               <span>{isRetryingAll ? "Retrying..." : `Retry Failed ${stats?.failed ? `(${stats.failed})` : ""}`}</span>
             </button>
           )}
+          {/* Apply Sort Pill (When rows were updated in place during active sort) */}
+          {hasPendingReSort && onApplySort && (
+            <button
+              onClick={onApplySort}
+              className="group flex items-center space-x-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/40 transition-all cursor-pointer whitespace-nowrap shrink-0 animate-in fade-in active:scale-95 shadow-xs"
+              title="Rows updated in place without shifting. Click to re-sort the table."
+            >
+              <ArrowUpDown className="w-3 h-3 text-indigo-600 dark:text-indigo-400 group-hover:rotate-180 transition-transform duration-300" />
+              <span>Apply Sort</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -1126,11 +1151,19 @@ export function PagesTable({
                     >
                       <span className="uppercase tracking-wider">Active Ads</span>
                       {sortBy === "currentResults" ? (
-                        sortOrder === "asc" ? (
-                          <ChevronUp className="w-3.5 h-3.5 text-indigo-500" />
-                        ) : (
-                          <ChevronDown className="w-3.5 h-3.5 text-indigo-500" />
-                        )
+                        <>
+                          {sortOrder === "asc" ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-indigo-500" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-indigo-500" />
+                          )}
+                          {hasPendingReSort && (
+                            <span
+                              className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0"
+                              title="Order frozen for updated rows. Click 'Apply Sort' to re-sort."
+                            />
+                          )}
+                        </>
                       ) : (
                         <ChevronsUpDown className="w-2.5 h-2.5 opacity-30 group-hover:opacity-70" />
                       )}
@@ -1150,11 +1183,19 @@ export function PagesTable({
                       <ArrowUpRight className="w-3.5 h-3.5" />
                       <span className="uppercase tracking-wider">+Δ New</span>
                       {sortBy === "difference" ? (
-                        sortOrder === "asc" ? (
-                          <ChevronUp className="w-3.5 h-3.5 text-emerald-500" />
-                        ) : (
-                          <ChevronDown className="w-3.5 h-3.5 text-emerald-500" />
-                        )
+                        <>
+                          {sortOrder === "asc" ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-emerald-500" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-emerald-500" />
+                          )}
+                          {hasPendingReSort && (
+                            <span
+                              className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0"
+                              title="Order frozen for updated rows. Click 'Apply Sort' to re-sort."
+                            />
+                          )}
+                        </>
                       ) : (
                         <ChevronsUpDown className="w-2.5 h-2.5 opacity-30 group-hover:opacity-70" />
                       )}

@@ -187,6 +187,7 @@ function DashboardContent() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [searchTabCounts, setSearchTabCounts] = useState<SearchTabCounts | null>(null);
+  const [hasPendingReSort, setHasPendingReSort] = useState(false);
 
   // Active scanning page IDs for real-time progress stream
   const scanningPageIds = useMemo(
@@ -328,6 +329,7 @@ function DashboardContent() {
         setTotalPages(data.pagination?.totalPages || 1);
         setTotalCount(data.pagination?.total || 0);
         setSearchTabCounts(data.searchTabCounts || null);
+        setHasPendingReSort(false);
       } else {
         const errData = await res.json().catch(() => ({}));
         showToast("error", errData.error || "Failed to load table pages.");
@@ -364,12 +366,19 @@ function DashboardContent() {
         loadData(false, true),
         new Promise((resolve) => setTimeout(resolve, 800)),
       ]);
+      setHasPendingReSort(false);
     } finally {
       setIsManualRefreshing(false);
     }
   };
 
+  const handleApplySort = useCallback(() => {
+    fetchPages(true, true);
+    setHasPendingReSort(false);
+  }, [fetchPages]);
+
   const handleSortChange = (col: string) => {
+    setHasPendingReSort(false);
     if (col === sortBy) {
       setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
     } else {
@@ -380,6 +389,7 @@ function DashboardContent() {
   };
 
   const handleResetFilters = useCallback(() => {
+    setHasPendingReSort(false);
     setSearch("");
     setSearchTabCounts(null);
     setStatusFilter("all");
@@ -442,8 +452,27 @@ function DashboardContent() {
           if (!updated?.id) return;
 
           // In-place row patch: only the updated row reference changes, preventing whole-table re-render or flicker
-          setPages((prevPages) =>
-            prevPages.map((page) => {
+          setPages((prevPages) => {
+            const hasTargetRow = prevPages.some((p) => p.id === updated.id);
+            if (hasTargetRow) {
+              const countUpdated =
+                updated.current_results !== undefined || updated.currentResults !== undefined;
+              const dateUpdated =
+                updated.last_checked !== undefined || updated.lastChecked !== undefined;
+              const rawCount = updated.current_results ?? updated.currentResults;
+              const countIsZero = rawCount !== null && rawCount !== undefined && Number(rawCount) === 0;
+
+              if (
+                (sortBy === "lastChecked" && dateUpdated) ||
+                (sortBy === "currentResults" && countUpdated) ||
+                (sortBy === "difference" && countUpdated) ||
+                (activeTab === "active" && countIsZero)
+              ) {
+                setHasPendingReSort(true);
+              }
+            }
+
+            return prevPages.map((page) => {
               if (page.id !== updated.id) return page;
 
               const rawResults =
@@ -477,8 +506,8 @@ function DashboardContent() {
                 updatedAt: updated.updated_at || updated.updatedAt || page.updatedAt,
                 holdStatus: updated.hold_status || updated.holdStatus || page.holdStatus,
               };
-            })
-          );
+            });
+          });
 
           // Debounced silent stats refresh: coalesces rapid batch updates (e.g. 20 rows in a scan)
           // into a single cached stats fetch after 3 seconds instead of 20 parallel queries.
@@ -721,6 +750,8 @@ function DashboardContent() {
         onSortChange={handleSortChange}
         onWatchlistToggle={() => loadData(true, true)}
         onResetFilters={handleResetFilters}
+        hasPendingReSort={hasPendingReSort}
+        onApplySort={handleApplySort}
       />
 
       {/* Track URL / Bulk File Import Modal */}
@@ -784,7 +815,9 @@ function DashboardContent() {
       <ScanProgressWidget
         scanningPageIds={scanningPageIds}
         onScanFinished={() => {
-          loadData(true, true);
+          // Refresh global stats silently; preserve frozen table order so scanned rows do not jump or vanish
+          fetchStats(true, true);
+          setHasPendingReSort(true);
         }}
       />
     </div>
