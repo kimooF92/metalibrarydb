@@ -141,3 +141,4 @@ export function usePagesRealtime({
     };
   }, [stats?.scanning, stats?.pending, fetchStats]);
 }
+

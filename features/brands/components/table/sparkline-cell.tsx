@@ -47,3 +47,4 @@ export function SparklineCell({
 
 // Backward-compatible alias for existing consumers
 export const InlineSparkline = SparklineCell;
+
