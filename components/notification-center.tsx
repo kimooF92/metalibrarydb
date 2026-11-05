@@ -673,7 +673,6 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
           <div className="flex items-center px-3 py-2 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/30 dark:bg-slate-900/30 gap-1.5 text-[11px] font-semibold overflow-x-auto">
             {[
               { id: "all", label: "All" },
-              { id: "supplier_album_drop", label: "📦 Supplier Drops" },
               { id: "breakout_alert", label: "Trending" },
               { id: "activity", label: "Activity" },
             ].map((tab) => (
