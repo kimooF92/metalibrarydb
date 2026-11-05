@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { scanSupplierNow } from "@/lib/supplier-scraper";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 120; // Allow sufficient time for Apify actor execution
+export const maxDuration = 60; // 60s max execution limit on Vercel Serverless
 
 /**
  * POST /api/suppliers/[id]/scan

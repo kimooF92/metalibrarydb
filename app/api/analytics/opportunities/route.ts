@@ -11,7 +11,7 @@ import {
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 // Single-flight in-memory concurrency guard per workspace
 const activeGenerations = new Set<string>();

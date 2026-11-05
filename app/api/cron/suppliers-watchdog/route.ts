@@ -5,7 +5,7 @@ import { eq, and, sql, asc } from "drizzle-orm";
 import { scanSupplierNow } from "@/lib/supplier-scraper";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300; // Max allowed serverless duration for batch runs
+export const maxDuration = 60; // 60s max execution limit on Vercel Serverless (Hobby plan compliance)
 
 /**
  * Twice-Weekly Scheduled Cron Dispatcher:

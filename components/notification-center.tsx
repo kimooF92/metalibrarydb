@@ -25,6 +25,7 @@ import {
   ShoppingBag,
   ChevronRight,
   Truck,
+  Info,
 } from "lucide-react";
 import { useToast } from "@/components/toast-context";
 import { stripEmojis } from "@/lib/utils";
@@ -356,6 +357,39 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
     const isMegaBrand = n.metadata?.isMegaBrand === true || (typeof n.metadata?.currentResults === "number" && n.metadata.currentResults >= 50);
     const isSurge = n.metadata?.isSurge === true;
     const isDiscovery = n.metadata?.runnerType === "discovery";
+    const isProductReextracted =
+      n.metadata?.event === "product_re_extracted" ||
+      n.title.toLowerCase().startsWith("product re-extracted");
+    const isProductAdded =
+      n.metadata?.event === "product_added" ||
+      n.title.toLowerCase().startsWith("product added");
+    const isProductExtractionFailed =
+      n.metadata?.event === "product_extraction_failed" ||
+      n.title.toLowerCase().startsWith("product extraction failed");
+
+    if (isProductReextracted) {
+      return (
+        <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0 shadow-sm">
+          <RefreshCw className="w-4 h-4" />
+        </div>
+      );
+    }
+
+    if (isProductAdded) {
+      return (
+        <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0 shadow-sm">
+          <ShoppingBag className="w-4 h-4" />
+        </div>
+      );
+    }
+
+    if (isProductExtractionFailed) {
+      return (
+        <div className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0 shadow-sm">
+          <AlertCircle className="w-4 h-4" />
+        </div>
+      );
+    }
 
     if (type === "supplier_album_drop") {
       return (
@@ -443,8 +477,29 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
         </div>
       );
     }
+    if (n.severity === "success") {
+      return (
+        <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0 shadow-sm">
+          <CheckCircle2 className="w-4 h-4" />
+        </div>
+      );
+    }
+    if (n.severity === "warning") {
+      return (
+        <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center shrink-0 shadow-sm">
+          <AlertTriangle className="w-4 h-4" />
+        </div>
+      );
+    }
+    if (n.severity === "info") {
+      return (
+        <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 flex items-center justify-center shrink-0 shadow-sm">
+          <Info className="w-4 h-4" />
+        </div>
+      );
+    }
     return (
-      <div className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0">
+      <div className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0 shadow-sm">
         <AlertCircle className="w-4 h-4" />
       </div>
     );
@@ -695,6 +750,15 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                 const isSurge = n.metadata?.isSurge === true;
                 const isQueued = n.metadata?.queuedForLocalScan === true;
                 const newProductsCount = (n.metadata?.newProductsCount as number) || 0;
+                const isProductReextracted =
+                  n.metadata?.event === "product_re_extracted" ||
+                  n.title.toLowerCase().startsWith("product re-extracted");
+                const isProductAdded =
+                  n.metadata?.event === "product_added" ||
+                  n.title.toLowerCase().startsWith("product added");
+                const isProductExtractionFailed =
+                  n.metadata?.event === "product_extraction_failed" ||
+                  n.title.toLowerCase().startsWith("product extraction failed");
 
                 return (
                   <div
@@ -724,6 +788,10 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                         ? "bg-amber-500/[0.06] dark:bg-amber-500/[0.1] hover:bg-amber-500/[0.12]"
                         : isQueued
                         ? "bg-emerald-500/[0.05] dark:bg-emerald-500/[0.08] hover:bg-emerald-500/[0.12]"
+                        : isProductReextracted || isProductAdded
+                        ? "bg-emerald-500/[0.04] dark:bg-emerald-500/[0.07] hover:bg-emerald-500/[0.1] dark:hover:bg-emerald-500/[0.14]"
+                        : isProductExtractionFailed
+                        ? "bg-rose-500/[0.05] dark:bg-rose-500/[0.08] hover:bg-rose-500/[0.12]"
                         : "bg-indigo-500/[0.04] dark:bg-indigo-500/[0.07] hover:bg-indigo-500/[0.1] dark:hover:bg-indigo-500/[0.15]"
                     }`}
                   >
@@ -738,9 +806,28 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                                 ? "text-slate-700 dark:text-slate-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
                                 : "text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
                             }`}
+                            dir="auto"
                           >
-                            {stripEmojis(n.title)}
+                            <bdi>{stripEmojis(n.title)}</bdi>
                           </h4>
+                          {isProductReextracted && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 shrink-0 border border-emerald-500/30 inline-flex items-center gap-1">
+                              <RefreshCw className="w-2.5 h-2.5 shrink-0" />
+                              <span>UPDATED</span>
+                            </span>
+                          )}
+                          {isProductAdded && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 shrink-0 border border-emerald-500/30 inline-flex items-center gap-1">
+                              <ShoppingBag className="w-2.5 h-2.5 shrink-0" />
+                              <span>NEW</span>
+                            </span>
+                          )}
+                          {isProductExtractionFailed && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-rose-500/20 text-rose-600 dark:text-rose-400 shrink-0 border border-rose-500/30 inline-flex items-center gap-1">
+                              <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                              <span>FAILED</span>
+                            </span>
+                          )}
                           {isSupplierDrop && (
                             <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-gradient-to-r from-fuchsia-600 to-indigo-600 text-white shrink-0 shadow-xs shadow-fuchsia-500/20">
                               NEW DROP
@@ -784,8 +871,8 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                         </span>
                       </div>
 
-                      <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug break-words">
-                        {stripEmojis(n.message)}
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug break-words" dir="auto">
+                        <bdi>{stripEmojis(n.message)}</bdi>
                       </p>
 
                       {/* Supplier Drop Preview Thumbnails */}
