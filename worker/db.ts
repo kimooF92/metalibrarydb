@@ -597,11 +597,13 @@ export async function claimNextPendingJob() {
         .set({ status: "scanning", updatedAt: new Date() })
         .where(eq(trackedPages.id, job.trackedPageId));
     }
-  } else if (job.trackedPageId) {
+  } else if (job.jobType === "count" && job.trackedPageId) {
     await db
       .update(trackedPages)
       .set({ status: "scanning", updatedAt: new Date() })
       .where(eq(trackedPages.id, job.trackedPageId));
+  } else if (job.jobType === "product_scrape") {
+    // Product landing page extraction should NEVER mark the brand page as "scanning"
   } else if (job.discoveredPageId) {
     await db
       .update(discoveredPages)
@@ -625,7 +627,8 @@ export async function markJobRunning(
   queueId: string,
   pageId?: string | null,
   creativeScanId?: string | null,
-  discoveredPageId?: string | null
+  discoveredPageId?: string | null,
+  jobType?: string | null
 ) {
   // Retained for backward compatibility if called directly
   const now = new Date();
@@ -647,7 +650,7 @@ export async function markJobRunning(
         startedAt: now,
       })
       .where(eq(creativeScans.id, creativeScanId));
-  } else if (pageId) {
+  } else if (pageId && jobType !== "product_scrape") {
     await db
       .update(trackedPages)
       .set({ status: "scanning", updatedAt: now })
@@ -1209,6 +1212,17 @@ export async function markJobCompleted(
     }
   }
 
+  if (trackedPage?.workspaceId) {
+    import("../lib/cache-service")
+      .then(({ deleteByPrefix, deleteCached }) => {
+        Promise.allSettled([
+          deleteByPrefix(`cache:dashboard:overview:${trackedPage.workspaceId}:`),
+          deleteCached(`cache:stats:${trackedPage.workspaceId}`),
+        ]).catch(() => {});
+      })
+      .catch(() => {});
+  }
+
   return { difference: displayDifference, results, brandName };
 }
 
@@ -1504,6 +1518,22 @@ export async function markCreativeJobCompleted(
         .update(scanHistory)
         .set({ creativeScannedAt: now })
         .where(eq(scanHistory.id, latestScan.id));
+    }
+
+    // Invalidate dashboard overview and stats cache so UI clears active scanning indicator immediately
+    const pageRecord = await db.query.trackedPages.findFirst({
+      where: eq(trackedPages.id, creativeScan.trackedPageId),
+      columns: { workspaceId: true },
+    });
+    if (pageRecord?.workspaceId) {
+      import("../lib/cache-service")
+        .then(({ deleteByPrefix, deleteCached }) => {
+          Promise.allSettled([
+            deleteByPrefix(`cache:dashboard:overview:${pageRecord.workspaceId}:`),
+            deleteCached(`cache:stats:${pageRecord.workspaceId}`),
+          ]).catch(() => {});
+        })
+        .catch(() => {});
     }
   }
 }

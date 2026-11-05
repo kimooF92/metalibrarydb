@@ -15,7 +15,7 @@ import { eq, and, sql, desc, asc, inArray, isNotNull, ne } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
-import { getCached, setCached } from "@/lib/cache-service";
+import { getCached, setCached, deleteCached, deleteByPrefix } from "@/lib/cache-service";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import { resolveTimezone, getStartOfTodaySql } from "@/lib/timezone";
 
@@ -722,6 +722,34 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    let scanningCount = brandStatsRows[0]?.scanningCount ?? 0;
+    let activeScanningIds = (activeScanningRows || []).map((r) => r.id);
+
+    // Auto-rescue any stuck scanning pages older than 60 seconds so the dashboard never displays orphaned scans
+    if (scanningCount > 0) {
+      try {
+        const rescued = await db.execute(sql`
+          UPDATE tracked_pages
+          SET status = CASE WHEN last_success_at IS NOT NULL OR current_results IS NOT NULL THEN 'success' ELSE 'failed' END,
+              updated_at = NOW()
+          WHERE status = 'scanning'
+            AND workspace_id = ${activeWorkspace.id}
+            AND updated_at < NOW() - INTERVAL '60 seconds'
+          RETURNING id;
+        `);
+        const rescuedRows = Array.isArray(rescued) ? rescued : (rescued as any)?.rows || [];
+        const rescuedCount = rescuedRows.length || (rescued as any)?.rowCount || 0;
+        if (rescuedCount > 0) {
+          const rescuedIdSet = new Set(rescuedRows.map((r: any) => r.id));
+          scanningCount = Math.max(0, scanningCount - rescuedCount);
+          activeScanningIds = activeScanningIds.filter((id) => !rescuedIdSet.has(id));
+          deleteCached(`cache:stats:${activeWorkspace.id}`).catch(() => { });
+        }
+      } catch (rescueErr) {
+        console.warn("[Dashboard Overview] Self-healing orphan rescue warning:", rescueErr);
+      }
+    }
+
     const scanOperations = {
       scansToday: workerStateRows[0]?.scansToday ?? 0,
       scansThisHour: workerStateRows[0]?.scansThisHour ?? 0,
@@ -729,7 +757,7 @@ export async function GET(req: NextRequest) {
       circuitBreakerTripped: workerStateRows[0]?.circuitBreakerTripped ?? false,
       totalBrands: brandStatsRows[0]?.totalBrands ?? 0,
       completedCount: brandStatsRows[0]?.completedCount ?? 0,
-      scanningCount: brandStatsRows[0]?.scanningCount ?? 0,
+      scanningCount,
       failedCount: brandStatsRows[0]?.failedCount ?? 0,
       onHoldCount: brandStatsRows[0]?.onHoldCount ?? 0,
       darkCount,
@@ -751,7 +779,7 @@ export async function GET(req: NextRequest) {
         totalBrands: brandStatsRows[0]?.totalBrands ?? 0,
         avgAds: brandStatsRows[0]?.avgAds ?? 0,
         maxAds: brandStatsRows[0]?.maxAds ?? 0,
-        scanningCount: brandStatsRows[0]?.scanningCount ?? 0,
+        scanningCount,
         failedCount: brandStatsRows[0]?.failedCount ?? 0,
         completedCount: brandStatsRows[0]?.completedCount ?? 0,
         onHoldCount: brandStatsRows[0]?.onHoldCount ?? 0,
@@ -824,11 +852,12 @@ export async function GET(req: NextRequest) {
         recent: recentDiscoveredRows,
       },
       recentActivity: recentNotificationRows,
-      activeScanningPageIds: (activeScanningRows || []).map((r) => r.id),
+      activeScanningPageIds: activeScanningIds,
     };
 
-    // Cache in Redis/memory
-    await setCached(cacheKey, responsePayload, OVERVIEW_CACHE_TTL_SECONDS);
+    // Cache in Redis/memory: use short 15s TTL if scans are actively underway, else full 5 minutes
+    const effectiveTtl = scanningCount > 0 ? 15 : OVERVIEW_CACHE_TTL_SECONDS;
+    await setCached(cacheKey, responsePayload, effectiveTtl);
 
     return NextResponse.json(responsePayload, {
       headers: {

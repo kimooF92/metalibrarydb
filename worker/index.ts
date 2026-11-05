@@ -872,6 +872,7 @@ async function runWorker() {
             const canonicalKey = (trackedPage.pageId || trackedPage.id).toLowerCase();
             Promise.allSettled([
               deleteCached(`cache:stats:${trackedPage.workspaceId}`),
+              deleteByPrefix(`cache:dashboard:overview:${trackedPage.workspaceId}:`),
               deleteByPrefix(`cache:pages:${trackedPage.workspaceId}:`),
               deleteByPrefix(`cache:products:${trackedPage.workspaceId}:`),
               deleteByPrefix(`cache:fresh_winners:${trackedPage.workspaceId}:`),
@@ -1030,6 +1031,7 @@ async function runWorker() {
             const canonicalKey = (trackedPage.pageId || trackedPage.id).toLowerCase();
             Promise.allSettled([
               deleteCached(`cache:stats:${trackedPage.workspaceId}`),
+              deleteByPrefix(`cache:dashboard:overview:${trackedPage.workspaceId}:`),
               deleteByPrefix(`cache:pages:${trackedPage.workspaceId}:`),
               deleteByPrefix(`cache:products:${trackedPage.workspaceId}:`),
               deleteByPrefix(`cache:fresh_winners:${trackedPage.workspaceId}:`),

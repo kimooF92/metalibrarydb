@@ -102,8 +102,8 @@ function DashboardOverviewContent() {
   }, [searchParams, router]);
 
   const loadOverview = useCallback(
-    async (isManual = false) => {
-      if (isManual) setRefreshing(true);
+    async (isManual = false, silent = false) => {
+      if (isManual && !silent) setRefreshing(true);
       try {
         const tz = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "";
         const params = new URLSearchParams();
@@ -119,14 +119,14 @@ function DashboardOverviewContent() {
         if (res.ok) {
           const json = await res.json();
           setData(json);
-        } else {
+        } else if (!silent) {
           showToast({ type: "error", title: "Failed to load dashboard overview" });
         }
       } catch (err) {
-        console.error("Failed to load overview:", err);
+        if (!silent) console.error("Failed to load overview:", err);
       } finally {
         setLoading(false);
-        setRefreshing(false);
+        if (!silent) setRefreshing(false);
       }
     },
     [showToast]
@@ -136,6 +136,23 @@ function DashboardOverviewContent() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadOverview();
   }, [loadOverview, activeWorkspace?.id]);
+
+  // Proactively poll overview while scans are in flight so the banner clears automatically
+  useEffect(() => {
+    const hasActiveScans = Boolean(
+      (data?.kpi?.scanningCount && data.kpi.scanningCount > 0) ||
+      (data?.activeScanningPageIds && data.activeScanningPageIds.length > 0)
+    );
+    if (!hasActiveScans) return;
+
+    const interval = setInterval(() => {
+      if (!document.hidden) {
+        loadOverview(true, true);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [data?.kpi?.scanningCount, data?.activeScanningPageIds?.length, loadOverview]);
 
   // Real-time Catalog Inflow updates via Supabase Broadcast (Method A: zero DB queries)
   useEffect(() => {

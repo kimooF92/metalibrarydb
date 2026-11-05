@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { trackedPages, creativeScans, queue, discoveryRuns } from "@/db/schema";
-import { eq, and, or, lt, isNull, inArray } from "drizzle-orm";
-import { forceReleaseLock, deleteCached } from "@/lib/cache-service";
+import { eq, and, or, lt, isNull, isNotNull, inArray } from "drizzle-orm";
+import { forceReleaseLock, deleteCached, deleteByPrefix } from "@/lib/cache-service";
 
 /**
  * Cleans up orphaned or stuck scans across trackedPages, creativeScans, queue, and discoveryRuns tables.
@@ -21,18 +21,17 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 3): Promise<{
   let fixedQueue = 0;
   let fixedDiscoveryRuns = 0;
 
-  // 1. Reset orphaned creative_scans (both running and abandoned ingesting)
+  // 1. Reset orphaned creative_scans (running, abandoned ingesting, or abandoned pending)
   const stuckScans = timeoutMinutes === 0
     ? await db.query.creativeScans.findMany({
-        where: inArray(creativeScans.status, ["running", "ingesting"]),
+        where: inArray(creativeScans.status, ["running", "ingesting", "pending"]),
         columns: { id: true },
       })
     : await db.query.creativeScans.findMany({
         where: and(
-          inArray(creativeScans.status, ["running", "ingesting"]),
+          inArray(creativeScans.status, ["running", "ingesting", "pending"]),
           or(
-            isNull(creativeScans.startedAt),
-            lt(creativeScans.startedAt, cutoff),
+            and(isNotNull(creativeScans.startedAt), lt(creativeScans.startedAt, cutoff)),
             and(isNull(creativeScans.startedAt), lt(creativeScans.createdAt, cutoff))
           )
         ),
@@ -169,6 +168,15 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 3): Promise<{
     await deleteCached(`scan_step:${page.id}`).catch(() => {});
 
     fixedPages++;
+  }
+
+  // If any orphaned items were recovered, invalidate cached overview & stats to keep UI fresh
+  if (fixedPages > 0 || fixedScans > 0 || fixedQueue > 0 || fixedDiscoveryRuns > 0) {
+    Promise.allSettled([
+      deleteByPrefix("cache:dashboard:overview:"),
+      deleteByPrefix("cache:stats:"),
+      deleteByPrefix("cache:pages:"),
+    ]).catch(() => {});
   }
 
   return { fixedPages, fixedScans, fixedQueue, fixedDiscoveryRuns };
