@@ -584,7 +584,7 @@ export function ModalHeader({
                         <RotateCw className={`w-3.5 h-3.5 text-purple-500 ${isRefreshing ? "animate-spin" : ""}`} />
                         <div>
                           <div className="font-semibold text-slate-900 dark:text-slate-100">Re-scrape Store Page</div>
-                          <div className="text-[10px] text-slate-400">Re-fetches price, offers, and images</div>
+                          <div className="text-[10px] text-slate-400">Re-fetches price, offers, images, and arbitrates category</div>
                         </div>
                       </button>
                     )}

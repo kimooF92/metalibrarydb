@@ -198,17 +198,19 @@ export async function enhanceProductWithJev(
         subCategory = jevResult.subCategory;
         targetAudience = jevResult.targetAudience;
         categoryResolvedByJev = true;
+        console.log(`[Category AI Referee] ⚖️ Arbitrated category for "${finalTitle.slice(0, 45)}...": ${category} > ${subCategory} (${targetAudience})`);
       } else {
         const offline = classifyProductOffline(finalTitle);
-        category = offline.category;
-        subCategory = offline.subCategory;
+        category = offline.category !== "General & Other" ? offline.category : (params.existingCategory || offline.category);
+        subCategory = offline.subCategory !== "General Merchandise" ? offline.subCategory : (params.existingSubCategory || offline.subCategory);
         targetAudience = offline.targetAudience;
+        console.log(`[Category AI Referee] 📋 Offline fallback categorized "${finalTitle.slice(0, 45)}...": ${category} > ${subCategory}`);
       }
     } catch (err: any) {
-      console.warn(`[Decision Engine] Error classifying "${finalTitle}":`, err?.message || err);
+      console.warn(`[Category AI Referee] Error classifying "${finalTitle}":`, err?.message || err);
       const offline = classifyProductOffline(finalTitle);
-      category = offline.category;
-      subCategory = offline.subCategory;
+      category = offline.category !== "General & Other" ? offline.category : (params.existingCategory || offline.category);
+      subCategory = offline.subCategory !== "General Merchandise" ? offline.subCategory : (params.existingSubCategory || offline.subCategory);
       targetAudience = offline.targetAudience;
     }
   }

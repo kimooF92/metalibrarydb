@@ -30,7 +30,7 @@ export const NICHE_TAXONOMY: NicheDefinition[] = [
       {
         id: "skincare-anti-aging",
         label: "Skincare & Anti-Aging",
-        dbValues: ["Skincare & Anti-Aging", "Skincare & Body", "Personal Care & Beauty", "Skincare", "Skincare & Face", "Skin Care", "Foot & Nail Care"],
+        dbValues: ["Skincare & Anti-Aging", "Skincare & Body", "Personal Care & Beauty", "Personal Care & Body", "Skincare", "Skincare & Face", "Skin Care", "Foot & Nail Care"],
       },
       {
         id: "hair-care-styling",
@@ -247,7 +247,7 @@ export const NICHE_TAXONOMY: NicheDefinition[] = [
       {
         id: "pain-relief-massagers",
         label: "Pain Relief & Massagers",
-        dbValues: ["Pain Relief & Massagers", "Massagers & Therapy", "Massage Roller", "Health & Pain Relief", "Pain Relief", "Respiratory Care"],
+        dbValues: ["Pain Relief & Massagers", "Massagers & Therapy", "Massagers & Pain Relief", "Massage Roller", "Health & Pain Relief", "Pain Relief", "Respiratory Care"],
       },
       {
         id: "weight-loss-sauna",

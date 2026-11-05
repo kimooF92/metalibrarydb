@@ -15,6 +15,7 @@ export interface ExtractionDoubtResult {
   reasons: string[];
   needsPriceReferee: boolean;
   needsTitleReferee: boolean;
+  needsCategoryReferee: boolean;
   isForeignCurrency?: boolean;
 }
 
@@ -26,10 +27,14 @@ export function detectExtractionDoubt(data: {
   currentPrice?: string | null;
   originalPrice?: string | null;
   url?: string | null;
+  category?: string | null;
+  subCategory?: string | null;
+  forceReclassify?: boolean;
 }): ExtractionDoubtResult {
   const reasons: string[] = [];
   let needsPriceReferee = false;
   let needsTitleReferee = false;
+  let needsCategoryReferee = false;
   let isForeignCurrency = false;
 
   const rawPriceStr = String(data.currentPrice || "").trim();
@@ -87,11 +92,29 @@ export function detectExtractionDoubt(data: {
     }
   }
 
+  
+  // 3. Category Anomaly / Doubt Check
+  if (data.forceReclassify) {
+    reasons.push("Forced category reclassification requested");
+    needsCategoryReferee = true;
+  } else if (data.category !== undefined || data.subCategory !== undefined) {
+    const cat = (data.category || "").trim();
+    const subCat = (data.subCategory || "").trim();
+    if (!cat || cat === "General & Other" || cat.toLowerCase() === "uncategorized") {
+      reasons.push(`Missing or generic parent category: "${cat || "empty"}"`);
+      needsCategoryReferee = true;
+    } else if (!subCat || subCat === "General Merchandise" || subCat === "General & Essentials") {
+      reasons.push(`Missing or generic subcategory: "${subCat || "empty"}"`);
+      needsCategoryReferee = true;
+    }
+  }
+
   return {
     hasDoubt: reasons.length > 0,
     reasons,
     needsPriceReferee,
     needsTitleReferee,
+    needsCategoryReferee,
     isForeignCurrency,
   };
 }

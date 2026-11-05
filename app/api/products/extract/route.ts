@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ads, scrapedProducts } from "@/db/schema";
@@ -174,36 +177,55 @@ export async function POST(req: NextRequest) {
     });
 
     if (!extractionResult.success || !extractionResult.data) {
-      // Record failure if product record exists or create failed record
-      if (existingProduct) {
-        await db
-          .update(scrapedProducts)
-          .set({
-            scrapeStatus: "failed",
-            failureReason: extractionResult.error || "Extraction failed",
-            updatedAt: new Date(),
-          })
-          .where(eq(scrapedProducts.id, existingProduct.id));
-      }
+      // If product already exists and has a title, do NOT destroy the product or fail on-demand refresh!
+      // Fallback to existing catalog data so the Category AI Referee can still evaluate and refine metadata.
+      if (existingProduct && existingProduct.title) {
+        console.warn(
+          `[Product Extract] Live scrape failed (${extractionResult.error || "unknown"}), falling back to existing catalog data for product ${existingProduct.id}`
+        );
+      } else {
+        // Record failure if new product or record with no prior title
+        if (existingProduct) {
+          await db
+            .update(scrapedProducts)
+            .set({
+              scrapeStatus: "failed",
+              failureReason: extractionResult.error || "Extraction failed",
+              updatedAt: new Date(),
+            })
+            .where(eq(scrapedProducts.id, existingProduct.id));
+        }
 
-      await createNotification(buildProductExtractionNotification({
-        success: false,
-        productId: existingProduct?.id,
-        url: normalizedUrl,
-        domain,
-        error: extractionResult.error,
-      }));
-
-      return NextResponse.json(
-        {
+        await createNotification(buildProductExtractionNotification({
           success: false,
-          error: extractionResult.error || "Failed to extract product details from landing page.",
-        },
-        { status: 422 }
-      );
+          productId: existingProduct?.id,
+          url: normalizedUrl,
+          domain,
+          error: extractionResult.error,
+        }));
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: extractionResult.error || "Failed to extract product details from landing page.",
+          },
+          { status: 422 }
+        );
+      }
     }
 
-    const extracted = extractionResult.data;
+    const extracted = extractionResult.data || {
+      title: existingProduct?.title || null,
+      current_price: existingProduct?.currentPrice || null,
+      original_price: existingProduct?.originalPrice || null,
+      main_image_url: existingProduct?.mainImageUrl || null,
+      currency: existingProduct?.currency || null,
+      discount_or_offer: existingProduct?.discountOrOffer || null,
+      gallery_images: (existingProduct?.galleryImages as string[]) || [],
+      all_offers: (existingProduct?.allOffers as any) || [],
+      resolved_url: existingProduct?.url || normalizedUrl,
+      delivery_cost: null,
+    };
 
     // 2b. Extract Tunisian Network Fingerprints (Phone, WhatsApp, Pixel IDs, Platform, Delivery)
     const rawHtml =
@@ -219,7 +241,18 @@ export async function POST(req: NextRequest) {
         .from(ads)
         .where(eq(ads.id, adId));
       if (adRecord) {
-        adCaptionText = `${adRecord.title || ""} ${adRecord.caption || ""}`;
+        adCaptionText = `${adRecord.title || ""} ${adRecord.caption || ""}`.trim();
+      }
+    }
+    // On-demand refresh fallback: query linked ad context if adId was not sent
+    if (!adCaptionText && existingProduct?.id) {
+      const [linkedAd] = await db
+        .select({ caption: ads.caption, title: ads.title })
+        .from(ads)
+        .where(eq(ads.productId, existingProduct.id))
+        .limit(1);
+      if (linkedAd) {
+        adCaptionText = `${linkedAd.title || ""} ${linkedAd.caption || ""}`.trim();
       }
     }
 
@@ -251,8 +284,8 @@ export async function POST(req: NextRequest) {
       adText: adCaptionText,
       html: rawHtml,
       markdown: extractionResult.raw?.markdown,
-      existingCategory: forceRefresh ? undefined : existingProduct?.category,
-      existingSubCategory: forceRefresh ? undefined : existingProduct?.subCategory,
+      existingCategory: existingProduct?.category,
+      existingSubCategory: existingProduct?.subCategory,
       existingTargetAudience: existingProduct?.targetAudience,
       forceReclassify: Boolean(forceRefresh),
       fallbackCurrencySymbol,

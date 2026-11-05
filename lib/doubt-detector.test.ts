@@ -137,3 +137,36 @@ test("harvestPriceCandidates handles legitimate prices under 10 and ignores CSS 
   assert.equal(cand9?.isHighConfidence, true, "9 DT must be high confidence from JSON-LD");
 });
 
+test("detectExtractionDoubt flags category doubt for missing, generic, or forceReclassify", () => {
+  const genericCategory = detectExtractionDoubt({
+    title: "Brosse De Nettoyage De Massage De Bain",
+    currentPrice: "45 DT",
+    category: "General & Other",
+    subCategory: "General Merchandise",
+  });
+  assert.equal(genericCategory.hasDoubt, true);
+  assert.equal(genericCategory.needsCategoryReferee, true);
+  assert.match(genericCategory.reasons[0], /Missing or generic parent category/i);
+
+  const forcedReclassify = detectExtractionDoubt({
+    title: "Brosse De Nettoyage De Massage De Bain",
+    currentPrice: "45 DT",
+    category: "Beauty, Health & Care",
+    subCategory: "Personal Care & Body",
+    forceReclassify: true,
+  });
+  assert.equal(forcedReclassify.hasDoubt, true);
+  assert.equal(forcedReclassify.needsCategoryReferee, true);
+  assert.match(forcedReclassify.reasons[0], /Forced category reclassification requested/i);
+
+  const wellCategorized = detectExtractionDoubt({
+    title: "Montre Connectée Ultra Series 9",
+    currentPrice: "89 DT",
+    category: "Electronics & Tech",
+    subCategory: "Smartwatches & Wearables",
+  });
+  assert.equal(wellCategorized.hasDoubt, false);
+  assert.equal(wellCategorized.needsCategoryReferee, false);
+});
+
+

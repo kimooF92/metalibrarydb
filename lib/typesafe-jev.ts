@@ -179,6 +179,7 @@ function deriveSubCategory(title: string, category: ProductCategory): string {
       return "Gadgets & Accessories";
 
     case "Beauty, Health & Care":
+      if (/bain|douche|corps|brosse.*bain|eponge|éponge|scrubber/i.test(text)) return "Personal Care & Body";
       if (/barbe|homme|tondeuse|لحية/i.test(text)) return "Men's Grooming";
       if (/parfum|fragrance|عطر/i.test(text)) return "Fragrances & Perfumes";
       if (/cheveux|shampoing|lissante|sechoir|sèche-cheveux|شعر/i.test(text)) return "Hair Care & Styling";
@@ -207,6 +208,7 @@ function deriveSubCategory(title: string, category: ProductCategory): string {
       return "Apparel & Fashion";
 
     case "Sports, Fitness & Outdoor":
+      if (/massage|massager|pistolet de massage|massage gun|مساج/i.test(text)) return "Massagers & Pain Relief";
       if (/مشد|genouillere|genouillère|ceinture|posture|support|brace|ركبة/i.test(text)) return "Supports & Braces";
       if (/fitness|gym|musculation|haltere|haltère|رياضة/i.test(text)) return "Fitness & Workout";
       if (/camping|randonnee|randonnée|outdoor|تخييم/i.test(text)) return "Outdoor & Camping";
@@ -233,6 +235,7 @@ function deriveSubCategory(title: string, category: ProductCategory): string {
 
 export const DECISION_SUBNICHE_CRITERIA: Record<string, string> = {
   // Beauty, Health & Care
+  "Personal Care & Body": "Bath, shower, body cleansing brushes, back scrubbers, massage tools, personal hygiene, and body skincare",
   "Skincare & Face": "Skincare, facial treatments, serums, creams, and cleansers",
   "Hair Care & Styling": "Hair care, styling appliances, shampoos, and treatments",
   "Makeup & Cosmetics": "Cosmetics, facial and eye makeup, and beauty products",
@@ -251,7 +254,7 @@ export const DECISION_SUBNICHE_CRITERIA: Record<string, string> = {
 
   // Home, Kitchen & Living
   "Kitchen & Cookware": "Cooking appliances, kitchen gadgets, cookware, and food prep tools",
-  "Cleaning & Maintenance": "Cleaning tools, vacuums, mops, and household maintenance",
+  "Cleaning & Maintenance": "Household cleaning tools, floor vacuums, mops, kitchen scrubbers, and home maintenance",
   "Home Decor & Lighting": "Home decor, decorative lighting, and room fragrance",
   "Bedroom & Comfort": "Bedding, comfort pillows, and bedroom furniture",
   "Pest Control & Garden": "Insect killers, pest repellers, traps, and garden accessories",
@@ -264,6 +267,7 @@ export const DECISION_SUBNICHE_CRITERIA: Record<string, string> = {
   "Jewelry & Accessories": "Jewelry, luxury watches, eyewear, sunglasses, and belts",
 
   // Sports, Fitness & Outdoor
+  "Massagers & Pain Relief": "Body massagers, massage guns, therapy devices, and muscle pain relief",
   "Fitness & Workout": "Gym equipment, exercise gear, weights, and workout accessories",
   "Supports & Braces": "Orthopedic body supports, posture correctors, and compression braces",
   "Outdoor & Camping": "Camping gear, tents, survival tools, and outdoor equipment",
@@ -282,6 +286,7 @@ export const DECISION_SUBNICHE_CRITERIA: Record<string, string> = {
 
 export const SUBNICHE_TO_CATEGORY_MAP: Record<string, ProductCategory> = {
   // Beauty, Health & Care
+  "Personal Care & Body": "Beauty, Health & Care",
   "Skincare & Face": "Beauty, Health & Care",
   "Hair Care & Styling": "Beauty, Health & Care",
   "Makeup & Cosmetics": "Beauty, Health & Care",
@@ -313,6 +318,7 @@ export const SUBNICHE_TO_CATEGORY_MAP: Record<string, ProductCategory> = {
   "Jewelry & Accessories": "Fashion & Jewelry",
 
   // Sports, Fitness & Outdoor
+  "Massagers & Pain Relief": "Sports, Fitness & Outdoor",
   "Fitness & Workout": "Sports, Fitness & Outdoor",
   "Supports & Braces": "Sports, Fitness & Outdoor",
   "Outdoor & Camping": "Sports, Fitness & Outdoor",
@@ -486,6 +492,9 @@ export async function classifyProductWithJev(
     }
   } else {
     subCategory = deriveSubCategory(contextForSubCategory, matchedCategory);
+    if (SUBNICHE_TO_CATEGORY_MAP[subCategory]) {
+      matchedCategory = SUBNICHE_TO_CATEGORY_MAP[subCategory];
+    }
   }
 
   return {
