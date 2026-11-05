@@ -581,6 +581,58 @@ export interface SmallPageNeedingScan {
   isInQueue: boolean;
 }
 
+// Supplier & Product Drop Interfaces
+export interface Supplier {
+  id: string;
+  workspaceId: string | null;
+  name: string;
+  facebookUrl: string;
+  facebookPageId?: string | null;
+  avatarUrl?: string | null;
+  phone?: string | null;
+  whatsapp?: string | null;
+  category?: string | null;
+  notes?: string | null;
+  status: "active" | "paused" | "archived";
+  lastScrapeStatus: "idle" | "scanning" | "success" | "failed";
+  lastScrapeError?: string | null;
+  lastCheckedAt?: string | null;
+  lastPostDate?: string | null;
+  lastPostUrl?: string | null;
+  lastAlbumUrl?: string | null;
+  lastAlbumTitle?: string | null;
+  lastAlbumPhotoCount: number;
+  hasUnseenDrop: boolean;
+  createdAt: string;
+  updatedAt: string;
+  previewPhotos?: SupplierPhoto[];
+  recentPhotosCount?: number;
+}
+
+export interface SupplierPhoto {
+  id: string;
+  supplierId: string;
+  albumUrl?: string | null;
+  albumTitle?: string | null;
+  photoUrl: string;
+  rawMetaUrl?: string | null;
+  mediaHash?: string | null;
+  caption?: string | null;
+  postedAt?: string | null;
+  isPromotedToProduct: boolean;
+  promotedProductId?: string | null;
+  createdAt: string;
+}
+
+export interface SuppliersStats {
+  totalSuppliers: number;
+  activeSuppliers: number;
+  unseenDropsCount: number;
+  photosThisMonth: number;
+  lastScanTime?: string | null;
+}
+
 export * from "./analytics";
 export * from "./cadence";
+
 

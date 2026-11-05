@@ -520,3 +520,76 @@ export const opportunityReports = pgTable(
     index("idx_opportunity_reports_generated_at").on(table.generatedAt.desc()),
   ]
 );
+
+// 14. Suppliers Table (Supplier Facebook Page Monitoring)
+export const suppliers = pgTable(
+  "suppliers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    facebookUrl: text("facebook_url").notNull(),
+    facebookPageId: text("facebook_page_id"),
+    avatarUrl: text("avatar_url"),
+    phone: text("phone"),
+    whatsapp: text("whatsapp"),
+    category: text("category").default("general"),
+    notes: text("notes"),
+
+    // Status & Cadence
+    status: text("status").default("active").notNull(), // 'active' | 'paused' | 'archived'
+    lastScrapeStatus: text("last_scrape_status").default("idle").notNull(), // 'idle' | 'scanning' | 'success' | 'failed'
+    lastScrapeError: text("last_scrape_error"),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+
+    // Watermarking & Activity
+    lastPostDate: timestamp("last_post_date", { withTimezone: true }),
+    lastPostUrl: text("last_post_url"),
+    lastAlbumUrl: text("last_album_url"),
+    lastAlbumTitle: text("last_album_title"),
+    lastAlbumPhotoCount: integer("last_album_photo_count").default(0),
+    hasUnseenDrop: boolean("has_unseen_drop").default(false).notNull(),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_suppliers_workspace_id").on(table.workspaceId),
+    index("idx_suppliers_status").on(table.status),
+    index("idx_suppliers_has_unseen_drop").on(table.hasUnseenDrop),
+    uniqueIndex("idx_suppliers_workspace_facebook_url").on(table.workspaceId, table.facebookUrl),
+  ]
+);
+
+// 15. Supplier Photos Table (Targeted Album Product Drops)
+export const supplierPhotos = pgTable(
+  "supplier_photos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    supplierId: uuid("supplier_id")
+      .references(() => suppliers.id, { onDelete: "cascade" })
+      .notNull(),
+    albumUrl: text("album_url"),
+    albumTitle: text("album_title"),
+    photoUrl: text("photo_url").notNull(),
+    rawMetaUrl: text("raw_meta_url"),
+    mediaHash: text("media_hash"),
+    caption: text("caption"),
+    postedAt: timestamp("posted_at", { withTimezone: true }),
+
+    // Linkage to products catalog (promotion)
+    isPromotedToProduct: boolean("is_promoted_to_product").default(false).notNull(),
+    promotedProductId: uuid("promoted_product_id").references(() => scrapedProducts.id, {
+      onDelete: "set null",
+    }),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_supplier_photos_supplier_id").on(table.supplierId),
+    index("idx_supplier_photos_posted_at").on(table.postedAt.desc()),
+    index("idx_supplier_photos_album_url").on(table.albumUrl),
+    uniqueIndex("idx_supplier_photos_unique").on(table.supplierId, table.photoUrl),
+  ]
+);
+

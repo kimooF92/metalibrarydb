@@ -53,6 +53,11 @@ async function main() {
         destination: `${appUrl}/api/cron/trigger-workers?target=all`,
         cron: "0 6,18 * * *", // Twice daily (6 AM and 6 PM UTC)
       },
+      {
+        name: "Twice-Weekly Supplier Facebook Watchdog (Mon & Thu)",
+        destination: `${appUrl}/api/cron/suppliers-watchdog`,
+        cron: "0 20 * * 1,4", // Mondays and Thursdays at 20:00 UTC (21:30 local)
+      },
     ];
 
     console.log("🚀 Registering desired recurring schedules...");

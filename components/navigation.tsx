@@ -28,7 +28,8 @@ import { useLogout } from "@/hooks/use-logout";
 import { useAuth } from "@/components/auth-context";
 import { useAddUrlModal } from "@/components/add-url-modal";
 import { useProductBadge } from "@/hooks/use-product-badge";
-import { Plus, PlusCircle, ShieldCheck, Building2 } from "lucide-react";
+import { useSupplierBadge } from "@/hooks/use-supplier-badge";
+import { Plus, PlusCircle, ShieldCheck, Building2, Truck } from "lucide-react";
 
 export function Navigation() {
   const pathname = usePathname();
@@ -47,13 +48,31 @@ export function Navigation() {
   const { isStaff } = useAuth();
   const { openAddUrlModal } = useAddUrlModal();
   const { count: newProductsCount } = useProductBadge();
+  const { count: supplierDropCount } = useSupplierBadge();
 
-  const navSections = [
+  interface NavItem {
+    href: string;
+    label: string;
+    icon: any;
+    badge?: { text: string; variant: "hot" | "ai" };
+    accentColor?: string;
+  }
+
+  const navSections: { id: string; items: NavItem[] }[] = [
     {
       id: "workspace",
       items: [
         { href: "/", label: "Dashboard", icon: LayoutDashboard },
         { href: "/products", label: "Products", icon: ShoppingBag },
+        {
+          href: "/suppliers",
+          label: "Suppliers",
+          icon: Truck,
+          badge:
+            supplierDropCount > 0
+              ? { text: `${supplierDropCount} DROP`, variant: "hot" as const }
+              : undefined,
+        },
         { href: "/brands", label: "Tracked Brands", icon: Building2 },
         { href: "/analytics", label: "Analytics", icon: BarChart3 },
       ],
@@ -186,7 +205,9 @@ export function Navigation() {
                           : activeRoute.startsWith(item.href);
 
                     const isProductItem = item.href === "/products";
+                    const isSupplierItem = item.href === "/suppliers";
                     const showProductBadge = isProductItem && newProductsCount > 0;
+                    const showSupplierBadge = isSupplierItem && supplierDropCount > 0;
                     const badgeText = newProductsCount > 99 ? "99+" : `${newProductsCount}`;
 
                     return (
@@ -195,9 +216,11 @@ export function Navigation() {
                         href={item.href}
                         title={
                           isCollapsed
-                            ? showProductBadge
-                              ? `${item.label} (+${badgeText} new)`
-                              : item.label
+                            ? showSupplierBadge
+                              ? `${item.label} (${supplierDropCount} drops)`
+                              : showProductBadge
+                                ? `${item.label} (+${badgeText} new)`
+                                : item.label
                             : undefined
                         }
                         className={`group relative flex items-center h-[34px] rounded-md text-[13px] font-medium transition-all duration-150 ${isCollapsed
@@ -223,6 +246,14 @@ export function Navigation() {
                           <span className="absolute top-1.5 right-1.5 flex h-2 w-2 pointer-events-none">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500 ring-2 ring-white dark:ring-[#010202]" />
+                          </span>
+                        )}
+
+                        {/* Collapsed Supplier Notification Dot */}
+                        {isCollapsed && showSupplierBadge && (
+                          <span className="absolute top-1.5 right-1.5 flex h-2 w-2 pointer-events-none">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-fuchsia-400 opacity-75" />
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-fuchsia-500 ring-2 ring-white dark:ring-[#010202]" />
                           </span>
                         )}
 

@@ -11,7 +11,8 @@ export type NotificationType =
   | "domain_portfolio_linked"
   | "batch_summary"
   | "system_alert"
-  | "breakout_alert";
+  | "breakout_alert"
+  | "supplier_album_drop";
 
 export type NotificationSeverity = "info" | "success" | "warning" | "error";
 
@@ -628,3 +629,38 @@ export async function pruneOldNotifications(maxKeep = 120) {
     // Non-fatal background cleanup
   }
 }
+
+/**
+ * Creates an unmissable high-priority notification for a new Supplier Album Drop.
+ */
+export async function logSupplierAlbumDropNotification(params: {
+  supplierId: string;
+  supplierName: string;
+  albumTitle?: string | null;
+  photoCount: number;
+  previewImages?: string[];
+  albumUrl?: string | null;
+  workspaceId?: string | null;
+}) {
+  const { supplierId, supplierName, albumTitle, photoCount, previewImages = [], albumUrl, workspaceId } = params;
+  const titleText = albumTitle ? `New Album Drop: ${albumTitle}` : `New Photo Drop (${photoCount} photos)`;
+
+  return createNotification({
+    type: "supplier_album_drop",
+    title: `📦 ${supplierName}: ${titleText}`,
+    message: `${supplierName} published a new product drop with ${photoCount} new photos. Review and source new winning items before stock depletes!`,
+    severity: "success",
+    actionUrl: `/suppliers?supplierId=${encodeURIComponent(supplierId)}`,
+    workspaceId: workspaceId || null,
+    metadata: {
+      supplierId,
+      supplierName,
+      albumTitle: albumTitle || "New Collection",
+      photoCount,
+      previewImages: previewImages.slice(0, 4),
+      albumUrl: albumUrl || null,
+      isSupplierDrop: true,
+    },
+  });
+}
+
