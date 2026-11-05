@@ -1,183 +1,16 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo, useRef, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
-import { TrackedPage, DashboardStats, SearchTabCounts } from "@/types";
-import { StatsCards } from "@/components/stats-cards";
-import { AddUrlForm } from "@/components/add-url-form";
-import { ImportDropzone } from "@/components/import-dropzone";
+import { useState, useCallback, useMemo, Suspense } from "react";
 import { PagesTable } from "@/components/pages-table";
-import { RefreshCw, X, Plus, UploadCloud } from "lucide-react";
-import { useWorkspace } from "@/components/workspace-context";
-import { getSupabase } from "@/lib/supabase";
 import { ScanProgressWidget } from "@/components/scan-progress-widget";
-import {
-  VALID_STATUSES,
-  VALID_SEARCH_TYPES,
-  VALID_TAGS,
-  VALID_TABS,
-  VALID_SORT_COLS,
-  VALID_PAGE_SIZES,
-  type BrandDashboardState,
-  type BrandStatusFilter,
-  type BrandSearchTypeFilter,
-  type BrandTagFilter,
-  type BrandTab,
-  type BrandSortCol,
-  type BrandSortOrder,
-  type BrandPageSize,
-  getDefaultDashboardState,
-  sanitizeDashboardState,
-  parseUrlParamsToState,
-  serializeStateToUrlParams,
-} from "@/lib/url-filter-sync";
-import {
-  readStoredFilterState,
-  writeStoredFilterState,
-  clearStoredFilterState,
-} from "@/lib/filter-storage";
-import {
-  appendLiveHistoryPoint,
-  computeDeltaDifference,
-} from "@/lib/sparkline-utils";
-
-function getInitialDashboardState(): BrandDashboardState {
-  const defaults = getDefaultDashboardState();
-  if (typeof window === "undefined") return defaults;
-
-  try {
-    const saved = readStoredFilterState<BrandDashboardState>() || {};
-    const sanitized = sanitizeDashboardState(saved);
-    const base = { ...defaults, ...sanitized };
-    return parseUrlParamsToState(window.location.search, base);
-  } catch (e) {
-    console.error("Error reading dashboard params:", e);
-  }
-
-  return defaults;
-}
-
-function syncDashboardStateToUrl(state: BrandDashboardState) {
-  if (typeof window === "undefined") return;
-  try {
-    const queryString = serializeStateToUrlParams(state).toString();
-    const newUrl = queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname;
-    window.history.replaceState(null, "", newUrl);
-
-    writeStoredFilterState(state);
-  } catch (e) {
-    console.error("Error syncing dashboard state:", e);
-  }
-}
+import { useBrandsFilters } from "@/features/brands/hooks/use-brands-filters";
+import { useTrackedPagesData } from "@/features/brands/hooks/use-tracked-pages-data";
+import { usePagesRealtime } from "@/features/brands/hooks/use-pages-realtime";
+import { BrandsHeader } from "@/features/brands/components/brands-header";
+import { TrackUrlModal } from "@/features/brands/components/track-url-modal";
 
 function DashboardContent() {
-  const searchParams = useSearchParams();
-  const { activeWorkspace } = useWorkspace();
-  const [initialLoaded] = useState(() => getInitialDashboardState());
-
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [statsLoading, setStatsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [addModalTab, setAddModalTab] = useState<"single" | "bulk">("single");
-
-  const [pages, setPages] = useState<TrackedPage[]>([]);
-  const [pagesLoading, setPagesLoading] = useState(true);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const realtimeStatsDebounceRef = useRef<NodeJS.Timeout | null>(null);
-
-  const [search, setSearch] = useState(initialLoaded.search);
-  const [statusFilter, setStatusFilter] = useState(initialLoaded.statusFilter);
-  const [searchTypeFilter, setSearchTypeFilter] = useState(initialLoaded.searchTypeFilter);
-  const [tagFilter, setTagFilter] = useState(initialLoaded.tagFilter);
-  const [activeTab, setActiveTab] = useState(initialLoaded.activeTab);
-  const [sortBy, setSortBy] = useState(initialLoaded.sortBy);
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">(initialLoaded.sortOrder);
-
-  const [page, setPage] = useState(initialLoaded.page);
-  const [pageSize, setPageSize] = useState(initialLoaded.pageSize);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
-  const [searchTabCounts, setSearchTabCounts] = useState<SearchTabCounts | null>(null);
-  const [hasPendingReSort, setHasPendingReSort] = useState(false);
-
-  // Active scanning page IDs for real-time progress stream
-  const scanningPageIds = useMemo(
-    () => pages.filter((p) => p.status === "scanning").map((p) => p.id),
-    [pages]
-  );
-
-  // Sync state when URL query params change (e.g. from internal router navigation or notification click)
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has("search")) {
-      setSearch(urlParams.get("search") || "");
-    }
-    if (urlParams.has("status")) {
-      const s = urlParams.get("status");
-      if (s && VALID_STATUSES.includes(s as any)) setStatusFilter(s as any);
-    }
-    if (urlParams.has("searchType")) {
-      const st = urlParams.get("searchType");
-      if (st && VALID_SEARCH_TYPES.includes(st as any)) setSearchTypeFilter(st as any);
-    }
-    if (urlParams.has("tag")) {
-      const tg = urlParams.get("tag");
-      if (tg && VALID_TAGS.includes(tg as any)) setTagFilter(tg as any);
-    }
-    if (urlParams.has("tab")) {
-      const t = urlParams.get("tab");
-      if (t && VALID_TABS.includes(t as any)) setActiveTab(t as any);
-    }
-    if (urlParams.has("sortBy")) {
-      const sb = urlParams.get("sortBy");
-      if (sb && VALID_SORT_COLS.includes(sb as any)) setSortBy(sb as any);
-    }
-    if (urlParams.has("sortOrder")) {
-      const so = urlParams.get("sortOrder");
-      if (so === "asc" || so === "desc") setSortOrder(so);
-    }
-    if (urlParams.has("page")) {
-      setPage(Math.max(1, Number(urlParams.get("page")) || 1));
-    }
-    if (urlParams.has("limit")) {
-      const l = Number(urlParams.get("limit"));
-      if (VALID_PAGE_SIZES.includes(l as any)) setPageSize(l as any);
-    }
-  }, [searchParams]);
-
-  // Sync state to URL and session storage
-  useEffect(() => {
-    syncDashboardStateToUrl({
-      search,
-      statusFilter,
-      searchTypeFilter,
-      tagFilter,
-      activeTab,
-      sortBy,
-      sortOrder,
-      page,
-      pageSize,
-    });
-  }, [search, statusFilter, searchTypeFilter, activeTab, sortBy, sortOrder, page, pageSize]);
-
-  // Sync on browser back/forward buttons
-  useEffect(() => {
-    const handlePopState = () => {
-      const init = getInitialDashboardState();
-      setSearch(init.search);
-      setStatusFilter(init.statusFilter);
-      setSearchTypeFilter(init.searchTypeFilter);
-      setActiveTab(init.activeTab);
-      setSortBy(init.sortBy);
-      setSortOrder(init.sortOrder);
-      setPage(init.page);
-      setPageSize(init.pageSize);
-    };
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
-
   const [toast, setToast] = useState<{
     type: "success" | "error" | "info";
     message: string;
@@ -188,472 +21,106 @@ function DashboardContent() {
     setTimeout(() => setToast(null), 4000);
   }, []);
 
-  const fetchStats = useCallback(async (silent = false, forceRefresh = false) => {
-    if (!silent) setStatsLoading(true);
-    try {
-      const cacheBust = forceRefresh ? `?refresh=true&_t=${Date.now()}` : "";
-      const res = await fetch(`/api/stats${cacheBust}`, {
-        cache: forceRefresh ? "no-store" : "default",
-        headers: forceRefresh ? { "Cache-Control": "no-cache" } : undefined,
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setStats(data);
-      }
-    } catch (err) {
-      console.error("Failed to fetch stats", err);
-    } finally {
-      if (!silent) setStatsLoading(false);
-    }
-  }, []);
+  const {
+    filters,
+    hasPendingReSort,
+    setHasPendingReSort,
+    setSearch,
+    setStatusFilter,
+    setSearchTypeFilter,
+    setTagFilter,
+    setActiveTab,
+    setPage,
+    setPageSize,
+    handleSortChange,
+    handleResetFilters,
+  } = useBrandsFilters();
 
-  const fetchPages = useCallback(async (silent = false, forceRefresh = false) => {
-    // Abort previous in-flight request so stale search/filter responses never overwrite latest state
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+  const {
+    pages,
+    setPages,
+    pagesLoading,
+    stats,
+    totalPages,
+    totalCount,
+    searchTabCounts,
+    isManualRefreshing,
+    fetchStats,
+    loadData,
+    handleManualRefresh,
+    handleApplySort,
+    actions,
+  } = useTrackedPagesData({
+    filters,
+    showToast,
+    onSortApplied: () => setHasPendingReSort(false),
+  });
 
-    if (!silent) setPagesLoading(true);
-    try {
-      const params = new URLSearchParams();
-      params.set("page", String(page));
-      params.set("limit", String(pageSize));
-      if (search) params.set("search", search);
-      if (statusFilter !== "all") params.set("status", statusFilter);
-      if (searchTypeFilter !== "all") params.set("searchType", searchTypeFilter);
-      if (tagFilter !== "all") params.set("tag", tagFilter);
-      if (activeTab) params.set("tab", activeTab);
-      params.set("sortBy", sortBy);
-      params.set("sortOrder", sortOrder);
-      if (forceRefresh) params.set("_t", String(Date.now()));
+  usePagesRealtime({
+    stats,
+    sortBy: filters.sortBy,
+    activeTab: filters.activeTab,
+    setPages,
+    fetchStats,
+    onPendingReSortChange: setHasPendingReSort,
+  });
 
-      const res = await fetch(`/api/pages?${params.toString()}`, {
-        signal: controller.signal,
-        cache: forceRefresh ? "no-store" : "default",
-        headers: forceRefresh ? { "Cache-Control": "no-cache" } : undefined,
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setPages(data.data || []);
-        setTotalPages(data.pagination?.totalPages || 1);
-        setTotalCount(data.pagination?.total || 0);
-        setSearchTabCounts(data.searchTabCounts || null);
-        setHasPendingReSort(false);
-      } else {
-        const errData = await res.json().catch(() => ({}));
-        showToast("error", errData.error || "Failed to load table pages.");
-      }
-    } catch (err: any) {
-      if (err.name === "AbortError" || err.name === "DOMException") {
-        // Request was cancelled by a newer search/filter action — silently ignore
-        return;
-      }
-      console.error("Failed to fetch pages", err);
-      showToast("error", "Network error loading table pages.");
-    } finally {
-      if (abortControllerRef.current === controller) {
-        abortControllerRef.current = null;
-        if (!silent) setPagesLoading(false);
-      }
-    }
-  }, [page, pageSize, search, statusFilter, searchTypeFilter, tagFilter, activeTab, sortBy, sortOrder, showToast]);
-
-  const loadData = useCallback(async (silent = false, forceRefresh = false) => {
-    return Promise.all([
-      fetchStats(silent, forceRefresh),
-      fetchPages(silent, forceRefresh),
-    ]);
-  }, [fetchStats, fetchPages]);
-
-  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
-
-  const handleManualRefresh = async () => {
-    if (isManualRefreshing || pagesLoading) return;
-    setIsManualRefreshing(true);
-    try {
-      await Promise.all([
-        loadData(false, true),
-        new Promise((resolve) => setTimeout(resolve, 800)),
-      ]);
-      setHasPendingReSort(false);
-    } finally {
-      setIsManualRefreshing(false);
-    }
-  };
-
-  const handleApplySort = useCallback(() => {
-    fetchPages(true, true);
-    setHasPendingReSort(false);
-  }, [fetchPages]);
-
-  const handleSortChange = (col: string) => {
-    setHasPendingReSort(false);
-    if (col === sortBy) {
-      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortBy(col as any);
-      setSortOrder("desc");
-    }
-    setPage(1);
-  };
-
-  const handleResetFilters = useCallback(() => {
-    setHasPendingReSort(false);
-    setSearch("");
-    setSearchTabCounts(null);
-    setStatusFilter("all");
-    setSearchTypeFilter("all");
-    setTagFilter("all");
-    setActiveTab("active");
-    setSortBy("createdAt");
-    setSortOrder("desc");
-    setPage(1);
-    clearStoredFilterState();
-    if (typeof window !== "undefined") {
-      window.history.replaceState(null, "", window.location.pathname);
-    }
-  }, []);
-
-  // Track previous workspace ID to distinguish initial mount from an actual workspace switch
-  const prevWorkspaceIdRef = useRef<string | null>(null);
-
-  // Initial load on mount and when filters/pagination change
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  // Re-fetch dashboard data ONLY when the active workspace actually switches to a different one
-  useEffect(() => {
-    if (!activeWorkspace?.id) return;
-
-    if (prevWorkspaceIdRef.current === null) {
-      // First resolution on initial mount: record the id without double-fetching or forcing cache bypass
-      prevWorkspaceIdRef.current = activeWorkspace.id;
-      return;
-    }
-
-    if (prevWorkspaceIdRef.current !== activeWorkspace.id) {
-      prevWorkspaceIdRef.current = activeWorkspace.id;
-      // Workspace changed by user: fetch without forceRefresh so Redis cache can serve it immediately if warm
-      loadData(false, false);
-    }
-  }, [activeWorkspace?.id, loadData]);
-
-  // Real-time row status & ad-count updates via Supabase WebSockets (Zero polling, zero full table reloads)
-  useEffect(() => {
-    const supabase = getSupabase();
-    const channel = supabase
-      .channel("realtime-tracked-pages")
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "tracked_pages",
-        },
-        (payload) => {
-          const updated = payload.new as any;
-          if (!updated?.id) return;
-
-          // In-place row patch: only the updated row reference changes, preventing whole-table re-render or flicker
-          setPages((prevPages) => {
-            const hasTargetRow = prevPages.some((p) => p.id === updated.id);
-            if (hasTargetRow) {
-              const countUpdated =
-                updated.current_results !== undefined || updated.currentResults !== undefined;
-              const dateUpdated =
-                updated.last_checked !== undefined || updated.lastChecked !== undefined;
-              const rawCount = updated.current_results ?? updated.currentResults;
-              const countIsZero = rawCount !== null && rawCount !== undefined && Number(rawCount) === 0;
-
-              if (
-                (sortBy === "lastChecked" && dateUpdated) ||
-                (sortBy === "currentResults" && countUpdated) ||
-                (sortBy === "difference" && countUpdated) ||
-                (activeTab === "active" && countIsZero)
-              ) {
-                setHasPendingReSort(true);
-              }
-            }
-
-            return prevPages.map((page) => {
-              if (page.id !== updated.id) return page;
-
-              const rawResults =
-                updated.current_results !== undefined && updated.current_results !== null
-                  ? updated.current_results
-                  : updated.currentResults !== undefined && updated.currentResults !== null
-                    ? updated.currentResults
-                    : page.currentResults;
-              const newResults = rawResults !== null && rawResults !== undefined ? Number(rawResults) : null;
-
-              const oldResults = page.currentResults;
-              const hasCountChanged = newResults !== null && oldResults !== null && newResults !== oldResults;
-              const difference = hasCountChanged
-                ? computeDeltaDifference(newResults, oldResults, page.difference)
-                : page.difference;
-              const previousResults = hasCountChanged ? oldResults : page.previousResults;
-
-              // Dynamically append new point to live sparkline history points
-              const historyPoints = hasCountChanged && newResults !== null
-                ? appendLiveHistoryPoint(page.historyPoints, newResults)
-                : page.historyPoints;
-
-              return {
-                ...page,
-                status: updated.status ?? page.status,
-                currentResults: newResults,
-                previousResults,
-                difference,
-                historyPoints,
-                lastChecked: updated.last_checked || updated.lastChecked || page.lastChecked,
-                lastSuccessAt: updated.last_success_at || updated.lastSuccessAt || page.lastSuccessAt,
-                updatedAt: updated.updated_at || updated.updatedAt || page.updatedAt,
-                holdStatus: updated.hold_status || updated.holdStatus || page.holdStatus,
-              };
-            });
-          });
-
-          // Debounced silent stats refresh: coalesces rapid batch updates (e.g. 20 rows in a scan)
-          // into a single cached stats fetch after 3 seconds instead of 20 parallel queries.
-          if (realtimeStatsDebounceRef.current) {
-            clearTimeout(realtimeStatsDebounceRef.current);
-          }
-          realtimeStatsDebounceRef.current = setTimeout(() => {
-            fetchStats(true, false);
-          }, 3000);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-      if (realtimeStatsDebounceRef.current) {
-        clearTimeout(realtimeStatsDebounceRef.current);
-      }
-    };
-  }, [fetchStats]);
-
-  // Active scan sync loop: while scans are in progress, poll stats at a relaxed 12s interval (using cache)
-  // and strictly pause when the tab is hidden.
-  useEffect(() => {
-    if (!stats || (stats.scanning === 0 && stats.pending === 0)) return;
-    const interval = setInterval(() => {
-      if (!document.hidden) {
-        fetchStats(true, false);
-      }
-    }, 12000);
-
-    const handleVisibility = () => {
-      if (!document.hidden) fetchStats(true, false);
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [stats?.scanning, stats?.pending, fetchStats]);
-
-  const handleRefresh = async (ids: string[]) => {
-    try {
-      // 1. Optimistic UI: mark row status as 'pending' immediately without reloading table
-      setPages((prev) =>
-        prev.map((p) => (ids.includes(p.id) ? { ...p, status: "pending" } : p))
-      );
-
-      const res = await fetch("/api/refresh", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids }),
-      });
-      if (res.ok) {
-        showToast("info", "Scan refresh queued successfully.");
-        fetchStats(true);
-      } else {
-        showToast("error", "Failed to queue refresh.");
-      }
-    } catch (err) {
-      console.error("Refresh action failed", err);
-      showToast("error", "Failed to queue refresh.");
-    }
-  };
-
-  const handleRetry = async (ids?: string[]) => {
-    try {
-      // 1. Optimistic UI: mark retried failed pages as 'pending' immediately without reloading table
-      setPages((prev) =>
-        prev.map((p) => (!ids || ids.includes(p.id) ? { ...p, status: "pending" } : p))
-      );
-
-      const res = await fetch("/api/retry", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids }),
-      });
-      if (res.ok) {
-        showToast("info", "Failed scans queued for retry.");
-        fetchStats(true);
-      } else {
-        showToast("error", "Failed to queue retry.");
-      }
-    } catch (err) {
-      console.error("Retry action failed", err);
-      showToast("error", "Failed to queue retry.");
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      const res = await fetch(`/api/page/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        showToast("success", "Tracked page deleted successfully.");
-        loadData(false, true);
-      } else {
-        showToast("error", "Failed to delete tracked page.");
-      }
-    } catch (err) {
-      console.error("Delete action failed", err);
-      showToast("error", "Network error while deleting page.");
-    }
-  };
-
-  const handleBulkDelete = async (ids: string[]) => {
-    try {
-      await Promise.all(ids.map((id) => fetch(`/api/page/${id}`, { method: "DELETE" })));
-      showToast("success", `Deleted ${ids.length} page(s) successfully.`);
-      loadData(false, true);
-    } catch (err) {
-      console.error("Bulk delete failed", err);
-      showToast("error", "Failed to delete some pages.");
-    }
-  };
+  const scanningPageIds = useMemo(
+    () => pages.filter((p) => p.status === "scanning").map((p) => p.id),
+    [pages]
+  );
 
   return (
     <div className="h-full flex flex-col space-y-4 overflow-y-auto md:overflow-hidden min-w-0">
-      {/* Toast Alert Banner */}
       {toast && (
         <div
-          className={`fixed top-20 right-6 z-50 flex items-center space-x-3 px-4 py-3 rounded-xl shadow-2xl border text-xs font-semibold animate-in slide-in-from-top-5 duration-200 ${toast.type === "success"
+          className={`fixed top-20 right-6 z-50 flex items-center space-x-3 px-4 py-3 rounded-xl shadow-2xl border text-xs font-semibold animate-in slide-in-from-top-5 duration-200 ${
+            toast.type === "success"
               ? "bg-emerald-50 dark:bg-emerald-950/95 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/40"
               : toast.type === "error"
-                ? "bg-rose-50 dark:bg-rose-950/95 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-500/40"
-                : "bg-indigo-50 dark:bg-indigo-950/95 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-500/40"
-            }`}
+              ? "bg-rose-50 dark:bg-rose-950/95 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-500/40"
+              : "bg-indigo-50 dark:bg-indigo-950/95 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-500/40"
+          }`}
         >
           <span>{toast.message}</span>
         </div>
       )}
-      {/* Page Header (Line 2) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200 dark:border-slate-800/40">
-        <div className="flex items-center flex-wrap gap-2">
-          <h1 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight">
-            Tracked Brands
-          </h1>
 
-          {stats && (
-            <div className="flex items-center gap-1.5 ml-1">
-              <span className="inline-flex items-center gap-1 text-[11px] bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md font-semibold">
-                <span className="text-slate-400 font-normal">Monitored:</span>
-                <span>{stats.totalPages}</span>
-              </span>
+      <BrandsHeader
+        stats={stats}
+        isManualRefreshing={isManualRefreshing}
+        pagesLoading={pagesLoading}
+        onTrackUrlClick={() => setShowAddModal(true)}
+        onRefreshClick={handleManualRefresh}
+      />
 
-              <span className="inline-flex items-center gap-1 text-[11px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-md font-semibold">
-                <span className="text-emerald-600/70 dark:text-emerald-400/70 font-normal">Completed:</span>
-                <span>{stats.completed}</span>
-              </span>
-
-              {stats.failed > 0 && (
-                <span className="inline-flex items-center gap-1 text-[11px] bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-300 px-2 py-0.5 rounded-md font-semibold">
-                  <span className="text-rose-600/70 dark:text-rose-400/70 font-normal">Failed:</span>
-                  <span>{stats.failed}</span>
-                </span>
-              )}
-
-              {stats.scanning > 0 && (
-                <span className="flex items-center space-x-1 text-[11px] bg-cyan-50 dark:bg-cyan-950/80 border border-cyan-200 dark:border-cyan-500/30 text-cyan-700 dark:text-cyan-300 px-2 py-0.5 rounded-md font-semibold animate-pulse shrink-0">
-                  <RefreshCw className="w-2.5 h-2.5 animate-spin text-cyan-500 dark:text-cyan-400" />
-                  <span>Scanning {stats.scanning}...</span>
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Track URL</span>
-          </button>
-
-          <button
-            onClick={handleManualRefresh}
-            disabled={isManualRefreshing || pagesLoading}
-            title="Refresh dashboard data"
-            className="group flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer active:scale-95 disabled:opacity-60 shadow-xs hover:shadow-sm"
-          >
-            <RefreshCw
-              className={`w-3.5 h-3.5 transition-transform duration-300 ${isManualRefreshing || pagesLoading
-                  ? "animate-spin text-indigo-500"
-                  : "group-hover:rotate-90 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200"
-                }`}
-            />
-            <span>{isManualRefreshing ? "Refreshing..." : "Refresh"}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Main Tracked Pages Table */}
       <PagesTable
         pages={pages}
         loading={pagesLoading}
         stats={stats}
-        onRefresh={handleRefresh}
-        onRetry={handleRetry}
-        onDelete={handleDelete}
-        onBulkDelete={handleBulkDelete}
-        search={search}
+        onRefresh={actions.handleRefresh}
+        onRetry={actions.handleRetry}
+        onDelete={actions.handleDelete}
+        onBulkDelete={actions.handleBulkDelete}
+        search={filters.search}
         searchTabCounts={searchTabCounts}
-        onSearchChange={(val) => {
-          setSearch(val);
-          setPage(1);
-        }}
-        statusFilter={statusFilter}
-        onStatusFilterChange={(val) => {
-          setStatusFilter(val as any);
-          setPage(1);
-        }}
-        searchTypeFilter={searchTypeFilter}
-        onSearchTypeFilterChange={(val) => {
-          setSearchTypeFilter(val as any);
-          setPage(1);
-        }}
-        tagFilter={tagFilter}
-        onTagFilterChange={(val) => {
-          setTagFilter(val as any);
-          setPage(1);
-        }}
-        activeTab={activeTab}
-        onTabChange={(tab) => {
-          setActiveTab(tab as any);
-          setPage(1);
-        }}
-        page={page}
-        pageSize={pageSize}
+        onSearchChange={setSearch}
+        statusFilter={filters.statusFilter}
+        onStatusFilterChange={(val) => setStatusFilter(val as any)}
+        searchTypeFilter={filters.searchTypeFilter}
+        onSearchTypeFilterChange={(val) => setSearchTypeFilter(val as any)}
+        tagFilter={filters.tagFilter}
+        onTagFilterChange={(val) => setTagFilter(val as any)}
+        activeTab={filters.activeTab}
+        onTabChange={(tab) => setActiveTab(tab as any)}
+        page={filters.page}
+        pageSize={filters.pageSize}
         totalPages={totalPages}
         totalCount={totalCount}
-        onPageChange={(p) => setPage(p)}
-        onPageSizeChange={(newSize) => {
-          setPageSize(newSize as BrandPageSize);
-          setPage(1);
-        }}
-        sortBy={sortBy}
-        sortOrder={sortOrder}
+        onPageChange={setPage}
+        onPageSizeChange={(newSize) => setPageSize(newSize as any)}
+        sortBy={filters.sortBy}
+        sortOrder={filters.sortOrder}
         onSortChange={handleSortChange}
         onWatchlistToggle={() => loadData(true, true)}
         onResetFilters={handleResetFilters}
@@ -661,68 +128,15 @@ function DashboardContent() {
         onApplySort={handleApplySort}
       />
 
-      {/* Track URL / Bulk File Import Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in">
-          <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
-            <button
-              onClick={() => {
-                setShowAddModal(false);
-                setAddModalTab("single");
-              }}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-200 cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
+      <TrackUrlModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSuccess={() => loadData(false, true)}
+      />
 
-            {/* Modal Switcher Tabs */}
-            <div className="flex items-center space-x-2 mb-4 pb-2.5 border-b border-slate-800/80">
-              <button
-                type="button"
-                onClick={() => setAddModalTab("single")}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${addModalTab === "single"
-                    ? "bg-indigo-600 text-white shadow-sm"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
-                  }`}
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Single URL / Domain</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setAddModalTab("bulk")}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${addModalTab === "bulk"
-                    ? "bg-indigo-600 text-white shadow-sm"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
-                  }`}
-              >
-                <UploadCloud className="w-3.5 h-3.5" />
-                <span>Bulk File Import (CSV / XLSX)</span>
-              </button>
-            </div>
-
-            {addModalTab === "single" ? (
-              <AddUrlForm
-                onSuccess={() => {
-                  setShowAddModal(false);
-                  loadData(false, true);
-                }}
-              />
-            ) : (
-              <div className="space-y-4">
-                <ImportDropzone />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Feature 2: Real-time Live Scraper Progress Bar & Step Stream */}
       <ScanProgressWidget
         scanningPageIds={scanningPageIds}
         onScanFinished={() => {
-          // Refresh global stats silently; preserve frozen table order so scanned rows do not jump or vanish
           fetchStats(true, true);
           setHasPendingReSort(true);
         }}
