@@ -85,4 +85,37 @@ The workspace uses a Notion Coding Workflow OS connected via Notion MCP (Bot: `A
 - **High-Priority Backup Rule**: Before executing any risky, destructive, or structural database migration (e.g., dropping columns/tables, modifying column types, renaming fields, data backfills, or table rewrites), **ALWAYS create a full database backup via `pg_dump`** before proceeding. Because the project operates on Supabase Free Tier (which does not provide automatic daily backups or Point-In-Time Recovery), pre-migration `pg_dump` snapshots are strictly mandatory to guarantee full recoverability against data loss.
 <!-- END:database-migration-backup-rules -->
 
+<!-- BEGIN:refactoring-safety-invariants -->
+# MANDATORY REFACTORING & CODE-SPLITTING SAFETY INVARIANTS
+
+You MUST strictly adhere to these rules during ANY file refactoring, code extraction, or modernization task across the project:
+
+### 1. The Strangler Fig Extraction Protocol (Zero-Regression)
+- **Import Back Before Deleting**: When extracting any logic (utilities, hooks, sub-components) from an existing file, write the new module first, import it back into the original file, and confirm it runs identically. NEVER delete original inline code before verifying the imported version.
+- **Backward-Compatible Barrel Re-exports**: When moving or splitting an existing component or utility, always preserve a re-export bridge in the original file path (e.g., `export * from '@/features/brands/components/pages-table'`). No existing consumer should break due to path relocation.
+- **Bottom-Up Dependency Flow**: Always extract leaves first before touching orchestrators:
+  1. Pure utilities (`lib/`) with zero UI or side-effect risk
+  2. Domain Hooks
+  3. Leaf UI atom components (no children)
+  4. Container/Table components
+  5. Page orchestrators (`page.tsx`)
+
+### 2. Mandatory Compiler & Quality Gates
+- **Zero-Error Compiler Gate**: Run `npx tsc --noEmit` after EVERY file extraction or modification. A refactoring step is NOT considered complete if there is even a single TypeScript diagnostic error.
+- **Single Responsibility & Size Limits**:
+  - `page.tsx`: Orchestrator target `< 130 lines`. Strictly ZERO direct `fetch()` calls, zero `useEffect()`, zero inline modals.
+  - Domain Hooks: Maximum 1 primary state machine per hook. Zero JSX.
+  - UI Components: Maximum 8 direct props. If more are needed, group into a typed domain config object or use local React Context.
+  - Pure Utils: 100% deterministic functions with zero React or DOM dependencies.
+
+### 3. Edge-Case Preservation Checklist
+During extractions, all domain edge-case handlers MUST be preserved verbatim:
+- Browser Back/Forward navigation `popstate` listeners
+- WebSocket real-time update debouncing (minimum 3,000ms delay before stats recalculation)
+- Safe fallback & whitelist validations on URL query parameters and local storage keys
+- Visibility-aware background polling (`document.hidden` checks)
+- In-place row patching for table states to preserve active sorting, pagination, and scroll positions
+<!-- END:refactoring-safety-invariants -->
+
+
 

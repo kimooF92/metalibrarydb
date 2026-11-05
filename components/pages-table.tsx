@@ -12,6 +12,7 @@ import { ManageDomainModal } from "./manage-domain-modal";
 import { MoveWorkspaceModal } from "./move-workspace-modal";
 import { BrandLogo } from "./brand-logo";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
+import { calculateSparklineGeometry, getSparklineTrend } from "@/lib/sparkline-utils";
 import {
   Search,
   Filter,
@@ -83,7 +84,8 @@ function InlineSparkline({
   points?: number[] | null;
   difference?: number | null;
 }) {
-  if (!points || points.length < 2) {
+  const geo = calculateSparklineGeometry(points);
+  if (!geo) {
     return (
       <div className="w-12 h-3.5 flex items-center justify-center opacity-25">
         <div className="w-5 h-[1px] bg-slate-400 dark:bg-slate-600 rounded-full" />
@@ -91,44 +93,26 @@ function InlineSparkline({
     );
   }
 
-  const min = Math.min(...points);
-  const max = Math.max(...points);
-  const range = max - min || 1;
-
-  const width = 52;
-  const height = 18;
-  const padding = 2;
-
-  const coords = points.map((v, i) => {
-    const x = padding + (i / (points.length - 1)) * (width - padding * 2);
-    const y = padding + (1 - (v - min) / range) * (height - padding * 2);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
-
-  const polylineStr = coords.join(" ");
-
-  const isUp = (difference ?? 0) > 0;
-  const isDown = (difference ?? 0) < 0;
-
-  // Harmonious brand colors: emerald, rose, indigo
-  const strokeColor = isUp ? "#10b981" : isDown ? "#f43f5e" : "#818cf8";
-  const lastPoint = coords[coords.length - 1].split(",");
+  const { strokeColor } = getSparklineTrend(difference);
 
   return (
-    <div className="flex items-center shrink-0" title={`Trend (last ${points.length} scans): ${points.join(" → ")} ads`}>
+    <div
+      className="flex items-center shrink-0"
+      title={`Trend (last ${points?.length ?? 0} scans): ${(points ?? []).join(" → ")} ads`}
+    >
       <svg
-        viewBox={`0 0 ${width} ${height}`}
+        viewBox={`0 0 ${geo.width} ${geo.height}`}
         className="w-13 h-4.5 overflow-visible select-none shrink-0"
       >
         <polyline
-          points={polylineStr}
+          points={geo.polylineStr}
           fill="none"
           stroke={strokeColor}
           strokeWidth="1.5"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        <circle cx={lastPoint[0]} cy={lastPoint[1]} r="2" fill={strokeColor} />
+        <circle cx={geo.lastPoint.x} cy={geo.lastPoint.y} r="2" fill={strokeColor} />
       </svg>
     </div>
   );

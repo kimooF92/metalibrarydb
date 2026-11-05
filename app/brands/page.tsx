@@ -11,101 +11,45 @@ import { RefreshCw, X, Plus, UploadCloud } from "lucide-react";
 import { useWorkspace } from "@/components/workspace-context";
 import { getSupabase } from "@/lib/supabase";
 import { ScanProgressWidget } from "@/components/scan-progress-widget";
+import {
+  VALID_STATUSES,
+  VALID_SEARCH_TYPES,
+  VALID_TAGS,
+  VALID_TABS,
+  VALID_SORT_COLS,
+  VALID_PAGE_SIZES,
+  type BrandDashboardState,
+  type BrandStatusFilter,
+  type BrandSearchTypeFilter,
+  type BrandTagFilter,
+  type BrandTab,
+  type BrandSortCol,
+  type BrandSortOrder,
+  type BrandPageSize,
+  getDefaultDashboardState,
+  sanitizeDashboardState,
+  parseUrlParamsToState,
+  serializeStateToUrlParams,
+} from "@/lib/url-filter-sync";
+import {
+  readStoredFilterState,
+  writeStoredFilterState,
+  clearStoredFilterState,
+} from "@/lib/filter-storage";
+import {
+  appendLiveHistoryPoint,
+  computeDeltaDifference,
+} from "@/lib/sparkline-utils";
 
-const VALID_STATUSES = ["all", "success", "pending", "scanning", "failed", "unclear"] as const;
-const VALID_SEARCH_TYPES = ["all", "page", "keyword_exact_phrase", "keyword_unordered"] as const;
-const VALID_TAGS = ["all", "breakout", "scaling", "burst", "stable", "heavy_tester", "descaling", "moderate", "emerging", "off_air", "inactive"] as const;
-const VALID_TABS = ["active", "all", "watchlist", "high_volume", "attention", "zero_ads", "needs_review"] as const;
-const VALID_SORT_COLS = ["createdAt", "displayName", "currentResults", "lastChecked", "lastCreativeScan", "status", "difference"] as const;
-const VALID_PAGE_SIZES = [25, 50, 100] as const;
-
-function getInitialDashboardState() {
-  const defaults = {
-    search: "",
-    statusFilter: "all" as (typeof VALID_STATUSES)[number],
-    searchTypeFilter: "all" as (typeof VALID_SEARCH_TYPES)[number],
-    tagFilter: "all" as (typeof VALID_TAGS)[number],
-    activeTab: "active" as (typeof VALID_TABS)[number],
-    sortBy: "createdAt" as (typeof VALID_SORT_COLS)[number],
-    sortOrder: "desc" as "asc" | "desc",
-    page: 1,
-    pageSize: 25,
-  };
-
+function getInitialDashboardState(): BrandDashboardState {
+  const defaults = getDefaultDashboardState();
   if (typeof window === "undefined") return defaults;
 
   try {
-    // 1. Load saved state from localStorage or sessionStorage
-    let saved: Partial<typeof defaults> = {};
-    const rawSaved =
-      localStorage.getItem("dashboard_filters_v2") ||
-      sessionStorage.getItem("dashboard_filters_v2");
-
-    if (rawSaved) {
-      try {
-        saved = JSON.parse(rawSaved);
-      } catch { }
-    }
-
-    // Validate saved fields against whitelist
-    if (saved.statusFilter && !VALID_STATUSES.includes(saved.statusFilter as any)) {
-      saved.statusFilter = "all";
-    }
-    if (saved.searchTypeFilter && !VALID_SEARCH_TYPES.includes(saved.searchTypeFilter as any)) {
-      saved.searchTypeFilter = "all";
-    }
-    if (saved.activeTab && !VALID_TABS.includes(saved.activeTab as any)) {
-      saved.activeTab = "active";
-    }
-    if (saved.sortBy && !VALID_SORT_COLS.includes(saved.sortBy as any)) {
-      saved.sortBy = "createdAt";
-    }
-    if (saved.sortOrder && saved.sortOrder !== "asc" && saved.sortOrder !== "desc") {
-      saved.sortOrder = "desc";
-    }
-    if (saved.pageSize && !VALID_PAGE_SIZES.includes(saved.pageSize as any)) {
-      saved.pageSize = 25;
-    }
-
-    const state = {
-      ...defaults,
-      ...saved,
-    };
-
-    // 2. Overlay individual URL query parameters if present (with strict validation)
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has("search")) state.search = urlParams.get("search") || "";
-    if (urlParams.has("status")) {
-      const s = urlParams.get("status");
-      state.statusFilter = s && VALID_STATUSES.includes(s as any) ? (s as any) : "all";
-    }
-    if (urlParams.has("searchType")) {
-      const st = urlParams.get("searchType");
-      state.searchTypeFilter = st && VALID_SEARCH_TYPES.includes(st as any) ? (st as any) : "all";
-    }
-    if (urlParams.has("tag")) {
-      const tg = urlParams.get("tag");
-      state.tagFilter = tg && VALID_TAGS.includes(tg as any) ? (tg as any) : "all";
-    }
-    if (urlParams.has("tab")) {
-      const t = urlParams.get("tab");
-      state.activeTab = t && VALID_TABS.includes(t as any) ? (t as any) : "active";
-    }
-    if (urlParams.has("sortBy")) {
-      const sb = urlParams.get("sortBy");
-      state.sortBy = sb && VALID_SORT_COLS.includes(sb as any) ? (sb as any) : "createdAt";
-    }
-    if (urlParams.has("sortOrder")) {
-      const so = urlParams.get("sortOrder");
-      state.sortOrder = so === "asc" ? "asc" : "desc";
-    }
-    if (urlParams.has("page")) state.page = Math.max(1, Number(urlParams.get("page")) || 1);
-    if (urlParams.has("limit")) {
-      const l = Number(urlParams.get("limit"));
-      state.pageSize = VALID_PAGE_SIZES.includes(l as any) ? l : 25;
-    }
-
-    return state;
+    const saved = readStoredFilterState<BrandDashboardState>() || {};
+    const sanitized = sanitizeDashboardState(saved);
+    const base = { ...defaults, ...sanitized };
+    return parseUrlParamsToState(window.location.search, base);
   } catch (e) {
     console.error("Error reading dashboard params:", e);
   }
@@ -113,47 +57,14 @@ function getInitialDashboardState() {
   return defaults;
 }
 
-function syncDashboardStateToUrl(state: {
-  search: string;
-  statusFilter: string;
-  searchTypeFilter: string;
-  tagFilter: string;
-  activeTab: string;
-  sortBy: string;
-  sortOrder: "asc" | "desc";
-  page: number;
-  pageSize: number;
-}) {
+function syncDashboardStateToUrl(state: BrandDashboardState) {
   if (typeof window === "undefined") return;
   try {
-    const query = new URLSearchParams();
-    if (state.search) query.set("search", state.search);
-    if (state.statusFilter && state.statusFilter !== "all" && VALID_STATUSES.includes(state.statusFilter as any)) {
-      query.set("status", state.statusFilter);
-    }
-    if (state.searchTypeFilter && state.searchTypeFilter !== "all" && VALID_SEARCH_TYPES.includes(state.searchTypeFilter as any)) {
-      query.set("searchType", state.searchTypeFilter);
-    }
-    if (state.tagFilter && state.tagFilter !== "all" && VALID_TAGS.includes(state.tagFilter as any)) {
-      query.set("tag", state.tagFilter);
-    }
-    if (state.activeTab && state.activeTab !== "active" && VALID_TABS.includes(state.activeTab as any)) {
-      query.set("tab", state.activeTab);
-    }
-    if (state.sortBy && state.sortBy !== "createdAt" && VALID_SORT_COLS.includes(state.sortBy as any)) {
-      query.set("sortBy", state.sortBy);
-    }
-    if (state.sortOrder && state.sortOrder !== "desc") query.set("sortOrder", state.sortOrder);
-    if (state.page && state.page > 1) query.set("page", String(state.page));
-    if (state.pageSize && state.pageSize !== 25) query.set("limit", String(state.pageSize));
-
-    const queryString = query.toString();
+    const queryString = serializeStateToUrlParams(state).toString();
     const newUrl = queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname;
     window.history.replaceState(null, "", newUrl);
 
-    const payload = JSON.stringify(state);
-    sessionStorage.setItem("dashboard_filters_v2", payload);
-    localStorage.setItem("dashboard_filters_v2", payload);
+    writeStoredFilterState(state);
   } catch (e) {
     console.error("Error syncing dashboard state:", e);
   }
@@ -399,14 +310,9 @@ function DashboardContent() {
     setSortBy("createdAt");
     setSortOrder("desc");
     setPage(1);
-    try {
-      sessionStorage.removeItem("dashboard_filters_v2");
-      localStorage.removeItem("dashboard_filters_v2");
-      sessionStorage.removeItem("dashboard_filters");
-      localStorage.removeItem("dashboard_filters");
+    clearStoredFilterState();
+    if (typeof window !== "undefined") {
       window.history.replaceState(null, "", window.location.pathname);
-    } catch (e) {
-      console.error("Error clearing dashboard filter storage:", e);
     }
   }, []);
 
@@ -485,14 +391,15 @@ function DashboardContent() {
 
               const oldResults = page.currentResults;
               const hasCountChanged = newResults !== null && oldResults !== null && newResults !== oldResults;
-              const difference = hasCountChanged ? newResults - oldResults : page.difference;
+              const difference = hasCountChanged
+                ? computeDeltaDifference(newResults, oldResults, page.difference)
+                : page.difference;
               const previousResults = hasCountChanged ? oldResults : page.previousResults;
 
               // Dynamically append new point to live sparkline history points
-              let historyPoints = page.historyPoints;
-              if (hasCountChanged && Array.isArray(historyPoints) && newResults !== null) {
-                historyPoints = [...historyPoints.slice(-13), newResults];
-              }
+              const historyPoints = hasCountChanged && newResults !== null
+                ? appendLiveHistoryPoint(page.historyPoints, newResults)
+                : page.historyPoints;
 
               return {
                 ...page,
@@ -742,7 +649,7 @@ function DashboardContent() {
         totalCount={totalCount}
         onPageChange={(p) => setPage(p)}
         onPageSizeChange={(newSize) => {
-          setPageSize(newSize);
+          setPageSize(newSize as BrandPageSize);
           setPage(1);
         }}
         sortBy={sortBy}
