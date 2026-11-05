@@ -30,6 +30,16 @@ export function useTrackedPagesData({
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const prevWorkspaceIdRef = useRef<string | null>(null);
 
+  const showToastRef = useRef(showToast);
+  useEffect(() => {
+    showToastRef.current = showToast;
+  }, [showToast]);
+
+  const onSortAppliedRef = useRef(onSortApplied);
+  useEffect(() => {
+    onSortAppliedRef.current = onSortApplied;
+  }, [onSortApplied]);
+
   const fetchStats = useCallback(async (silent = false, forceRefresh = false) => {
     if (!silent) setStatsLoading(true);
     try {
@@ -83,17 +93,17 @@ export function useTrackedPagesData({
           setTotalPages(data.pagination?.totalPages || 1);
           setTotalCount(data.pagination?.total || 0);
           setSearchTabCounts(data.searchTabCounts || null);
-          onSortApplied?.();
+          onSortAppliedRef.current?.();
         } else {
           const errData = await res.json().catch(() => ({}));
-          showToast("error", errData.error || "Failed to load table pages.");
+          showToastRef.current("error", errData.error || "Failed to load table pages.");
         }
       } catch (err: any) {
         if (err.name === "AbortError" || err.name === "DOMException") {
           return;
         }
         console.error("Failed to fetch pages", err);
-        showToast("error", "Network error loading table pages.");
+        showToastRef.current("error", "Network error loading table pages.");
       } finally {
         if (abortControllerRef.current === controller) {
           abortControllerRef.current = null;
@@ -101,7 +111,17 @@ export function useTrackedPagesData({
         }
       }
     },
-    [filters, showToast, onSortApplied]
+    [
+      filters.page,
+      filters.pageSize,
+      filters.search,
+      filters.statusFilter,
+      filters.searchTypeFilter,
+      filters.tagFilter,
+      filters.activeTab,
+      filters.sortBy,
+      filters.sortOrder,
+    ]
   );
 
   const loadData = useCallback(

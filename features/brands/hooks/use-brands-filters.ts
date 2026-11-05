@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   type BrandDashboardState,
@@ -206,8 +206,8 @@ export function useBrandsFilters() {
     setPageState(1);
   }, []);
 
-  return {
-    filters: {
+  const filters = useMemo(
+    () => ({
       search,
       statusFilter,
       searchTypeFilter,
@@ -217,7 +217,12 @@ export function useBrandsFilters() {
       sortOrder,
       page,
       pageSize,
-    },
+    }),
+    [search, statusFilter, searchTypeFilter, tagFilter, activeTab, sortBy, sortOrder, page, pageSize]
+  );
+
+  return {
+    filters,
     hasPendingReSort,
     setHasPendingReSort,
     setSearch,

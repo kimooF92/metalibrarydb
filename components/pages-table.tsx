@@ -612,84 +612,86 @@ export function PagesTable({
       />
 
       {/* Table Container */}
-      <div className="border border-slate-200 dark:border-slate-800/80 rounded-xl overflow-x-auto bg-white dark:bg-slate-900/50 shadow-xs relative">
-        <table className="w-full md:table-fixed text-left text-[11px]">
-          <TableHeader
-            allVisibleSelected={allVisibleSelected}
-            onToggleSelectAll={toggleSelectAll}
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            hasPendingReSort={hasPendingReSort}
-            onSortChange={onSortChange}
-          />
-          <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
-            {loading ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-slate-500 dark:text-slate-400">
-                  <Loader2 className="w-6 h-6 animate-spin text-indigo-500 dark:text-indigo-400 mx-auto mb-2" />
-                  <span>Loading tracked pages...</span>
-                </td>
-              </tr>
-            ) : pages.length === 0 ? (
-              <TableEmptyState
-                filters={{
-                  search,
-                  activeTab,
-                  statusFilter,
-                  searchTypeFilter,
-                  tagFilter,
-                  page,
-                }}
-                searchTabCounts={searchTabCounts}
-                actions={{
-                  onTabChange,
-                  onTagFilterChange,
-                  onResetFilters,
-                }}
-              />
-            ) : (
-              pages.map((p) => (
-                <TableRow
-                  key={p.id}
-                  page={p}
-                  isSelected={selectedIds.includes(p.id)}
-                  isWatchlisted={watchlisted[p.id] ?? false}
-                  isRefreshing={refreshingPageIds.has(p.id)}
-                  isMenuOpen={openMenuPageId === p.id}
-                  editing={{
-                    isEditing: editingId === p.id,
-                    name: editingName,
-                    saving: savingEdit,
-                    onChangeName: setEditingName,
-                    onSave: saveEditing,
-                    onCancel: cancelEditing,
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 flex-1 min-h-[400px] md:min-h-0 flex flex-col overflow-hidden shadow-xs">
+        <div className="overflow-y-auto overflow-x-auto md:overflow-x-hidden flex-1 min-h-0 relative">
+          <table className="w-full md:table-fixed text-left text-[11px]">
+            <TableHeader
+              allVisibleSelected={allVisibleSelected}
+              onToggleSelectAll={toggleSelectAll}
+              sortBy={sortBy}
+              sortOrder={sortOrder}
+              hasPendingReSort={hasPendingReSort}
+              onSortChange={onSortChange}
+            />
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-12 text-center text-slate-500 dark:text-slate-400">
+                    <Loader2 className="w-6 h-6 animate-spin text-indigo-500 dark:text-indigo-400 mx-auto mb-2" />
+                    <span>Loading tracked pages...</span>
+                  </td>
+                </tr>
+              ) : pages.length === 0 ? (
+                <TableEmptyState
+                  filters={{
+                    search,
+                    activeTab,
+                    statusFilter,
+                    searchTypeFilter,
+                    tagFilter,
+                    page,
                   }}
+                  searchTabCounts={searchTabCounts}
                   actions={{
-                    onToggleSelect: toggleSelectRow,
-                    onToggleWatchlist: toggleWatchlist,
-                    onRefresh: handleRowRefresh,
-                    onOpenRunner: (targetPage) => {
-                      setRunnerModalPages([targetPage]);
-                      setRunnerModalOpen(true);
-                    },
-                    onToggleMenu: handleToggleMenu,
-                    onOpenNotePopover: openNotePopoverFromElement,
-                    onResolveMultiPage: (pageId) => setResolveModalPageId(pageId),
-                    onManageDomain: (domainId) => setManageDomainId(domainId),
-                    onCopyPageId: (pageId) => {
-                      navigator.clipboard.writeText(pageId);
-                      showToast({
-                        title: "Page ID Copied",
-                        message: `#${pageId} copied to clipboard`,
-                        type: "success",
-                      });
-                    },
+                    onTabChange,
+                    onTagFilterChange,
+                    onResetFilters,
                   }}
                 />
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                pages.map((p) => (
+                  <TableRow
+                    key={p.id}
+                    page={p}
+                    isSelected={selectedIds.includes(p.id)}
+                    isWatchlisted={watchlisted[p.id] ?? false}
+                    isRefreshing={refreshingPageIds.has(p.id)}
+                    isMenuOpen={openMenuPageId === p.id}
+                    editing={{
+                      isEditing: editingId === p.id,
+                      name: editingName,
+                      saving: savingEdit,
+                      onChangeName: setEditingName,
+                      onSave: saveEditing,
+                      onCancel: cancelEditing,
+                    }}
+                    actions={{
+                      onToggleSelect: toggleSelectRow,
+                      onToggleWatchlist: toggleWatchlist,
+                      onRefresh: handleRowRefresh,
+                      onOpenRunner: (targetPage) => {
+                        setRunnerModalPages([targetPage]);
+                        setRunnerModalOpen(true);
+                      },
+                      onToggleMenu: handleToggleMenu,
+                      onOpenNotePopover: openNotePopoverFromElement,
+                      onResolveMultiPage: (pageId) => setResolveModalPageId(pageId),
+                      onManageDomain: (domainId) => setManageDomainId(domainId),
+                      onCopyPageId: (pageId) => {
+                        navigator.clipboard.writeText(pageId);
+                        showToast({
+                          title: "Page ID Copied",
+                          message: `#${pageId} copied to clipboard`,
+                          type: "success",
+                        });
+                      },
+                    }}
+                  />
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
 
         {/* Pagination Bar */}
         <TablePagination

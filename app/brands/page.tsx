@@ -36,6 +36,10 @@ function DashboardContent() {
     handleResetFilters,
   } = useBrandsFilters();
 
+  const handleSortApplied = useCallback(() => {
+    setHasPendingReSort(false);
+  }, [setHasPendingReSort]);
+
   const {
     pages,
     setPages,
@@ -53,7 +57,7 @@ function DashboardContent() {
   } = useTrackedPagesData({
     filters,
     showToast,
-    onSortApplied: () => setHasPendingReSort(false),
+    onSortApplied: handleSortApplied,
   });
 
   usePagesRealtime({
