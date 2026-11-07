@@ -295,9 +295,7 @@ function DashboardOverviewContent() {
               <Clock className="w-3.5 h-3.5 text-cyan-500" />
               <span className="font-semibold text-slate-700 dark:text-slate-200">Found Today</span>
             </span>
-            <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/25">
-              LIVE FINDS
-            </span>
+            <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <div className="flex items-baseline gap-1.5">
@@ -315,7 +313,7 @@ function DashboardOverviewContent() {
               )}
             </div>
             <span className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 rounded-md">
-              Catalog Inflow
+              New products
             </span>
           </div>
           <div className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
@@ -335,9 +333,7 @@ function DashboardOverviewContent() {
               <Flame className="w-3.5 h-3.5 text-amber-500" />
               <span className="font-semibold text-slate-700 dark:text-slate-200">Breakout Winners</span>
             </span>
-            <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25">
-              HOT PICKS
-            </span>
+            <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <span className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
@@ -346,7 +342,7 @@ function DashboardOverviewContent() {
                 : (data?.freshWinnersSummary?.totalCount ?? data?.freshBreakouts?.length ?? 0)}
             </span>
             <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-md">
-              Top Velocity
+              Scaling fast
             </span>
           </div>
           <div className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
