@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { TrendingUp, TrendingDown, Eye, ArrowRight, Building2, AlertTriangle } from "lucide-react";
+import { TrendingUp, TrendingDown, Eye, ArrowRight, Building2, AlertTriangle, Moon, Sparkles } from "lucide-react";
 
 export interface BrandVelocityItem {
   id: string;
@@ -28,6 +28,8 @@ export interface BrandVelocityItem {
 interface BrandVelocityBoardProps {
   scalingBrands: BrandVelocityItem[];
   descalingBrands: BrandVelocityItem[];
+  darkCount?: number;
+  revivedCount?: number;
   loading?: boolean;
 }
 
@@ -68,6 +70,8 @@ function Sparkline({ points, isUp }: { points: number[]; isUp: boolean }) {
 export function BrandVelocityBoard({
   scalingBrands = [],
   descalingBrands = [],
+  darkCount = 0,
+  revivedCount = 0,
   loading = false,
 }: BrandVelocityBoardProps) {
   const [activeTab, setActiveTab] = useState<"scaling" | "descaling">("scaling");
@@ -225,6 +229,60 @@ export function BrandVelocityBoard({
             );
           })
         )}
+      </div>
+
+      {/* Competitor Status Shifts (Went Dark & Revived) */}
+      <div className="grid grid-cols-2 gap-2 p-2.5 border-t border-slate-200/80 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30">
+        <Link
+          href="/brands?tab=attention"
+          className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80 hover:border-rose-400/60 dark:hover:border-rose-600/60 transition-all shadow-2xs group"
+          title="View competitors on hold or with 0 active ads"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="w-6 h-6 rounded-md bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0">
+              <Moon className="w-3.5 h-3.5" />
+            </span>
+            <div className="min-w-0">
+              <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 block truncate group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
+                Went Dark
+              </span>
+              <span className="text-[9px] text-slate-400 dark:text-slate-500 block truncate">
+                0 ads / on hold
+              </span>
+            </div>
+          </div>
+          <span className="text-xs font-black text-rose-600 dark:text-rose-400 font-mono shrink-0 pl-1">
+            {loading ? "--" : darkCount}
+          </span>
+        </Link>
+
+        <Link
+          href="/brands?tab=active"
+          className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80 hover:border-emerald-400/60 dark:hover:border-emerald-600/60 transition-all shadow-2xs group"
+          title="View competitors that relaunched ad campaigns in the last 7 days"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="w-6 h-6 rounded-md bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
+              <Sparkles className="w-3.5 h-3.5" />
+            </span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1">
+                <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                  Revived
+                </span>
+                <span className="text-[8px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1 py-0.2 rounded">
+                  7d
+                </span>
+              </div>
+              <span className="text-[9px] text-slate-400 dark:text-slate-500 block truncate">
+                Relaunched ads
+              </span>
+            </div>
+          </div>
+          <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 font-mono shrink-0 pl-1">
+            {loading ? "--" : revivedCount}
+          </span>
+        </Link>
       </div>
     </div>
   );

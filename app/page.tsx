@@ -434,6 +434,8 @@ function DashboardOverviewContent() {
           <BrandVelocityBoard
             scalingBrands={data?.scalingBrands || []}
             descalingBrands={data?.descalingBrands || []}
+            darkCount={data?.scanOperations?.darkCount ?? 0}
+            revivedCount={data?.scanOperations?.revivedCount ?? 0}
             loading={loading}
           />
 
