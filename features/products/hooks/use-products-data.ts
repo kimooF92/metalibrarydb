@@ -208,7 +208,10 @@ export function useProductsData(filters: UseProductsDataParams) {
           } else {
             setProducts(newItems);
           }
-          if (data.pagination) setPagination(data.pagination);
+          if (data.pagination) {
+            setPagination(data.pagination);
+            setPage(data.pagination.page);
+          }
         } else {
           throw new Error(data.error || "Unknown error");
         }
@@ -294,7 +297,6 @@ export function useProductsData(filters: UseProductsDataParams) {
   const loadNextPage = useCallback(() => {
     if (loading || isFetchingMore || page >= pagination.totalPages) return;
     const nextPage = page + 1;
-    setPage(nextPage);
     setAutoLoadCount((prev) => prev + 1);
     fetchProducts(nextPage, true);
   }, [loading, isFetchingMore, page, pagination.totalPages, fetchProducts]);
@@ -303,7 +305,6 @@ export function useProductsData(filters: UseProductsDataParams) {
   const handleManualLoadMore = useCallback(() => {
     if (loading || isFetchingMore || page >= pagination.totalPages) return;
     const nextPage = page + 1;
-    setPage(nextPage);
     setAutoLoadCount(0); // Reset the 3-batch pause
     fetchProducts(nextPage, true);
   }, [loading, isFetchingMore, page, pagination.totalPages, fetchProducts]);
