@@ -63,10 +63,10 @@ export function Inflow24hCard({ data, loading = false, currencySymbol = "DT" }: 
             Found Today
           </span>
           <div className="flex items-baseline gap-1 mt-0.5">
-            <span className="text-lg font-black text-slate-900 dark:text-white">
+            <span className="text-lg font-bold font-mono tabular-nums text-slate-900 dark:text-white">
               {loading ? "--" : total}
             </span>
-            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+            <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
               items
             </span>
           </div>
@@ -78,7 +78,7 @@ export function Inflow24hCard({ data, loading = false, currencySymbol = "DT" }: 
             Offers & Bundles
           </span>
           <div className="flex items-baseline gap-1 mt-0.5">
-            <span className="text-lg font-black text-purple-600 dark:text-purple-400">
+            <span className="text-lg font-bold font-mono tabular-nums text-purple-600 dark:text-purple-400">
               {loading ? "--" : `${offerPct}%`}
             </span>
             <span className="text-[10px] font-medium text-slate-400">
@@ -93,7 +93,7 @@ export function Inflow24hCard({ data, loading = false, currencySymbol = "DT" }: 
             Average Price
           </span>
           <div className="flex items-baseline gap-1 mt-0.5">
-            <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">
+            <span className="text-lg font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
               {loading ? "--" : avgPriceFormatted}
             </span>
           </div>
@@ -105,7 +105,7 @@ export function Inflow24hCard({ data, loading = false, currencySymbol = "DT" }: 
             Top E-Com Engine
           </span>
           <div className="flex items-baseline gap-1 mt-0.5">
-            <span className="text-sm font-black text-slate-800 dark:text-slate-200 truncate capitalize">
+            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate capitalize">
               {loading ? "--" : platform}
             </span>
           </div>
@@ -113,8 +113,8 @@ export function Inflow24hCard({ data, loading = false, currencySymbol = "DT" }: 
       </div>
 
       {/* Today's Niche Breakdown (% Share) */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400 pb-1 border-b border-slate-100 dark:border-slate-800/60">
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 dark:text-slate-400 pb-1 border-b border-slate-100 dark:border-slate-800/60">
           <span>Trending Niches Today</span>
           <span>Category Share</span>
         </div>
@@ -140,11 +140,11 @@ export function Inflow24hCard({ data, loading = false, currencySymbol = "DT" }: 
                 <span className="font-semibold text-slate-700 dark:text-slate-300 group-hover:text-indigo-500 transition-colors">
                   {cat.category}
                 </span>
-                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                <span className="text-[11px] font-semibold font-mono tabular-nums text-slate-500 dark:text-slate-400">
                   {cat.count} products ({cat.percentage}%)
                 </span>
               </div>
-              <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-900 overflow-hidden">
+              <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-900 overflow-hidden">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-indigo-500 transition-all duration-500"
                   style={{ width: `${Math.max(6, cat.percentage)}%` }}

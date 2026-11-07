@@ -161,7 +161,7 @@ export function FreshWinnersList({ products, loading = false, currencySymbol = "
                 {/* Left: Rank, Image & Product Identity */}
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   {/* Rank */}
-                  <span className="w-5 text-center text-xs font-black text-slate-400 group-hover:text-indigo-500 transition-colors shrink-0">
+                  <span className="w-5 text-center text-xs font-semibold text-slate-400 dark:text-slate-500 font-mono group-hover:text-indigo-500 transition-colors shrink-0">
                     #{idx + 1}
                   </span>
 
@@ -194,7 +194,7 @@ export function FreshWinnersList({ products, loading = false, currencySymbol = "
                     <div className="flex flex-wrap items-center gap-1.5 mb-1">
                       {/* Active Ads Velocity Count */}
                       {item.activeAdsCount && item.activeAdsCount > 0 ? (
-                        <span className="text-[10px] font-black text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
+                        <span className="text-[10px] font-semibold font-mono tabular-nums text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
                           🔥 {item.activeAdsCount} active ads
                         </span>
                       ) : null}
@@ -209,7 +209,7 @@ export function FreshWinnersList({ products, loading = false, currencySymbol = "
                     <button
                       type="button"
                       onClick={() => handleOpenProduct(item)}
-                      className="text-left text-xs font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-1 cursor-pointer block"
+                      className="text-left text-[13px] font-semibold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-1 cursor-pointer block"
                       title={title}
                     >
                       {title}
@@ -223,7 +223,7 @@ export function FreshWinnersList({ products, loading = false, currencySymbol = "
                       {price && (
                         <>
                           <span className="text-slate-300 dark:text-slate-700">•</span>
-                          <span className="text-[11px] font-black text-emerald-600 dark:text-emerald-400">
+                          <span className="text-xs font-semibold font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
                             {price}
                           </span>
                         </>

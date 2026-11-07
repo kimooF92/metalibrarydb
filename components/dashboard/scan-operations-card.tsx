@@ -254,10 +254,10 @@ export function ScanOperationsCard({
             Checks Completed
           </span>
           <div className="flex items-baseline justify-between mt-0.5">
-            <span className="text-base font-black text-slate-900 dark:text-white">
+            <span className="text-base font-bold font-mono tabular-nums text-slate-900 dark:text-white">
               {loading ? "--" : scansToday}
             </span>
-            <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400" title="Scraper executions per hour">
+            <span className="text-[10px] font-semibold font-mono tabular-nums text-indigo-600 dark:text-indigo-400" title="Scraper executions per hour">
               +{scansThisHour}/hr
             </span>
           </div>
@@ -272,7 +272,7 @@ export function ScanOperationsCard({
             Success Rate
           </span>
           <div className="flex items-baseline justify-between mt-0.5">
-            <span className="text-base font-black text-emerald-600 dark:text-emerald-400">
+            <span className="text-base font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
               {loading ? "--" : `${successRate}%`}
             </span>
             <span className="text-[10px] font-medium text-slate-400">
@@ -290,11 +290,11 @@ export function ScanOperationsCard({
             Queued Checks
           </span>
           <div className="flex items-baseline justify-between mt-0.5">
-            <span className="text-base font-black text-slate-900 dark:text-white">
+            <span className="text-base font-bold font-mono tabular-nums text-slate-900 dark:text-white">
               {loading ? "--" : pending}
             </span>
             {running > 0 ? (
-              <span className="text-[10px] font-extrabold text-cyan-500 animate-pulse">
+              <span className="text-[10px] font-bold text-cyan-500 animate-pulse">
                 {running} active
               </span>
             ) : (
@@ -312,7 +312,7 @@ export function ScanOperationsCard({
             Monitored Brands
           </span>
           <div className="flex items-baseline justify-between mt-0.5">
-            <span className="text-base font-black text-slate-900 dark:text-white">
+            <span className="text-base font-bold font-mono tabular-nums text-slate-900 dark:text-white">
               {loading ? "--" : `${completed}/${totalBrands}`}
             </span>
             <span className="text-[10px] font-medium text-slate-400">
