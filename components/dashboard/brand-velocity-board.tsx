@@ -184,16 +184,13 @@ export function BrandVelocityBoard({
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className={`text-[9px] font-semibold px-1.5 py-0.2 rounded ${brand.scalingPattern?.pillClass || "bg-slate-100 text-slate-600"}`}>
-                        {brand.scalingPattern?.label || (isPositive ? "Scaling" : "Descaling")}
-                      </span>
-                      {brand.consecutiveZeroScans && brand.consecutiveZeroScans >= 2 ? (
+                    {brand.consecutiveZeroScans && brand.consecutiveZeroScans >= 2 ? (
+                      <div className="flex items-center gap-1.5 mt-0.5">
                         <span className="text-[9px] font-black text-rose-500 bg-rose-500/10 px-1 py-0.2 rounded">
                           {brand.consecutiveZeroScans}x 0 ads
                         </span>
-                      ) : null}
-                    </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 

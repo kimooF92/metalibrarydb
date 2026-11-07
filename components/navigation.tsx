@@ -64,15 +64,6 @@ export function Navigation() {
       items: [
         { href: "/", label: "Dashboard", icon: LayoutDashboard },
         { href: "/products", label: "Products", icon: ShoppingBag },
-        {
-          href: "/suppliers",
-          label: "Suppliers",
-          icon: Truck,
-          badge:
-            supplierDropCount > 0
-              ? { text: `${supplierDropCount} DROP`, variant: "hot" as const }
-              : undefined,
-        },
         { href: "/brands", label: "Tracked Brands", icon: Building2 },
         { href: "/analytics", label: "Analytics", icon: BarChart3 },
       ],
@@ -95,6 +86,15 @@ export function Navigation() {
           accentColor: "text-indigo-500 dark:text-indigo-400",
         },
         { href: "/spy", label: "Ad Feed", icon: Eye },
+        {
+          href: "/suppliers",
+          label: "Suppliers",
+          icon: Truck,
+          badge:
+            supplierDropCount > 0
+              ? { text: `${supplierDropCount} DROP`, variant: "hot" as const }
+              : undefined,
+        },
         { href: "/discovery", label: "Discover Brands", icon: Globe },
       ],
     },
