@@ -425,87 +425,24 @@ export function PagesTable({
   };
 
   const [notePopoverPage, setNotePopoverPage] = useState<TrackedPage | null>(null);
-  const [notePopoverPos, setNotePopoverPos] = useState<{
-    top?: number;
-    bottom?: number;
-    left?: number;
-    right?: number;
-  } | null>(null);
+  const [notePopoverAnchor, setNotePopoverAnchor] = useState<HTMLElement | null>(null);
   const [notePopoverValue, setNotePopoverValue] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
-  const notePopoverRef = useRef<HTMLDivElement | null>(null);
-
-  // Close note popover on click outside, scroll, or resize
-  useEffect(() => {
-    if (!notePopoverPage) return;
-
-    function handleClickOutside(e: MouseEvent) {
-      if (notePopoverRef.current && notePopoverRef.current.contains(e.target as Node)) {
-        return;
-      }
-      if ((e.target as HTMLElement)?.closest?.(`[data-note-trigger="${notePopoverPage?.id}"]`)) {
-        return;
-      }
-      setNotePopoverPage(null);
-      setNotePopoverPos(null);
-    }
-
-    function handleScrollOrResize() {
-      setNotePopoverPage(null);
-      setNotePopoverPos(null);
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    window.addEventListener("scroll", handleScrollOrResize, true);
-    window.addEventListener("resize", handleScrollOrResize);
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      window.removeEventListener("scroll", handleScrollOrResize, true);
-      window.removeEventListener("resize", handleScrollOrResize);
-    };
-  }, [notePopoverPage]);
 
   const openNotePopoverFromElement = (page: TrackedPage, triggerEl: HTMLElement) => {
-    const rect = triggerEl.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const openUpwards = spaceBelow < 250;
-
-    let leftPos: number | undefined = undefined;
-    let rightPos: number | undefined = undefined;
-
-    if (rect.left + 328 <= window.innerWidth) {
-      leftPos = Math.max(8, rect.left);
-    } else {
-      rightPos = Math.max(8, window.innerWidth - rect.right);
-    }
-
-    setNotePopoverPos({
-      top: openUpwards ? undefined : rect.bottom + 6,
-      bottom: openUpwards ? window.innerHeight - rect.top + 6 : undefined,
-      left: leftPos,
-      right: rightPos,
-    });
+    setNotePopoverAnchor(triggerEl);
     setNotePopoverPage(page);
     setNotePopoverValue((page as any).notes || "");
     setOpenMenuPageId(null);
     setMenuPos(null);
   };
 
-  const openNotePopoverFromMenu = (page: TrackedPage) => {
-    if (menuPos) {
-      const right = Math.max(8, Math.min(menuPos.right, window.innerWidth - 328));
-      setNotePopoverPos({
-        top: menuPos.top,
-        bottom: menuPos.bottom,
-        right,
-      });
-    } else {
-      setNotePopoverPos({
-        top: 100,
-        right: 16,
-      });
-    }
+  const openNotePopoverFromMenu = (page: TrackedPage, triggerEl?: HTMLElement) => {
+    const rowTrigger = (typeof document !== "undefined"
+      ? (document.querySelector(`[data-note-trigger="${page.id}"]`) as HTMLElement | null)
+      : null) || triggerEl || null;
+
+    setNotePopoverAnchor(rowTrigger);
     setOpenMenuPageId(null);
     setMenuPos(null);
     setNotePopoverPage(page);
@@ -526,7 +463,7 @@ export function PagesTable({
         const target = pages.find((p) => p.id === id);
         if (target) (target as any).notes = trimmed;
         setNotePopoverPage(null);
-        setNotePopoverPos(null);
+        setNotePopoverAnchor(null);
         showToast({
           title: trimmed ? "Note Saved" : "Note Cleared",
           message: trimmed
@@ -795,18 +732,17 @@ export function PagesTable({
         onDelete={(page) => setPageToDelete(page)}
       />
 
-      {/* Floating Notes Popover Portal */}
+      {/* Floating Notes Popover */}
       <NotePopover
         mounted={mounted}
-        isOpen={Boolean(notePopoverPage && notePopoverPos)}
-        notePopoverPos={notePopoverPos}
+        isOpen={Boolean(notePopoverPage && notePopoverAnchor)}
+        anchorEl={notePopoverAnchor}
         notePopoverPage={notePopoverPage}
-        notePopoverRef={notePopoverRef}
         notePopoverValue={notePopoverValue}
         onChangeValue={setNotePopoverValue}
         onClose={() => {
           setNotePopoverPage(null);
-          setNotePopoverPos(null);
+          setNotePopoverAnchor(null);
         }}
         onSave={saveNotes}
         savingNotes={savingNotes}

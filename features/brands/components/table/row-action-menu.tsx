@@ -22,7 +22,7 @@ export interface RowActionMenuProps {
   onClose: () => void;
   onRename: (page: TrackedPage) => void;
   onHistory: (page: TrackedPage) => void;
-  onNote: (page: TrackedPage) => void;
+  onNote: (page: TrackedPage, triggerEl?: HTMLElement) => void;
   onRetry: (pageId: string) => void;
   onMove: (page: TrackedPage) => void;
   onDelete: (page: TrackedPage) => void;
@@ -91,7 +91,7 @@ export function RowActionMenu({
           data-note-trigger={activeMenuPage.id}
           onClick={(e) => {
             e.stopPropagation();
-            onNote(activeMenuPage);
+            onNote(activeMenuPage, e.currentTarget);
           }}
           className="w-full px-2.5 py-1.5 text-left text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-2 cursor-pointer transition-colors"
         >
