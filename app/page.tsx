@@ -288,21 +288,21 @@ function DashboardOverviewContent() {
         {/* KPI 1: Found Today (Live Catalog Inflow) */}
         <Link
           href="/products?discovery=today"
-          className="group p-3.5 rounded-xl bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-all duration-150 shadow-xs hover:shadow-sm cursor-pointer block relative overflow-hidden"
+          className="group p-3.5 rounded-xl bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200 shadow-xs hover:shadow-sm cursor-pointer block relative overflow-hidden"
         >
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
             <span className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-cyan-500" />
               <span className="font-semibold text-slate-700 dark:text-slate-200">Found Today</span>
             </span>
-            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
-              Live Finds
+            <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/25">
+              LIVE FINDS
             </span>
           </div>
-          <div className="mt-2.5 flex items-baseline justify-between">
+          <div className="mt-2 flex items-baseline justify-between">
             <div className="flex items-baseline gap-1.5">
               <span
-                className={`text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-white tracking-tight transition-transform duration-300 ${
+                className={`text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tight transition-transform duration-300 ${
                   newProductGlow ? "scale-110 text-cyan-500 dark:text-cyan-400 inline-block" : ""
                 }`}
               >
@@ -314,7 +314,7 @@ function DashboardOverviewContent() {
                 </span>
               )}
             </div>
-            <span className="text-[10px] font-semibold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-md">
+            <span className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 rounded-md">
               Catalog Inflow
             </span>
           </div>
@@ -328,24 +328,24 @@ function DashboardOverviewContent() {
         {/* KPI 2: Breakout Winners */}
         <Link
           href="/fresh-winners"
-          className="group p-3.5 rounded-xl bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-all duration-150 shadow-xs hover:shadow-sm cursor-pointer block"
+          className="group p-3.5 rounded-xl bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200 shadow-xs hover:shadow-sm cursor-pointer block"
         >
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
             <span className="flex items-center gap-1.5">
               <Flame className="w-3.5 h-3.5 text-amber-500" />
               <span className="font-semibold text-slate-700 dark:text-slate-200">Breakout Winners</span>
             </span>
-            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-              Hot Picks
+            <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25">
+              HOT PICKS
             </span>
           </div>
-          <div className="mt-2.5 flex items-baseline justify-between">
-            <span className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-white tracking-tight">
+          <div className="mt-2 flex items-baseline justify-between">
+            <span className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
               {loading
                 ? "--"
                 : (data?.freshWinnersSummary?.totalCount ?? data?.freshBreakouts?.length ?? 0)}
             </span>
-            <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
+            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-md">
               Top Velocity
             </span>
           </div>
@@ -357,7 +357,7 @@ function DashboardOverviewContent() {
         {/* KPI 3: Scaling Brands */}
         <Link
           href="/analytics?tab=pages&sub=scaling"
-          className="group p-3.5 rounded-xl bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-all duration-150 shadow-xs hover:shadow-sm cursor-pointer block"
+          className="group p-3.5 rounded-xl bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200 shadow-xs hover:shadow-sm cursor-pointer block"
         >
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
             <span className="flex items-center gap-1.5">
@@ -366,11 +366,11 @@ function DashboardOverviewContent() {
             </span>
             <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
           </div>
-          <div className="mt-2.5 flex items-baseline justify-between">
-            <span className="text-2xl font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400 tracking-tight">
+          <div className="mt-2 flex items-baseline justify-between">
+            <span className="text-xl md:text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">
               {loading ? "--" : (data?.scalingSummary?.count ?? data?.scalingBrands?.length ?? 0)}
             </span>
-            <span className="text-[10px] font-semibold font-mono tabular-nums text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-md">
               +{data?.scalingSummary?.netAds ?? 0} ads added
             </span>
           </div>
@@ -384,7 +384,7 @@ function DashboardOverviewContent() {
         {/* KPI 4: Descaling Brands */}
         <Link
           href="/analytics?tab=pages&sub=descaling"
-          className="group p-3.5 rounded-xl bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-all duration-150 shadow-xs hover:shadow-sm cursor-pointer block"
+          className="group p-3.5 rounded-xl bg-white dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200 shadow-xs hover:shadow-sm cursor-pointer block"
         >
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
             <span className="flex items-center gap-1.5">
@@ -393,11 +393,11 @@ function DashboardOverviewContent() {
             </span>
             <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
           </div>
-          <div className="mt-2.5 flex items-baseline justify-between">
-            <span className="text-2xl font-bold font-mono tabular-nums text-rose-600 dark:text-rose-400 tracking-tight">
+          <div className="mt-2 flex items-baseline justify-between">
+            <span className="text-xl md:text-2xl font-black text-rose-600 dark:text-rose-400 tracking-tight">
               {loading ? "--" : (data?.descalingSummary?.count ?? data?.descalingBrands?.length ?? 0)}
             </span>
-            <span className="text-[10px] font-semibold font-mono tabular-nums text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-md">
+            <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded-md">
               -{data?.descalingSummary?.netAds ?? 0} ads cut
             </span>
           </div>
