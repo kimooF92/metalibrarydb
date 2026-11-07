@@ -107,12 +107,7 @@ export async function GET(req: NextRequest) {
     // 2. Source B: Extract candidates from activity notifications (multi_page_detected)
     const notifs = await db.query.activityNotifications.findMany({
       where: and(
-        or(
-          eq(activityNotifications.trackedPageId, trackedPage.id),
-          trackedPage.pageId
-            ? sql`${activityNotifications.metadata}::text LIKE ${`%${trackedPage.pageId}%`}`
-            : undefined
-        ),
+        eq(activityNotifications.trackedPageId, trackedPage.id),
         eq(activityNotifications.type, "multi_page_detected")
       ),
       orderBy: [desc(activityNotifications.createdAt)],
@@ -185,6 +180,21 @@ export async function GET(req: NextRequest) {
         }
         if (dp.status === "imported") {
           cand.status = "imported";
+        }
+      }
+    }
+
+    // Populate display names from discoveredPages for any candidates that only have page IDs
+    const candidatePids = Array.from(candidateMap.keys());
+    if (candidatePids.length > 0) {
+      const dpMatches = await db.query.discoveredPages.findMany({
+        where: inArray(discoveredPages.pageId, candidatePids),
+      });
+      for (const dp of dpMatches) {
+        if (!dp.pageId) continue;
+        const cand = candidateMap.get(dp.pageId.trim());
+        if (cand && dp.displayName && (!cand.displayName || cand.displayName.startsWith("Page "))) {
+          cand.displayName = dp.displayName.trim();
         }
       }
     }

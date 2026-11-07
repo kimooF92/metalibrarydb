@@ -74,7 +74,11 @@ export function ResolveBrandModal({
             setTrackedPage(data.trackedPage);
             setCandidates(data.candidates || []);
           } else {
-            showToast({ type: "error", title: "Failed to load candidate pages" });
+            showToast({
+              type: "error",
+              title: "Failed to load candidate pages",
+              message: data.error || "Could not retrieve candidate pages for this brand.",
+            });
           }
           setLoading(false);
         }

@@ -45,6 +45,7 @@ interface DomainPortfolioData {
   primaryPageId?: string | null;
   primaryDisplayName?: string | null;
   sisterPages: SisterPageInfo[];
+  detectedCandidates?: Array<{ pageId: string; displayName?: string | null }>;
 }
 
 interface ManageDomainModalProps {
@@ -486,6 +487,81 @@ export function ManageDomainModal({
                   })}
                 </div>
               </div>
+
+              {/* Detected Candidate Pages (Unlinked) */}
+              {portfolio.detectedCandidates && portfolio.detectedCandidates.length > 0 && (
+                <div className="space-y-2 p-3.5 rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-500/[0.07]">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span>Detected Candidate Facebook Pages ({portfolio.detectedCandidates.length})</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                    Meta Ad Library detected ads running for this domain from the following pages. Click to link as a sister page:
+                  </p>
+                  <div className="space-y-1.5 pt-1">
+                    {portfolio.detectedCandidates.map((cand) => (
+                      <div
+                        key={cand.pageId}
+                        className="flex items-center justify-between p-2.5 rounded-lg border border-amber-500/20 bg-white dark:bg-slate-900/80 gap-3"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                            {cand.displayName || `Page ${cand.pageId}`}
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-mono">
+                            Page ID: {cand.pageId}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <a
+                            href={`https://www.facebook.com/ads/library/?active_status=active&ad_type=all&view_all_page_id=${cand.pageId}&search_type=page`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-md transition-colors"
+                            title="View in Meta Ad Library"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                          <button
+                            type="button"
+                            disabled={isLinking}
+                            onClick={async () => {
+                              setIsLinking(true);
+                              try {
+                                const res = await fetch(`/api/domains/${portfolio.id}/link`, {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ pageIdOrUrl: cand.pageId, role: "satellite" }),
+                                });
+                                const data = await res.json();
+                                if (res.ok && data.success) {
+                                  showToast({
+                                    type: "success",
+                                    title: "Sister Page Linked",
+                                    message: `Linked "${cand.displayName || cand.pageId}" to ${portfolio.domain}.`,
+                                  });
+                                  await fetchPortfolio();
+                                  onSuccess?.();
+                                } else {
+                                  showToast({ type: "error", title: "Link Failed", message: data.error });
+                                }
+                              } catch (e: any) {
+                                showToast({ type: "error", title: "Network Error", message: e.message });
+                              } finally {
+                                setIsLinking(false);
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>Link to Portfolio</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Link New Page Form */}
               <form onSubmit={handleLinkNewPage} className="pt-2">

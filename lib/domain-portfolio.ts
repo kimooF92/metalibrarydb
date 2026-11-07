@@ -6,6 +6,8 @@ import {
   ads,
   adObservations,
   queue,
+  activityNotifications,
+  discoveredPages,
 } from "@/db/schema";
 import { resolveTrackableDomain, isSocialDomain, extractStoreDomain } from "@/lib/url-parser";
 import { eq, and, sql, desc, or, inArray, isNull } from "drizzle-orm";
@@ -308,11 +310,33 @@ export async function getDomainPortfolio(domainOrId: string) {
   const isId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(domainOrId);
   const cleanDomain = !isId ? resolveTrackableDomain(domainOrId).toLowerCase().trim() : "";
 
-  const domainRecord = await db.query.brandDomains.findFirst({
+  let domainRecord = await db.query.brandDomains.findFirst({
     where: isId
       ? eq(brandDomains.id, domainOrId)
       : eq(brandDomains.domain, cleanDomain),
   });
+
+  if (!domainRecord) {
+    // Fallback: Check if domainOrId is a trackedPage (by UUID id or numeric pageId)
+    const matchedPage = await db.query.trackedPages.findFirst({
+      where: isId
+        ? eq(trackedPages.id, domainOrId)
+        : eq(trackedPages.pageId, domainOrId),
+    });
+
+    if (matchedPage?.brandDomainId) {
+      domainRecord = await db.query.brandDomains.findFirst({
+        where: eq(brandDomains.id, matchedPage.brandDomainId),
+      });
+    } else if (matchedPage?.canonicalDomain || matchedPage?.landingPage) {
+      const pageDomain = resolveTrackableDomain(matchedPage.canonicalDomain || matchedPage.landingPage || "").toLowerCase().trim();
+      if (pageDomain) {
+        domainRecord = await db.query.brandDomains.findFirst({
+          where: eq(brandDomains.domain, pageDomain),
+        });
+      }
+    }
+  }
 
   if (!domainRecord) return null;
 
@@ -345,6 +369,60 @@ export async function getDomainPortfolio(domainOrId: string) {
     .where(and(...productConditions));
   const totalProducts = Number(productRows[0]?.count || 0);
 
+  // Collect any detected unlinked candidates from activity notifications
+  const linkedTrackedIds = linkedPages.map((p) => p.id);
+  const linkedPageIds = new Set(linkedPages.map((p) => p.pageId).filter(Boolean));
+
+  let detectedCandidates: Array<{ pageId: string; displayName?: string | null }> = [];
+  if (linkedTrackedIds.length > 0) {
+    try {
+      const notifs = await db.query.activityNotifications.findMany({
+        where: and(
+          inArray(activityNotifications.trackedPageId, linkedTrackedIds),
+          eq(activityNotifications.type, "multi_page_detected")
+        ),
+        orderBy: [desc(activityNotifications.createdAt)],
+        limit: 5,
+      });
+
+      const candidateMap = new Map<string, { pageId: string; displayName?: string | null }>();
+      for (const notif of notifs) {
+        const meta = notif.metadata as {
+          candidates?: Array<{ pageId: string; pageName?: string | null }>;
+        } | null;
+        if (meta?.candidates && Array.isArray(meta.candidates)) {
+          for (const item of meta.candidates) {
+            if (!item.pageId || linkedPageIds.has(item.pageId.trim())) continue;
+            const pid = item.pageId.trim();
+            if (!candidateMap.has(pid)) {
+              candidateMap.set(pid, {
+                pageId: pid,
+                displayName: item.pageName?.trim() || null,
+              });
+            }
+          }
+        }
+      }
+
+      if (candidateMap.size > 0) {
+        const pids = Array.from(candidateMap.keys());
+        const dpMatches = await db.query.discoveredPages.findMany({
+          where: inArray(discoveredPages.pageId, pids),
+        });
+        for (const dp of dpMatches) {
+          if (!dp.pageId) continue;
+          const cand = candidateMap.get(dp.pageId.trim());
+          if (cand && dp.displayName && (!cand.displayName || cand.displayName.startsWith("Page "))) {
+            cand.displayName = dp.displayName.trim();
+          }
+        }
+        detectedCandidates = Array.from(candidateMap.values());
+      }
+    } catch (err) {
+      console.warn("[getDomainPortfolio] Error reading detected candidates:", err);
+    }
+  }
+
   return {
     ...domainRecord,
     totalCombinedAds,
@@ -353,6 +431,7 @@ export async function getDomainPortfolio(domainOrId: string) {
     primaryPageId: primaryPage?.pageId || null,
     primaryDisplayName: primaryPage?.displayName || null,
     sisterPages: linkedPages,
+    detectedCandidates,
   };
 }
 
