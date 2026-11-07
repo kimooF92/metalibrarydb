@@ -1,9 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { X, Plus, UploadCloud } from "lucide-react";
+import { Plus, UploadCloud } from "lucide-react";
 import { AddUrlForm } from "@/components/add-url-form";
 import { ImportDropzone } from "@/components/import-dropzone";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 interface TrackUrlModalProps {
   isOpen: boolean;
@@ -18,8 +24,6 @@ export function TrackUrlModal({
 }: TrackUrlModalProps) {
   const [tab, setTab] = useState<"single" | "bulk">("single");
 
-  if (!isOpen) return null;
-
   const handleClose = () => {
     onClose();
     setTab("single");
@@ -31,24 +35,22 @@ export function TrackUrlModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in">
-      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
-        <button
-          onClick={handleClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-200 cursor-pointer"
-        >
-          <X className="w-4 h-4" />
-        </button>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
+      <DialogContent className="max-w-lg p-6">
+        <DialogTitle className="sr-only">Track Brand or Bulk Import</DialogTitle>
+        <DialogDescription className="sr-only">
+          Add single URL or import brands via CSV/XLSX
+        </DialogDescription>
 
         {/* Modal Switcher Tabs */}
-        <div className="flex items-center space-x-2 mb-4 pb-2.5 border-b border-slate-800/80">
+        <div className="flex items-center space-x-2 mb-4 pb-2.5 border-b border-slate-200 dark:border-slate-800/80">
           <button
             type="button"
             onClick={() => setTab("single")}
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               tab === "single"
                 ? "bg-indigo-600 text-white shadow-sm"
-                : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
             }`}
           >
             <Plus className="w-3.5 h-3.5" />
@@ -61,7 +63,7 @@ export function TrackUrlModal({
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               tab === "bulk"
                 ? "bg-indigo-600 text-white shadow-sm"
-                : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
             }`}
           >
             <UploadCloud className="w-3.5 h-3.5" />
@@ -76,8 +78,7 @@ export function TrackUrlModal({
             <ImportDropzone />
           </div>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
-

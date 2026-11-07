@@ -31,13 +31,15 @@ import {
   MoreVertical,
   X,
 } from "lucide-react";
+import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { RowActionMenu } from "@/features/brands/components/table/row-action-menu";
 
 export interface TableRowProps {
   page: TrackedPage;
   isSelected: boolean;
   isWatchlisted: boolean;
   isRefreshing: boolean;
-  isMenuOpen: boolean;
+  isMenuOpen?: boolean;
   editing: {
     isEditing: boolean;
     name: string;
@@ -51,11 +53,18 @@ export interface TableRowProps {
     onToggleWatchlist: (id: string) => void;
     onRefresh: (id: string) => void;
     onOpenRunner: (page: TrackedPage) => void;
-    onToggleMenu: (e: React.MouseEvent<HTMLButtonElement>, pageId: string) => void;
+    onToggleMenu?: (e: React.MouseEvent<HTMLButtonElement>, pageId: string) => void;
     onOpenNotePopover: (page: TrackedPage, triggerEl: HTMLElement) => void;
     onResolveMultiPage: (pageId: string) => void;
     onManageDomain: (domainId: string) => void;
     onCopyPageId: (pageId: string) => void;
+    onRename?: (page: TrackedPage) => void;
+    onHistory?: (page: TrackedPage) => void;
+    onNote?: (page: TrackedPage) => void;
+    onRetry?: (pageId: string) => void;
+    onMove?: (page: TrackedPage) => void;
+    onDelete?: (page: TrackedPage) => void;
+    isRetrying?: (pageId: string) => boolean;
   };
 }
 
@@ -609,22 +618,26 @@ export function TableRow({
           </button>
 
           {/* 3. Three-dots More Menu Trigger */}
-          <div className="relative inline-block text-left">
-            <button
-              type="button"
+          <DropdownMenu>
+            <DropdownMenuTrigger
               data-menu-trigger={p.id}
-              onClick={(e) => actions.onToggleMenu(e, p.id)}
-              className={`p-1 rounded-md transition-all cursor-pointer ${
-                isMenuOpen
-                  ? "text-slate-900 dark:text-white bg-slate-200 dark:bg-slate-800"
-                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80"
-              }`}
+              className="p-1 rounded-md text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-all cursor-pointer data-popup-open:text-slate-900 dark:data-popup-open:text-white data-popup-open:bg-slate-200 dark:data-popup-open:bg-slate-800"
               title="More options"
               aria-label={`More options for ${p.displayName || "tracked page"}`}
             >
               <MoreVertical className="w-3.5 h-3.5" />
-            </button>
-          </div>
+            </DropdownMenuTrigger>
+            <RowActionMenu
+              page={p}
+              isRetrying={actions.isRetrying ? actions.isRetrying(p.id) : false}
+              onRename={actions.onRename ?? (() => {})}
+              onHistory={actions.onHistory ?? (() => {})}
+              onNote={actions.onNote ?? (() => {})}
+              onRetry={actions.onRetry ?? (() => {})}
+              onMove={actions.onMove ?? (() => {})}
+              onDelete={actions.onDelete ?? (() => {})}
+            />
+          </DropdownMenu>
         </div>
       </td>
     </tr>

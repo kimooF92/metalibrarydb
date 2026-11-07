@@ -5,6 +5,12 @@ import { TrackedPage, ScanHistoryEntry } from "@/types";
 import { X, Calendar, Loader2, ExternalLink, ArrowUpRight, ArrowDownRight, Minus, ChevronUp, ChevronDown, Sparkles } from "lucide-react";
 import { ExportDossierModal } from "@/components/export-dossier-modal";
 import { BrandLogo } from "@/components/brand-logo";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 interface HistoryModalProps {
   page: TrackedPage | null;
@@ -116,18 +122,14 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
 
   return (
     <>
-      <div
-        className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-20 px-4 bg-slate-950/70 animate-in fade-in duration-150"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) onClose();
-        }}
-      >
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="history-modal-title"
-          className="relative w-full max-w-4xl glass-panel rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <DialogContent
+          showClose={false}
+          className="max-w-4xl p-0 overflow-hidden flex flex-col max-h-[85vh]"
         >
+          <DialogDescription className="sr-only">
+            Historical ad scan count and trends for {page.displayName || page.url}
+          </DialogDescription>
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900/50">
             <div className="flex items-center gap-3">
@@ -140,9 +142,9 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
               />
               <div>
               <div className="flex items-center space-x-2">
-                <h2 id="history-modal-title" className="text-base font-bold text-slate-900 dark:text-slate-100">
+                <DialogTitle className="text-base font-bold text-slate-900 dark:text-slate-100">
                   Scan History
-                </h2>
+                </DialogTitle>
                 <a
                   href={page.url}
                   target="_blank"
@@ -318,8 +320,8 @@ export function HistoryModal({ page, isOpen, onClose }: HistoryModalProps) {
             </>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
 
     {/* Export Dossier Modal */}
     <ExportDossierModal

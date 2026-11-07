@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect } from "react";
-import { AlertTriangle, Trash2, X, Loader2 } from "lucide-react";
+import React from "react";
+import { AlertTriangle, Trash2, Loader2 } from "lucide-react";
 import { TrackedPage } from "@/types";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
-interface DeleteConfirmModalProps {
+export interface DeleteConfirmModalProps {
   page: TrackedPage | null;
   isOpen: boolean;
   onClose: () => void;
@@ -19,41 +25,18 @@ export function DeleteConfirmModal({
   onConfirm,
   loading = false,
 }: DeleteConfirmModalProps) {
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen && !loading) {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, loading, onClose]);
-
-  if (!isOpen || !page) return null;
+  if (!page) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-20 sm:pt-28 px-4 bg-slate-950/70 animate-in fade-in duration-150"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !loading) onClose();
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open && !loading) {
+          onClose();
+        }
       }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="delete-modal-title"
-        className="relative w-full max-w-md glass-panel rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden p-6 animate-in zoom-in-95 duration-150"
-      >
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          disabled={loading}
-          aria-label="Close modal"
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer disabled:opacity-50"
-        >
-          <X className="w-4 h-4" />
-        </button>
-
+      <DialogContent showClose={!loading} className="max-w-md p-6">
         {/* Modal Icon & Header */}
         <div className="flex items-start space-x-4">
           <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 shrink-0">
@@ -61,14 +44,16 @@ export function DeleteConfirmModal({
           </div>
 
           <div className="flex-1">
-            <h3 id="delete-modal-title" className="text-lg font-bold text-slate-900 dark:text-slate-100">
+            <DialogTitle className="text-lg font-bold text-slate-900 dark:text-slate-100">
               Delete Brand
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
               Are you sure you want to delete{" "}
-              <strong className="text-slate-800 dark:text-slate-200">{page.displayName || page.url}</strong>?
-              This will remove the brand and its saved ad history from your workspace.
-            </p>
+              <strong className="text-slate-800 dark:text-slate-200">
+                {page.displayName || page.url}
+              </strong>
+              ? This will remove the brand and its saved ad history from your workspace.
+            </DialogDescription>
           </div>
         </div>
 
@@ -97,7 +82,7 @@ export function DeleteConfirmModal({
             <span>Delete Brand</span>
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -10,7 +10,6 @@ import { TableRow } from "@/features/brands/components/table/table-row";
 import { TableEmptyState } from "@/features/brands/components/table/table-empty-state";
 import { TablePagination } from "@/features/brands/components/table/table-pagination";
 import { TableModals } from "@/features/brands/components/table/table-modals";
-import { RowActionMenu } from "@/features/brands/components/table/row-action-menu";
 import { NotePopover } from "@/features/brands/components/table/note-popover";
 import { InlineSparkline } from "@/features/brands/components/table/sparkline-cell";
 import { Loader2 } from "lucide-react";
@@ -178,68 +177,10 @@ export function PagesTable({
   };
 
   const [mounted, setMounted] = useState(false);
-  const [openMenuPageId, setOpenMenuPageId] = useState<string | null>(null);
-  const [menuPos, setMenuPos] = useState<{
-    top?: number;
-    bottom?: number;
-    right: number;
-  } | null>(null);
-  const rowMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  // Close row actions menu on click outside, scroll, or resize
-  useEffect(() => {
-    if (!openMenuPageId) return;
-
-    function handleClickOutside(e: MouseEvent) {
-      if (rowMenuRef.current && rowMenuRef.current.contains(e.target as Node)) {
-        return;
-      }
-      if ((e.target as HTMLElement)?.closest?.(`[data-menu-trigger="${openMenuPageId}"]`)) {
-        return;
-      }
-      setOpenMenuPageId(null);
-      setMenuPos(null);
-    }
-
-    function handleScrollOrResize() {
-      setOpenMenuPageId(null);
-      setMenuPos(null);
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    window.addEventListener("scroll", handleScrollOrResize, true);
-    window.addEventListener("resize", handleScrollOrResize);
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      window.removeEventListener("scroll", handleScrollOrResize, true);
-      window.removeEventListener("resize", handleScrollOrResize);
-    };
-  }, [openMenuPageId]);
-
-  const handleToggleMenu = (e: React.MouseEvent<HTMLButtonElement>, pageId: string) => {
-    e.stopPropagation();
-    if (openMenuPageId === pageId) {
-      setOpenMenuPageId(null);
-      setMenuPos(null);
-    } else {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const openUpwards = spaceBelow < 220;
-      setMenuPos({
-        top: openUpwards ? undefined : rect.bottom + 4,
-        bottom: openUpwards ? window.innerHeight - rect.top + 4 : undefined,
-        right: Math.max(8, window.innerWidth - rect.right),
-      });
-      setOpenMenuPageId(pageId);
-    }
-  };
-
-  const activeMenuPage = openMenuPageId ? (pages.find((p) => p.id === openMenuPageId) ?? null) : null;
 
   useEffect(() => {
     setWatchlisted(Object.fromEntries(pages.map((p) => [p.id, p.isWatchlisted ?? false])));
@@ -435,8 +376,6 @@ export function PagesTable({
     setNotePopoverAlign("start");
     setNotePopoverPage(page);
     setNotePopoverValue((page as any).notes || "");
-    setOpenMenuPageId(null);
-    setMenuPos(null);
   };
 
   const openNotePopoverFromMenu = (page: TrackedPage) => {
@@ -447,8 +386,6 @@ export function PagesTable({
 
     setNotePopoverAnchor(trigger);
     setNotePopoverAlign("end");
-    setOpenMenuPageId(null);
-    setMenuPos(null);
     setNotePopoverPage(page);
     setNotePopoverValue((page as any).notes || "");
   };
@@ -597,7 +534,6 @@ export function PagesTable({
                     isSelected={selectedIds.includes(p.id)}
                     isWatchlisted={watchlisted[p.id] ?? false}
                     isRefreshing={refreshingPageIds.has(p.id)}
-                    isMenuOpen={openMenuPageId === p.id}
                     editing={{
                       isEditing: editingId === p.id,
                       name: editingName,
@@ -614,7 +550,6 @@ export function PagesTable({
                         setRunnerModalPages([targetPage]);
                         setRunnerModalOpen(true);
                       },
-                      onToggleMenu: handleToggleMenu,
                       onOpenNotePopover: openNotePopoverFromElement,
                       onResolveMultiPage: (pageId) => setResolveModalPageId(pageId),
                       onManageDomain: (domainId) => setManageDomainId(domainId),
@@ -626,6 +561,18 @@ export function PagesTable({
                           type: "success",
                         });
                       },
+                      onRename: startEditing,
+                      onHistory: openHistory,
+                      onNote: openNotePopoverFromMenu,
+                      onRetry: handleRowRetry,
+                      onMove: (page) => {
+                        setMoveModalPage(page);
+                        setMoveModalPages(null);
+                        setMoveModalPageIds([page.id]);
+                        setMoveModalOpen(true);
+                      },
+                      onDelete: (page) => setPageToDelete(page),
+                      isRetrying: (pageId) => retryingPageIds.has(pageId),
                     }}
                   />
                 ))
@@ -709,31 +656,6 @@ export function PagesTable({
           data: toast,
           onDismiss: () => setToast(null),
         }}
-      />
-
-      {/* Row Action Menu Portal */}
-      <RowActionMenu
-        mounted={mounted}
-        isOpen={Boolean(openMenuPageId && menuPos && activeMenuPage)}
-        menuPos={menuPos}
-        activeMenuPage={activeMenuPage}
-        rowMenuRef={rowMenuRef}
-        retryingPageIds={retryingPageIds}
-        onClose={() => {
-          setOpenMenuPageId(null);
-          setMenuPos(null);
-        }}
-        onRename={startEditing}
-        onHistory={openHistory}
-        onNote={openNotePopoverFromMenu}
-        onRetry={handleRowRetry}
-        onMove={(page) => {
-          setMoveModalPage(page);
-          setMoveModalPages(null);
-          setMoveModalPageIds([page.id]);
-          setMoveModalOpen(true);
-        }}
-        onDelete={(page) => setPageToDelete(page)}
       />
 
       {/* Floating Notes Popover */}

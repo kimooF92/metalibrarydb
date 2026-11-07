@@ -19,6 +19,12 @@ import {
 } from "lucide-react";
 import { useToast } from "@/components/toast-context";
 import { MoveWorkspaceModal } from "@/components/move-workspace-modal";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import type { TrackedPage } from "@/types";
 
 interface SisterPageInfo extends TrackedPage {
@@ -277,15 +283,10 @@ export function ManageDomainModal({
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Manage Domain Portfolio"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200"
-    >
-      <div
-        className="relative w-full max-w-3xl bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
-        onClick={(e) => e.stopPropagation()}
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        showClose={false}
+        className="max-w-3xl p-0 overflow-hidden flex flex-col max-h-[92vh]"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60">
@@ -295,18 +296,18 @@ export function ManageDomainModal({
             </div>
             <div className="truncate">
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900 dark:text-white truncate">
+                <DialogTitle className="text-base font-bold text-slate-900 dark:text-white truncate">
                   {portfolio?.domain || "Domain Portfolio"}
-                </h2>
+                </DialogTitle>
                 {portfolio?.storePlatform && (
                   <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-semibold text-slate-600 dark:text-slate-300">
                     {portfolio.storePlatform}
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+              <DialogDescription className="text-xs text-slate-500 dark:text-slate-400 truncate">
                 Brand Portfolio: <span className="font-semibold text-slate-700 dark:text-slate-200">{portfolio?.displayName}</span>
-              </p>
+              </DialogDescription>
             </div>
           </div>
 
@@ -525,7 +526,7 @@ export function ManageDomainModal({
             Close
           </button>
         </div>
-      </div>
+      </DialogContent>
 
       {/* Move Brand Portfolio to Workspace Modal */}
       <MoveWorkspaceModal
@@ -539,6 +540,6 @@ export function ManageDomainModal({
           onClose();
         }}
       />
-    </div>
+    </Dialog>
   );
 }
