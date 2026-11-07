@@ -39,8 +39,9 @@ export async function mergeExactMatchWithPageId(
     }
 
     // 1. Fetch exact match tracked page
+    const isIdUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(exactMatchTrackedPageId);
     const exactMatchPage = await db.query.trackedPages.findFirst({
-      where: eq(trackedPages.id, exactMatchTrackedPageId),
+      where: isIdUuid ? eq(trackedPages.id, exactMatchTrackedPageId) : eq(trackedPages.pageId, exactMatchTrackedPageId),
     });
 
     if (!exactMatchPage) {

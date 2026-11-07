@@ -7,7 +7,7 @@ import {
   ads,
   activityNotifications,
 } from "@/db/schema";
-import { eq, desc, and, inArray, sql, count } from "drizzle-orm";
+import { eq, desc, and, or, inArray, sql, count } from "drizzle-orm";
 import { isValidPageId } from "@/lib/utils";
 
 export async function GET(req: NextRequest) {
@@ -22,8 +22,9 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    const isIdUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trackedPageId);
     const trackedPage = await db.query.trackedPages.findFirst({
-      where: eq(trackedPages.id, trackedPageId),
+      where: isIdUuid ? eq(trackedPages.id, trackedPageId) : eq(trackedPages.pageId, trackedPageId),
     });
 
     if (!trackedPage) {
@@ -60,7 +61,7 @@ export async function GET(req: NextRequest) {
         })
         .from(adObservations)
         .innerJoin(ads, eq(adObservations.adId, ads.id))
-        .where(eq(adObservations.trackedPageId, trackedPageId))
+        .where(eq(adObservations.trackedPageId, trackedPage.id))
         .groupBy(ads.pageId),
 
       // Fetch a bounded sample of up to 60 recent ads to populate sample CTAs, URLs, and archive IDs
@@ -73,7 +74,7 @@ export async function GET(req: NextRequest) {
         })
         .from(adObservations)
         .innerJoin(ads, eq(adObservations.adId, ads.id))
-        .where(eq(adObservations.trackedPageId, trackedPageId))
+        .where(eq(adObservations.trackedPageId, trackedPage.id))
         .limit(60),
     ]);
 
@@ -106,7 +107,12 @@ export async function GET(req: NextRequest) {
     // 2. Source B: Extract candidates from activity notifications (multi_page_detected)
     const notifs = await db.query.activityNotifications.findMany({
       where: and(
-        eq(activityNotifications.trackedPageId, trackedPageId),
+        or(
+          eq(activityNotifications.trackedPageId, trackedPage.id),
+          trackedPage.pageId
+            ? sql`${activityNotifications.metadata}::text LIKE ${`%${trackedPage.pageId}%`}`
+            : undefined
+        ),
         eq(activityNotifications.type, "multi_page_detected")
       ),
       orderBy: [desc(activityNotifications.createdAt)],
@@ -146,9 +152,9 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 3. Source C: Discovered Pages table (if any explicitly linked to this trackedPageId)
+    // 3. Source C: Discovered Pages table (if any explicitly linked to this tracked page)
     const dpRows = await db.query.discoveredPages.findMany({
-      where: eq(discoveredPages.trackedPageId, trackedPageId),
+      where: eq(discoveredPages.trackedPageId, trackedPage.id),
       orderBy: [desc(discoveredPages.matchingAdCount), desc(discoveredPages.createdAt)],
     });
 
@@ -223,7 +229,7 @@ export async function GET(req: NextRequest) {
       await db
         .update(trackedPages)
         .set({ discoveredPagesCount: candidates.length })
-        .where(eq(trackedPages.id, trackedPageId));
+        .where(eq(trackedPages.id, trackedPage.id));
     }
 
     return NextResponse.json({
@@ -236,6 +242,9 @@ export async function GET(req: NextRequest) {
         country: trackedPage.country,
         searchType: trackedPage.searchType,
         discoveredPagesCount: candidates.length || trackedPage.discoveredPagesCount || 0,
+        brandDomainId: trackedPage.brandDomainId,
+        canonicalDomain: trackedPage.canonicalDomain,
+        landingPage: trackedPage.landingPage,
       },
       candidates,
     });

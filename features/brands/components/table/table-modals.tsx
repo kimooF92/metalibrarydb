@@ -33,6 +33,7 @@ export interface TableModalsProps {
     pageId: string | null;
     onClose: () => void;
     onSuccess?: () => void;
+    onManageDomain?: (domainOrId: string) => void;
   };
   manageDomain: {
     domainOrId: string | null;
@@ -114,6 +115,7 @@ export function TableModals({
         isOpen={Boolean(brandResolution.pageId)}
         onClose={brandResolution.onClose}
         onSuccess={brandResolution.onSuccess}
+        onManageDomain={brandResolution.onManageDomain}
       />
 
       {/* Multi-Page Brand Domain Portfolio Modal */}

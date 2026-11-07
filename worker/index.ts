@@ -846,6 +846,11 @@ async function runWorker() {
           console.log(
             `[Discovered Pages] Keyword search target "${targetDisplayName}" revealed ${pageIdsFound.length} unique Facebook Page IDs (${pageIdsFound.join(", ")}). Saved to Discovered Pages for user review.`
           );
+          await db
+            .update(trackedPages)
+            .set({ discoveredPagesCount: pageIdsFound.length })
+            .where(eq(trackedPages.id, trackedPage.id))
+            .catch(() => {});
           const { logMultiPageDetectedNotification } = await import("../lib/notifications");
           await logMultiPageDetectedNotification({
             trackedPageId: trackedPage.id,

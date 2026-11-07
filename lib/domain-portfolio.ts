@@ -92,24 +92,42 @@ export async function linkPageToDomain(
   options?: { forceReassign?: boolean }
 ): Promise<LinkPageResult> {
   try {
+    const isPageUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trackedPageId);
     const page = await db.query.trackedPages.findFirst({
-      where: eq(trackedPages.id, trackedPageId),
+      where: isPageUuid ? eq(trackedPages.id, trackedPageId) : eq(trackedPages.pageId, trackedPageId),
     });
 
     if (!page) {
       return { success: false, error: `Tracked page not found: ${trackedPageId}` };
     }
 
-    const domainRecord = await db.query.brandDomains.findFirst({
-      where: eq(brandDomains.id, brandDomainId),
+    const isDomainUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(brandDomainId);
+    let domainRecord = await db.query.brandDomains.findFirst({
+      where: isDomainUuid
+        ? eq(brandDomains.id, brandDomainId)
+        : eq(brandDomains.domain, resolveTrackableDomain(brandDomainId).toLowerCase().trim()),
     });
+
+    if (!domainRecord && !isDomainUuid) {
+      try {
+        domainRecord = (await getOrCreateBrandDomain(
+          brandDomainId,
+          page.displayName,
+          page.workspaceId
+        )) as any;
+      } catch (e: any) {
+        console.warn("[linkPageToDomain] Could not auto-create domain portfolio:", e);
+      }
+    }
 
     if (!domainRecord) {
       return { success: false, error: `Brand domain not found: ${brandDomainId}` };
     }
 
+    const resolvedBrandDomainId = domainRecord.id;
+
     // Check conflict: already linked to a different domain?
-    if (page.brandDomainId && page.brandDomainId !== brandDomainId && !options?.forceReassign) {
+    if (page.brandDomainId && page.brandDomainId !== resolvedBrandDomainId && !options?.forceReassign) {
       const currentDomain = await db.query.brandDomains.findFirst({
         where: eq(brandDomains.id, page.brandDomainId),
       });
@@ -125,7 +143,7 @@ export async function linkPageToDomain(
     // Check if this domain currently has any primary page
     const existingPrimary = await db.query.trackedPages.findFirst({
       where: and(
-        eq(trackedPages.brandDomainId, brandDomainId),
+        eq(trackedPages.brandDomainId, resolvedBrandDomainId),
         eq(trackedPages.pageRole, "primary")
       ),
     });
@@ -135,7 +153,7 @@ export async function linkPageToDomain(
 
     await db.transaction(async (tx) => {
       // If we are setting this page as primary and another primary exists, downgrade the existing one first
-      if (effectiveRole === "primary" && existingPrimary && existingPrimary.id !== trackedPageId) {
+      if (effectiveRole === "primary" && existingPrimary && existingPrimary.id !== page.id) {
         await tx
           .update(trackedPages)
           .set({ pageRole: "satellite", updatedAt: now })
@@ -146,17 +164,17 @@ export async function linkPageToDomain(
       await tx
         .update(trackedPages)
         .set({
-          brandDomainId,
+          brandDomainId: resolvedBrandDomainId,
           pageRole: effectiveRole,
           canonicalDomain: domainRecord.domain,
           updatedAt: now,
         })
-        .where(eq(trackedPages.id, trackedPageId));
+        .where(eq(trackedPages.id, page.id));
 
       // Backfill products matching this domain to link to the brandDomainId
       await tx
         .update(scrapedProducts)
-        .set({ brandDomainId, updatedAt: now })
+        .set({ brandDomainId: resolvedBrandDomainId, updatedAt: now })
         .where(
           and(
             eq(scrapedProducts.domain, domainRecord.domain),

@@ -225,17 +225,38 @@ export function PagesTable({
   const [moveModalOpen, setMoveModalOpen] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const target = params.get("resolveModal");
-      if (target) {
-        setResolveModalPageId(target);
+    const handleOpenResolve = (e: any) => {
+      if (e.detail) setResolveModalPageId(String(e.detail));
+    };
+    const handleOpenManageDomain = (e: any) => {
+      if (e.detail) setManageDomainId(String(e.detail));
+    };
+
+    window.addEventListener("open-resolve-modal" as any, handleOpenResolve);
+    window.addEventListener("open-manage-domain-modal" as any, handleOpenManageDomain);
+
+    const checkUrlParams = () => {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const target = params.get("resolveModal");
+        if (target) {
+          setResolveModalPageId(target);
+        }
+        const domainParam = params.get("manageDomain");
+        if (domainParam) {
+          setManageDomainId(domainParam);
+        }
       }
-      const domainParam = params.get("manageDomain");
-      if (domainParam) {
-        setManageDomainId(domainParam);
-      }
-    }
+    };
+
+    checkUrlParams();
+    window.addEventListener("popstate", checkUrlParams);
+
+    return () => {
+      window.removeEventListener("open-resolve-modal" as any, handleOpenResolve);
+      window.removeEventListener("open-manage-domain-modal" as any, handleOpenManageDomain);
+      window.removeEventListener("popstate", checkUrlParams);
+    };
   }, []);
 
   const handleLaunchScan = async (runner: "local" | "apify") => {
@@ -630,6 +651,10 @@ export function PagesTable({
           pageId: resolveModalPageId,
           onClose: () => setResolveModalPageId(null),
           onSuccess: () => onWatchlistToggle?.(),
+          onManageDomain: (domainId) => {
+            setResolveModalPageId(null);
+            setManageDomainId(domainId);
+          },
         }}
         manageDomain={{
           domainOrId: manageDomainId,

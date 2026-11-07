@@ -242,24 +242,25 @@ export function TableRow({
                 )}
               </div>
 
-              {/* Subline: ONLY if multi page! */}
+              {/* Subline: Domain portfolio or Multi page candidates */}
               {Boolean(
-                (p.brandDomainId && p.brandDomain && (p.brandDomain.linkedPagesCount ?? 0) > 1) ||
+                p.brandDomainId ||
+                p.canonicalDomain ||
                 (p.discoveredPagesCount && p.discoveredPagesCount >= 2) ||
                 (p.searchType !== "page" && p.discoveredPagesCount && p.discoveredPagesCount > 0)
               ) && (
                 <div className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 min-w-0 mt-0.5">
-                  {p.brandDomainId && p.brandDomain && (p.brandDomain.linkedPagesCount ?? 0) > 1 && (
+                  {(p.brandDomainId || p.canonicalDomain) && (
                     <button
                       type="button"
-                      onClick={() => actions.onManageDomain(p.brandDomainId!)}
+                      onClick={() => actions.onManageDomain((p.brandDomainId || p.canonicalDomain)!)}
                       className="inline-flex items-center gap-1 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer group/domain truncate max-w-[200px]"
-                      title={`Part of ${p.brandDomain.domain} portfolio (${p.brandDomain.linkedPagesCount} pages, ${p.brandDomain.totalCombinedAds} combined ads). Click to manage.`}
+                      title={`Brand portfolio (${p.brandDomain?.domain || p.canonicalDomain || "Domain"}). Click to manage sister pages.`}
                     >
                       <Store className="w-2.5 h-2.5 shrink-0 opacity-60 group-hover/domain:opacity-100" />
-                      <span className="truncate">{p.brandDomain.domain}</span>
+                      <span className="truncate">{p.brandDomain?.domain || p.canonicalDomain}</span>
                       <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-                        ({p.brandDomain.linkedPagesCount} pages)
+                        ({p.brandDomain?.linkedPagesCount ?? 1} {(p.brandDomain?.linkedPagesCount ?? 1) === 1 ? "page" : "pages"})
                       </span>
                     </button>
                   )}
@@ -636,6 +637,8 @@ export function TableRow({
               onRetry={actions.onRetry ?? (() => {})}
               onMove={actions.onMove ?? (() => {})}
               onDelete={actions.onDelete ?? (() => {})}
+              onManageDomain={actions.onManageDomain}
+              onResolveMultiPage={actions.onResolveMultiPage}
             />
           </DropdownMenu>
         </div>

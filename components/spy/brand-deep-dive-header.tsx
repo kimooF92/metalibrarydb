@@ -297,7 +297,7 @@ export const BrandDeepDiveHeader = memo(function BrandDeepDiveHeader({
       )}
 
       {/* Domain Portfolio Sister Pages Filter */}
-      {sisterPages && sisterPages.length > 1 && (
+      {brandDomain && (
         <div className="flex flex-col gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2">
@@ -306,71 +306,71 @@ export const BrandDeepDiveHeader = memo(function BrandDeepDiveHeader({
                 <span>Domain Portfolio ({brandDomain?.domain})</span>
               </span>
               <span className="text-xs text-slate-500 dark:text-slate-400">
-                {sisterPages.length} linked Facebook pages driving traffic to this store
+                {(sisterPages?.length || 1)} linked Facebook {(sisterPages?.length || 1) === 1 ? "page" : "pages"} driving traffic to this store
               </span>
             </div>
 
-            {brandDomain && (
-              <button
-                type="button"
-                onClick={onOpenManageDomainModal}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 hover:underline cursor-pointer"
-              >
-                <span>⚙️ Manage Portfolio</span>
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 pt-1">
             <button
               type="button"
-              onClick={() => onSelectSisterPage(null)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
-                selectedSisterPageId === null
-                  ? "bg-indigo-600 text-white shadow-xs"
-                  : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
-              }`}
+              onClick={onOpenManageDomainModal}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 hover:underline cursor-pointer"
             >
-              <Globe className="w-3.5 h-3.5" />
-              <span>All Pages (Combined)</span>
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+              <span>⚙️ Manage Portfolio</span>
+            </button>
+          </div>
+
+          {sisterPages && sisterPages.length > 1 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 pt-1">
+              <button
+                type="button"
+                onClick={() => onSelectSisterPage(null)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
                   selectedSisterPageId === null
-                    ? "bg-white/20 text-white"
-                    : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
                 }`}
               >
-                {totalAdsCaptured}
-              </span>
-            </button>
-
-            {sisterPages.map((sp) => {
-              const isSelected = selectedSisterPageId === sp.pageId || selectedSisterPageId === sp.id;
-              return (
-                <button
-                  key={sp.id}
-                  type="button"
-                  onClick={() => onSelectSisterPage(sp.pageId || sp.id)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${
-                    isSelected
-                      ? "bg-indigo-600 text-white shadow-xs"
-                      : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
+                <Globe className="w-3.5 h-3.5" />
+                <span>All Pages (Combined)</span>
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                    selectedSisterPageId === null
+                      ? "bg-white/20 text-white"
+                      : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
                   }`}
                 >
-                  <span className="truncate max-w-[130px]">{sp.displayName}</span>
-                  <span
-                    className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                  {totalAdsCaptured}
+                </span>
+              </button>
+
+              {sisterPages.map((sp) => {
+                const isSelected = selectedSisterPageId === sp.pageId || selectedSisterPageId === sp.id;
+                return (
+                  <button
+                    key={sp.id}
+                    type="button"
+                    onClick={() => onSelectSisterPage(sp.pageId || sp.id)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${
                       isSelected
-                        ? "bg-white/20 text-white"
-                        : "bg-slate-100 dark:bg-slate-700 text-slate-500"
+                        ? "bg-indigo-600 text-white shadow-xs"
+                        : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
                     }`}
                   >
-                    {sp.currentResults}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+                    <span className="truncate max-w-[130px]">{sp.displayName}</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                        isSelected
+                          ? "bg-white/20 text-white"
+                          : "bg-slate-100 dark:bg-slate-700 text-slate-500"
+                      }`}
+                    >
+                      {sp.currentResults}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

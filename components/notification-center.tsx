@@ -730,7 +730,16 @@ export function NotificationCenter({ layout = "sidebar", onOpenResolveModal }: N
                       if (!n.isRead) handleMarkSingleRead(n.id);
                       if (n.type === "multi_page_detected" && n.trackedPageId) {
                         setIsOpen(false);
-                        onOpenResolveModal?.(n.trackedPageId);
+                        if (onOpenResolveModal) {
+                          onOpenResolveModal(n.trackedPageId);
+                        } else {
+                          if (typeof window !== "undefined") {
+                            window.dispatchEvent(
+                              new CustomEvent("open-resolve-modal", { detail: n.trackedPageId })
+                            );
+                          }
+                          router.push(n.actionUrl || `/?resolveModal=${n.trackedPageId}`);
+                        }
                       } else if (n.actionUrl) {
                         setIsOpen(false);
                         router.push(n.actionUrl);

@@ -9,6 +9,8 @@ import {
   RotateCcw,
   FolderInput,
   Trash2,
+  Globe,
+  AlertTriangle,
 } from "lucide-react";
 import {
   DropdownMenuContent,
@@ -24,6 +26,8 @@ export interface RowActionMenuProps {
   onRetry: (pageId: string) => void;
   onMove: (page: TrackedPage) => void;
   onDelete: (page: TrackedPage) => void;
+  onManageDomain?: (domainOrId: string) => void;
+  onResolveMultiPage?: (pageId: string) => void;
   // Optional backward compatibility props
   mounted?: boolean;
   isOpen?: boolean;
@@ -43,6 +47,8 @@ export function RowActionMenu({
   onRetry,
   onMove,
   onDelete,
+  onManageDomain,
+  onResolveMultiPage,
   activeMenuPage,
   retryingPageIds,
   onClose,
@@ -53,7 +59,7 @@ export function RowActionMenu({
   const retrying = isRetrying ?? (retryingPageIds?.has(targetPage.id) ?? false);
 
   return (
-    <DropdownMenuContent align="end" side="bottom" sideOffset={4} className="w-36 text-left">
+    <DropdownMenuContent align="end" side="bottom" sideOffset={4} className="w-44 text-left">
       <div className="py-0.5">
         {/* Rename Brand */}
         <DropdownMenuItem
@@ -65,6 +71,38 @@ export function RowActionMenu({
           <Pencil className="w-3.5 h-3.5 shrink-0 text-indigo-500" />
           <span>Rename</span>
         </DropdownMenuItem>
+
+        {/* Manage Sister Pages / Domain Portfolio */}
+        {(targetPage.brandDomainId || targetPage.canonicalDomain || targetPage.landingPage) && (
+          <DropdownMenuItem
+            onClick={() => {
+              onClose?.();
+              const domainTarget = targetPage.brandDomainId || targetPage.canonicalDomain || targetPage.landingPage;
+              if (domainTarget && onManageDomain) {
+                onManageDomain(domainTarget);
+              }
+            }}
+          >
+            <Globe className="w-3.5 h-3.5 shrink-0 text-cyan-500" />
+            <span>Sister Pages</span>
+          </DropdownMenuItem>
+        )}
+
+        {/* Resolve Multi-Page Conflict if candidates detected */}
+        {Boolean(
+          (targetPage.discoveredPagesCount && targetPage.discoveredPagesCount >= 2) ||
+          (targetPage.searchType !== "page" && targetPage.discoveredPagesCount && targetPage.discoveredPagesCount > 0)
+        ) && (
+          <DropdownMenuItem
+            onClick={() => {
+              onClose?.();
+              onResolveMultiPage?.(targetPage.id);
+            }}
+          >
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+            <span>Resolve Pages</span>
+          </DropdownMenuItem>
+        )}
 
         {/* View History */}
         <DropdownMenuItem
