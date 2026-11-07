@@ -1,5 +1,8 @@
 "use client";
 
+import React from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+
 interface TablePaginationProps {
   page: number;
   pageSize: number;
@@ -30,14 +33,30 @@ export function TablePagination({
     return [1, "...", page - 1, page, page + 1, "...", totalPages];
   };
 
+  const startRecord = totalCount && totalCount > 0 ? (page - 1) * pageSize + 1 : 0;
+  const endRecord = totalCount ? Math.min(page * pageSize, totalCount) : 0;
+
   return (
-    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-800/80 text-xs text-slate-500 dark:text-slate-400 select-none">
       <div className="flex items-center space-x-4">
         <span>
-          Page <strong className="text-slate-800 dark:text-slate-200">{page}</strong> of{" "}
-          <strong className="text-slate-800 dark:text-slate-200">{totalPages}</strong>
-          {totalCount !== undefined && totalCount > 0 && (
-            <span className="ml-1 text-slate-400 dark:text-slate-500">({totalCount} total)</span>
+          {totalCount !== undefined && totalCount > 0 ? (
+            <>
+              Showing{" "}
+              <strong className="text-slate-800 dark:text-slate-200 font-semibold font-mono">
+                {startRecord}–{endRecord}
+              </strong>{" "}
+              of{" "}
+              <strong className="text-slate-800 dark:text-slate-200 font-semibold font-mono">
+                {totalCount.toLocaleString()}
+              </strong>{" "}
+              brands
+            </>
+          ) : (
+            <>
+              Page <strong className="text-slate-800 dark:text-slate-200">{page}</strong> of{" "}
+              <strong className="text-slate-800 dark:text-slate-200">{totalPages}</strong>
+            </>
           )}
         </span>
 
@@ -50,7 +69,7 @@ export function TablePagination({
             id="rows-per-page-select"
             value={pageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
-            className="bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 font-semibold px-2 py-0.5 rounded border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer text-xs transition-colors hover:border-slate-300 dark:hover:border-slate-700"
+            className="bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 font-medium px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer text-xs transition-colors hover:border-slate-300 dark:hover:border-slate-700"
             aria-label="Select number of rows per page"
           >
             <option value={25} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">25 rows</option>
@@ -61,14 +80,15 @@ export function TablePagination({
       </div>
 
       {totalPages > 1 && (
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1">
           <button
             disabled={page <= 1}
             onClick={() => onPageChange(page - 1)}
-            className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 disabled:opacity-40 text-slate-600 dark:text-slate-300 transition-all cursor-pointer disabled:cursor-not-allowed text-xs font-medium"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-800 disabled:opacity-40 text-slate-600 dark:text-slate-300 transition-all cursor-pointer disabled:cursor-not-allowed text-xs font-medium shadow-2xs"
             aria-label="Previous page"
           >
-            Previous
+            <ChevronLeft className="w-3.5 h-3.5" />
+            <span>Prev</span>
           </button>
 
           {getPageNumbers().map((p, idx) => {
@@ -85,10 +105,10 @@ export function TablePagination({
               <button
                 key={`page-${pageNum}`}
                 onClick={() => onPageChange(pageNum)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                className={`min-w-[28px] h-7 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center justify-center ${
                   isActive
-                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30 border border-indigo-500"
-                    : "bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800"
+                    ? "bg-indigo-600 text-white shadow-xs border border-indigo-500"
+                    : "bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/80 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 shadow-2xs"
                 }`}
               >
                 {pageNum}
@@ -99,14 +119,14 @@ export function TablePagination({
           <button
             disabled={page >= totalPages}
             onClick={() => onPageChange(page + 1)}
-            className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 disabled:opacity-40 text-slate-600 dark:text-slate-300 transition-all cursor-pointer disabled:cursor-not-allowed text-xs font-medium"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-800 disabled:opacity-40 text-slate-600 dark:text-slate-300 transition-all cursor-pointer disabled:cursor-not-allowed text-xs font-medium shadow-2xs"
             aria-label="Next page"
           >
-            Next
+            <span>Next</span>
+            <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
     </div>
   );
 }
-

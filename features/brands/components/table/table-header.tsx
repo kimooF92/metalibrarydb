@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Star, Package, ChevronUp, ChevronDown, ChevronsUpDown, ArrowUpRight } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export interface TableHeaderProps {
   allVisibleSelected: boolean;
@@ -24,7 +25,7 @@ export function TableHeader({
     const active = sortBy === col;
     return (
       <th
-        className={`px-2.5 md:px-3.5 xl:px-4 py-2.5 whitespace-nowrap text-[10px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 ${className}`}
+        className={`px-3 md:px-3.5 xl:px-4 py-3 whitespace-nowrap text-[11px] uppercase tracking-wider font-medium text-slate-500 dark:text-slate-400 ${className}`}
       >
         <button
           type="button"
@@ -52,7 +53,7 @@ export function TableHeader({
                 )}
               </>
             ) : (
-              <ChevronsUpDown className="w-3 h-3 opacity-40 group-hover:opacity-80" />
+              <ChevronsUpDown className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
             )}
           </span>
         </button>
@@ -61,27 +62,27 @@ export function TableHeader({
   };
 
   return (
-    <thead className="bg-slate-50 dark:bg-slate-900 sticky top-0 z-20 text-[10px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800/80 select-none shadow-xs">
+    <thead className="bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-xs sticky top-0 z-20 text-[11px] uppercase tracking-wider font-medium text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800/80 select-none shadow-xs">
       <tr>
-        <th className="px-2 md:px-2.5 py-2.5 w-10 text-center">
-          <input
-            type="checkbox"
-            checked={allVisibleSelected}
-            onChange={onToggleSelectAll}
-            className="rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-slate-900 cursor-pointer"
-            aria-label="Select all visible pages"
-          />
+        <th className="px-2 md:px-2.5 py-3 w-10 text-center">
+          <div className="flex items-center justify-center">
+            <Checkbox
+              checked={allVisibleSelected}
+              onCheckedChange={onToggleSelectAll}
+              aria-label="Select all visible pages"
+            />
+          </div>
         </th>
-        <th className="px-1 md:px-1.5 py-2.5 w-8 text-center">
+        <th className="px-1 md:px-1.5 py-3 w-8 text-center">
           <Star className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 mx-auto" />
         </th>
         {renderSortHeader("displayName", "Brand", "w-[30%] min-w-[170px]")}
-        <th className="px-2.5 md:px-3.5 xl:px-4 py-2.5 whitespace-nowrap w-[20%] min-w-[155px]">
-          <div className="flex items-center gap-1.5 font-semibold text-[10px] uppercase tracking-wider select-none">
+        <th className="px-3 md:px-3.5 xl:px-4 py-3 whitespace-nowrap w-[20%] min-w-[155px]">
+          <div className="flex items-center gap-2 font-medium text-[11px] uppercase tracking-wider select-none">
             <button
               type="button"
               onClick={() => onSortChange("currentResults")}
-              className={`flex items-center gap-0.5 group transition-colors cursor-pointer uppercase tracking-wider ${
+              className={`flex items-center gap-1 group transition-colors cursor-pointer uppercase tracking-wider ${
                 sortBy === "currentResults"
                   ? "text-indigo-600 dark:text-indigo-400 font-bold"
                   : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
@@ -104,30 +105,28 @@ export function TableHeader({
                   )}
                 </>
               ) : (
-                <ChevronsUpDown className="w-2.5 h-2.5 opacity-30 group-hover:opacity-70" />
+                <ChevronsUpDown className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
               )}
             </button>
-
-            <span className="text-slate-300 dark:text-slate-700 font-normal">/</span>
 
             <button
               type="button"
               onClick={() => onSortChange("difference")}
-              className={`flex items-center gap-0.5 group transition-colors cursor-pointer uppercase tracking-wider ${
+              className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors cursor-pointer uppercase ${
                 sortBy === "difference"
-                  ? "text-emerald-600 dark:text-emerald-400 font-bold"
-                  : "text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-300"
+                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold"
+                  : "text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800"
               }`}
               title="Sort by Net New Creatives Added (Top Gainers & Scalers)"
             >
-              <ArrowUpRight className="w-3.5 h-3.5" />
-              <span className="uppercase tracking-wider">+Δ New</span>
-              {sortBy === "difference" ? (
+              <ArrowUpRight className="w-3 h-3" />
+              <span>+Δ</span>
+              {sortBy === "difference" && (
                 <>
                   {sortOrder === "asc" ? (
-                    <ChevronUp className="w-3.5 h-3.5 text-emerald-500" />
+                    <ChevronUp className="w-3 h-3 text-emerald-500" />
                   ) : (
-                    <ChevronDown className="w-3.5 h-3.5 text-emerald-500" />
+                    <ChevronDown className="w-3 h-3 text-emerald-500" />
                   )}
                   {hasPendingReSort && (
                     <span
@@ -136,13 +135,11 @@ export function TableHeader({
                     />
                   )}
                 </>
-              ) : (
-                <ChevronsUpDown className="w-2.5 h-2.5 opacity-30 group-hover:opacity-70" />
               )}
             </button>
           </div>
         </th>
-        <th className="px-2 md:px-2.5 xl:px-3 py-2.5 text-center whitespace-nowrap text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase tracking-wider w-[9%] min-w-[65px]" title="Unique products catalog">
+        <th className="px-2 md:px-2.5 xl:px-3 py-3 text-center whitespace-nowrap text-slate-500 dark:text-slate-400 font-medium text-[11px] uppercase tracking-wider w-[9%] min-w-[65px]" title="Unique products catalog">
           <span className="inline-flex items-center justify-center gap-1 uppercase tracking-wider">
             <Package className="w-3.5 h-3.5 text-slate-400" />
             <span className="uppercase tracking-wider">Products</span>
@@ -150,11 +147,10 @@ export function TableHeader({
         </th>
         {renderSortHeader("status", "Pattern & Status", "hidden md:table-cell w-[17%] min-w-[135px] whitespace-nowrap")}
         {renderSortHeader("lastChecked", "Last Checked", "w-[13%] min-w-[100px] whitespace-nowrap")}
-        <th className="px-2.5 md:px-3.5 xl:px-4 py-2.5 text-right whitespace-nowrap text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase tracking-wider w-[9%] min-w-[75px]">
+        <th className="px-3 md:px-3.5 xl:px-4 py-3 text-right whitespace-nowrap text-slate-500 dark:text-slate-400 font-medium text-[11px] uppercase tracking-wider w-[9%] min-w-[75px]">
           <span className="uppercase tracking-wider">Actions</span>
         </th>
       </tr>
     </thead>
   );
 }
-
