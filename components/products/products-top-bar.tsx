@@ -31,6 +31,12 @@ import {
 import type { SmartPreset } from "./products-kpi-bar";
 import { getNicheDisplayLabel, getSubNicheDisplayLabel } from "@/lib/niches-taxonomy";
 import { useAuth } from "@/components/auth-context";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 
 export interface SortOption {
   value: string;
@@ -170,8 +176,6 @@ export function ProductsTopBar({
   onResetFilters,
 }: ProductsTopBarProps) {
   const { isStaff } = useAuth();
-  const [isSortOpen, setIsSortOpen] = useState(false);
-  const sortRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Keyboard shortcut '/' to focus search
@@ -194,21 +198,6 @@ export function ProductsTopBar({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
-
-  // Close sort dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (sortRef.current && !sortRef.current.contains(e.target as Node)) {
-        setIsSortOpen(false);
-      }
-    };
-    if (isSortOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [isSortOpen]);
 
   const currentSortOption = SORT_OPTIONS.find((opt) => opt.value === sortBy);
   const currentSortLabel = currentSortOption?.label || "Sort";
@@ -337,79 +326,66 @@ export function ProductsTopBar({
             <span>Active Only</span>
           </button>
 
-          {/* Custom Styled Sort Dropdown */}
-          <div className="relative" ref={sortRef}>
-            <button
-              type="button"
-              onClick={() => setIsSortOpen((prev) => !prev)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-semibold border border-border bg-background hover:bg-accent text-foreground transition-all cursor-pointer select-none"
+          {/* shadcn Portaled Sort Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-semibold border border-border bg-background hover:bg-accent text-foreground transition-all cursor-pointer select-none outline-none"
               title="Change sort order"
-              aria-expanded={isSortOpen}
             >
               <CurrentSortIcon className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
               <span className="hidden sm:inline">{currentSortLabel}</span>
               <span className="sm:hidden">Sort</span>
-              <ChevronDown
-                className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-150 ${
-                  isSortOpen ? "rotate-180" : ""
-                }`}
-              />
-            </button>
+              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground transition-transform duration-150" />
+            </DropdownMenuTrigger>
 
-            {isSortOpen && (
-              <div className="absolute right-0 top-full mt-1.5 w-60 bg-card border border-border rounded-xl shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
-                <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/50">
-                  Sort Products
-                </div>
-                <div className="py-0.5 divide-y divide-border/40 max-h-[380px] overflow-y-auto">
-                  {SORT_GROUPS.map((group) => {
-                    const GroupIcon = group.icon;
-                    return (
-                      <div key={group.group} className="p-1 space-y-0.5">
-                        <div className="px-2 pt-1.5 pb-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground/70 flex items-center gap-1.5">
-                          <GroupIcon className="w-3 h-3 text-muted-foreground/60 shrink-0" />
-                          <span>{group.group}</span>
-                        </div>
-                        {group.options.map((opt) => {
-                          const isSelected = sortBy === opt.value;
-                          const OptionIcon = opt.icon;
-                          return (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              onClick={() => {
-                                onChangeSortBy(opt.value);
-                                setIsSortOpen(false);
-                              }}
-                              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                                isSelected
-                                  ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold"
-                                  : "text-foreground hover:bg-accent"
-                              }`}
-                            >
-                              <span className="flex items-center gap-2 truncate">
-                                <OptionIcon
-                                  className={`w-3.5 h-3.5 shrink-0 ${
-                                    isSelected
-                                      ? "text-indigo-500"
-                                      : "text-muted-foreground"
-                                  }`}
-                                />
-                                <span className="truncate">{opt.label}</span>
-                              </span>
-                              {isSelected && (
-                                <Check className="w-3.5 h-3.5 text-indigo-500 shrink-0 ml-2" />
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-                </div>
+            <DropdownMenuContent align="end" side="bottom" sideOffset={4} className="w-60 p-1">
+              <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/50">
+                Sort Products
               </div>
-            )}
-          </div>
+              <div className="py-0.5 max-h-[380px] overflow-y-auto">
+                {SORT_GROUPS.map((group) => {
+                  const GroupIcon = group.icon;
+                  return (
+                    <div key={group.group} className="p-1 space-y-0.5">
+                      <div className="px-2 pt-1.5 pb-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground/70 flex items-center gap-1.5">
+                        <GroupIcon className="w-3 h-3 text-muted-foreground/60 shrink-0" />
+                        <span>{group.group}</span>
+                      </div>
+                      {group.options.map((opt) => {
+                        const isSelected = sortBy === opt.value;
+                        const OptionIcon = opt.icon;
+                        return (
+                          <DropdownMenuItem
+                            key={opt.value}
+                            onClick={() => onChangeSortBy(opt.value)}
+                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                              isSelected
+                                ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold"
+                                : "text-foreground hover:bg-accent"
+                            }`}
+                          >
+                            <span className="flex items-center gap-2 truncate">
+                              <OptionIcon
+                                className={`w-3.5 h-3.5 shrink-0 ${
+                                  isSelected
+                                    ? "text-indigo-500"
+                                    : "text-muted-foreground"
+                                }`}
+                              />
+                              <span className="truncate">{opt.label}</span>
+                            </span>
+                            {isSelected && (
+                              <Check className="w-3.5 h-3.5 text-indigo-500 shrink-0 ml-2" />
+                            )}
+                          </DropdownMenuItem>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Group Carousels Toggle */}
           {onToggleGroupCarousels && (
