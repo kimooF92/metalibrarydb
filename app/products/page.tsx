@@ -41,11 +41,6 @@ export default function ProductsPage() {
     loadNextPage: data.loadNextPage,
   });
 
-  const handleRefreshCatalog = useCallback(() => {
-    data.fetchProducts(1, false, true);
-    data.fetchStats(true);
-  }, [data]);
-
   const handleViewCreatives = useCallback(
     (product: ScrapedProduct) => {
       const isUuid = (s?: string | null) =>
@@ -124,7 +119,8 @@ export default function ProductsPage() {
         <ProductsHeader
           loading={data.loading}
           statsLoading={data.statsLoading}
-          onRefreshCatalog={handleRefreshCatalog}
+          isCatalogRefreshing={data.isCatalogRefreshing}
+          onRefreshCatalog={data.handleRefreshCatalog}
           onOpenAddProductModal={() => layout.setIsAddProductModalOpen(true)}
         />
 

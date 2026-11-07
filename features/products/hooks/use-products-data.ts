@@ -32,10 +32,35 @@ export function useProductsData(filters: UseProductsDataParams) {
   const { showToast } = useToast();
   const { activeWorkspace } = useWorkspace();
 
+  const {
+    sortBy,
+    smartPreset,
+    debouncedSearch,
+    debouncedBrand,
+    platform,
+    categoryFilter,
+    selectedNiches,
+    selectedSubNiches,
+    statusFilter,
+    hideInactive,
+    discoveryFilter,
+    discoveryFrom,
+    discoveryTo,
+    adLaunchFilter,
+    adLaunchFrom,
+    adLaunchTo,
+    stillRunningOnly,
+    groupCarousels,
+  } = filters;
+
+  const nichesKey = selectedNiches.join(",");
+  const subNichesKey = selectedSubNiches.join(",");
+
   const [products, setProducts] = useState<ScrapedProduct[]>([]);
   const [refreshingProductIds, setRefreshingProductIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
+  const [isCatalogRefreshing, setIsCatalogRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [groupedCarouselsCount, setGroupedCarouselsCount] = useState(0);
@@ -75,9 +100,13 @@ export function useProductsData(filters: UseProductsDataParams) {
   const fetchStats = useCallback(async (forceRefresh = false) => {
     const now = Date.now();
     if (!forceRefresh && now - lastStatsFetchedRef.current < 45000 && lastStatsFetchedRef.current > 0) {
+      setStatsLoading(false);
       return;
     }
     lastStatsFetchedRef.current = now;
+    if (forceRefresh) {
+      setStatsLoading(true);
+    }
     try {
       const res = await fetch(`/api/products/stats${forceRefresh ? "?refresh=true" : ""}`);
       if (res.ok) {
@@ -119,8 +148,8 @@ export function useProductsData(filters: UseProductsDataParams) {
         const query = new URLSearchParams({
           page: targetPage.toString(),
           limit: "24",
-          sortBy: filters.sortBy,
-          smartPreset: filters.smartPreset,
+          sortBy,
+          smartPreset,
         });
 
         // Only bust cache if the user explicitly clicked manual refresh
@@ -128,31 +157,31 @@ export function useProductsData(filters: UseProductsDataParams) {
           query.set("_t", Date.now().toString());
         }
 
-        if (filters.debouncedSearch.trim()) query.set("search", filters.debouncedSearch.trim());
-        if (filters.debouncedBrand.trim()) query.set("brand", filters.debouncedBrand.trim());
-        if (filters.platform !== "all") query.set("platform", filters.platform);
-        if (filters.selectedNiches.length > 0) {
-          query.set("niche", filters.selectedNiches.join(","));
-        } else if (filters.categoryFilter !== "all") {
-          query.set("category", filters.categoryFilter);
+        if (debouncedSearch.trim()) query.set("search", debouncedSearch.trim());
+        if (debouncedBrand.trim()) query.set("brand", debouncedBrand.trim());
+        if (platform !== "all") query.set("platform", platform);
+        if (nichesKey) {
+          query.set("niche", nichesKey);
+        } else if (categoryFilter !== "all") {
+          query.set("category", categoryFilter);
         }
-        if (filters.selectedSubNiches.length > 0) {
-          query.set("subNiche", filters.selectedSubNiches.join(","));
+        if (subNichesKey) {
+          query.set("subNiche", subNichesKey);
         }
-        if (filters.statusFilter !== "all") query.set("status", filters.statusFilter);
-        if (filters.hideInactive) query.set("hideInactive", "true");
-        if (filters.discoveryFilter !== "all") query.set("discovery", filters.discoveryFilter);
-        if (filters.discoveryFilter === "custom") {
-          if (filters.discoveryFrom) query.set("discoveryFrom", filters.discoveryFrom);
-          if (filters.discoveryTo) query.set("discoveryTo", filters.discoveryTo);
+        if (statusFilter !== "all") query.set("status", statusFilter);
+        if (hideInactive) query.set("hideInactive", "true");
+        if (discoveryFilter !== "all") query.set("discovery", discoveryFilter);
+        if (discoveryFilter === "custom") {
+          if (discoveryFrom) query.set("discoveryFrom", discoveryFrom);
+          if (discoveryTo) query.set("discoveryTo", discoveryTo);
         }
-        if (filters.adLaunchFilter !== "all") query.set("adLaunch", filters.adLaunchFilter);
-        if (filters.adLaunchFilter === "custom") {
-          if (filters.adLaunchFrom) query.set("adLaunchFrom", filters.adLaunchFrom);
-          if (filters.adLaunchTo) query.set("adLaunchTo", filters.adLaunchTo);
+        if (adLaunchFilter !== "all") query.set("adLaunch", adLaunchFilter);
+        if (adLaunchFilter === "custom") {
+          if (adLaunchFrom) query.set("adLaunchFrom", adLaunchFrom);
+          if (adLaunchTo) query.set("adLaunchTo", adLaunchTo);
         }
-        query.set("stillRunning", filters.stillRunningOnly ? "true" : "false");
-        query.set("groupCarousels", filters.groupCarousels ? "true" : "false");
+        query.set("stillRunning", stillRunningOnly ? "true" : "false");
+        query.set("groupCarousels", groupCarousels ? "true" : "false");
         const tz = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "";
         if (tz) query.set("tz", tz);
 
@@ -198,7 +227,26 @@ export function useProductsData(filters: UseProductsDataParams) {
         }
       }
     },
-    [filters]
+    [
+      sortBy,
+      smartPreset,
+      debouncedSearch,
+      debouncedBrand,
+      platform,
+      categoryFilter,
+      nichesKey,
+      subNichesKey,
+      statusFilter,
+      hideInactive,
+      discoveryFilter,
+      discoveryFrom,
+      discoveryTo,
+      adLaunchFilter,
+      adLaunchFrom,
+      adLaunchTo,
+      stillRunningOnly,
+      groupCarousels,
+    ]
   );
 
   // Trigger fetch on filter/sort change
@@ -208,15 +256,39 @@ export function useProductsData(filters: UseProductsDataParams) {
     fetchProducts(1, false);
   }, [fetchProducts]);
 
-  // Re-fetch products when workspace switches
+  // Re-fetch products when workspace switches (skip initial mount to avoid duplicate fetch)
+  const activeWorkspaceId = activeWorkspace?.id;
+  const isInitialMountRef = useRef(true);
+  const fetchProductsRef = useRef(fetchProducts);
+  fetchProductsRef.current = fetchProducts;
+  const fetchStatsRef = useRef(fetchStats);
+  fetchStatsRef.current = fetchStats;
+
   useEffect(() => {
-    if (activeWorkspace?.id) {
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      return;
+    }
+    if (activeWorkspaceId) {
       setPage(1);
       setAutoLoadCount(0);
-      fetchProducts(1, false);
-      fetchStats();
+      fetchProductsRef.current(1, false);
+      fetchStatsRef.current(true);
     }
-  }, [activeWorkspace?.id, fetchProducts, fetchStats]);
+  }, [activeWorkspaceId]);
+
+  // Manual catalog refresh handler (force busts cache for both products & stats)
+  const handleRefreshCatalog = useCallback(async () => {
+    setIsCatalogRefreshing(true);
+    try {
+      await Promise.all([
+        fetchProducts(1, false, true),
+        fetchStats(true),
+      ]);
+    } finally {
+      setIsCatalogRefreshing(false);
+    }
+  }, [fetchProducts, fetchStats]);
 
   // Load next page function
   const loadNextPage = useCallback(() => {
@@ -431,8 +503,10 @@ export function useProductsData(filters: UseProductsDataParams) {
     refreshingProductIds,
     stats,
     statsLoading,
+    isCatalogRefreshing,
     fetchProducts,
     fetchStats,
+    handleRefreshCatalog,
     loadNextPage,
     handleManualLoadMore,
     handleToggleFavorite,

@@ -7,6 +7,7 @@ import { useAuth } from "@/components/auth-context";
 export interface ProductsHeaderProps {
   loading: boolean;
   statsLoading: boolean;
+  isCatalogRefreshing?: boolean;
   onRefreshCatalog: () => void;
   onOpenAddProductModal: () => void;
 }
@@ -14,10 +15,12 @@ export interface ProductsHeaderProps {
 export function ProductsHeader({
   loading,
   statsLoading,
+  isCatalogRefreshing,
   onRefreshCatalog,
   onOpenAddProductModal,
 }: ProductsHeaderProps) {
   const { isStaff } = useAuth();
+  const isRefreshing = loading || statsLoading || !!isCatalogRefreshing;
 
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-border">
@@ -59,12 +62,12 @@ export function ProductsHeader({
 
         <button
           onClick={onRefreshCatalog}
-          disabled={loading && statsLoading}
+          disabled={isRefreshing}
           title="Refresh product intelligence catalog"
-          className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-card hover:bg-accent text-foreground border border-border transition-all cursor-pointer shadow-xs"
+          className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-card hover:bg-accent text-foreground border border-border transition-all cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
         >
           <RotateCw
-            className={`w-3.5 h-3.5 ${loading || statsLoading ? "animate-spin text-indigo-500" : ""}`}
+            className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-indigo-500" : ""}`}
           />
           <span>Refresh</span>
         </button>
