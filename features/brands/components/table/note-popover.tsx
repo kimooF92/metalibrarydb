@@ -16,6 +16,7 @@ export interface NotePopoverProps {
   mounted?: boolean;
   isOpen: boolean;
   anchorEl?: HTMLElement | null;
+  align?: "start" | "end" | "center";
   notePopoverPage: TrackedPage | null;
   notePopoverValue: string;
   onChangeValue: (value: string) => void;
@@ -31,6 +32,7 @@ export function NotePopover({
   mounted = true,
   isOpen,
   anchorEl,
+  align = "start",
   notePopoverPage,
   notePopoverValue,
   onChangeValue,
@@ -76,8 +78,10 @@ export function NotePopover({
         ref={notePopoverRef as any}
         anchor={anchor}
         side="bottom"
-        align="start"
+        align={align}
         sideOffset={6}
+        positionMethod="fixed"
+        collisionPadding={8}
         className="w-80 rounded-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 shadow-2xl p-3 z-50 text-left"
       >
         {/* Header */}

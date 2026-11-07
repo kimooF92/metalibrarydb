@@ -426,23 +426,27 @@ export function PagesTable({
 
   const [notePopoverPage, setNotePopoverPage] = useState<TrackedPage | null>(null);
   const [notePopoverAnchor, setNotePopoverAnchor] = useState<HTMLElement | null>(null);
+  const [notePopoverAlign, setNotePopoverAlign] = useState<"start" | "end">("start");
   const [notePopoverValue, setNotePopoverValue] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
 
   const openNotePopoverFromElement = (page: TrackedPage, triggerEl: HTMLElement) => {
     setNotePopoverAnchor(triggerEl);
+    setNotePopoverAlign("start");
     setNotePopoverPage(page);
     setNotePopoverValue((page as any).notes || "");
     setOpenMenuPageId(null);
     setMenuPos(null);
   };
 
-  const openNotePopoverFromMenu = (page: TrackedPage, triggerEl?: HTMLElement) => {
-    const rowTrigger = (typeof document !== "undefined"
-      ? (document.querySelector(`[data-note-trigger="${page.id}"]`) as HTMLElement | null)
-      : null) || triggerEl || null;
+  const openNotePopoverFromMenu = (page: TrackedPage) => {
+    // Anchor to the permanent 3-dots button on that page's row so the anchor stays permanently mounted in DOM
+    const trigger = typeof document !== "undefined"
+      ? (document.querySelector(`[data-menu-trigger="${page.id}"]`) as HTMLElement | null)
+      : null;
 
-    setNotePopoverAnchor(rowTrigger);
+    setNotePopoverAnchor(trigger);
+    setNotePopoverAlign("end");
     setOpenMenuPageId(null);
     setMenuPos(null);
     setNotePopoverPage(page);
@@ -737,6 +741,7 @@ export function PagesTable({
         mounted={mounted}
         isOpen={Boolean(notePopoverPage && notePopoverAnchor)}
         anchorEl={notePopoverAnchor}
+        align={notePopoverAlign}
         notePopoverPage={notePopoverPage}
         notePopoverValue={notePopoverValue}
         onChangeValue={setNotePopoverValue}
