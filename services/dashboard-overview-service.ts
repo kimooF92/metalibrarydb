@@ -1,0 +1,832 @@
+import { db } from "@/db";
+import {
+  trackedPages,
+  ads,
+  scrapedProducts,
+  discoveredPages,
+  discoveryRuns,
+  queue,
+  workerState,
+  scanHistory,
+  activityNotifications,
+} from "@/db/schema";
+import { eq, and, sql, desc, asc, inArray, isNotNull, ne } from "drizzle-orm";
+import { getCached, setCached, deleteCached } from "@/lib/cache-service";
+import { classifyScalingPattern } from "@/lib/scaling-classifier";
+import { resolveTimezone, getStartOfTodaySql } from "@/lib/timezone";
+
+export const OVERVIEW_CACHE_TTL_SECONDS = 300; // 5 minutes cache
+
+export interface FetchDashboardOverviewOptions {
+  workspaceId: string;
+  countryCode?: string;
+  clientTz?: string | null;
+  forceRefresh?: boolean;
+}
+
+/**
+ * Orchestrates dashboard overview data fetching across 4 bounded domain batches (BUG-05)
+ * Enforces partition bounds (BUG-06) and workspace isolation (BUG-07)
+ */
+export async function fetchDashboardOverview(options: FetchDashboardOverviewOptions) {
+  const { workspaceId, countryCode, clientTz, forceRefresh } = options;
+
+  const userTz = resolveTimezone({
+    clientTz,
+    countryCode,
+  });
+
+  const cacheKey = `cache:dashboard:overview:${workspaceId}:${userTz}`;
+  if (!forceRefresh) {
+    const cached = await getCached<Record<string, unknown>>(cacheKey);
+    if (cached) {
+      return { ...cached, fromCache: true };
+    }
+  }
+
+  // BUG-06: Partition-bounded 14-day window avoids full table history scans on scan_history
+  const differenceSql = sql<number>`(
+    SELECT s.difference
+    FROM scan_history s
+    WHERE s.tracked_page_id = ${trackedPages.id}
+      AND s.checked_at >= NOW() - INTERVAL '14 days'
+    ORDER BY s.checked_at DESC
+    LIMIT 1
+  )`;
+
+  // BATCH 1: Core Entity KPIs (Brands, Products, Ads, Categories)
+  const [brandStatsRows, productStatsRows, adsStatsRows, topCategoriesRows] = await Promise.all([
+    db
+      .select({
+        totalBrands: sql<number>`count(*)`.mapWith(Number),
+        avgAds: sql<number>`coalesce(round(avg(case when ${trackedPages.currentResults} is not null and ${trackedPages.currentResults} > 0 then ${trackedPages.currentResults} end)), 0)`.mapWith(Number),
+        maxAds: sql<number>`coalesce(max(${trackedPages.currentResults}), 0)`.mapWith(Number),
+        scanningCount: sql<number>`count(case when ${trackedPages.status} = 'scanning' then 1 end)`.mapWith(Number),
+        failedCount: sql<number>`count(case when ${trackedPages.status} = 'failed' then 1 end)`.mapWith(Number),
+        unclearCount: sql<number>`count(case when ${trackedPages.status} = 'unclear' then 1 end)`.mapWith(Number),
+        onHoldCount: sql<number>`count(case when ${trackedPages.holdStatus} = 'on_hold' or ${trackedPages.consecutiveZeroScans} >= 3 then 1 end)`.mapWith(Number),
+        completedCount: sql<number>`count(case when ${trackedPages.status} = 'success' then 1 end)`.mapWith(Number),
+      })
+      .from(trackedPages)
+      .where(eq(trackedPages.workspaceId, workspaceId)),
+
+    db
+      .select({
+        totalProducts: sql<number>`count(*)`.mapWith(Number),
+        successfulProducts: sql<number>`count(case when ${scrapedProducts.scrapeStatus} = 'success' then 1 end)`.mapWith(Number),
+        withOffersCount: sql<number>`count(case when ${scrapedProducts.discountOrOffer} is not null and ${scrapedProducts.discountOrOffer} != '' then 1 end)`.mapWith(Number),
+        favoritesCount: sql<number>`count(case when ${scrapedProducts.isFavorite} = true then 1 end)`.mapWith(Number),
+      })
+      .from(scrapedProducts)
+      .where(eq(scrapedProducts.workspaceId, workspaceId)),
+
+    db
+      .select({
+        totalAds: sql<number>`count(*)`.mapWith(Number),
+        activeAds: sql<number>`count(case when ${ads.isArchived} = false or ${ads.isArchived} is null then 1 end)`.mapWith(Number),
+      })
+      .from(ads)
+      .innerJoin(trackedPages, eq(ads.pageId, trackedPages.pageId))
+      .where(eq(trackedPages.workspaceId, workspaceId)),
+
+    db
+      .select({
+        category: scrapedProducts.category,
+        count: sql<number>`count(*)`.mapWith(Number),
+      })
+      .from(scrapedProducts)
+      .where(
+        and(
+          eq(scrapedProducts.workspaceId, workspaceId),
+          isNotNull(scrapedProducts.category),
+          ne(scrapedProducts.category, "")
+        )
+      )
+      .groupBy(scrapedProducts.category)
+      .orderBy(desc(sql`count(*)`))
+      .limit(5),
+  ]);
+
+  // BATCH 2: Product Highlights (Scaling Products, Hot Offers, Fresh Breakouts)
+  const [scalingProductsRows, hotOfferProductsRows, freshBreakoutRows] = await Promise.all([
+    db
+      .select({
+        id: scrapedProducts.id,
+        url: scrapedProducts.url,
+        domain: scrapedProducts.domain,
+        pageId: scrapedProducts.pageId,
+        title: sql<string>`left(${scrapedProducts.title}, 100)`,
+        currentPrice: scrapedProducts.currentPrice,
+        originalPrice: scrapedProducts.originalPrice,
+        currency: scrapedProducts.currency,
+        discountOrOffer: scrapedProducts.discountOrOffer,
+        mainImageUrl: scrapedProducts.mainImageUrl,
+        storePlatform: scrapedProducts.storePlatform,
+        category: scrapedProducts.category,
+        activeAdsCount: sql<number>`(
+          SELECT count(*)
+          FROM ${ads}
+          WHERE ${ads.productId} = ${scrapedProducts.id}
+            AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
+        )`.mapWith(Number),
+        brandDisplayName: sql<string>`(
+          SELECT coalesce(${trackedPages.displayName}, ${scrapedProducts.domain})
+          FROM ${trackedPages}
+          WHERE ${trackedPages.pageId} = ${scrapedProducts.pageId}
+          LIMIT 1
+        )`,
+      })
+      .from(scrapedProducts)
+      .where(
+        and(
+          eq(scrapedProducts.workspaceId, workspaceId),
+          eq(scrapedProducts.scrapeStatus, "success"),
+          isNotNull(scrapedProducts.mainImageUrl),
+          ne(scrapedProducts.mainImageUrl, "")
+        )
+      )
+      .orderBy(
+        desc(sql`(
+          SELECT count(*)
+          FROM ${ads}
+          WHERE ${ads.productId} = ${scrapedProducts.id}
+            AND (${ads.isArchived} = false OR ${ads.isArchived} IS NULL)
+        )`),
+        desc(scrapedProducts.updatedAt)
+      )
+      .limit(4),
+
+    db
+      .select({
+        id: scrapedProducts.id,
+        url: scrapedProducts.url,
+        domain: scrapedProducts.domain,
+        title: sql<string>`left(${scrapedProducts.title}, 90)`,
+        currentPrice: scrapedProducts.currentPrice,
+        currency: scrapedProducts.currency,
+        discountOrOffer: scrapedProducts.discountOrOffer,
+        mainImageUrl: scrapedProducts.mainImageUrl,
+        storePlatform: scrapedProducts.storePlatform,
+        category: scrapedProducts.category,
+        brandDisplayName: sql<string>`(
+          SELECT coalesce(${trackedPages.displayName}, ${scrapedProducts.domain})
+          FROM ${trackedPages}
+          WHERE ${trackedPages.pageId} = ${scrapedProducts.pageId}
+          LIMIT 1
+        )`,
+      })
+      .from(scrapedProducts)
+      .where(
+        and(
+          eq(scrapedProducts.workspaceId, workspaceId),
+          eq(scrapedProducts.scrapeStatus, "success"),
+          isNotNull(scrapedProducts.discountOrOffer),
+          ne(scrapedProducts.discountOrOffer, "")
+        )
+      )
+      .orderBy(desc(scrapedProducts.updatedAt))
+      .limit(4),
+
+    db
+      .select({
+        productId: scrapedProducts.id,
+        productTitle: sql<string>`left(${scrapedProducts.title}, 100)`,
+        productUrl: scrapedProducts.url,
+        productDomain: scrapedProducts.domain,
+        productPrice: scrapedProducts.currentPrice,
+        productCurrency: scrapedProducts.currency,
+        productImageUrl: scrapedProducts.mainImageUrl,
+        storePlatform: scrapedProducts.storePlatform,
+        brandDisplayName: sql<string | null>`max(${trackedPages.displayName})`,
+        pageId: scrapedProducts.pageId,
+        adArchiveId: sql<string>`max(${ads.adArchiveId})`,
+        adId: sql<string>`max(${ads.id}::text)`,
+        title: sql<string>`left(max(${ads.title}), 100)`,
+        mediaType: sql<string>`case when count(case when ${ads.mediaType} = 'video' then 1 end) > 0 then 'video' when count(case when ${ads.mediaType} = 'carousel' then 1 end) > 0 then 'carousel' else 'image' end`,
+        thumbnailUrl: sql<string | null>`coalesce(max(${ads.thumbnailUrl}), ${scrapedProducts.mainImageUrl})`,
+        earliestAdDate: sql<Date | null>`min(coalesce(${ads.startedRunningOn}, ${ads.firstSeenAt}))`,
+        latestAdDate: sql<Date | null>`max(coalesce(${ads.startedRunningOn}, ${ads.firstSeenAt}))`,
+        activeAdsCount: sql<number>`count(distinct ${ads.id})`.mapWith(Number),
+        totalCopies: sql<number>`sum(latest_obs.duplication_count)`.mapWith(Number),
+      })
+      .from(scrapedProducts)
+      .innerJoin(ads, eq(ads.productId, scrapedProducts.id))
+      .innerJoin(
+        sql`(
+          SELECT DISTINCT ON (ad_id)
+            id AS obs_id,
+            ad_id,
+            tracked_page_id,
+            duplication_count,
+            is_active,
+            observed_at
+          FROM ad_observations
+          WHERE observed_at >= NOW() - INTERVAL '30 days'
+          ORDER BY ad_id, observed_at DESC
+        ) AS latest_obs`,
+        sql`latest_obs.ad_id = ${ads.id}`
+      )
+      .leftJoin(trackedPages, sql`tracked_pages.id = latest_obs.tracked_page_id`)
+      .where(
+        and(
+          sql`latest_obs.is_active = true`,
+          sql`(${ads.isArchived} = false or ${ads.isArchived} is null)`,
+          eq(scrapedProducts.workspaceId, workspaceId),
+          eq(trackedPages.workspaceId, workspaceId),
+          sql`(${scrapedProducts.mainImageUrl} is not null and ${scrapedProducts.mainImageUrl} != '')`
+        )
+      )
+      .groupBy(scrapedProducts.id)
+      .having(
+        and(
+          sql`count(distinct ${ads.id}) >= 1`,
+          sql`sum(latest_obs.duplication_count) >= 2`,
+          sql`max(coalesce(${ads.startedRunningOn}, ${ads.firstSeenAt})) >= NOW() - INTERVAL '7 days'`
+        )
+      )
+      .orderBy(
+        desc(
+          sql`(sum(latest_obs.duplication_count)::numeric / GREATEST(1, EXTRACT(DAY FROM NOW() - MIN(COALESCE(${ads.startedRunningOn}, ${ads.firstSeenAt})))))`
+        ),
+        desc(sql`sum(latest_obs.duplication_count)`),
+        desc(scrapedProducts.id)
+      )
+      .limit(10),
+  ]);
+
+  // BATCH 3: Worker, Queue Health, Discovery & Activity
+  const [
+    workerStateRows,
+    queueStatsRows,
+    darkBrandRows,
+    discoveryStatsRows,
+    recentDiscoveredRows,
+    recentNotificationRows,
+    activeScanningRows,
+  ] = await Promise.all([
+    db
+      .select({
+        id: workerState.id,
+        isPaused: workerState.isPaused,
+        scansThisHour: workerState.scansThisHour,
+        scansToday: workerState.scansToday,
+        consecutiveFailures: workerState.consecutiveFailures,
+        lastFailureAt: workerState.lastFailureAt,
+        circuitBreakerTripped: workerState.circuitBreakerTripped,
+        updatedAt: workerState.updatedAt,
+      })
+      .from(workerState)
+      .where(eq(workerState.id, 1)),
+
+    db
+      .select({
+        status: queue.status,
+        count: sql<number>`count(*)`.mapWith(Number),
+      })
+      .from(queue)
+      .where(eq(queue.workspaceId, workspaceId))
+      .groupBy(queue.status),
+
+    db
+      .select({
+        id: trackedPages.id,
+        displayName: trackedPages.displayName,
+        currentResults: trackedPages.currentResults,
+        lastKnownValidResults: trackedPages.lastKnownValidResults,
+        consecutiveZeroScans: trackedPages.consecutiveZeroScans,
+        holdStatus: trackedPages.holdStatus,
+        status: trackedPages.status,
+        lastChecked: trackedPages.lastChecked,
+        country: trackedPages.country,
+      })
+      .from(trackedPages)
+      .where(
+        and(
+          eq(trackedPages.workspaceId, workspaceId),
+          sql`(${trackedPages.consecutiveZeroScans} >= 2 or ${trackedPages.holdStatus} = 'on_hold' or ${trackedPages.status} in ('failed', 'unclear'))`
+        )
+      )
+      .orderBy(desc(trackedPages.consecutiveZeroScans), desc(trackedPages.updatedAt))
+      .limit(4),
+
+    db
+      .select({
+        discoveredCount: sql<number>`count(case when ${discoveredPages.status} = 'discovered' then 1 end)`.mapWith(Number),
+        totalCount: sql<number>`count(*)`.mapWith(Number),
+      })
+      .from(discoveredPages)
+      .innerJoin(discoveryRuns, eq(discoveredPages.runId, discoveryRuns.id))
+      .where(eq(discoveryRuns.workspaceId, workspaceId)),
+
+    db
+      .select({
+        id: discoveredPages.id,
+        pageId: discoveredPages.pageId,
+        displayName: discoveredPages.displayName,
+        matchingAdCount: discoveredPages.matchingAdCount,
+        previewTitle: sql<string>`left(${discoveredPages.previewProductTitle}, 80)`,
+        previewImage: discoveredPages.previewProductImage,
+        previewPrice: discoveredPages.previewProductPrice,
+        status: discoveredPages.status,
+      })
+      .from(discoveredPages)
+      .innerJoin(discoveryRuns, eq(discoveredPages.runId, discoveryRuns.id))
+      .where(
+        and(
+          eq(discoveryRuns.workspaceId, workspaceId),
+          eq(discoveredPages.status, "discovered")
+        )
+      )
+      .orderBy(desc(discoveredPages.matchingAdCount), desc(discoveredPages.id))
+      .limit(3),
+
+    db
+      .select({
+        id: activityNotifications.id,
+        type: activityNotifications.type,
+        title: activityNotifications.title,
+        message: activityNotifications.message,
+        severity: activityNotifications.severity,
+        createdAt: activityNotifications.createdAt,
+      })
+      .from(activityNotifications)
+      .where(eq(activityNotifications.workspaceId, workspaceId))
+      .orderBy(desc(activityNotifications.createdAt))
+      .limit(4),
+
+    db
+      .select({ id: trackedPages.id })
+      .from(trackedPages)
+      .where(
+        and(
+          eq(trackedPages.workspaceId, workspaceId),
+          eq(trackedPages.status, "scanning")
+        )
+      )
+      .limit(10),
+  ]);
+
+  // BATCH 4: Brand Velocity & Timeline Analytics
+  const [
+    scalingBrandsRows,
+    descalingBrandsRows,
+    products24hStatsRows,
+    products24hNicheRows,
+    scalingStatsRes,
+    darkAndRevivedRes,
+    freshWinnersCountRes,
+  ] = await Promise.all([
+    db
+      .select({
+        id: trackedPages.id,
+        displayName: trackedPages.displayName,
+        currentResults: trackedPages.currentResults,
+        difference: differenceSql,
+        profilePicUrl: trackedPages.profilePicUrl,
+        lastChecked: trackedPages.lastChecked,
+        status: trackedPages.status,
+        country: trackedPages.country,
+        holdStatus: trackedPages.holdStatus,
+        lastKnownValidResults: trackedPages.lastKnownValidResults,
+        consecutiveZeroScans: trackedPages.consecutiveZeroScans,
+      })
+      .from(trackedPages)
+      .where(
+        and(
+          eq(trackedPages.workspaceId, workspaceId),
+          sql`${trackedPages.currentResults} > 0`
+        )
+      )
+      .orderBy(desc(differenceSql), desc(trackedPages.currentResults))
+      .limit(5),
+
+    db
+      .select({
+        id: trackedPages.id,
+        displayName: trackedPages.displayName,
+        currentResults: trackedPages.currentResults,
+        difference: differenceSql,
+        profilePicUrl: trackedPages.profilePicUrl,
+        lastChecked: trackedPages.lastChecked,
+        status: trackedPages.status,
+        country: trackedPages.country,
+        holdStatus: trackedPages.holdStatus,
+        lastKnownValidResults: trackedPages.lastKnownValidResults,
+        consecutiveZeroScans: trackedPages.consecutiveZeroScans,
+      })
+      .from(trackedPages)
+      .where(
+        and(
+          eq(trackedPages.workspaceId, workspaceId),
+          sql`(${differenceSql} < 0 or ${trackedPages.consecutiveZeroScans} >= 2 or ${trackedPages.holdStatus} = 'on_hold')`
+        )
+      )
+      .orderBy(asc(differenceSql), desc(trackedPages.consecutiveZeroScans))
+      .limit(5),
+
+    db
+      .select({
+        totalAdded: sql<number>`count(*)`.mapWith(Number),
+        withOffersCount: sql<number>`count(case when ${scrapedProducts.discountOrOffer} is not null and ${scrapedProducts.discountOrOffer} != '' then 1 end)`.mapWith(Number),
+        topPlatform: sql<string>`coalesce(mode() within group (order by ${scrapedProducts.storePlatform}), 'Shopify')`,
+        avgPrice: sql<number>`coalesce(round(avg(nullif(substring(regexp_replace(${scrapedProducts.currentPrice}, ',', '.', 'g') from '([0-9]+(\\.[0-9]+)?)'), '')::numeric), 0), 0)`.mapWith(Number),
+      })
+      .from(scrapedProducts)
+      .where(
+        and(
+          eq(scrapedProducts.workspaceId, workspaceId),
+          sql`${scrapedProducts.createdAt} >= ${getStartOfTodaySql(userTz)}`
+        )
+      ),
+
+    db
+      .select({
+        category: scrapedProducts.category,
+        count: sql<number>`count(*)`.mapWith(Number),
+      })
+      .from(scrapedProducts)
+      .where(
+        and(
+          eq(scrapedProducts.workspaceId, workspaceId),
+          sql`${scrapedProducts.createdAt} >= ${getStartOfTodaySql(userTz)}`,
+          isNotNull(scrapedProducts.category),
+          ne(scrapedProducts.category, "")
+        )
+      )
+      .groupBy(scrapedProducts.category)
+      .orderBy(desc(sql`count(*)`))
+      .limit(4),
+
+    db.execute<{
+      scalingBrandsCount?: number;
+      totalAdsScaled?: number;
+      descalingBrandsCount?: number;
+      totalAdsDescaled?: number;
+    }>(sql`
+      WITH latest_scans AS (
+        SELECT 
+          s.tracked_page_id, 
+          s.difference
+        FROM (
+          SELECT 
+            sh.tracked_page_id, 
+            sh.difference,
+            row_number() OVER (PARTITION BY sh.tracked_page_id ORDER BY sh.checked_at DESC) as rn
+          FROM scan_history sh
+          INNER JOIN tracked_pages tp ON tp.id = sh.tracked_page_id
+          WHERE sh.difference IS NOT NULL
+            AND sh.checked_at >= NOW() - INTERVAL '30 days'
+            AND tp.workspace_id = ${workspaceId}::uuid
+        ) s
+        WHERE s.rn = 1
+      )
+      SELECT 
+        COUNT(CASE WHEN difference > 0 THEN 1 END)::int AS "scalingBrandsCount",
+        COALESCE(SUM(CASE WHEN difference > 0 THEN difference ELSE 0 END), 0)::int AS "totalAdsScaled",
+        COUNT(CASE WHEN difference < 0 THEN 1 END)::int AS "descalingBrandsCount",
+        COALESCE(SUM(CASE WHEN difference < 0 THEN ABS(difference) ELSE 0 END), 0)::int AS "totalAdsDescaled"
+      FROM latest_scans;
+    `),
+
+    db.execute<{
+      darkCount?: number;
+      revivedCount?: number;
+    }>(sql`
+      SELECT
+        COUNT(CASE WHEN (hold_status = 'on_hold' OR consecutive_zero_scans >= 2 OR status IN ('failed', 'unclear')) THEN 1 END)::int AS "darkCount",
+        COUNT(CASE WHEN hold_status = 'active' AND consecutive_zero_scans = 0 AND current_results > 0 AND last_success_at >= NOW() - INTERVAL '48 hours' AND (
+          EXISTS (
+            SELECT 1 FROM scan_history sh
+            WHERE sh.tracked_page_id = tracked_pages.id
+              AND sh.checked_at >= NOW() - INTERVAL '7 days'
+              AND (sh.results = 0 OR sh.results IS NULL)
+          )
+        ) THEN 1 END)::int AS "revivedCount"
+      FROM tracked_pages
+      WHERE workspace_id = ${workspaceId}::uuid;
+    `),
+
+    db.execute<{ total_products?: number }>(sql`
+      SELECT
+        COUNT(*)::int AS total_products
+      FROM (
+        SELECT
+          sp.id AS product_id
+        FROM scraped_products sp
+        INNER JOIN ads a ON a.product_id = sp.id
+        INNER JOIN (
+          SELECT DISTINCT ON (ad_id)
+            ad_id,
+            tracked_page_id,
+            duplication_count,
+            is_active
+          FROM ad_observations
+          ORDER BY ad_id, observed_at DESC
+        ) latest_obs ON latest_obs.ad_id = a.id
+        LEFT JOIN tracked_pages tp ON tp.id = latest_obs.tracked_page_id
+        WHERE latest_obs.is_active = true
+          AND (a.is_archived = false OR a.is_archived IS NULL)
+          AND sp.workspace_id = ${workspaceId}::uuid
+          AND tp.workspace_id = ${workspaceId}::uuid
+        GROUP BY sp.id
+        HAVING count(distinct a.id) >= 1
+          AND sum(latest_obs.duplication_count) >= 2
+          AND max(coalesce(a.started_running_on, a.first_seen_at)) >= NOW() - INTERVAL '7 days'
+      ) sub;
+    `),
+  ]);
+
+  // Format fresh breakouts with winner scoring metrics (Top 5 Unique Products)
+  const nowMs = Date.now();
+  const rawBreakouts = freshBreakoutRows.map((row) => {
+    const earliestT = row.earliestAdDate ? new Date(row.earliestAdDate).getTime() : nowMs;
+    const daysRunning = Math.max(0, Math.floor((nowMs - earliestT) / (1000 * 60 * 60 * 24)));
+    const totalCopies = row.totalCopies || row.activeAdsCount || 1;
+    const velocityScore = Math.min(
+      100,
+      Math.round((totalCopies / Math.max(1, daysRunning)) * 12)
+    );
+
+    return {
+      id: row.adId || row.productId,
+      adArchiveId: row.adArchiveId,
+      pageId: row.pageId,
+      pageName: row.brandDisplayName,
+      brandDisplayName: row.brandDisplayName,
+      mediaType: row.mediaType,
+      thumbnailUrl: row.thumbnailUrl || row.productImageUrl,
+      startedRunningOn: row.latestAdDate ? new Date(row.latestAdDate).toISOString() : null,
+      firstSeenAt: row.earliestAdDate ? new Date(row.earliestAdDate).toISOString() : null,
+      daysRunning,
+      winnerScore: velocityScore,
+      winnerTier: (velocityScore >= 70 ? "high" : "promising") as "high" | "promising",
+      isBreakout: true,
+      productId: row.productId,
+      productTitle: row.productTitle,
+      productUrl: row.productUrl,
+      productPrice: row.productPrice,
+      productCurrency: row.productCurrency,
+      productImageUrl: row.productImageUrl,
+      storePlatform: row.storePlatform,
+      activeAdsCount: row.activeAdsCount,
+      totalCopies,
+    };
+  });
+
+  const seenProductKeys = new Set<string>();
+  const freshBreakouts: typeof rawBreakouts = [];
+  for (const b of rawBreakouts) {
+    const normKey = (b.productId || b.productTitle || b.id).toLowerCase().trim();
+    if (!seenProductKeys.has(normKey)) {
+      seenProductKeys.add(normKey);
+      freshBreakouts.push(b);
+    }
+    if (freshBreakouts.length >= 5) break;
+  }
+
+  // Analytics summary processing
+  const scalingStats = (scalingStatsRes as unknown as Array<Record<string, unknown>>)?.[0] || {};
+  const scalingCount = Number(scalingStats.scalingBrandsCount || 0);
+  const scalingNetAds = Number(scalingStats.totalAdsScaled || 0);
+  const scalingAvgAds = scalingCount > 0 ? Number((scalingNetAds / scalingCount).toFixed(1)) : 0;
+
+  const descalingCount = Number(scalingStats.descalingBrandsCount || 0);
+  const descalingNetAds = Number(scalingStats.totalAdsDescaled || 0);
+  const descalingAvgAds = descalingCount > 0 ? Number((descalingNetAds / descalingCount).toFixed(1)) : 0;
+
+  const darkRevivedRow = (darkAndRevivedRes as unknown as Array<Record<string, unknown>>)?.[0] || {};
+  const darkCount = Number(darkRevivedRow.darkCount || 0);
+  const revivedCount = Number(darkRevivedRow.revivedCount || 0);
+
+  const fwRow = (freshWinnersCountRes as unknown as Array<Record<string, unknown>>)?.[0] || {};
+  const freshWinnersTotal = Number(fwRow.total_products || 0);
+  const totalBreakoutsCount = freshWinnersTotal > 0 ? freshWinnersTotal : freshBreakouts.length;
+
+  // Resolve 14-day history points for scaling and descaling brands (BUG-06)
+  const velocityPageIds = Array.from(
+    new Set([
+      ...scalingBrandsRows.map((b) => b.id),
+      ...descalingBrandsRows.map((b) => b.id),
+    ])
+  );
+  const historyMap: Record<string, number[]> = {};
+
+  if (velocityPageIds.length > 0) {
+    const historyRows = await db
+      .select({
+        trackedPageId: scanHistory.trackedPageId,
+        results: scanHistory.results,
+      })
+      .from(scanHistory)
+      .where(
+        and(
+          inArray(scanHistory.trackedPageId, velocityPageIds),
+          sql`${scanHistory.checkedAt} >= NOW() - INTERVAL '14 days'`
+        )
+      )
+      .orderBy(asc(scanHistory.checkedAt));
+
+    for (const row of historyRows) {
+      if (row.results !== null) {
+        if (!historyMap[row.trackedPageId]) {
+          historyMap[row.trackedPageId] = [];
+        }
+        historyMap[row.trackedPageId].push(row.results);
+      }
+    }
+  }
+
+  const mapBrandWithPattern = (brand: (typeof scalingBrandsRows)[0]) => {
+    const points = historyMap[brand.id] || (brand.currentResults ? [brand.currentResults] : [0]);
+    const pattern = classifyScalingPattern(
+      points,
+      brand.currentResults,
+      null,
+      {
+        holdStatus: brand.holdStatus,
+        lastKnownValidResults: brand.lastKnownValidResults,
+        consecutiveZeroScans: brand.consecutiveZeroScans,
+      }
+    );
+    return {
+      ...brand,
+      difference: brand.difference ?? 0,
+      historyPoints: points,
+      scalingPattern: pattern,
+    };
+  };
+
+  const scalingBrandsWithPattern = scalingBrandsRows.map(mapBrandWithPattern);
+  const descalingBrandsWithPattern = descalingBrandsRows.map(mapBrandWithPattern);
+
+  const totalCategorized = topCategoriesRows.reduce((acc, c) => acc + (c.count || 0), 0);
+  const categoriesWithPct = topCategoriesRows.map((cat) => ({
+    category: cat.category || "Uncategorized",
+    count: cat.count,
+    percentage: totalCategorized > 0 ? Math.round((cat.count / totalCategorized) * 100) : 0,
+  }));
+
+  const stats24h = products24hStatsRows[0] || {
+    totalAdded: 0,
+    withOffersCount: 0,
+    topPlatform: "Shopify",
+    avgPrice: 0,
+  };
+  const total24hCategorized = products24hNicheRows.reduce((acc, c) => acc + (c.count || 0), 0);
+  const nicheShare24h = products24hNicheRows.map((cat) => ({
+    category: cat.category || "Uncategorized",
+    count: cat.count,
+    percentage: total24hCategorized > 0 ? Math.round((cat.count / total24hCategorized) * 100) : 0,
+  }));
+
+  const queueMap: Record<string, number> = {
+    pending: 0,
+    running: 0,
+    completed: 0,
+    failed: 0,
+  };
+  for (const q of queueStatsRows) {
+    if (q.status && q.status in queueMap) {
+      queueMap[q.status] = q.count;
+    }
+  }
+
+  let scanningCount = brandStatsRows[0]?.scanningCount ?? 0;
+  let activeScanningIds = (activeScanningRows || []).map((r) => r.id);
+
+  // Auto-rescue stuck scanning pages
+  if (scanningCount > 0) {
+    try {
+      const rescued = await db.execute(sql`
+        UPDATE tracked_pages
+        SET status = CASE WHEN last_success_at IS NOT NULL OR current_results IS NOT NULL THEN 'success' ELSE 'failed' END,
+            updated_at = NOW()
+        WHERE status = 'scanning'
+          AND workspace_id = ${workspaceId}
+          AND updated_at < NOW() - INTERVAL '60 seconds'
+        RETURNING id;
+      `);
+      const rescuedRows = Array.isArray(rescued) ? rescued : (rescued as any)?.rows || [];
+      const rescuedCount = rescuedRows.length || (rescued as any)?.rowCount || 0;
+      if (rescuedCount > 0) {
+        const rescuedIdSet = new Set(rescuedRows.map((r: any) => r.id));
+        scanningCount = Math.max(0, scanningCount - rescuedCount);
+        activeScanningIds = activeScanningIds.filter((id) => !rescuedIdSet.has(id));
+        deleteCached(`cache:stats:${workspaceId}`).catch(() => {});
+      }
+    } catch (rescueErr) {
+      console.warn("[Dashboard Overview Service] Self-healing orphan rescue warning:", rescueErr);
+    }
+  }
+
+  const scanOperations = {
+    scansToday: workerStateRows[0]?.scansToday ?? 0,
+    scansThisHour: workerStateRows[0]?.scansThisHour ?? 0,
+    isPaused: workerStateRows[0]?.isPaused ?? false,
+    circuitBreakerTripped: workerStateRows[0]?.circuitBreakerTripped ?? false,
+    totalBrands: brandStatsRows[0]?.totalBrands ?? 0,
+    completedCount: brandStatsRows[0]?.completedCount ?? 0,
+    scanningCount,
+    failedCount: brandStatsRows[0]?.failedCount ?? 0,
+    onHoldCount: brandStatsRows[0]?.onHoldCount ?? 0,
+    darkCount,
+    revivedCount,
+    successRate:
+      (brandStatsRows[0]?.completedCount || 0) + (brandStatsRows[0]?.failedCount || 0) > 0
+        ? Math.round(
+            ((brandStatsRows[0]?.completedCount || 0) /
+              ((brandStatsRows[0]?.completedCount || 0) + (brandStatsRows[0]?.failedCount || 0))) *
+              100
+          )
+        : 100,
+    queuePending: queueMap.pending,
+    queueRunning: queueMap.running,
+  };
+
+  const responsePayload = {
+    kpi: {
+      totalBrands: brandStatsRows[0]?.totalBrands ?? 0,
+      avgAds: brandStatsRows[0]?.avgAds ?? 0,
+      maxAds: brandStatsRows[0]?.maxAds ?? 0,
+      scanningCount,
+      failedCount: brandStatsRows[0]?.failedCount ?? 0,
+      completedCount: brandStatsRows[0]?.completedCount ?? 0,
+      onHoldCount: brandStatsRows[0]?.onHoldCount ?? 0,
+      totalProducts: productStatsRows[0]?.totalProducts ?? 0,
+      successfulProducts: productStatsRows[0]?.successfulProducts ?? 0,
+      withOffersCount: productStatsRows[0]?.withOffersCount ?? 0,
+      favoritesCount: productStatsRows[0]?.favoritesCount ?? 0,
+      totalAds: adsStatsRows[0]?.totalAds ?? 0,
+      activeAds: adsStatsRows[0]?.activeAds ?? 0,
+    },
+    scalingSummary: {
+      count: scalingCount,
+      netAds: scalingNetAds,
+      avgAds: scalingAvgAds,
+    },
+    descalingSummary: {
+      count: descalingCount,
+      netAds: descalingNetAds,
+      avgAds: descalingAvgAds,
+    },
+    freshWinnersSummary: {
+      totalCount: totalBreakoutsCount,
+    },
+    coverageStats: {
+      darkCount,
+      revivedCount,
+    },
+    scalingProducts: scalingProductsRows,
+    hotOffers: hotOfferProductsRows,
+    freshBreakouts,
+    scalingBrands: scalingBrandsWithPattern,
+    descalingBrands: descalingBrandsWithPattern,
+    inflow24h: {
+      totalAdded: stats24h.totalAdded,
+      withOffersCount: stats24h.withOffersCount,
+      offerPercentage:
+        stats24h.totalAdded > 0
+          ? Math.round((stats24h.withOffersCount / stats24h.totalAdded) * 100)
+          : 0,
+      topPlatform: stats24h.topPlatform,
+      avgPrice: stats24h.avgPrice,
+      nicheShare: nicheShare24h,
+    },
+    inflowToday: {
+      totalAdded: stats24h.totalAdded,
+      withOffersCount: stats24h.withOffersCount,
+      offerPercentage:
+        stats24h.totalAdded > 0
+          ? Math.round((stats24h.withOffersCount / stats24h.totalAdded) * 100)
+          : 0,
+      topPlatform: stats24h.topPlatform,
+      avgPrice: stats24h.avgPrice,
+      nicheShare: nicheShare24h,
+    },
+    scanOperations,
+    darkBrands: darkBrandRows,
+    topCategories: categoriesWithPct,
+    worker: workerStateRows[0] || {
+      isPaused: false,
+      scansThisHour: 0,
+      scansToday: 0,
+      consecutiveFailures: 0,
+      lastFailureAt: null,
+      circuitBreakerTripped: false,
+    },
+    queue: queueMap,
+    discovery: {
+      discoveredCount: discoveryStatsRows[0]?.discoveredCount ?? 0,
+      totalCount: discoveryStatsRows[0]?.totalCount ?? 0,
+      recent: recentDiscoveredRows,
+    },
+    recentActivity: recentNotificationRows,
+    activeScanningPageIds: activeScanningIds,
+  };
+
+  const effectiveTtl = scanningCount > 0 ? 15 : OVERVIEW_CACHE_TTL_SECONDS;
+  await setCached(cacheKey, responsePayload, effectiveTtl);
+
+  return responsePayload;
+}
+

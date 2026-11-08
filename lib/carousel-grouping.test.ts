@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { ScrapedProduct, CarouselItemSummary } from "@/types";
+import { groupProductsIntoCarousels } from "@/services/product-query-service";
 
 /**
  * Grouping function replicating the engine in /api/products
@@ -11,82 +12,7 @@ function groupCarouselProducts(
   limit: number = 24
 ) {
   if (!groupCarousels) return products.slice(0, limit);
-
-  const carouselGroups = new Map<string, any[]>();
-
-  for (const p of products) {
-    if (p.hasCarouselAd) {
-      const groupKey = p.brandPageId
-        ? `brand:${p.brandPageId}`
-        : p.pageId
-        ? `page:${p.pageId}`
-        : p.domain
-        ? `domain:${p.domain.toLowerCase()}`
-        : null;
-
-      if (groupKey) {
-        const existing = carouselGroups.get(groupKey) || [];
-        existing.push(p);
-        carouselGroups.set(groupKey, existing);
-      }
-    }
-  }
-
-  const consolidated: any[] = [];
-  const processedGroupKeys = new Set<string>();
-
-  for (const p of products) {
-    if (p.hasCarouselAd) {
-      const groupKey = p.brandPageId
-        ? `brand:${p.brandPageId}`
-        : p.pageId
-        ? `page:${p.pageId}`
-        : p.domain
-        ? `domain:${p.domain.toLowerCase()}`
-        : null;
-
-      if (groupKey) {
-        if (processedGroupKeys.has(groupKey)) continue;
-        processedGroupKeys.add(groupKey);
-
-        const group = carouselGroups.get(groupKey) || [p];
-        if (group.length > 1) {
-          // Sort within cluster so highest active ads / strongest product serves as Hero
-          group.sort(
-            (a, b) =>
-              (b.activeAdsCount || 0) - (a.activeAdsCount || 0) ||
-              (b.linkedAdsCount || 0) - (a.linkedAdsCount || 0)
-          );
-
-          const hero = { ...group[0] };
-          hero.isCarouselBundle = true;
-          hero.carouselBundleCount = group.length;
-          hero.carouselItems = group.map((item) => ({
-            id: item.id,
-            url: item.url,
-            title: item.title,
-            currentPrice: item.currentPrice,
-            originalPrice: item.originalPrice,
-            currency: item.currency,
-            discountOrOffer: item.discountOrOffer,
-            mainImageUrl: item.mainImageUrl,
-            activeAdsCount: item.activeAdsCount,
-            linkedAdsCount: item.linkedAdsCount,
-            isFavorite: item.isFavorite,
-            createdAt: item.createdAt,
-          }));
-          consolidated.push(hero);
-          continue;
-        } else {
-          consolidated.push(p);
-          continue;
-        }
-      }
-    }
-    consolidated.push(p);
-  }
-
-  return consolidated.slice(0, limit);
+  return groupProductsIntoCarousels(products, limit, !groupCarousels);
 }
 
 test("Task 1: Groups sibling carousel products from same brand into single stacked card", () => {
@@ -181,3 +107,38 @@ test("Task 3: Single carousel product without siblings is not marked as bundle",
   assert.strictEqual(grouped[0].isCarouselBundle, undefined);
   assert.strictEqual(grouped[0].carouselItems, undefined);
 });
+
+test("Carousel grouping invariant: groupProductsIntoCarousels with skipGrouping=true (includeDetails=true) preserves flat products without grouping", () => {
+  const mockProducts = [
+    { id: "prod-1", domain: "tbshopp.com", brandPageId: "183958198135625", hasCarouselAd: true, activeAdsCount: 3 },
+    { id: "prod-2", domain: "tbshopp.com", brandPageId: "183958198135625", hasCarouselAd: true, activeAdsCount: 8 },
+    { id: "prod-3", domain: "tbshopp.com", brandPageId: "183958198135625", hasCarouselAd: true, activeAdsCount: 1 },
+  ];
+
+  // When skipGrouping is true (e.g. single product detail modal read), products are returned flat
+  const flat = groupProductsIntoCarousels(mockProducts, 24, true);
+  assert.strictEqual(flat.length, 3);
+  assert.strictEqual(flat[0].id, "prod-1");
+  assert.strictEqual(flat[0].isCarouselBundle, undefined);
+  assert.strictEqual(flat[1].id, "prod-2");
+  assert.strictEqual(flat[2].id, "prod-3");
+});
+
+test("Cache hygiene invariant: Brand cache key suffix null-guard prevents wiping all workspace brand caches", () => {
+  const ws = "test-ws-123";
+  const getBrandCachePrefix = (domain: string | null | undefined): string | null => {
+    const brandKey = (domain || "").toLowerCase().trim();
+    return brandKey ? `cache:brand:${ws}:${brandKey}:` : null;
+  };
+
+  // With a valid domain
+  assert.strictEqual(getBrandCachePrefix("example.com"), "cache:brand:test-ws-123:example.com:");
+  assert.strictEqual(getBrandCachePrefix("  TBSHOPP.COM  "), "cache:brand:test-ws-123:tbshopp.com:");
+
+  // With null, empty, or whitespace-only domain, brand cache prefix MUST be null (never cache:brand:test-ws-123::)
+  assert.strictEqual(getBrandCachePrefix(null), null);
+  assert.strictEqual(getBrandCachePrefix(""), null);
+  assert.strictEqual(getBrandCachePrefix("   "), null);
+  assert.strictEqual(getBrandCachePrefix(undefined), null);
+});
+

@@ -98,7 +98,7 @@ export function BrandDeepDiveView({
     }
   }, [isProductModalOpen, selectedProductForModal?.id]);
 
-  // Domain Tab Navigation Hook (with popstate & scroll-restoration fix BUG-04)
+  // Domain Tab Navigation Hook (with popstate & scroll-restoration handling)
   const {
     activeTab,
     visitedTabs,
@@ -139,7 +139,7 @@ export function BrandDeepDiveView({
     }
   }, [data?.brand, setOverlayMeta]);
 
-  // Domain Actions Hook (with locked ref set BUG-05 & internal toast BUG-10)
+  // Domain Actions Hook (with locked ref set & internal toast feedback)
   const {
     isCheckingStatus,
     isWatchlisted,

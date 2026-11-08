@@ -35,14 +35,14 @@ export function useAdCardState(
   const [showScoreTooltip, setShowScoreTooltip] = useState(false);
   const hasAutoRefreshedRef = useRef(false);
 
-  // Sync when prop updates with BUG-02 fix (reset carouselIndex to 0)
+  // Sync when prop updates (reset carouselIndex to 0)
   useEffect(() => {
     setCurrentAd(ad);
     setIsArchived(Boolean(ad.isArchived));
     if (ad.product) setExtractedProduct(ad.product);
     setVideoError(false);
     setIsPlayingVideo(false);
-    setCarouselIndex(0); // BUG-02 fix: eliminate wrong slide display on ad prop updates
+    setCarouselIndex(0); // Eliminate wrong slide display on ad prop updates
     hasAutoRefreshedRef.current = false;
   }, [ad]);
 
@@ -273,7 +273,7 @@ export function useAdCardState(
     productCreativeCount: currentAd.productCreativeCount || 1,
   });
 
-  // Grouped domain configurations (BUG-12 fix for <= 8 direct props)
+  // Grouped domain configurations (satisfying <= 8 direct props)
   const mediaConfig: AdMediaConfig = {
     firstVideoUrl,
     displayThumbnail,

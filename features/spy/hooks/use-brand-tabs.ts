@@ -115,7 +115,7 @@ export function useBrandTabs({
     [isModal, onProductsNeeded, onProductsRefreshNeeded]
   );
 
-  // BUG-04 fix: forward latest handleTabChange reference to avoid stale closures in popstate listener
+  // Forward latest handleTabChange reference to avoid stale closures in popstate listener
   const handleTabChangeRef = useRef(handleTabChange);
   handleTabChangeRef.current = handleTabChange;
 

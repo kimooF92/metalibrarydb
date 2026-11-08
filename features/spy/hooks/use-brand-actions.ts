@@ -36,7 +36,7 @@ export function useBrandActions({
   const [isSyncingProducts, setIsSyncingProducts] = useState(false);
   const [isQueueingLocalRescan, setIsQueueingLocalRescan] = useState(false);
 
-  // BUG-05 fix: own refreshingProductIdsRef internally inside useBrandActions
+  // Dedicated ref to track ongoing product refreshes without re-render thrashing
   const refreshingProductIdsRef = useRef<Set<string>>(new Set());
   const statusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -232,7 +232,7 @@ export function useBrandActions({
     }
   };
 
-  // BUG-05 fix: accepts products to resolveProductForRefresh without stale closure
+  // Accept latest products array to resolveProductForRefresh without stale closure
   const handleRefreshProduct = async (
     productId: string,
     productOverride?: ScrapedProduct

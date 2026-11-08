@@ -22,7 +22,7 @@ export function DateRangePopover({
 }: DateRangePopoverProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  // BUG-07 fix: self-contained click-outside handler tied directly to popover DOM node
+  // Self-contained click-outside handler tied directly to popover DOM node
   useEffect(() => {
     if (!isOpen) return;
     function handleClickOutside(e: MouseEvent) {

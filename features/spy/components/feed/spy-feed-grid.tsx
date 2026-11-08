@@ -46,7 +46,7 @@ export function SpyFeedGrid({
   const { onLoadMore, onRetry, onResetFilters, onExcludeBrand, onUpdateAd } = actions;
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // BUG-09 fix: ref-stabilized IntersectionObserver attached to stable sentinel outside view conditional
+  // Ref-stabilized IntersectionObserver attached to stable sentinel outside view conditional
   useEffect(() => {
     if (isLoading || isFetchingMore || pagination.page >= pagination.totalPages) return;
     const sentinel = sentinelRef.current;
@@ -170,7 +170,7 @@ export function SpyFeedGrid({
         </div>
       )}
 
-      {/* Sentinel element for infinite scroll (BUG-09 fix: persistent DOM node) */}
+      {/* Sentinel element for infinite scroll (persistent DOM node) */}
       <div ref={sentinelRef} className="h-4 w-full" />
 
       {/* Inline Loading Footer when fetching next page */}
