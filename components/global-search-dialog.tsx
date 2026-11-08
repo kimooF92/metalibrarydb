@@ -25,6 +25,7 @@ import {
   Sparkles,
   ArrowUpDown,
   CornerDownLeft,
+  ArrowRight,
   Command as CommandKey,
 } from "lucide-react";
 import type { GlobalSearchResult } from "@/app/api/search/global/route";
@@ -315,6 +316,15 @@ export function GlobalSearchDialog({
                   </CommandItem>
                 );
               })}
+
+              {/* View all Brands link */}
+              <CommandItem
+                onSelect={() => handleNavigate(`/brands?search=${encodeURIComponent(query.trim())}`)}
+                className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50/70 dark:hover:bg-indigo-500/10 cursor-pointer transition-colors border-t border-slate-100 dark:border-slate-800/60 mt-1"
+              >
+                <span>View all brand results for &quot;{query}&quot;</span>
+                <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+              </CommandItem>
             </CommandGroup>
           )}
 
@@ -377,6 +387,15 @@ export function GlobalSearchDialog({
                     </CommandItem>
                   );
                 })}
+
+                {/* View all Products link */}
+                <CommandItem
+                  onSelect={() => handleNavigate(`/products?search=${encodeURIComponent(query.trim())}`)}
+                  className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50/70 dark:hover:bg-emerald-500/10 cursor-pointer transition-colors border-t border-slate-100 dark:border-slate-800/60 mt-1"
+                >
+                  <span>View all product results for &quot;{query}&quot;</span>
+                  <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+                </CommandItem>
               </CommandGroup>
             </>
           )}
@@ -449,6 +468,15 @@ export function GlobalSearchDialog({
                     </CommandItem>
                   );
                 })}
+
+                {/* View all Ads link */}
+                <CommandItem
+                  onSelect={() => handleNavigate(`/spy?search=${encodeURIComponent(query.trim())}`)}
+                  className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-sky-600 dark:text-sky-400 hover:bg-sky-50/70 dark:hover:bg-sky-500/10 cursor-pointer transition-colors border-t border-slate-100 dark:border-slate-800/60 mt-1"
+                >
+                  <span>View all ad results for &quot;{query}&quot;</span>
+                  <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+                </CommandItem>
               </CommandGroup>
             </>
           )}
