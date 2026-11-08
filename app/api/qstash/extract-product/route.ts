@@ -110,7 +110,27 @@ async function handleProductExtraction(req: Request | NextRequest) {
   }
 }
 
-// Wrap with QStash cryptographic signature verification
-export const POST = verifySignatureAppRouter(handleProductExtraction, {
-  clockTolerance: 10,
-});
+// Lazy signature verification wrapper to prevent build-time crashes when env vars are missing
+export async function POST(req: Request | NextRequest) {
+  const currentSigningKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
+  const nextSigningKey = process.env.QSTASH_NEXT_SIGNING_KEY;
+
+  if (!currentSigningKey || !nextSigningKey) {
+    if (process.env.NODE_ENV === "development") {
+      return handleProductExtraction(req);
+    }
+    console.error("[QStash Error] Missing QSTASH_CURRENT_SIGNING_KEY or QSTASH_NEXT_SIGNING_KEY in environment");
+    return NextResponse.json(
+      { error: "Server configuration missing: QStash signing keys are required." },
+      { status: 500 }
+    );
+  }
+
+  const verified = verifySignatureAppRouter(handleProductExtraction, {
+    currentSigningKey,
+    nextSigningKey,
+    clockTolerance: 10,
+  });
+
+  return verified(req);
+}
