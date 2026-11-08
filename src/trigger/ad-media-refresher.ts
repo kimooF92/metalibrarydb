@@ -1,9 +1,9 @@
 import { chromium, Browser, BrowserContext, Page } from "playwright";
-import { db } from "@/db";
-import { ads, adObservations } from "@/db/schema";
+import { db } from "../../db";
+import { ads, adObservations } from "../../db/schema";
 import { eq } from "drizzle-orm";
-import { uploadMediaFromUrlToB2, isB2Configured } from "./b2-storage";
-import { deleteByPrefix } from "./cache-service";
+import { uploadMediaFromUrlToB2, isB2Configured } from "../../lib/b2-storage";
+import { deleteByPrefix } from "../../lib/cache-service";
 
 export interface RefreshAdMediaOptions {
   adId?: string;
@@ -27,7 +27,7 @@ export interface RefreshAdMediaResult {
 
 /**
  * Core engine to refresh single ad media and active status via Playwright.
- * Works uniformly in Trigger.dev tasks and local/serverless worker execution.
+ * Runs inside Trigger.dev Cloud container with dedicated Playwright Chromium.
  */
 export async function refreshSingleAdMedia(
   options: RefreshAdMediaOptions

@@ -7,7 +7,7 @@ import { scanMetaAdPage } from "../../worker/scanner";
 import { markJobCompleted } from "../../worker/db";
 import { acquireLock, acquireLockDetailed, releaseLock, deleteCached, deleteByPrefix, setCached } from "../../lib/cache-service";
 import { broadcastScanStep } from "../../lib/realtime-scan";
-import { refreshSingleAdMedia, RefreshAdMediaOptions } from "../../lib/ad-media-refresher";
+import { refreshSingleAdMedia, RefreshAdMediaOptions } from "./ad-media-refresher";
 
 export interface ScanPageCountPayload {
   pageId?: string;

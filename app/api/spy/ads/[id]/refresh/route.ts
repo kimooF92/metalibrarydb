@@ -4,14 +4,27 @@ import { ads, adObservations } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { tasks, runs } from "@trigger.dev/sdk";
-import { refreshSingleAdMedia, RefreshAdMediaResult } from "@/lib/ad-media-refresher";
 import { scrapeSingleAdViaApify, getApifyTokens } from "@/lib/apify";
 import { extractMedia, extractAdActiveStatus } from "@/lib/apify-ingest";
 import { uploadMediaFromUrlToB2, isB2Configured } from "@/lib/b2-storage";
 import { deleteByPrefix } from "@/lib/cache-service";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60; // Allow sufficient time for Playwright/Trigger run
+export const maxDuration = 60; // 60s max on platforms supporting it
+
+export interface RefreshAdMediaResult {
+  success: boolean;
+  adId?: string;
+  adArchiveId?: string;
+  isActive?: boolean;
+  isArchived?: boolean;
+  mediaUrls?: string[];
+  thumbnailUrl?: string | null;
+  refreshedVideoUrl?: string | null;
+  refreshedThumbnailUrl?: string | null;
+  message?: string;
+  error?: string;
+}
 
 export async function POST(
   req: NextRequest,
@@ -68,7 +81,7 @@ export async function POST(
     const searchParams = req.nextUrl?.searchParams || new URL(req.url).searchParams;
     const forceRefresh = searchParams.get("force") === "true";
 
-    if (hasB2Video && hasB2Thumb && !forceRefresh) {
+    if (hasB2Thumb && (hasB2Video || adRecord.mediaType === "image") && !forceRefresh) {
       const [obs] = await db
         .select({ isActive: adObservations.isActive })
         .from(adObservations)
@@ -91,7 +104,7 @@ export async function POST(
 
     let refreshResult: RefreshAdMediaResult | null = null;
 
-    // 2. PRIMARY: Trigger.dev Background Task Engine (Zero Apify credits)
+    // 2. PRIMARY: Trigger.dev Cloud Background Task Engine (Zero Apify credits, runs Playwright in Docker)
     if (process.env.TRIGGER_SECRET_KEY) {
       try {
         console.log(`[Ad Refresh] Dispatching Trigger.dev task 'refresh-ad-media' for ad: ${adRecord.adArchiveId}...`);
@@ -101,33 +114,30 @@ export async function POST(
           force: forceRefresh,
         });
 
-        const run = await runs.poll(handle.id, { pollIntervalMs: 1000 });
+        // Safe poll bounded to 25s to prevent Vercel Gateway Timeout (504/500)
+        const startTime = Date.now();
+        const MAX_WAIT_MS = 25000;
+        let pollRun: any = null;
 
-        if (run.status === "COMPLETED" && run.output) {
-          refreshResult = run.output as RefreshAdMediaResult;
+        while (Date.now() - startTime < MAX_WAIT_MS) {
+          pollRun = await runs.retrieve(handle.id);
+          if (pollRun && pollRun.isCompleted) {
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+
+        if (pollRun && pollRun.isCompleted && pollRun.output) {
+          refreshResult = pollRun.output as RefreshAdMediaResult;
         } else {
-          console.warn(`[Ad Refresh] Trigger.dev run ${handle.id} ended with status: ${run.status}`);
+          console.warn(`[Ad Refresh] Trigger.dev run ${handle.id} status: ${pollRun?.status || "timed_out"}`);
         }
       } catch (triggerErr: any) {
-        console.warn(`[Ad Refresh] Trigger.dev task execution issue (${triggerErr?.message}), falling back to direct refresher`);
+        console.warn(`[Ad Refresh] Trigger.dev task execution issue (${triggerErr?.message}), falling back to Apify`);
       }
     }
 
-    // 3. SECONDARY: Direct Playwright Engine (Runs locally or serverless without external API cost)
-    if (!refreshResult || !refreshResult.success) {
-      console.log(`[Ad Refresh] Executing direct Playwright refresher for Ad ID: ${adRecord.adArchiveId}...`);
-      try {
-        refreshResult = await refreshSingleAdMedia({
-          adId: id,
-          adArchiveId: adRecord.adArchiveId,
-          force: forceRefresh,
-        });
-      } catch (directErr: any) {
-        console.warn(`[Ad Refresh] Direct Playwright error (${directErr?.message})`);
-      }
-    }
-
-    // 4. TERTIARY: Apify Actor Failover (Only if Playwright & Trigger.dev encountered CAPTCHA/block)
+    // 3. FAILOVER: Apify Actor Failover (HTTP API that works 100% on Vercel serverless without Playwright)
     if (!refreshResult || !refreshResult.success) {
       const tokens = getApifyTokens();
       if (tokens.length > 0) {
@@ -213,7 +223,7 @@ export async function POST(
       });
     }
 
-    // 5. Fetch updated ad record for clean response
+    // 4. Fetch updated ad record for clean response
     const [finalAd] = await db
       .select({
         id: ads.id,
