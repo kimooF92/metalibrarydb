@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Ad, ScrapedProduct } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
@@ -69,12 +69,14 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
   const [isRefreshingMedia, setIsRefreshingMedia] = useState(false);
   const [isExtractingProduct, setIsExtractingProduct] = useState(false);
   const [extractedProduct, setExtractedProduct] = useState<ScrapedProduct | null>(ad.product || null);
+  const hasAutoRefreshedRef = useRef(false);
 
   // Sync when prop updates
   useEffect(() => {
     setCurrentAd(ad);
     setIsArchived(Boolean(ad.isArchived));
     if (ad.product) setExtractedProduct(ad.product);
+    hasAutoRefreshedRef.current = false;
   }, [ad]);
 
   const firstVideoUrl = currentAd.mediaUrls?.find(isGenuineVideoUrl) || null;
@@ -106,23 +108,35 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
   };
 
   const openPreview = async () => {
-    if (currentAd.mediaUrls?.length || currentAd.storyboardUrls?.length) {
-      setIsPreviewOpen(true);
-      return;
+    setIsPreviewOpen(true);
+
+    let latestAd = currentAd;
+    if (!currentAd.mediaUrls?.length && !currentAd.storyboardUrls?.length) {
+      setIsLoadingMedia(true);
+      try {
+        const res = await fetch(`/api/spy/ads/${encodeURIComponent(currentAd.id)}`);
+        const data = await res.json();
+        if (res.ok && data.success && data.ad) {
+          latestAd = { ...latestAd, ...data.ad };
+          setCurrentAd(latestAd);
+        }
+      } catch {
+        // Keep the thumbnail preview available if detail loading fails.
+      } finally {
+        setIsLoadingMedia(false);
+      }
     }
 
-    setIsLoadingMedia(true);
-    try {
-      const res = await fetch(`/api/spy/ads/${encodeURIComponent(currentAd.id)}`);
-      const data = await res.json();
-      if (res.ok && data.success && data.ad) {
-        setCurrentAd((prev) => ({ ...prev, ...data.ad }));
-      }
-    } catch {
-      // Keep the thumbnail preview available if detail loading fails.
-    } finally {
-      setIsLoadingMedia(false);
-      setIsPreviewOpen(true);
+    // Auto-refresh strictly when modal is opened AND media CDN link is expired
+    const vid = latestAd.mediaUrls?.find(isGenuineVideoUrl) || null;
+    const thumb = latestAd.signedThumbnailUrl || latestAd.thumbnailUrl || (latestAd.mediaUrls?.[0] ?? null);
+    const isVidExpired = vid ? isFbCdnUrlExpired(vid) : false;
+    const isImgExpired = thumb ? isFbCdnUrlExpired(thumb) : false;
+    const isExpired = isVidExpired || isImgExpired || imgError;
+
+    if (isExpired && !isRefreshingMedia && !hasAutoRefreshedRef.current) {
+      hasAutoRefreshedRef.current = true;
+      handleRefreshMedia();
     }
   };
 
@@ -167,6 +181,7 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
       const data = await res.json();
       if (data.success && data.ad) {
         setCurrentAd(data.ad);
+        setIsArchived(Boolean(data.ad.isArchived));
         setImgError(false);
         setIsProxied(false);
         onMediaRefreshed?.(data.ad);

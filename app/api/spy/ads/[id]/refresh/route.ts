@@ -4,10 +4,7 @@ import { ads, adObservations } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { tasks, runs } from "@trigger.dev/sdk";
-import { scrapeSingleAdViaApify, getApifyTokens } from "@/lib/apify";
-import { extractMedia, extractAdActiveStatus } from "@/lib/apify-ingest";
-import { uploadMediaFromUrlToB2, isB2Configured } from "@/lib/b2-storage";
-import { deleteByPrefix } from "@/lib/cache-service";
+import { isFbCdnUrlExpired } from "@/lib/fb-cdn";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // 60s max on platforms supporting it
@@ -73,15 +70,17 @@ export async function POST(
     }
 
     const adArchiveUrl = `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&id=${adRecord.adArchiveId}`;
-
-    // 1. Check if media is already permanently preserved in Backblaze B2 (unless force refresh requested)
-    const b2Endpoint = process.env.B2_ENDPOINT || "backblazeb2.com";
-    const hasB2Video = adRecord.mediaUrls?.some((u) => u.includes(b2Endpoint) || u.includes("b2/"));
-    const hasB2Thumb = adRecord.thumbnailUrl?.includes(b2Endpoint) || adRecord.thumbnailUrl?.includes("b2/");
     const searchParams = req.nextUrl?.searchParams || new URL(req.url).searchParams;
     const forceRefresh = searchParams.get("force") === "true";
 
-    if (hasB2Thumb && (hasB2Video || adRecord.mediaType === "image") && !forceRefresh) {
+    // 1. Fast skip: If media was refreshed within the last 5 minutes and is not expired, skip Trigger.dev
+    const isVideo = adRecord.mediaType === "video" || (adRecord.mediaUrls && adRecord.mediaUrls.some((u) => u.includes(".mp4")));
+    const firstVideo = adRecord.mediaUrls?.find((u) => u.includes(".mp4") || u.includes("/videos/"));
+    const isThumbExpired = adRecord.thumbnailUrl ? isFbCdnUrlExpired(adRecord.thumbnailUrl) : false;
+    const isVidExpired = firstVideo ? isFbCdnUrlExpired(firstVideo) : false;
+    const recentRefreshMs = Date.now() - new Date(adRecord.updatedAt || 0).getTime();
+
+    if (!forceRefresh && recentRefreshMs < 5 * 60 * 1000 && !isThumbExpired && (!isVideo || (firstVideo && !isVidExpired))) {
       const [obs] = await db
         .select({ isActive: adObservations.isActive })
         .from(adObservations)
@@ -97,14 +96,14 @@ export async function POST(
           isActive: isActiveState,
         },
         isActive: isActiveState,
-        message: "Media is permanently preserved in Backblaze B2 storage.",
+        message: "Ad media is currently fresh and valid.",
         adArchiveUrl,
       });
     }
 
     let refreshResult: RefreshAdMediaResult | null = null;
 
-    // 2. PRIMARY: Trigger.dev Cloud Background Task Engine (Zero Apify credits, runs Playwright in Docker)
+    // 2. PRIMARY & ONLY ENGINE: Trigger.dev Cloud Task (Zero Apify credits, runs Playwright in Docker)
     if (process.env.TRIGGER_SECRET_KEY) {
       try {
         console.log(`[Ad Refresh] Dispatching Trigger.dev task 'refresh-ad-media' for ad: ${adRecord.adArchiveId}...`);
@@ -133,86 +132,10 @@ export async function POST(
           console.warn(`[Ad Refresh] Trigger.dev run ${handle.id} status: ${pollRun?.status || "timed_out"}`);
         }
       } catch (triggerErr: any) {
-        console.warn(`[Ad Refresh] Trigger.dev task execution issue (${triggerErr?.message}), falling back to Apify`);
+        console.error(`[Ad Refresh] Trigger.dev task execution issue: ${triggerErr?.message}`);
       }
-    }
-
-    // 3. FAILOVER: Apify Actor Failover (HTTP API that works 100% on Vercel serverless without Playwright)
-    if (!refreshResult || !refreshResult.success) {
-      const tokens = getApifyTokens();
-      if (tokens.length > 0) {
-        console.log(`[Ad Refresh] Falling back to Apify actor failover for Ad ID: ${adRecord.adArchiveId}...`);
-        const scrapedItem = await scrapeSingleAdViaApify(adRecord.adArchiveId);
-
-        if (scrapedItem) {
-          const isAdActive = extractAdActiveStatus(scrapedItem);
-          const { mediaUrls: extractedUrls, thumbnailUrl: extractedThumb, mediaType } = extractMedia(scrapedItem);
-
-          let finalVideoUrl = extractedUrls.find((u) => u.includes(".mp4") || mediaType === "video") || null;
-          let finalThumbnailUrl = extractedThumb || (extractedUrls.length > 0 ? extractedUrls[0] : null);
-
-          if (isB2Configured()) {
-            if (finalVideoUrl && finalVideoUrl.startsWith("http")) {
-              const b2Vid = await uploadMediaFromUrlToB2(
-                finalVideoUrl,
-                "videos",
-                `${adRecord.adArchiveId}_refreshed_${Date.now()}`
-              );
-              if (b2Vid) finalVideoUrl = b2Vid;
-            }
-
-            if (finalThumbnailUrl && finalThumbnailUrl.startsWith("http")) {
-              const b2Thumb = await uploadMediaFromUrlToB2(
-                finalThumbnailUrl,
-                "thumbnails",
-                `${adRecord.adArchiveId}_refreshed_${Date.now()}`
-              );
-              if (b2Thumb) finalThumbnailUrl = b2Thumb;
-            }
-          }
-
-          await db
-            .update(adObservations)
-            .set({
-              isActive: isAdActive,
-              observedAt: new Date(),
-            })
-            .where(eq(adObservations.adId, id));
-
-          deleteByPrefix("cache:spy_ads:").catch(() => {});
-
-          const updatedMediaUrls = finalVideoUrl
-            ? [finalVideoUrl, ...(adRecord.mediaUrls?.filter((u) => u !== finalVideoUrl) || [])]
-            : extractedUrls.length > 0
-            ? extractedUrls
-            : adRecord.mediaUrls;
-
-          const [updatedAd] = await db
-            .update(ads)
-            .set({
-              mediaUrls: updatedMediaUrls,
-              thumbnailUrl: finalThumbnailUrl || adRecord.thumbnailUrl,
-              updatedAt: new Date(),
-              ...(isAdActive ? { lastSeenAt: new Date() } : {}),
-            })
-            .where(eq(ads.id, id))
-            .returning();
-
-          return NextResponse.json({
-            success: true,
-            ad: {
-              ...updatedAd,
-              isActive: isAdActive,
-            },
-            isActive: isAdActive,
-            refreshedVideoUrl: finalVideoUrl,
-            refreshedThumbnailUrl: finalThumbnailUrl,
-            message: isAdActive
-              ? "Media refreshed and ad is actively running on Meta."
-              : "Media refreshed. Meta confirms ad has ended (inactive).",
-          });
-        }
-      }
+    } else {
+      console.warn("[Ad Refresh] TRIGGER_SECRET_KEY not set; Trigger.dev cannot run.");
     }
 
     if (!refreshResult || !refreshResult.success) {
@@ -221,6 +144,20 @@ export async function POST(
         message: refreshResult?.error || "Could not refresh media right now. Click 'Watch on Meta Ad Library' to view.",
         adArchiveUrl,
       });
+    }
+
+    const isAdActive = refreshResult.isActive ?? true;
+
+    // 3. Auto-unarchive if Meta confirms active
+    if (isAdActive && adRecord.isArchived) {
+      await db
+        .update(ads)
+        .set({
+          isArchived: false,
+          archivedAt: null,
+          lastSeenAt: new Date(),
+        })
+        .where(eq(ads.id, id));
     }
 
     // 4. Fetch updated ad record for clean response
@@ -249,18 +186,17 @@ export async function POST(
       .where(eq(ads.id, id))
       .limit(1);
 
-    const isAdActive = refreshResult.isActive ?? true;
-
     return NextResponse.json({
       success: true,
       ad: {
         ...(finalAd || adRecord),
         isActive: isAdActive,
+        isArchived: isAdActive ? false : Boolean(finalAd?.isArchived ?? adRecord.isArchived),
       },
       isActive: isAdActive,
       refreshedVideoUrl: refreshResult.refreshedVideoUrl,
       refreshedThumbnailUrl: refreshResult.refreshedThumbnailUrl,
-      message: refreshResult.message || "Media refreshed successfully.",
+      message: refreshResult.message || (isAdActive ? "Media refreshed and ad is actively running on Meta." : "Media refreshed. Ad has ended on Meta."),
     });
   } catch (err: any) {
     console.error("[Ad Refresh Error]:", err);

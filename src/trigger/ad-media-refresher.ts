@@ -2,7 +2,6 @@ import { chromium, Browser, BrowserContext, Page } from "playwright";
 import { db } from "../../db";
 import { ads, adObservations } from "../../db/schema";
 import { eq } from "drizzle-orm";
-import { uploadMediaFromUrlToB2, isB2Configured } from "../../lib/b2-storage";
 import { deleteByPrefix } from "../../lib/cache-service";
 
 export interface RefreshAdMediaOptions {
@@ -48,6 +47,7 @@ export async function refreshSingleAdMedia(
       mediaType: ads.mediaType,
       pageId: ads.pageId,
       pageName: ads.pageName,
+      isArchived: ads.isArchived,
       lastSeenAt: ads.lastSeenAt,
     })
     .from(ads)
@@ -258,31 +258,9 @@ export async function refreshSingleAdMedia(
 
     const discoveredImages = evaluation.cardImages.length > 0 ? evaluation.cardImages : interceptedImages.slice(0, 5);
 
-    let finalVideoUrl = discoveredVideoUrl;
-    let finalThumbnailUrl = discoveredThumbnailUrl;
-
-    // 6. Upload fresh media to Backblaze B2 if configured
-    if (isB2Configured()) {
-      if (finalVideoUrl && finalVideoUrl.startsWith("http") && !finalVideoUrl.includes(b2Endpoint)) {
-        console.log(`[Ad Media Refresher] Uploading fresh video to B2: ${finalVideoUrl.substring(0, 60)}...`);
-        const b2Vid = await uploadMediaFromUrlToB2(
-          finalVideoUrl,
-          "videos",
-          `${archiveId}_refreshed_${Date.now()}`
-        );
-        if (b2Vid) finalVideoUrl = b2Vid;
-      }
-
-      if (finalThumbnailUrl && finalThumbnailUrl.startsWith("http") && !finalThumbnailUrl.includes(b2Endpoint)) {
-        console.log(`[Ad Media Refresher] Uploading fresh thumbnail to B2: ${finalThumbnailUrl.substring(0, 60)}...`);
-        const b2Thumb = await uploadMediaFromUrlToB2(
-          finalThumbnailUrl,
-          "thumbnails",
-          `${archiveId}_refreshed_${Date.now()}`
-        );
-        if (b2Thumb) finalThumbnailUrl = b2Thumb;
-      }
-    }
+    // 6. Direct media URLs (B2 storage disabled to conserve storage quota)
+    const finalVideoUrl = discoveredVideoUrl;
+    const finalThumbnailUrl = discoveredThumbnailUrl;
 
     // 7. Update Database: adObservations and ads table
     await db
@@ -305,7 +283,13 @@ export async function refreshSingleAdMedia(
         mediaUrls: updatedMediaUrls,
         thumbnailUrl: finalThumbnailUrl || adRecord.thumbnailUrl,
         updatedAt: new Date(),
-        ...(isAdActive ? { lastSeenAt: new Date() } : {}),
+        ...(isAdActive
+          ? {
+              isArchived: false,
+              archivedAt: null,
+              lastSeenAt: new Date(),
+            }
+          : {}),
       })
       .where(eq(ads.id, adRecord.id));
 
@@ -317,6 +301,7 @@ export async function refreshSingleAdMedia(
       adId: adRecord.id,
       adArchiveId: archiveId,
       isActive: isAdActive,
+      isArchived: isAdActive ? false : Boolean(adRecord.isArchived),
       mediaUrls: updatedMediaUrls,
       thumbnailUrl: finalThumbnailUrl || adRecord.thumbnailUrl,
       refreshedVideoUrl: finalVideoUrl,

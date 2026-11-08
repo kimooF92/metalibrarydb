@@ -33,6 +33,7 @@ export function useAdCardState(
   const [isExtractingProduct, setIsExtractingProduct] = useState(false);
   const [extractedProduct, setExtractedProduct] = useState<ScrapedProduct | null>(ad.product || null);
   const [showScoreTooltip, setShowScoreTooltip] = useState(false);
+  const hasAutoRefreshedRef = useRef(false);
 
   // Sync when prop updates with BUG-02 fix (reset carouselIndex to 0)
   useEffect(() => {
@@ -42,6 +43,7 @@ export function useAdCardState(
     setVideoError(false);
     setIsPlayingVideo(false);
     setCarouselIndex(0); // BUG-02 fix: eliminate wrong slide display on ad prop updates
+    hasAutoRefreshedRef.current = false;
   }, [ad]);
 
   const firstVideoUrl = currentAd.mediaUrls?.find(isGenuineVideoUrl) || null;
@@ -93,21 +95,34 @@ export function useAdCardState(
 
   const openPreview = async () => {
     setIsPreviewOpen(true);
-    if (currentAd.mediaUrls?.length || currentAd.storyboardUrls?.length) {
-      return;
+
+    let latestAd = currentAd;
+    if (!currentAd.mediaUrls?.length && !currentAd.storyboardUrls?.length) {
+      setIsLoadingMedia(true);
+      try {
+        const res = await fetch(`/api/spy/ads/${encodeURIComponent(currentAd.id)}`);
+        const data = await res.json();
+        if (res.ok && data.success && data.ad) {
+          latestAd = { ...latestAd, ...data.ad };
+          setCurrentAd(latestAd);
+        }
+      } catch {
+        // Keep the thumbnail preview available if detail loading fails.
+      } finally {
+        setIsLoadingMedia(false);
+      }
     }
 
-    setIsLoadingMedia(true);
-    try {
-      const res = await fetch(`/api/spy/ads/${encodeURIComponent(currentAd.id)}`);
-      const data = await res.json();
-      if (res.ok && data.success && data.ad) {
-        setCurrentAd((prev) => ({ ...prev, ...data.ad }));
-      }
-    } catch {
-      // Keep the thumbnail preview available if detail loading fails.
-    } finally {
-      setIsLoadingMedia(false);
+    // Auto-refresh strictly when modal is opened AND media CDN link is expired
+    const vid = latestAd.mediaUrls?.find(isGenuineVideoUrl) || null;
+    const thumb = latestAd.signedThumbnailUrl || latestAd.thumbnailUrl || (latestAd.mediaUrls?.[0] ?? null);
+    const isVidExpired = vid ? isFbCdnUrlExpired(vid) : false;
+    const isImgExpired = thumb ? isFbCdnUrlExpired(thumb) : false;
+    const isExpired = isVidExpired || isImgExpired || imgError || videoError;
+
+    if (isExpired && !isRefreshingMedia && !hasAutoRefreshedRef.current) {
+      hasAutoRefreshedRef.current = true;
+      handleRefreshMedia();
     }
   };
 
@@ -152,6 +167,7 @@ export function useAdCardState(
       const data = await res.json();
       if (data.success && data.ad) {
         setCurrentAd(data.ad);
+        setIsArchived(Boolean(data.ad.isArchived));
         setImgError(false);
         setVideoError(false);
         setIsPlayingVideo(false);
