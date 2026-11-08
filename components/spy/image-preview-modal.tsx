@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   Download,
@@ -72,10 +73,15 @@ export function ImagePreviewModal({
   isRefreshingMedia = false,
 }: ImagePreviewModalProps) {
   const { showToast } = useToast();
+  const [mounted, setMounted] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [videoError, setVideoError] = useState(false);
   const [copiedText, setCopiedText] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const hasDetails = Boolean(caption || title || destinationUrl);
   // Default to Theater mode if there are no details, otherwise Split view
@@ -92,6 +98,11 @@ export function ImagePreviewModal({
   useEffect(() => {
     if (isOpen) {
       setIsTheaterMode(!hasDetails);
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
     }
   }, [isOpen, hasDetails]);
 
@@ -148,7 +159,7 @@ export function ImagePreviewModal({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  if (!isOpen || (displayMediaList.length === 0 && !activeVideo)) return null;
+  if (!isOpen || !mounted) return null;
 
   const currentMedia = displayMediaList[currentIndex] || displayMediaList[0];
   const downloadHref = activeVideo || currentMedia || fallbackThumbnail;
@@ -195,7 +206,7 @@ export function ImagePreviewModal({
     }
   };
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-950/75 dark:bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
       onClick={onClose}
@@ -395,15 +406,15 @@ export function ImagePreviewModal({
                   className="max-h-[75vh] max-w-full object-contain rounded-xl"
                   onError={() => setVideoError(true)}
                 />
-              ) : (
+              ) : currentMedia || fallbackThumbnail ? (
                 <img
-                  src={getSmartMediaUrl(fallbackThumbnail || currentMedia)}
+                  src={getSmartMediaUrl(currentMedia || fallbackThumbnail)}
                   alt={title || pageName || "Ad preview"}
                   referrerPolicy="no-referrer"
                   className="max-h-[75vh] max-w-full object-contain rounded-xl select-none"
                   onError={(e) => {
                     const target = e.currentTarget;
-                    const source = fallbackThumbnail || currentMedia;
+                    const source = currentMedia || fallbackThumbnail;
                     if (
                       source &&
                       !target.src.includes("/api/spy/image-proxy") &&
@@ -413,6 +424,11 @@ export function ImagePreviewModal({
                     }
                   }}
                 />
+              ) : (
+                <div className="flex flex-col items-center justify-center p-8 text-slate-400 gap-2">
+                  <ImageIcon className="w-10 h-10 opacity-40" />
+                  <span className="text-xs">No media preview available</span>
+                </div>
               )}
             </div>
 
@@ -620,6 +636,7 @@ export function ImagePreviewModal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

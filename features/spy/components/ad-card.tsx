@@ -54,7 +54,10 @@ export function AdCard({
   } = useAdCardState(ad, onArchiveToggle, onMediaRefreshed);
 
   return (
-    <div className="group relative flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 px-3.5 py-[19px] shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 hover:border-slate-300 dark:hover:border-slate-700/80 hover:shadow-lg">
+    <div
+      onClick={openPreview}
+      className="group relative flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 px-3.5 py-[19px] shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 hover:border-slate-300 dark:hover:border-slate-700/80 hover:shadow-lg cursor-pointer"
+    >
       {/* Top Section */}
       <div>
         {/* Brand Action Row (Matches ProductCardActions) */}
@@ -147,7 +150,7 @@ export function AdCard({
         isOpen={isPreviewOpen}
         onClose={() => setIsPreviewOpen(false)}
         imageUrls={previewImages}
-        videoUrl={canPlayVideo ? firstVideoUrl : null}
+        videoUrl={firstVideoUrl || null}
         fallbackThumbnail={displayThumbnail}
         isVideoAd={isVideoAd}
         title={currentAd.title}

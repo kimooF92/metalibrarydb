@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Ad } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
 import { getSmartMediaUrl } from "@/lib/image-proxy-url";
@@ -12,10 +13,8 @@ import {
   Image as ImageIcon,
   Flame,
   Calendar,
-  Sparkles,
   Trophy,
   Crown,
-  Play,
   CheckCircle2,
   XCircle,
   Loader2,
@@ -38,12 +37,27 @@ export function ProductClusterModal({
   productKey,
   initialAd,
 }: ProductClusterModalProps) {
+  const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [clusterData, setClusterData] = useState<{
     clusterSummary: any;
     items: Ad[];
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -73,7 +87,7 @@ export function ProductClusterModal({
     fetchCluster();
   }, [isOpen, adId, pageId, productKey]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const summary = clusterData?.clusterSummary;
   const items = clusterData?.items || [];
@@ -81,7 +95,7 @@ export function ProductClusterModal({
   const destinationUrl = landingUrl ? resolveDestinationUrl(landingUrl) : null;
   const domain = landingUrl ? getCleanDomain(landingUrl) : null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
       onClick={onClose}
@@ -102,7 +116,7 @@ export function ProductClusterModal({
               {summary?.isFlagship && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
                   <Crown className="w-3.5 h-3.5 text-amber-500 fill-amber-500/20" />
-                  <span>👑 Flagship Hero Product</span>
+                  <span>Flagship Hero Product</span>
                 </span>
               )}
             </div>
@@ -202,7 +216,6 @@ export function ProductClusterModal({
               {items.map((item, idx) => {
                 const isVideo = item.mediaType === "video";
                 const displayImg = item.signedThumbnailUrl || item.thumbnailUrl || item.mediaUrls?.[0];
-                const firstVideo = item.mediaUrls?.find((u) => u.includes(".mp4") || u.includes("video"));
 
                 return (
                   <div
@@ -292,6 +305,7 @@ export function ProductClusterModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

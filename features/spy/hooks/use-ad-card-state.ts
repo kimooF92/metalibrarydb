@@ -106,8 +106,8 @@ export function useAdCardState(
   };
 
   const openPreview = async () => {
+    setIsPreviewOpen(true);
     if (currentAd.mediaUrls?.length || currentAd.storyboardUrls?.length) {
-      setIsPreviewOpen(true);
       return;
     }
 
@@ -122,7 +122,6 @@ export function useAdCardState(
       // Keep the thumbnail preview available if detail loading fails.
     } finally {
       setIsLoadingMedia(false);
-      setIsPreviewOpen(true);
     }
   };
 

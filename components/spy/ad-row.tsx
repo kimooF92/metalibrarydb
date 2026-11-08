@@ -663,7 +663,7 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
         isOpen={isPreviewOpen}
         onClose={() => setIsPreviewOpen(false)}
         imageUrls={previewImages}
-        videoUrl={canPlayVideo ? firstVideoUrl : null}
+        videoUrl={firstVideoUrl || null}
         fallbackThumbnail={displayThumbnail}
         isVideoAd={isVideoAd}
         title={currentAd.title}

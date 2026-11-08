@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Ad } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
 import { getSmartMediaUrl } from "@/lib/image-proxy-url";
@@ -42,12 +43,27 @@ export function CreativeClusterModal({
   mediaHash,
   initialAd,
 }: CreativeClusterModalProps) {
+  const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [clusterData, setClusterData] = useState<{
     clusterSummary: any;
     items: Ad[];
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -77,7 +93,7 @@ export function CreativeClusterModal({
     fetchCluster();
   }, [isOpen, adId, clusterKey, mediaHash]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const summary = clusterData?.clusterSummary || initialAd?.creativeMetrics;
   const items = clusterData?.items || [];
@@ -85,7 +101,7 @@ export function CreativeClusterModal({
   const originalCreator = summary?.originalCreator;
   const isCrossBrand = summary?.isCrossBrand;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
       onClick={onClose}
@@ -338,6 +354,7 @@ export function CreativeClusterModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
