@@ -13,12 +13,14 @@ export const DialogDescription = DialogPrimitive.Description;
 
 export interface DialogContentProps extends DialogPrimitive.Popup.Props {
   showClose?: boolean;
+  containerClassName?: string;
 }
 
 export function DialogContent({
   className,
   children,
   showClose = true,
+  containerClassName,
   ...props
 }: DialogContentProps) {
   return (
@@ -28,7 +30,12 @@ export function DialogContent({
         className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs duration-150 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0"
       />
       {/* Scrollable Viewport Wrapper (prevents top-clipping on short screens) */}
-      <div className="fixed inset-0 z-50 overflow-y-auto p-4 sm:p-6 md:p-10 flex items-center justify-center">
+      <div
+        className={cn(
+          "fixed inset-0 z-50 overflow-y-auto p-4 sm:p-6 md:p-10 flex items-center justify-center",
+          containerClassName
+        )}
+      >
         <DialogPrimitive.Popup
           className={cn(
             "relative w-full max-w-md rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 shadow-2xl p-6 outline-none duration-150",
