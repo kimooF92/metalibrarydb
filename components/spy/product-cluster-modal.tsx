@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import { Ad } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
 import { getSmartMediaUrl } from "@/lib/image-proxy-url";
+import { ImagePreviewModal } from "./image-preview-modal";
+import { isGenuineVideoUrl, isFbCdnUrlExpired } from "@/lib/fb-cdn";
 import {
   X,
   ExternalLink,
@@ -44,6 +46,61 @@ export function ProductClusterModal({
     items: Ad[];
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [previewAd, setPreviewAd] = useState<Ad | null>(null);
+  const [isRefreshingPreviewAd, setIsRefreshingPreviewAd] = useState(false);
+
+  const handleRefreshPreviewAd = async () => {
+    if (!previewAd) return;
+    setIsRefreshingPreviewAd(true);
+    try {
+      const res = await fetch(`/api/spy/ads/${previewAd.id}/refresh`, { method: "POST" });
+      const data = await res.json();
+      if (data.success && data.ad) {
+        setPreviewAd(data.ad);
+        setClusterData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            items: prev.items.map((item) => (item.id === data.ad.id ? { ...item, ...data.ad } : item)),
+          };
+        });
+      }
+    } catch {
+      // Ignore
+    } finally {
+      setIsRefreshingPreviewAd(false);
+    }
+  };
+
+  const handleSelectAdForPreview = (item: Ad) => {
+    setPreviewAd(item);
+
+    // Auto-refresh strictly when modal is opened AND media CDN link is expired
+    const vid = item.mediaUrls?.find(isGenuineVideoUrl) || null;
+    const thumb = item.signedThumbnailUrl || item.thumbnailUrl || (item.mediaUrls?.[0] ?? null);
+    const isVidExpired = vid ? isFbCdnUrlExpired(vid) : false;
+    const isImgExpired = thumb ? isFbCdnUrlExpired(thumb) : false;
+
+    if ((isVidExpired || isImgExpired) && !isRefreshingPreviewAd) {
+      setIsRefreshingPreviewAd(true);
+      fetch(`/api/spy/ads/${item.id}/refresh`, { method: "POST" })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.ad) {
+            setPreviewAd(data.ad);
+            setClusterData((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                items: prev.items.map((i) => (i.id === data.ad.id ? { ...i, ...data.ad } : i)),
+              };
+            });
+          }
+        })
+        .catch(() => {})
+        .finally(() => setIsRefreshingPreviewAd(false));
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -214,13 +271,14 @@ export function ProductClusterModal({
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {items.map((item, idx) => {
-                const isVideo = item.mediaType === "video";
-                const displayImg = item.signedThumbnailUrl || item.thumbnailUrl || item.mediaUrls?.[0];
+                const isVideo = item.mediaType === "video" || (item.mediaUrls && item.mediaUrls.some((u: string) => isGenuineVideoUrl(u)));
+                const displayImg = item.signedThumbnailUrl || item.thumbnailUrl || item.mediaUrls?.find((u: string) => !isGenuineVideoUrl(u)) || null;
 
                 return (
                   <div
                     key={item.id || idx}
-                    className="flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-3 shadow-sm hover:border-indigo-400 dark:hover:border-indigo-700 transition"
+                    onClick={() => handleSelectAdForPreview(item)}
+                    className="flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-3 shadow-sm hover:border-indigo-400 dark:hover:border-indigo-700 transition cursor-pointer group"
                   >
                     <div>
                       {/* Media Preview */}
@@ -230,11 +288,11 @@ export function ProductClusterModal({
                             src={getSmartMediaUrl(displayImg)}
                             alt={item.title || "Creative"}
                             referrerPolicy="no-referrer"
-                            className="w-full h-full object-cover"
+                            className="w-full h-full object-cover transition-transform group-hover:scale-105"
                           />
                         ) : (
                           <div className="flex flex-col items-center gap-1 text-slate-400">
-                            {isVideo ? <Video className="w-6 h-6" /> : <ImageIcon className="w-6 h-6" />}
+                            {isVideo ? <Video className="w-6 h-6 text-indigo-400" /> : <ImageIcon className="w-6 h-6" />}
                           </div>
                         )}
 
@@ -251,6 +309,12 @@ export function ProductClusterModal({
                             <span>{item.winnerScore} Score</span>
                           </div>
                         )}
+
+                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <span className="px-2.5 py-1 rounded-full bg-slate-900/90 text-white text-[10px] font-bold backdrop-blur-xs shadow-md">
+                            Preview Ad
+                          </span>
+                        </div>
                       </div>
 
                       {/* Creative Badges */}
@@ -287,7 +351,10 @@ export function ProductClusterModal({
                     </div>
 
                     {/* Bottom CTA */}
-                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                    <div
+                      className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <a
                         href={`https://www.facebook.com/ads/library/?id=${item.adArchiveId}`}
                         target="_blank"
@@ -305,6 +372,38 @@ export function ProductClusterModal({
           )}
         </div>
       </div>
+
+      {/* Preview Modal for selected sister creative */}
+      {previewAd && (
+        <ImagePreviewModal
+          isOpen={Boolean(previewAd)}
+          onClose={() => setPreviewAd(null)}
+          imageUrls={
+            previewAd.mediaType === "carousel" && (previewAd.mediaUrls?.filter((u: string) => !isGenuineVideoUrl(u)).length || 0) > 0
+              ? previewAd.mediaUrls!.filter((u: string) => !isGenuineVideoUrl(u))
+              : previewAd.signedThumbnailUrl || previewAd.thumbnailUrl
+              ? [previewAd.signedThumbnailUrl || previewAd.thumbnailUrl!]
+              : []
+          }
+          videoUrl={previewAd.mediaUrls?.find(isGenuineVideoUrl) || null}
+          fallbackThumbnail={previewAd.signedThumbnailUrl || previewAd.thumbnailUrl}
+          isVideoAd={
+            previewAd.mediaType === "video" ||
+            Boolean(previewAd.mediaUrls?.find(isGenuineVideoUrl)) ||
+            Boolean(previewAd.storyboardUrls?.length)
+          }
+          title={previewAd.title}
+          pageName={previewAd.pageName || (previewAd.pageId ? `Page ${previewAd.pageId}` : null)}
+          pageId={previewAd.pageId}
+          caption={previewAd.caption}
+          destinationUrl={previewAd.linkUrl}
+          adArchiveId={previewAd.adArchiveId}
+          startedRunningOn={previewAd.startedRunningOn}
+          isActive={!previewAd.isArchived && previewAd.isActive !== false}
+          onRefreshMedia={handleRefreshPreviewAd}
+          isRefreshingMedia={isRefreshingPreviewAd}
+        />
+      )}
     </div>,
     document.body
   );

@@ -4,6 +4,8 @@ import { useState } from "react";
 import NextImage from "next/image";
 import { Ad } from "@/types";
 import { useToast } from "@/components/toast-context";
+import { getSmartMediaUrl } from "@/lib/image-proxy-url";
+import { isGenuineVideoUrl } from "@/lib/fb-cdn";
 import {
   Sparkles,
   RotateCw,
@@ -327,27 +329,29 @@ export function ModalAdGallery({
         <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
           {displayAds.map((ad: any) => {
             const isAdArchived = Boolean(ad.isArchived || ad.isActive === false);
-            const thumb = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.[0];
+            const isVideo = ad.mediaType === "video" || (ad.mediaUrls && ad.mediaUrls.some((u: string) => isGenuineVideoUrl(u)));
+            const rawThumb = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.find((u: string) => !isGenuineVideoUrl(u)) || null;
+            const smartThumb = rawThumb ? getSmartMediaUrl(rawThumb) : null;
             const isThisUnlinking = unlinkingAdId === ad.id;
             const duration = getAdDuration(ad);
 
             return (
               <div
                 key={ad.id}
-                className={`group relative flex flex-col bg-slate-50 dark:bg-slate-950 rounded-lg border overflow-hidden transition-all ${
+                onClick={() => onOpenLightbox(ad)}
+                className={`group relative flex flex-col bg-slate-50 dark:bg-slate-950 rounded-lg border overflow-hidden transition-all cursor-pointer ${
                   isAdArchived
                     ? "border-rose-500/30 opacity-75 hover:opacity-100 hover:border-rose-500"
-                    : "border-slate-200 dark:border-slate-800 hover:border-indigo-500"
+                    : "border-slate-200 dark:border-slate-800 hover:border-indigo-500 shadow-xs"
                 }`}
               >
                 <div
-                  onClick={() => onOpenLightbox(ad)}
-                  className="relative aspect-square w-full bg-slate-200 dark:bg-slate-900 flex items-center justify-center cursor-pointer overflow-hidden"
+                  className="relative aspect-square w-full bg-slate-200 dark:bg-slate-900 flex items-center justify-center overflow-hidden"
                   title={`${ad.title || ad.caption || "Ad Creative"} (Click to enlarge & view ad copy)`}
                 >
-                  {thumb ? (
+                  {smartThumb ? (
                     <NextImage
-                      src={thumb}
+                      src={smartThumb}
                       alt="Ad creative"
                       fill
                       unoptimized
@@ -356,6 +360,11 @@ export function ModalAdGallery({
                         isAdArchived ? "grayscale-[40%]" : ""
                       }`}
                     />
+                  ) : isVideo ? (
+                    <div className="flex flex-col items-center justify-center gap-1 text-indigo-400">
+                      <Play className="w-8 h-8 fill-indigo-500/20" />
+                      <span className="text-[9px] font-bold">Watch Video</span>
+                    </div>
                   ) : (
                     <ImageIcon className="w-6 h-6 text-slate-400" />
                   )}
@@ -387,7 +396,7 @@ export function ModalAdGallery({
                     )}
                   </div>
 
-                  {ad.mediaType === "video" && (
+                  {isVideo && (
                     <div className="absolute bottom-1.5 left-1.5 w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-md">
                       <Play className="w-2.5 h-2.5 fill-current ml-0.5" />
                     </div>
@@ -395,12 +404,15 @@ export function ModalAdGallery({
 
                   <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <span className="px-2 py-0.5 rounded-full bg-slate-900/90 text-white text-[9px] font-bold backdrop-blur-xs shadow-md">
-                      Quick View
+                      Preview Ad
                     </span>
                   </div>
                 </div>
 
-                <div className="p-2 truncate text-[10px] font-medium text-slate-600 dark:text-slate-400 flex items-center justify-between">
+                <div
+                  className="p-2 truncate text-[10px] font-medium text-slate-600 dark:text-slate-400 flex items-center justify-between"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <span className="truncate">{ad.pageName || `Page ${ad.pageId}`}</span>
                   <div className="flex items-center gap-1">
                     {(ad.caption || ad.title) && (

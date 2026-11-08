@@ -6,6 +6,8 @@ import { ScrapedProduct, Ad } from "@/types";
 import { useToast } from "@/components/toast-context";
 import { useWorkspace } from "@/components/workspace-context";
 import { formatPrice, formatDelivery } from "@/lib/format-price";
+import { getSmartMediaUrl } from "@/lib/image-proxy-url";
+import { isGenuineVideoUrl } from "@/lib/fb-cdn";
 import {
   Building2,
   ExternalLink,
@@ -16,6 +18,7 @@ import {
   Trash2,
   RotateCw,
   Save,
+  Play,
   Image as ImageIcon,
 } from "lucide-react";
 
@@ -441,7 +444,9 @@ export const ModalEditForm = forwardRef<ModalEditFormHandle, ModalEditFormProps>
           <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2.5 pt-2">
             {linkedAds.map((ad: any) => {
               const isAdArchived = Boolean(ad.isArchived || ad.isActive === false);
-              const thumb = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.[0];
+              const isVideo = ad.mediaType === "video" || (ad.mediaUrls && ad.mediaUrls.some((u: string) => isGenuineVideoUrl(u)));
+              const rawThumb = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.find((u: string) => !isGenuineVideoUrl(u)) || null;
+              const smartThumb = rawThumb ? getSmartMediaUrl(rawThumb) : null;
               const isThisUnlinking = unlinkingAdId === ad.id;
 
               return (
@@ -450,15 +455,19 @@ export const ModalEditForm = forwardRef<ModalEditFormHandle, ModalEditFormProps>
                   className="relative group flex flex-col bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs"
                 >
                   <div className="relative aspect-square w-full bg-slate-100 dark:bg-slate-950 flex items-center justify-center">
-                    {thumb ? (
+                    {smartThumb ? (
                       <NextImage
-                        src={thumb}
+                        src={smartThumb}
                         alt="Ad"
                         fill
                         unoptimized
                         referrerPolicy="no-referrer"
                         className="object-cover"
                       />
+                    ) : isVideo ? (
+                      <div className="flex flex-col items-center justify-center gap-1 text-indigo-400">
+                        <Play className="w-5 h-5 fill-indigo-500/20" />
+                      </div>
                     ) : (
                       <ImageIcon className="w-5 h-5 text-slate-400" />
                     )}
