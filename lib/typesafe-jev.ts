@@ -9,7 +9,7 @@
  * in a single parallel pass without token-by-token generation.
  */
 
-import { PRODUCT_CATEGORIES, ProductCategory, ProductClassificationResult } from "./product-classifier";
+import { PRODUCT_CATEGORIES, ProductCategory, ProductClassificationResult } from "./product-categories";
 
 export interface JevChoiceQuestion {
   type: "choice";

@@ -9,28 +9,19 @@
  * Includes an Offline Deterministic Rule-Based Fallback Engine ($0 cost, 0 network failure).
  */
 
-import { classifyProductWithJev } from "./typesafe-jev";
+// import { classifyProductWithJev } from "./typesafe-jev" dynamically imported below to avoid circular dependency
 
-export const PRODUCT_CATEGORIES = [
-  "Electronics & Tech",
-  "Beauty, Health & Care",
-  "Home, Kitchen & Living",
-  "Fashion & Jewelry",
-  "Sports, Fitness & Outdoor",
-  "Kids, Baby & Toys",
-  "Automotive & Tools",
-  "General & Other",
-] as const;
+import {
+  PRODUCT_CATEGORIES,
+  ProductCategory,
+  ProductClassificationResult,
+} from "./product-categories";
 
-export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
-
-export interface ProductClassificationResult {
-  category: ProductCategory;
-  subCategory: string;
-  targetAudience: "unisex" | "men" | "women" | "kids";
-  modelUsed: string;
-  confidence?: number;
-}
+export {
+  PRODUCT_CATEGORIES,
+  type ProductCategory,
+  type ProductClassificationResult,
+};
 
 // In-memory cache for categorized titles (avoids redundant API requests)
 const categoryCache = new Map<string, ProductClassificationResult>();
@@ -218,6 +209,7 @@ export async function classifyProductWithAI(
   // Strict Policy: Uses ONLY span (respan/span-02), and if it fails, jev (typesafe/jev-1.13) as backup.
   // Never uses any other LLM.
   try {
+    const { classifyProductWithJev } = await import("./typesafe-jev");
     const decisionResult = await classifyProductWithJev(cleanTitle, {
       domain: extraContext?.domain,
       brandName: extraContext?.brandName,

@@ -1,4 +1,4 @@
-import { getWorkerState, updateWorkerState } from "./db";
+import { getWorkerState, updateWorkerState } from "./repositories/worker-state-repo";
 import { redis } from "../lib/redis";
 
 export function randomDelay(minMs: number, maxMs: number): Promise<void> {

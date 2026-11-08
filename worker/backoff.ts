@@ -1,4 +1,4 @@
-import { getWorkerState, updateWorkerState } from "./db";
+import { getWorkerState, updateWorkerState } from "./repositories/worker-state-repo";
 import { isCircuitBreakerActive } from "./circuit-breaker";
 
 export async function checkBackoffStatus(): Promise<{ inBackoff: boolean; reason?: string }> {

@@ -1,7 +1,7 @@
 import { db } from "../db";
 import { scanHistory, trackedPages, queue } from "../db/schema";
 import { sql, and, gte, eq, inArray, or, lt } from "drizzle-orm";
-import { updateWorkerState, getWorkerState } from "./db";
+import { updateWorkerState, getWorkerState } from "./repositories/worker-state-repo";
 import { Page } from "playwright";
 import { scanMetaAdPage } from "./scanner";
 

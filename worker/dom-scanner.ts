@@ -1,5 +1,5 @@
 import { Page } from "playwright";
-import { ExtractedAdData } from "./spy-scanner";
+import type { ExtractedAdData } from "./scanners/scanner-types";
 import { resolveDestinationUrl } from "../lib/utils";
 
 /**

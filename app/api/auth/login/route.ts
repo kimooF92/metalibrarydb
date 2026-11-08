@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import { db } from "@/db";
+import { appSettings } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { verifyPassword } from "@/lib/crypto-password";
 import {
   createSessionToken,
   SESSION_COOKIE_NAME,
@@ -51,14 +55,37 @@ export async function POST(request: Request) {
     const appPassword = process.env.APP_PASSWORD;
     const staffPassword = process.env.STAFF_PASSWORD;
 
-    // Check credentials against both configured passwords
-    const isAdmin = appPassword && appPassword.trim() !== "" ? timingSafeEqual(password, appPassword) : false;
+    // 1. Query database for dynamic custom password (lean projection)
+    let isDbAdmin = false;
+    let hasDbPassword = false;
+
+    try {
+      const [settings] = await db
+        .select({
+          appPasswordHash: appSettings.appPasswordHash,
+          appPasswordSalt: appSettings.appPasswordSalt,
+        })
+        .from(appSettings)
+        .where(eq(appSettings.id, "default"))
+        .limit(1);
+
+      if (settings?.appPasswordHash && settings?.appPasswordSalt) {
+        hasDbPassword = true;
+        isDbAdmin = verifyPassword(password, settings.appPasswordHash, settings.appPasswordSalt);
+      }
+    } catch (dbErr) {
+      console.warn("[Auth Login DB Fallback]: DB lookup failed, falling back to ENV password", dbErr);
+    }
+
+    // Check credentials against configured passwords
+    // If dynamic DB password is set, it supersedes APP_PASSWORD; otherwise fallback to APP_PASSWORD
+    const isAdmin = isDbAdmin || (!hasDbPassword && appPassword && appPassword.trim() !== "" ? timingSafeEqual(password, appPassword) : false);
     const isStaff = staffPassword && staffPassword.trim() !== "" ? timingSafeEqual(password, staffPassword) : false;
 
     // If neither password matched (or neither is configured)
     if (!isAdmin && !isStaff) {
-      // If no password at all is configured in the environment
-      if ((!appPassword || appPassword.trim() === "") && (!staffPassword || staffPassword.trim() === "")) {
+      // If no password at all is configured in DB or environment
+      if (!hasDbPassword && (!appPassword || appPassword.trim() === "") && (!staffPassword || staffPassword.trim() === "")) {
         return NextResponse.json(
           {
             success: false,
