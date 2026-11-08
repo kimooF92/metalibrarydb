@@ -3,12 +3,15 @@ import { db } from "@/db";
 import { ads, adObservations } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
+import { tasks } from "@trigger.dev/sdk";
+import { refreshSingleAdMedia, RefreshAdMediaResult } from "@/lib/ad-media-refresher";
 import { scrapeSingleAdViaApify, getApifyTokens } from "@/lib/apify";
 import { extractMedia, extractAdActiveStatus } from "@/lib/apify-ingest";
 import { uploadMediaFromUrlToB2, isB2Configured } from "@/lib/b2-storage";
 import { deleteByPrefix } from "@/lib/cache-service";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // Allow sufficient time for Playwright/Trigger run
 
 export async function POST(
   req: NextRequest,
@@ -85,100 +88,165 @@ export async function POST(
       });
     }
 
-    const tokens = getApifyTokens();
-    if (tokens.length === 0) {
+    let refreshResult: RefreshAdMediaResult | null = null;
+
+    // 2. PRIMARY: Trigger.dev Background Task Engine (Zero Apify credits)
+    if (process.env.TRIGGER_SECRET_KEY) {
+      try {
+        console.log(`[Ad Refresh] Dispatching Trigger.dev task 'refresh-ad-media' for ad: ${adRecord.adArchiveId}...`);
+        const run = await tasks.triggerAndWait(
+          "refresh-ad-media",
+          { adId: id, adArchiveId: adRecord.adArchiveId, force: forceRefresh }
+        );
+
+        if (run.ok && run.output) {
+          refreshResult = run.output as RefreshAdMediaResult;
+        } else {
+          console.warn("[Ad Refresh] Trigger.dev run finished with warning/error:", (run as any).error);
+        }
+      } catch (triggerErr: any) {
+        console.warn(`[Ad Refresh] Trigger.dev task execution issue (${triggerErr?.message}), falling back to direct refresher`);
+      }
+    }
+
+    // 3. SECONDARY: Direct Playwright Engine (Runs locally or serverless without external API cost)
+    if (!refreshResult || !refreshResult.success) {
+      console.log(`[Ad Refresh] Executing direct Playwright refresher for Ad ID: ${adRecord.adArchiveId}...`);
+      try {
+        refreshResult = await refreshSingleAdMedia({
+          adId: id,
+          adArchiveId: adRecord.adArchiveId,
+          force: forceRefresh,
+        });
+      } catch (directErr: any) {
+        console.warn(`[Ad Refresh] Direct Playwright error (${directErr?.message})`);
+      }
+    }
+
+    // 4. TERTIARY: Apify Actor Failover (Only if Playwright & Trigger.dev encountered CAPTCHA/block)
+    if (!refreshResult || !refreshResult.success) {
+      const tokens = getApifyTokens();
+      if (tokens.length > 0) {
+        console.log(`[Ad Refresh] Falling back to Apify actor failover for Ad ID: ${adRecord.adArchiveId}...`);
+        const scrapedItem = await scrapeSingleAdViaApify(adRecord.adArchiveId);
+
+        if (scrapedItem) {
+          const isAdActive = extractAdActiveStatus(scrapedItem);
+          const { mediaUrls: extractedUrls, thumbnailUrl: extractedThumb, mediaType } = extractMedia(scrapedItem);
+
+          let finalVideoUrl = extractedUrls.find((u) => u.includes(".mp4") || mediaType === "video") || null;
+          let finalThumbnailUrl = extractedThumb || (extractedUrls.length > 0 ? extractedUrls[0] : null);
+
+          if (isB2Configured()) {
+            if (finalVideoUrl && finalVideoUrl.startsWith("http")) {
+              const b2Vid = await uploadMediaFromUrlToB2(
+                finalVideoUrl,
+                "videos",
+                `${adRecord.adArchiveId}_refreshed_${Date.now()}`
+              );
+              if (b2Vid) finalVideoUrl = b2Vid;
+            }
+
+            if (finalThumbnailUrl && finalThumbnailUrl.startsWith("http")) {
+              const b2Thumb = await uploadMediaFromUrlToB2(
+                finalThumbnailUrl,
+                "thumbnails",
+                `${adRecord.adArchiveId}_refreshed_${Date.now()}`
+              );
+              if (b2Thumb) finalThumbnailUrl = b2Thumb;
+            }
+          }
+
+          await db
+            .update(adObservations)
+            .set({
+              isActive: isAdActive,
+              observedAt: new Date(),
+            })
+            .where(eq(adObservations.adId, id));
+
+          deleteByPrefix("cache:spy_ads:").catch(() => {});
+
+          const updatedMediaUrls = finalVideoUrl
+            ? [finalVideoUrl, ...(adRecord.mediaUrls?.filter((u) => u !== finalVideoUrl) || [])]
+            : extractedUrls.length > 0
+            ? extractedUrls
+            : adRecord.mediaUrls;
+
+          const [updatedAd] = await db
+            .update(ads)
+            .set({
+              mediaUrls: updatedMediaUrls,
+              thumbnailUrl: finalThumbnailUrl || adRecord.thumbnailUrl,
+              updatedAt: new Date(),
+              ...(isAdActive ? { lastSeenAt: new Date() } : {}),
+            })
+            .where(eq(ads.id, id))
+            .returning();
+
+          return NextResponse.json({
+            success: true,
+            ad: {
+              ...updatedAd,
+              isActive: isAdActive,
+            },
+            isActive: isAdActive,
+            refreshedVideoUrl: finalVideoUrl,
+            refreshedThumbnailUrl: finalThumbnailUrl,
+            message: isAdActive
+              ? "Media refreshed and ad is actively running on Meta."
+              : "Media refreshed. Meta confirms ad has ended (inactive).",
+          });
+        }
+      }
+    }
+
+    if (!refreshResult || !refreshResult.success) {
       return NextResponse.json({
         success: false,
-        message: "Apify API token not configured. View directly on Meta Ad Library.",
+        message: refreshResult?.error || "Could not refresh media right now. Click 'Watch on Meta Ad Library' to view.",
         adArchiveUrl,
       });
     }
 
-    console.log(`[Ad Refresh] Requesting fresh media and active status from Apify for Ad ID: ${adRecord.adArchiveId}...`);
-    const scrapedItem = await scrapeSingleAdViaApify(adRecord.adArchiveId);
-
-    if (!scrapedItem) {
-      return NextResponse.json({
-        success: false,
-        message: "Apify could not extract fresh media right now. Click 'Watch on Meta Ad Library' to view.",
-        adArchiveUrl,
-      });
-    }
-
-    // Extract active/inactive status from Meta payload
-    const isAdActive = extractAdActiveStatus(scrapedItem);
-
-    // Extract fresh media URLs from Apify item payload
-    const { mediaUrls: extractedUrls, thumbnailUrl: extractedThumb, mediaType } = extractMedia(scrapedItem);
-
-    let finalVideoUrl = extractedUrls.find((u) => u.includes(".mp4") || mediaType === "video") || null;
-    let finalThumbnailUrl = extractedThumb || (extractedUrls.length > 0 ? extractedUrls[0] : null);
-
-    // If Backblaze B2 is configured, backup the fresh media immediately
-    if (isB2Configured()) {
-      if (finalVideoUrl && finalVideoUrl.startsWith("http")) {
-        console.log(`[Ad Refresh] Uploading refreshed video to B2 storage: ${finalVideoUrl.substring(0, 60)}...`);
-        const b2Vid = await uploadMediaFromUrlToB2(
-          finalVideoUrl,
-          "videos",
-          `${adRecord.adArchiveId}_refreshed_${Date.now()}`
-        );
-        if (b2Vid) finalVideoUrl = b2Vid;
-      }
-
-      if (finalThumbnailUrl && finalThumbnailUrl.startsWith("http")) {
-        console.log(`[Ad Refresh] Uploading refreshed thumbnail to B2 storage: ${finalThumbnailUrl.substring(0, 60)}...`);
-        const b2Thumb = await uploadMediaFromUrlToB2(
-          finalThumbnailUrl,
-          "thumbnails",
-          `${adRecord.adArchiveId}_refreshed_${Date.now()}`
-        );
-        if (b2Thumb) finalThumbnailUrl = b2Thumb;
-      }
-    }
-
-    // 1. Update observation record in DB so isActive is updated in all queries
-    await db
-      .update(adObservations)
-      .set({
-        isActive: isAdActive,
-        observedAt: new Date(),
+    // 5. Fetch updated ad record for clean response
+    const [finalAd] = await db
+      .select({
+        id: ads.id,
+        adArchiveId: ads.adArchiveId,
+        mediaUrls: ads.mediaUrls,
+        thumbnailUrl: ads.thumbnailUrl,
+        pageId: ads.pageId,
+        pageName: ads.pageName,
+        caption: ads.caption,
+        title: ads.title,
+        linkUrl: ads.linkUrl,
+        productId: ads.productId,
+        mediaType: ads.mediaType,
+        startedRunningOn: ads.startedRunningOn,
+        firstSeenAt: ads.firstSeenAt,
+        lastSeenAt: ads.lastSeenAt,
+        isArchived: ads.isArchived,
+        archivedAt: ads.archivedAt,
+        createdAt: ads.createdAt,
+        updatedAt: ads.updatedAt,
       })
-      .where(eq(adObservations.adId, id));
-
-    // 2. Invalidate spy ads cache in Redis non-blockingly
-    deleteByPrefix("cache:spy_ads:").catch(() => {});
-
-    // 3. Update the canonical ad record
-    const updatedMediaUrls = finalVideoUrl
-      ? [finalVideoUrl, ...(adRecord.mediaUrls?.filter((u) => u !== finalVideoUrl) || [])]
-      : extractedUrls.length > 0
-      ? extractedUrls
-      : adRecord.mediaUrls;
-
-    const [updatedAd] = await db
-      .update(ads)
-      .set({
-        mediaUrls: updatedMediaUrls,
-        thumbnailUrl: finalThumbnailUrl || adRecord.thumbnailUrl,
-        updatedAt: new Date(),
-        ...(isAdActive ? { lastSeenAt: new Date() } : {}),
-      })
+      .from(ads)
       .where(eq(ads.id, id))
-      .returning();
+      .limit(1);
+
+    const isAdActive = refreshResult.isActive ?? true;
 
     return NextResponse.json({
       success: true,
       ad: {
-        ...updatedAd,
+        ...(finalAd || adRecord),
         isActive: isAdActive,
       },
       isActive: isAdActive,
-      refreshedVideoUrl: finalVideoUrl,
-      refreshedThumbnailUrl: finalThumbnailUrl,
-      message: isAdActive
-        ? "Media refreshed and ad is actively running on Meta."
-        : "Media refreshed. Meta confirms ad has ended (inactive).",
+      refreshedVideoUrl: refreshResult.refreshedVideoUrl,
+      refreshedThumbnailUrl: refreshResult.refreshedThumbnailUrl,
+      message: refreshResult.message || "Media refreshed successfully.",
     });
   } catch (err: any) {
     console.error("[Ad Refresh Error]:", err);

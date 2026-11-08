@@ -92,7 +92,9 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
   const previewImages = imageSlides.length > 0 ? imageSlides : displayThumbnail ? [displayThumbnail] : [];
 
   const activeImageSrc = displayThumbnail && displayThumbnail.startsWith("http")
-    ? getSmartMediaUrl(displayThumbnail, isProxied)
+    ? isProxied
+      ? `/api/spy/image-proxy?url=${encodeURIComponent(displayThumbnail)}`
+      : getSmartMediaUrl(displayThumbnail, false)
     : displayThumbnail;
 
   const handleImageError = () => {

@@ -77,6 +77,7 @@ export function ImagePreviewModal({
   const [mounted, setMounted] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [videoError, setVideoError] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const [copiedText, setCopiedText] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
 
@@ -94,7 +95,8 @@ export function ImagePreviewModal({
 
   useEffect(() => {
     setVideoError(false);
-  }, [videoUrl, isOpen]);
+    setImgError(false);
+  }, [videoUrl, imageUrls, fallbackThumbnail, isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -164,6 +166,8 @@ export function ImagePreviewModal({
   if (!isOpen || !mounted) return null;
 
   const currentMedia = displayMediaList[currentIndex] || displayMediaList[0];
+  const isImageExpired = !isVideoAd && currentMedia ? isFbCdnUrlExpired(currentMedia) : false;
+  const isExpiredImage = !isVideoAd && Boolean(currentMedia || fallbackThumbnail) && (isImageExpired || imgError);
   const downloadHref = activeVideo || currentMedia || fallbackThumbnail;
   const fullSizeHref = activeVideo || currentMedia || fallbackThumbnail;
 
@@ -411,6 +415,35 @@ export function ImagePreviewModal({
               </div>
             )}
 
+            {/* Expired Image Notice Badge */}
+            {isExpiredImage && (
+              <div className="absolute top-3 left-3 right-3 sm:right-auto z-30 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-950/90 border border-amber-600/40 text-amber-200 text-xs shadow-lg backdrop-blur-md">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="truncate">Image token expired on Meta CDN</span>
+                {adArchiveId && (
+                  <a
+                    href={`https://www.facebook.com/ads/library/?id=${adArchiveId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-1 underline font-semibold text-amber-300 hover:text-white shrink-0"
+                  >
+                    Meta ↗
+                  </a>
+                )}
+                {onRefreshMedia && (
+                  <button
+                    type="button"
+                    onClick={onRefreshMedia}
+                    disabled={isRefreshingMedia}
+                    className="ml-auto sm:ml-2 px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-semibold border border-amber-400/30 flex items-center gap-1 cursor-pointer disabled:opacity-50 shrink-0"
+                  >
+                    <RotateCw className={`w-3 h-3 ${isRefreshingMedia ? "animate-spin" : ""}`} />
+                    <span>{isRefreshingMedia ? "Refreshing..." : "Refresh"}</span>
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Carousel Previous Button */}
             {displayMediaList.length > 1 && !activeVideo && (
               <button
@@ -447,12 +480,10 @@ export function ImagePreviewModal({
                   onError={(e) => {
                     const target = e.currentTarget;
                     const source = currentMedia || fallbackThumbnail;
-                    if (
-                      source &&
-                      !target.src.includes("/api/spy/image-proxy") &&
-                      !target.src.includes("workers.dev")
-                    ) {
-                      target.src = getProxiedImageUrl(source);
+                    if (source && !target.src.includes("/api/spy/image-proxy")) {
+                      target.src = `/api/spy/image-proxy?url=${encodeURIComponent(source)}`;
+                    } else {
+                      setImgError(true);
                     }
                   }}
                 />

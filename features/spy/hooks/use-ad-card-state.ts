@@ -78,7 +78,9 @@ export function useAdCardState(
 
   const activeImageSrc =
     activeSlideUrl && activeSlideUrl.startsWith("http")
-      ? getSmartMediaUrl(activeSlideUrl, isProxied)
+      ? isProxied
+        ? `/api/spy/image-proxy?url=${encodeURIComponent(activeSlideUrl)}`
+        : getSmartMediaUrl(activeSlideUrl, false)
       : activeSlideUrl;
 
   const handleImageError = () => {

@@ -7,6 +7,7 @@ import { scanMetaAdPage } from "../../worker/scanner";
 import { markJobCompleted } from "../../worker/db";
 import { acquireLock, acquireLockDetailed, releaseLock, deleteCached, deleteByPrefix, setCached } from "../../lib/cache-service";
 import { broadcastScanStep } from "../../lib/realtime-scan";
+import { refreshSingleAdMedia, RefreshAdMediaOptions } from "../../lib/ad-media-refresher";
 
 export interface ScanPageCountPayload {
   pageId?: string;
@@ -627,3 +628,34 @@ export const dispatchGithubWorkerTask = task({
     };
   },
 });
+
+export interface RefreshAdMediaPayload extends RefreshAdMediaOptions {}
+
+/**
+ * Task: refreshAdMediaTask
+ * On-demand refresh of a single Meta ad creative & active status.
+ * Replaces Apify for single ad refreshes, saves media to B2, and updates Postgres.
+ */
+export const refreshAdMediaTask = task({
+  id: "refresh-ad-media",
+  machine: "medium-1x",
+  retry: {
+    maxAttempts: 2,
+    factor: 2,
+    minTimeoutInMs: 3000,
+  },
+  queue: {
+    concurrencyLimit: 2,
+  },
+  run: async (payload: RefreshAdMediaPayload) => {
+    logger.info(
+      `[refresh-ad-media] Starting refresh for adId=${payload.adId || "none"}, archiveId=${payload.adArchiveId || "none"}`
+    );
+    const result = await refreshSingleAdMedia(payload);
+    logger.info(
+      `[refresh-ad-media] Finished refresh. Success=${result.success}, isActive=${result.isActive}`
+    );
+    return result;
+  },
+});
+
