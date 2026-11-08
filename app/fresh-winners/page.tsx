@@ -155,7 +155,7 @@ function FreshWinnersContent() {
   };
 
   return (
-    <div className="flex-1 min-w-0 h-full overflow-y-auto p-4 md:px-6 md:py-5 flex flex-col space-y-4">
+    <div className="w-full flex-1 flex flex-col space-y-4 pb-8">
       {/* 1. Header with Product-Level KPIs */}
       <FreshWinnersHeader
         stats={stats}
@@ -362,7 +362,7 @@ function FreshWinnersContent() {
 
 function FreshWinnersSkeleton() {
   return (
-    <div className="flex-1 min-w-0 h-full overflow-y-auto p-4 md:px-6 md:py-5 flex flex-col space-y-4 animate-pulse">
+    <div className="w-full flex-1 flex flex-col space-y-4 pb-8 animate-pulse">
       <div className="h-8 w-48 bg-muted rounded-lg" />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {Array.from({ length: 4 }).map((_, i) => (

@@ -56,7 +56,7 @@ export default function SuppliersPage() {
   }, [handleMarkAsSeen]);
 
   return (
-    <div className="h-full flex flex-col space-y-4 overflow-y-auto p-4 sm:p-6 min-w-0">
+    <div className="w-full flex-1 flex flex-col space-y-4 pb-8 min-w-0">
       {/* Top Header */}
       <SuppliersHeader
         stats={stats}

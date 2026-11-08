@@ -105,7 +105,7 @@ export function KPICard({
 
   return (
     <div
-      className={`glass-card rounded-2xl p-4 flex flex-col justify-between border ${theme.border} ${theme.bg} transition-all duration-300 hover:-translate-y-0.5 shadow-sm min-h-[112px] relative overflow-hidden`}
+      className={`glass-card rounded-2xl p-4 flex flex-col justify-between border ${theme.border} ${theme.bg} transition-all duration-200 shadow-xs min-h-[112px] relative overflow-hidden`}
     >
       <div>
         <div className="flex items-center justify-between mb-1.5">

@@ -43,7 +43,7 @@ export default function AnalyticsPage() {
   } = useAnalyticsData({ activeTab, dateRange });
 
   return (
-    <div className="h-full overflow-y-auto space-y-5 pb-12 pr-1 text-slate-900 dark:text-slate-100">
+    <div className="w-full flex-1 flex flex-col space-y-5 pb-8 text-slate-900 dark:text-slate-100">
       <AnalyticsHeader
         counts={{
           totalProducts: productsData?.summary?.totalProducts || 0,

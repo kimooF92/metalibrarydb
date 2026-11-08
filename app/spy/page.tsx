@@ -56,7 +56,7 @@ function AdSpyContent() {
   };
 
   return (
-    <div className="h-full overflow-y-auto overflow-x-hidden bg-background text-foreground space-y-4">
+    <div className="w-full flex-1 flex flex-col space-y-4 pb-8 bg-background text-foreground">
       {/* Header & Metrics Banner */}
       <SpyHeader
         stats={stats}

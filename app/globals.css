@@ -111,12 +111,19 @@ html.theme-fade-running::before {
   color: var(--card-foreground);
 }
 
-.glass-card:hover {
+.glass-card-interactive {
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--card-foreground);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.glass-card-interactive:hover {
   border-color: var(--primary);
   box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
 }
 
-.dark .glass-card:hover {
+.dark .glass-card-interactive:hover {
   box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.6);
 }
 

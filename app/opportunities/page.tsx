@@ -108,7 +108,7 @@ export default function OpportunitiesPage() {
   }, [report, selectedCategory, selectedPriceBand, searchQuery]);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-16">
+    <div className="w-full flex-1 flex flex-col space-y-6 pb-12">
       {/* View Switcher Bar */}
       <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
         <div className="flex items-center space-x-2">
