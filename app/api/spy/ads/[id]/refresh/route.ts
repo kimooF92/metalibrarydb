@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { ads, adObservations } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
-import { tasks } from "@trigger.dev/sdk";
+import { tasks, runs } from "@trigger.dev/sdk";
 import { refreshSingleAdMedia, RefreshAdMediaResult } from "@/lib/ad-media-refresher";
 import { scrapeSingleAdViaApify, getApifyTokens } from "@/lib/apify";
 import { extractMedia, extractAdActiveStatus } from "@/lib/apify-ingest";
@@ -65,7 +65,8 @@ export async function POST(
     const b2Endpoint = process.env.B2_ENDPOINT || "backblazeb2.com";
     const hasB2Video = adRecord.mediaUrls?.some((u) => u.includes(b2Endpoint) || u.includes("b2/"));
     const hasB2Thumb = adRecord.thumbnailUrl?.includes(b2Endpoint) || adRecord.thumbnailUrl?.includes("b2/");
-    const forceRefresh = req.nextUrl.searchParams.get("force") === "true";
+    const searchParams = req.nextUrl?.searchParams || new URL(req.url).searchParams;
+    const forceRefresh = searchParams.get("force") === "true";
 
     if (hasB2Video && hasB2Thumb && !forceRefresh) {
       const [obs] = await db
@@ -94,15 +95,18 @@ export async function POST(
     if (process.env.TRIGGER_SECRET_KEY) {
       try {
         console.log(`[Ad Refresh] Dispatching Trigger.dev task 'refresh-ad-media' for ad: ${adRecord.adArchiveId}...`);
-        const run = await tasks.triggerAndWait(
-          "refresh-ad-media",
-          { adId: id, adArchiveId: adRecord.adArchiveId, force: forceRefresh }
-        );
+        const handle = await tasks.trigger("refresh-ad-media", {
+          adId: id,
+          adArchiveId: adRecord.adArchiveId,
+          force: forceRefresh,
+        });
 
-        if (run.ok && run.output) {
+        const run = await runs.poll(handle.id, { pollIntervalMs: 1000 });
+
+        if (run.status === "COMPLETED" && run.output) {
           refreshResult = run.output as RefreshAdMediaResult;
         } else {
-          console.warn("[Ad Refresh] Trigger.dev run finished with warning/error:", (run as any).error);
+          console.warn(`[Ad Refresh] Trigger.dev run ${handle.id} ended with status: ${run.status}`);
         }
       } catch (triggerErr: any) {
         console.warn(`[Ad Refresh] Trigger.dev task execution issue (${triggerErr?.message}), falling back to direct refresher`);
