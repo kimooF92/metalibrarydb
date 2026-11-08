@@ -31,6 +31,7 @@ export function AdCard({
     isVideoAd,
     canPlayVideo,
     destinationUrl,
+    targetDomain,
     extractedProduct,
     isClusterModalOpen,
     setIsClusterModalOpen,
@@ -53,50 +54,62 @@ export function AdCard({
   } = useAdCardState(ad, onArchiveToggle, onMediaRefreshed);
 
   return (
-    <div className="group relative flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-4 shadow-sm transition-all hover:border-slate-300 dark:hover:border-slate-700/80 hover:shadow-md">
+    <div className="group relative flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 px-3.5 py-[19px] shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 hover:border-slate-300 dark:hover:border-slate-700/80 hover:shadow-lg">
       {/* Top Section */}
       <div>
-        {/* Brand Name & Status Badges */}
+        {/* Brand Action Row (Matches ProductCardActions) */}
         <AdCardHeader
           ad={currentAd}
           isArchived={actionsConfig.isArchived}
-          onExcludeBrand={onExcludeBrand}
+          isArchiving={actionsConfig.isArchiving}
+          isRefreshingMedia={actionsConfig.isRefreshingMedia}
+          canPlayVideo={canPlayVideo}
+          firstVideoUrl={firstVideoUrl}
+          displayThumbnail={displayThumbnail}
+          handlers={{
+            onToggleArchive: toggleArchive,
+            onRefreshMedia: handleRefreshMedia,
+            onExcludeBrand,
+            onOpenClusterModal: () => setIsClusterModalOpen(true),
+            onOpenCreativeClusterModal: () => setIsCreativeClusterModalOpen(true),
+          }}
         />
 
-        {/* High-Signal Intelligence Pills & Launch Date Metadata */}
+        {/* Media Container with Ambient Blurred Background, Hover Play & Overlaid Badges */}
+        <AdCardMedia
+          config={mediaConfig}
+          videoRef={videoRef}
+          handlers={{
+            onOpenPreview: openPreview,
+            onImageError: handleImageError,
+            onVideoError: () => {
+              setVideoError(true);
+              setIsPlayingVideo(false);
+            },
+            onPlayingVideoChange: setIsPlayingVideo,
+            onPrevSlide: (e) => {
+              e.stopPropagation();
+              setCarouselIndex((prev) =>
+                prev > 0 ? prev - 1 : previewImages.length - 1
+              );
+            },
+            onNextSlide: (e) => {
+              e.stopPropagation();
+              setCarouselIndex((prev) => (prev + 1) % previewImages.length);
+            },
+            onSlideChange: (idx) => setCarouselIndex(idx),
+            onToggleScoreTooltip: () => setShowScoreTooltip((prev) => !prev),
+            onOpenClusterModal: () => setIsClusterModalOpen(true),
+            onOpenCreativeClusterModal: () => setIsCreativeClusterModalOpen(true),
+          }}
+        />
+
+        {/* Winner Score Breakdown Popover (Active when user clicks score badge) */}
         <AdCardSignals
           ad={currentAd}
           showScoreTooltip={showScoreTooltip}
           onToggleScoreTooltip={() => setShowScoreTooltip((prev) => !prev)}
-          onOpenClusterModal={() => setIsClusterModalOpen(true)}
-          onOpenCreativeClusterModal={() => setIsCreativeClusterModalOpen(true)}
         />
-
-        {/* Media Container with Ambient Blurred Background & Hover Video */}
-        <AdCardMedia
-          config={mediaConfig}
-          videoRef={videoRef}
-          onOpenPreview={openPreview}
-          onImageError={handleImageError}
-          onVideoError={() => {
-            setVideoError(true);
-            setIsPlayingVideo(false);
-          }}
-          onPlayingVideoChange={setIsPlayingVideo}
-          onPrevSlide={(e) => {
-            e.stopPropagation();
-            setCarouselIndex((prev) =>
-              prev > 0 ? prev - 1 : previewImages.length - 1
-            );
-          }}
-          onNextSlide={(e) => {
-            e.stopPropagation();
-            setCarouselIndex((prev) => (prev + 1) % previewImages.length);
-          }}
-        />
-
-        {/* Extracted Product Info Pill */}
-        <AdCardProduct product={extractedProduct} />
 
         {/* Ad Title & Copy Clamp */}
         <AdCardCopy
@@ -107,13 +120,27 @@ export function AdCard({
         />
       </div>
 
-      {/* Two-Tier Footer Actions */}
-      <AdCardFooter
-        config={actionsConfig}
-        onFetchProduct={handleFetchProduct}
-        onRefreshMedia={handleRefreshMedia}
-        onToggleArchive={toggleArchive}
-      />
+      {/* Bottom Section */}
+      <div className="mt-auto">
+        {/* Clean Price & External Action Buttons (Matches ProductCardPricing) */}
+        <AdCardProduct
+          product={extractedProduct}
+          adArchiveId={currentAd.adArchiveId}
+          destinationUrl={destinationUrl}
+          targetDomain={targetDomain}
+          isExtractingProduct={actionsConfig.isExtractingProduct}
+          onFetchProduct={handleFetchProduct}
+        />
+
+        {/* Velocity & Longevity Footer (Matches ProductCardFooter) */}
+        <AdCardFooter
+          startedRunningOn={currentAd.startedRunningOn}
+          firstSeenAt={currentAd.firstSeenAt}
+          duplicationCount={currentAd.duplicationCount || 1}
+          isActive={currentAd.isActive}
+          isArchived={actionsConfig.isArchived}
+        />
+      </div>
 
       {/* Image / Video Preview Modal */}
       <ImagePreviewModal
@@ -157,4 +184,3 @@ export function AdCard({
     </div>
   );
 }
-

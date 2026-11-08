@@ -84,9 +84,9 @@ export function AdvancedFiltersDrawer({
               }`}
             >
               <option value={0}>All Scores (Any)</option>
-              <option value={85}>🏆 85+ (Super Winners Only)</option>
-              <option value={70}>🔥 70+ (High Potential)</option>
-              <option value={50}>⚡ 50+ (Promising Tests)</option>
+              <option value={85}>85+ (Super Winners Only)</option>
+              <option value={70}>70+ (High Potential)</option>
+              <option value={50}>50+ (Promising Tests)</option>
             </select>
           </div>
 
@@ -108,8 +108,8 @@ export function AdvancedFiltersDrawer({
             >
               <option value={1}>All ads (1+ copies)</option>
               <option value={3}>3+ copies running</option>
-              <option value={5}>🔥 5+ copies (Scaling)</option>
-              <option value={10}>🚀 10+ copies (Heavy Scale)</option>
+              <option value={5}>5+ copies (Scaling)</option>
+              <option value={10}>10+ copies (Heavy Scale)</option>
             </select>
           </div>
 
@@ -166,9 +166,9 @@ export function AdvancedFiltersDrawer({
               }`}
             >
               <option value={0}>All Products</option>
-              <option value={2}>🎯 2+ Angles (Multi-Angle)</option>
-              <option value={3}>🎯 3+ Angles (Proven Iteration)</option>
-              <option value={5}>🎯 5+ Angles (Heavy Scale)</option>
+              <option value={2}>2+ Angles (Multi-Angle)</option>
+              <option value={3}>3+ Angles (Proven Iteration)</option>
+              <option value={5}>5+ Angles (Heavy Scale)</option>
             </select>
           </div>
 
@@ -212,7 +212,7 @@ export function AdvancedFiltersDrawer({
               }`}
             >
               <option value="all">All CTAs</option>
-              <option value="ecom_any">🛍️ Any Shop / Buy CTA</option>
+              <option value="ecom_any">Any Shop / Buy CTA</option>
               <option value="Shop Now">Shop Now</option>
               <option value="Order Now">Order Now / Commander</option>
               <option value="Learn More">Learn More</option>
@@ -283,7 +283,7 @@ export function AdvancedFiltersDrawer({
               <option value="yesterday">Yesterday</option>
               <option value="7days">Last 7 Days</option>
               <option value="30days">Last 30 Days</option>
-              <option value="custom">📅 Custom Range...</option>
+              <option value="custom">Custom Range...</option>
             </select>
           </div>
 

@@ -30,9 +30,10 @@ export function SpyIncomingAlert({
           </span>
         </div>
         <div className="min-w-0">
-          <div className="text-xs font-bold flex items-center gap-2">
+          <div className="text-xs font-bold flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0" />
             <span>
-              ✨ {incomingCount} new{" "}
+              {incomingCount} new{" "}
               {incomingCount === 1 ? "ad creative" : "ad creatives"} discovered!
             </span>
           </div>

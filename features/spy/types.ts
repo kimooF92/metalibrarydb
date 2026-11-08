@@ -50,6 +50,13 @@ export interface AdMediaConfig {
   activeImageSrc: string | null;
   mediaType?: string | null;
   title?: string | null;
+  winnerScore?: number;
+  isBreakout?: boolean;
+  isEvergreen?: boolean;
+  creativeCount?: number;
+  totalAdSets?: number;
+  distinctBrandsCount?: number;
+  isCrossBrand?: boolean;
 }
 
 export interface AdActionsConfig {
@@ -68,6 +75,8 @@ export interface AdActionsConfig {
   adArchiveId: string;
   startedRunningOn?: string | null;
   firstSeenAt?: string | null;
+  duplicationCount?: number;
+  isActive?: boolean | null;
 }
 
 export interface BrandAnalyticsData {

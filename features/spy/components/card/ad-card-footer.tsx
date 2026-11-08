@@ -2,188 +2,154 @@
 
 import type React from "react";
 import type { AdActionsConfig } from "../../types";
-import {
-  Globe,
-  ExternalLink,
-  ShoppingBag,
-  RotateCw,
-  Clock,
-  Archive,
-  ArchiveRestore,
-  Download,
-} from "lucide-react";
+import { formatDiscoveryDate } from "@/lib/format-date";
+import { Flame, Calendar, Clock } from "lucide-react";
 
 export interface AdCardFooterProps {
-  config: AdActionsConfig;
-  onFetchProduct: (e: React.MouseEvent) => void;
-  onRefreshMedia: (e?: React.MouseEvent) => void;
-  onToggleArchive: () => void;
+  config?: Partial<AdActionsConfig>;
+  startedRunningOn?: string | null;
+  firstSeenAt?: string | null;
+  duplicationCount?: number;
+  isActive?: boolean | null;
+  isArchived?: boolean;
+  onFetchProduct?: (e: React.MouseEvent) => void;
+  onRefreshMedia?: (e?: React.MouseEvent) => void;
+  onToggleArchive?: () => void;
 }
 
 export function AdCardFooter({
   config,
-  onFetchProduct,
-  onRefreshMedia,
-  onToggleArchive,
+  startedRunningOn: propStartedRunningOn,
+  firstSeenAt: propFirstSeenAt,
+  duplicationCount: propDuplicationCount,
+  isActive: propIsActive,
+  isArchived: propIsArchived,
 }: AdCardFooterProps) {
-  const {
-    destinationUrl,
-    targetDomain,
-    ctaText,
-    extractedProduct,
-    isExtractingProduct,
-    isRefreshingMedia,
-    isArchiving,
-    isArchived,
-    canPlayVideo,
-    firstVideoUrl,
-    displayThumbnail,
-    isVideoAd,
-    adArchiveId,
-    startedRunningOn,
-    firstSeenAt,
-  } = config;
+  const startedRunningOn = propStartedRunningOn ?? config?.startedRunningOn;
+  const firstSeenAt = propFirstSeenAt ?? config?.firstSeenAt;
+  const duplicationCount = propDuplicationCount ?? (config as any)?.duplicationCount ?? 1;
+  const isArchived = propIsArchived ?? config?.isArchived ?? false;
+  const isActive = propIsActive ?? (config as any)?.isActive ?? !isArchived;
 
-  const formatLaunchDate = (dateStr?: string | null, firstSeenStr?: string | null) => {
-    const isFirstSeen = !dateStr;
-    const targetStr = dateStr || firstSeenStr;
-    if (!targetStr) return "Unknown launch date";
-    const date = new Date(targetStr);
-    if (isNaN(date.getTime())) return "Unknown launch date";
+  const effectiveStart = startedRunningOn || firstSeenAt;
+  const isScaled = duplicationCount >= 5;
 
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const launchDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-
-    const diffTime = today.getTime() - launchDay.getTime();
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-    const prefix = isFirstSeen ? "First seen " : "Launched ";
-
-    if (diffDays <= 0) return `${prefix}today`;
-    if (diffDays === 1) return `${prefix}yesterday`;
-    if (diffDays < 30) return `${prefix}${diffDays}d ago`;
-    return `${prefix}${date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+  const formatDate = (dateStr?: string | null) => {
+    if (!dateStr) return null;
+    try {
+      const d = new Date(dateStr);
+      return isNaN(d.getTime())
+        ? null
+        : d.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          });
+    } catch {
+      return null;
+    }
   };
 
+  const getTimelineDetails = () => {
+    if (!effectiveStart) {
+      return {
+        label: "Unknown date",
+        tooltip: "Launch date not recorded by Meta",
+      };
+    }
+
+    const startMs = new Date(effectiveStart).getTime();
+    if (isNaN(startMs)) {
+      return {
+        label: "Unknown date",
+        tooltip: "Launch date not recorded",
+      };
+    }
+
+    const days = Math.max(0, Math.floor((Date.now() - startMs) / (1000 * 60 * 60 * 24)));
+    const formattedShort = formatDiscoveryDate(effectiveStart);
+    const fullDate = formatDate(effectiveStart) || formattedShort;
+
+    if (!isActive || isArchived) {
+      return {
+        label: days <= 1 ? "Ran 1d" : `Ran ${days}d`,
+        tooltip: `Active from ${fullDate} (${days}d lifespan)`,
+      };
+    }
+
+    if (days <= 0) {
+      return {
+        label: "Launched today",
+        tooltip: `Launched today (${fullDate})`,
+      };
+    }
+
+    if (days === 1) {
+      return {
+        label: "Launched yesterday",
+        tooltip: `Launched yesterday (${fullDate})`,
+      };
+    }
+
+    return {
+      label: `Running ${days}d • since ${formattedShort}`,
+      tooltip: `Running since ${fullDate} (${days} days active)`,
+    };
+  };
+
+  const timeline = getTimelineDetails();
+
+  const velocityContent =
+    !isActive || isArchived ? (
+      <span className="inline-flex items-center gap-1.5 font-medium text-slate-400 dark:text-slate-500 leading-none">
+        <span className="w-1.5 h-1.5 rounded-full bg-slate-500 inline-block shrink-0" />
+        <span>Ended</span>
+      </span>
+    ) : isScaled ? (
+      <span
+        className="inline-flex items-center gap-1 font-bold text-amber-500 dark:text-amber-400 leading-none"
+        title={`${duplicationCount} ad copies running simultaneously`}
+      >
+        <Flame className="w-3.5 h-3.5 text-amber-500 fill-amber-500/20 animate-pulse" />
+        <span>{duplicationCount} Copies (Scaled)</span>
+      </span>
+    ) : duplicationCount >= 2 ? (
+      <span
+        className="inline-flex items-center gap-1.5 font-bold text-emerald-600 dark:text-emerald-400 leading-none"
+        title={`${duplicationCount} active ad copies running`}
+      >
+        <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0" />
+        <span>{duplicationCount} Copies</span>
+      </span>
+    ) : (
+      <span
+        className="inline-flex items-center gap-1.5 font-semibold text-slate-600 dark:text-slate-400 leading-none"
+        title="1 active ad running"
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/80 inline-block shrink-0" />
+        <span>1 Copy</span>
+      </span>
+    );
+
   return (
-    <div className="pt-2.5 border-t border-slate-200 dark:border-slate-800/60 flex flex-col gap-2 mt-auto text-xs">
-      {/* Tier 1: Main Action Buttons (Visit Store & Fetch Product) */}
-      {destinationUrl ? (
-        <div className="flex items-center gap-2 w-full">
-          <a
-            href={destinationUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 min-w-0 inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-white bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg shadow-sm transition-all truncate"
-            title={`Direct Brand Website: ${destinationUrl}`}
-          >
-            <Globe className="w-3.5 h-3.5 text-indigo-200 shrink-0" />
-            <span className="truncate">
-              {ctaText || "Visit Store"} {targetDomain ? `• ${targetDomain}` : ""}
-            </span>
-            <ExternalLink className="w-3 h-3 text-indigo-200 shrink-0 ml-0.5" />
-          </a>
+    <div className="pt-2.5 border-t border-slate-200 dark:border-slate-800/60 flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400 min-h-[26px]">
+      {/* Velocity / Scale Indicator (Matches ProductCardFooter) */}
+      <div className="flex items-center min-w-0 shrink-0">{velocityContent}</div>
 
-          {!extractedProduct && (
-            <button
-              type="button"
-              onClick={onFetchProduct}
-              disabled={isExtractingProduct}
-              className="inline-flex items-center justify-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200/60 dark:border-indigo-800/60 px-3 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer shrink-0 disabled:opacity-50"
-              title="Scan landing page to save product details, price & offers"
-            >
-              {isExtractingProduct ? (
-                <>
-                  <RotateCw className="w-3 h-3 animate-spin text-indigo-500" />
-                  <span>Saving...</span>
-                </>
-              ) : (
-                <>
-                  <ShoppingBag className="w-3.5 h-3.5 text-indigo-500" />
-                  <span>Save Product</span>
-                </>
-              )}
-            </button>
+      {/* Longevity / Launch Timeline (Single Non-Redundant Date) */}
+      <div className="flex items-center justify-end truncate font-medium leading-none">
+        <span
+          className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-400 truncate leading-none"
+          title={timeline.tooltip}
+        >
+          {effectiveStart ? (
+            <Calendar className="w-3.5 h-3.5 text-indigo-500/80 shrink-0" />
+          ) : (
+            <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
           )}
-        </div>
-      ) : (
-        <div className="text-[11px] text-slate-500 dark:text-slate-400 italic font-medium py-0.5">
-          No store website link
-        </div>
-      )}
-
-      {/* Tier 2: Metadata & Quick Tools Row */}
-      <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-100 dark:border-slate-800/40 text-[11px] text-slate-500 dark:text-slate-400">
-        <div className="flex items-center gap-1 truncate font-medium">
-          <Clock className="w-3 h-3 shrink-0 text-slate-400" />
-          <span className="truncate">
-            {formatLaunchDate(startedRunningOn, firstSeenAt)}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            type="button"
-            onClick={onRefreshMedia}
-            disabled={isRefreshingMedia}
-            className="p-1 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors cursor-pointer"
-            title="Refresh Single Ad Media Links"
-          >
-            <RotateCw className={`w-3.5 h-3.5 ${isRefreshingMedia ? "animate-spin text-indigo-500" : ""}`} />
-          </button>
-
-          <button
-            type="button"
-            onClick={onToggleArchive}
-            disabled={isArchiving}
-            className={`p-1 rounded-md transition-colors cursor-pointer ${
-              isArchived
-                ? "text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
-                : "text-slate-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-slate-100 dark:hover:bg-slate-900"
-            }`}
-            title={isArchived ? "Unarchive Ad (Move to Active Feed)" : "Archive Ad (Move to Vault)"}
-          >
-            {isArchived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
-          </button>
-
-          {canPlayVideo && firstVideoUrl ? (
-            <a
-              href={firstVideoUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              download
-              className="p-1 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors"
-              title="Download Video Creative (.mp4)"
-            >
-              <Download className="w-3.5 h-3.5" />
-            </a>
-          ) : displayThumbnail ? (
-            <a
-              href={displayThumbnail}
-              target="_blank"
-              rel="noopener noreferrer"
-              download
-              className="p-1 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-md transition-colors"
-              title={isVideoAd ? "Download Snapshot Thumbnail (.jpg)" : "Download Media File"}
-            >
-              <Download className="w-3.5 h-3.5" />
-            </a>
-          ) : null}
-
-          <a
-            href={`https://www.facebook.com/ads/library/?id=${adArchiveId}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline inline-flex items-center gap-0.5 px-1 py-0.5 rounded"
-            title="Open in Meta Ad Library"
-          >
-            <span>Meta</span>
-            <ExternalLink className="w-2.5 h-2.5" />
-          </a>
-        </div>
+          <span className="truncate">{timeline.label}</span>
+        </span>
       </div>
     </div>
   );
 }
-

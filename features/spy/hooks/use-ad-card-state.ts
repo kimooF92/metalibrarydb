@@ -7,6 +7,7 @@ import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
 import { isFbCdnUrlExpired } from "@/lib/fb-cdn";
 import { getSmartMediaUrl } from "@/lib/image-proxy-url";
 import { useToast } from "@/components/toast-context";
+import { calculateWinnerScore } from "@/lib/winner-score";
 
 export function useAdCardState(
   ad: Ad,
@@ -234,6 +235,17 @@ export function useAdCardState(
     }
   };
 
+  const winnerMetrics = calculateWinnerScore({
+    startedRunningOn: currentAd.startedRunningOn,
+    firstSeenAt: currentAd.firstSeenAt,
+    lastSeenAt: currentAd.lastSeenAt,
+    duplicationCount: currentAd.duplicationCount || 1,
+    isActive: currentAd.isActive,
+    isArchived: isArchived,
+    mediaType: currentAd.mediaType,
+    productCreativeCount: currentAd.productCreativeCount || 1,
+  });
+
   // Grouped domain configurations (BUG-12 fix for <= 8 direct props)
   const mediaConfig: AdMediaConfig = {
     firstVideoUrl,
@@ -252,6 +264,13 @@ export function useAdCardState(
     activeImageSrc,
     mediaType: currentAd.mediaType,
     title: currentAd.title,
+    winnerScore: winnerMetrics.winnerScore,
+    isBreakout: winnerMetrics.isBreakout,
+    isEvergreen: winnerMetrics.isEvergreen,
+    creativeCount: currentAd.productCreativeCount || 1,
+    totalAdSets: currentAd.creativeMetrics?.totalAdSets,
+    distinctBrandsCount: currentAd.creativeMetrics?.distinctBrandsCount,
+    isCrossBrand: currentAd.creativeMetrics?.isCrossBrand,
   };
 
   const actionsConfig: AdActionsConfig = {
@@ -270,6 +289,8 @@ export function useAdCardState(
     adArchiveId: currentAd.adArchiveId,
     startedRunningOn: currentAd.startedRunningOn,
     firstSeenAt: currentAd.firstSeenAt,
+    duplicationCount: currentAd.duplicationCount || 1,
+    isActive: currentAd.isActive,
   };
 
   return {
