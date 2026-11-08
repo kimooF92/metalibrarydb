@@ -124,6 +124,60 @@ export function extractMedia(item: any): {
 }
 
 /**
+ * Extracts the active delivery status of an ad from Meta Ad Library / Apify item payload.
+ * Returns `false` if the ad has ended, stopped, paused, or is marked inactive.
+ * Returns `true` if currently delivering or actively running.
+ */
+export function extractAdActiveStatus(item: any): boolean {
+  if (!item) return false;
+
+  // 1. Check explicit boolean flags
+  if (typeof item.isActive === "boolean") return item.isActive;
+  if (typeof item.is_active === "boolean") return item.is_active;
+  if (typeof item.active === "boolean") return item.active;
+  if (typeof item.snapshot?.is_active === "boolean") return item.snapshot.is_active;
+  if (typeof item.snapshot?.isActive === "boolean") return item.snapshot.isActive;
+
+  // 2. Check status string values
+  const statusStr = String(
+    item.status ||
+    item.ad_status ||
+    item.adDeliveryStatus ||
+    item.ad_delivery_status ||
+    item.snapshot?.status ||
+    item.snapshot?.ad_delivery_status ||
+    ""
+  ).toUpperCase().trim();
+
+  if (["INACTIVE", "PAUSED", "ENDED", "COMPLETED", "STOPPED", "DELETED"].includes(statusStr)) {
+    return false;
+  }
+  if (statusStr === "ACTIVE") {
+    return true;
+  }
+
+  // 3. Check stop time / end date
+  const rawEndDate =
+    item.endDate ||
+    item.end_date ||
+    item.stoppedRunningOn ||
+    item.ad_delivery_stop_time ||
+    item.snapshot?.end_date;
+
+  if (rawEndDate) {
+    const endMs =
+      typeof rawEndDate === "number"
+        ? (rawEndDate < 10000000000 ? rawEndDate * 1000 : rawEndDate)
+        : new Date(rawEndDate).getTime();
+    if (!isNaN(endMs) && endMs <= Date.now()) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
  * Parses ad launch date safely, handling Unix timestamps in seconds vs milliseconds.
  */
 export function parseAdStartDate(item: any): Date | null {

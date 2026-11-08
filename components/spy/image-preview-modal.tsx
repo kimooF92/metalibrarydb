@@ -16,6 +16,7 @@ import {
   Copy,
   Check,
   Video,
+  Play,
   Image as ImageIcon,
   Layers,
   Sparkles,
@@ -109,6 +110,7 @@ export function ImagePreviewModal({
   const isVideoExpired = videoUrl ? isFbCdnUrlExpired(videoUrl) : false;
   const activeVideo = videoUrl && !isVideoExpired && !videoError ? videoUrl : null;
   const isExpiredVideo = isVideoAd && Boolean(videoUrl) && (isVideoExpired || videoError);
+  const isVideoSnapshotOnly = isVideoAd && !videoUrl;
 
   const displayMediaList = useMemo(() => {
     if (imageUrls.length > 0) return imageUrls;
@@ -237,10 +239,10 @@ export function ImagePreviewModal({
                       "px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0",
                       isActive
                         ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                        : "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                        : "bg-slate-500/20 text-slate-300 border-slate-500/30"
                     )}
                   >
-                    {isActive ? "Active" : "Archived"}
+                    {isActive ? "Active" : "Inactive"}
                   </span>
                 )}
               </div>
@@ -350,6 +352,36 @@ export function ImagePreviewModal({
         >
           {/* Main Media Stage */}
           <div className="relative flex-1 bg-slate-950 flex flex-col items-center justify-center p-3 sm:p-5 select-none overflow-hidden min-h-[340px] sm:min-h-[460px]">
+            {/* Video Snapshot (Stream Not Yet Loaded) Notice Badge */}
+            {isVideoSnapshotOnly && (
+              <div className="absolute top-3 left-3 right-3 sm:right-auto z-30 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/90 border border-indigo-500/40 text-slate-200 text-xs shadow-lg backdrop-blur-md">
+                <Play className="w-3.5 h-3.5 text-indigo-400 fill-indigo-400/20 shrink-0" />
+                <span className="truncate">Video ad • Showing snapshot</span>
+                {adArchiveId && (
+                  <a
+                    href={`https://www.facebook.com/ads/library/?id=${adArchiveId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-1 underline font-semibold text-indigo-300 hover:text-white shrink-0"
+                  >
+                    Meta ↗
+                  </a>
+                )}
+                {onRefreshMedia && (
+                  <button
+                    type="button"
+                    onClick={onRefreshMedia}
+                    disabled={isRefreshingMedia}
+                    className="ml-auto sm:ml-2 px-2.5 py-0.5 rounded bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-200 font-semibold border border-indigo-400/30 flex items-center gap-1 cursor-pointer disabled:opacity-50 shrink-0 transition-colors"
+                    title="Fetch full video (.mp4) on demand"
+                  >
+                    <RotateCw className={`w-3 h-3 ${isRefreshingMedia ? "animate-spin" : ""}`} />
+                    <span>{isRefreshingMedia ? "Fetching..." : "Fetch Video"}</span>
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Expired Video Notice Badge */}
             {isExpiredVideo && (
               <div className="absolute top-3 left-3 right-3 sm:right-auto z-30 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-950/90 border border-amber-600/40 text-amber-200 text-xs shadow-lg backdrop-blur-md">

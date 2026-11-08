@@ -201,7 +201,13 @@ export function AdCardHeader({
                     isRefreshingMedia ? "animate-spin" : ""
                   }`}
                 />
-                <span>{isRefreshingMedia ? "Refreshing..." : "Refresh Media Links"}</span>
+                <span>
+                  {isRefreshingMedia
+                    ? "Refreshing..."
+                    : ad.mediaType === "video" && !firstVideoUrl
+                    ? "Fetch Full Video"
+                    : "Refresh Media Links"}
+                </span>
               </DropdownMenuItem>
             )}
 

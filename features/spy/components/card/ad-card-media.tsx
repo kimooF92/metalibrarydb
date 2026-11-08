@@ -192,6 +192,14 @@ export function AdCardMedia({
             <Camera className="w-2.5 h-2.5 text-amber-400" />
             <span>Snapshot</span>
           </span>
+        ) : isVideoAd && !firstVideoUrl ? (
+          <span
+            className="inline-flex items-center gap-1 text-[10px] font-medium text-indigo-300 bg-black/80 border border-indigo-500/40 px-2 py-0.5 rounded-full backdrop-blur-md shadow-md"
+            title="Video creative snapshot. Click to open and optionally fetch video."
+          >
+            <Play className="w-2.5 h-2.5 text-indigo-400 fill-indigo-400/20" />
+            <span>Video Ad</span>
+          </span>
         ) : (
           <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-200 bg-black/80 border border-white/15 px-2 py-0.5 rounded-full backdrop-blur-md shadow-md opacity-85 group-hover/media:opacity-100 transition-opacity">
             <ImageIcon className="w-2.5 h-2.5 text-slate-300" />

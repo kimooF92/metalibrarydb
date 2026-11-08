@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Ad, ScrapedProduct } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
 import { calculateWinnerScore } from "@/lib/winner-score";
-import { isFbCdnUrlExpired } from "@/lib/fb-cdn";
+import { isFbCdnUrlExpired, isGenuineVideoUrl } from "@/lib/fb-cdn";
 import { getProxiedImageUrl, getSmartMediaUrl } from "@/lib/image-proxy-url";
 import { ImagePreviewModal } from "./image-preview-modal";
 import { ProductClusterModal } from "./product-cluster-modal";
@@ -77,13 +77,7 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
     if (ad.product) setExtractedProduct(ad.product);
   }, [ad]);
 
-  const firstVideoUrl = currentAd.mediaUrls?.find(
-    (url: string) =>
-      url.includes(".mp4") ||
-      url.includes("/videos/") ||
-      url.includes("video.") ||
-      url.includes("fbcdn.net/o1/v/")
-  ) || (currentAd.mediaType === "video" && currentAd.mediaUrls?.[0]?.includes("http") ? currentAd.mediaUrls[0] : null);
+  const firstVideoUrl = currentAd.mediaUrls?.find(isGenuineVideoUrl) || null;
 
   const isVideoExpired = firstVideoUrl ? isFbCdnUrlExpired(firstVideoUrl) : false;
   const canPlayVideo = Boolean(firstVideoUrl) && !isVideoExpired;
@@ -92,13 +86,7 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
   // thumbnails remain static and non-downloadable without rendering frames.
   const isVideoAd = currentAd.mediaType === "video" || Boolean(firstVideoUrl) || Boolean(currentAd.storyboardUrls?.length);
 
-  const imageSlides = currentAd.mediaUrls?.filter(
-    (url: string) =>
-      !url.includes(".mp4") &&
-      !url.includes("/videos/") &&
-      !url.includes("video.") &&
-      !url.includes("fbcdn.net/o1/v/")
-  ) || [];
+  const imageSlides = currentAd.mediaUrls?.filter((url: string) => !isGenuineVideoUrl(url)) || [];
 
   const displayThumbnail = currentAd.signedThumbnailUrl || currentAd.thumbnailUrl || (imageSlides.length > 0 ? imageSlides[0] : null);
   const previewImages = imageSlides.length > 0 ? imageSlides : displayThumbnail ? [displayThumbnail] : [];
@@ -166,7 +154,11 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
       const contentType = res.headers.get("content-type") || "";
 
       if (!contentType.includes("application/json")) {
-        alert("Server temporary error (" + res.status + "). Click 'Watch on Meta Ad Library' to view.");
+        showToast({
+          type: "error",
+          title: "Refresh Error",
+          message: `Server temporary error (${res.status}). Click 'Watch on Meta Ad Library' to view.`,
+        });
         return;
       }
 
@@ -176,11 +168,33 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
         setImgError(false);
         setIsProxied(false);
         onMediaRefreshed?.(data.ad);
+
+        if (data.isActive === false) {
+          showToast({
+            type: "warning",
+            title: "Ad Inactive (Ended)",
+            message: "Media refreshed. Meta Ad Library confirmed this ad has ended.",
+          });
+        } else {
+          showToast({
+            type: "success",
+            title: "Media Refreshed",
+            message: "Fresh media loaded. Ad is actively delivering on Meta.",
+          });
+        }
       } else {
-        alert(data.message || "Could not extract fresh media right now. Use 'Watch on Meta Ad Library' link.");
+        showToast({
+          type: "error",
+          title: "Refresh Failed",
+          message: data.message || "Could not extract fresh media right now. Use 'Watch on Meta Ad Library' link.",
+        });
       }
     } catch (err: any) {
-      alert("Failed to refresh media: " + (err.message || "Network error"));
+      showToast({
+        type: "error",
+        title: "Connection Error",
+        message: "Failed to refresh media: " + (err.message || "Network error"),
+      });
     } finally {
       setIsRefreshingMedia(false);
     }

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import type { Ad, ScrapedProduct } from "@/types";
 import type { AdMediaConfig, AdActionsConfig } from "../types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
-import { isFbCdnUrlExpired } from "@/lib/fb-cdn";
+import { isFbCdnUrlExpired, isGenuineVideoUrl } from "@/lib/fb-cdn";
 import { getSmartMediaUrl } from "@/lib/image-proxy-url";
 import { useToast } from "@/components/toast-context";
 import { calculateWinnerScore } from "@/lib/winner-score";
@@ -44,17 +44,7 @@ export function useAdCardState(
     setCarouselIndex(0); // BUG-02 fix: eliminate wrong slide display on ad prop updates
   }, [ad]);
 
-  const firstVideoUrl =
-    currentAd.mediaUrls?.find(
-      (url) =>
-        url.includes(".mp4") ||
-        url.includes("/videos/") ||
-        url.includes("video.") ||
-        url.includes("fbcdn.net/o1/v/")
-    ) ||
-    (currentAd.mediaType === "video" && currentAd.mediaUrls?.[0]?.includes("http")
-      ? currentAd.mediaUrls[0]
-      : null);
+  const firstVideoUrl = currentAd.mediaUrls?.find(isGenuineVideoUrl) || null;
 
   const isVideoExpired = firstVideoUrl ? isFbCdnUrlExpired(firstVideoUrl) : false;
   const canPlayVideo = Boolean(firstVideoUrl) && !isVideoExpired && !videoError;
@@ -65,13 +55,7 @@ export function useAdCardState(
     Boolean(currentAd.storyboardUrls?.length);
 
   const imageSlides =
-    currentAd.mediaUrls?.filter(
-      (url) =>
-        !url.includes(".mp4") &&
-        !url.includes("/videos/") &&
-        !url.includes("video.") &&
-        !url.includes("fbcdn.net/o1/v/")
-    ) || [];
+    currentAd.mediaUrls?.filter((url) => !isGenuineVideoUrl(url)) || [];
 
   const displayThumbnail =
     currentAd.signedThumbnailUrl ||
@@ -155,7 +139,11 @@ export function useAdCardState(
       const contentType = res.headers.get("content-type") || "";
 
       if (!contentType.includes("application/json")) {
-        alert("Server temporary error (" + res.status + "). Click 'Watch on Meta Ad Library' to view.");
+        showToast({
+          type: "error",
+          title: "Refresh Error",
+          message: `Server temporary error (${res.status}). Click 'Watch on Meta Ad Library' to view.`,
+        });
         return;
       }
 
@@ -167,11 +155,33 @@ export function useAdCardState(
         setIsPlayingVideo(false);
         setIsProxied(false);
         onMediaRefreshed?.(data.ad);
+
+        if (data.isActive === false) {
+          showToast({
+            type: "warning",
+            title: "Ad Inactive (Ended)",
+            message: "Media refreshed. Meta Ad Library confirmed this ad is no longer active.",
+          });
+        } else {
+          showToast({
+            type: "success",
+            title: "Media Refreshed",
+            message: "Fresh media loaded. Ad is actively delivering on Meta.",
+          });
+        }
       } else {
-        alert(data.message || "Could not extract fresh media right now. Use 'Watch on Meta Ad Library' link.");
+        showToast({
+          type: "error",
+          title: "Refresh Failed",
+          message: data.message || "Could not extract fresh media right now. Use 'Watch on Meta Ad Library' link.",
+        });
       }
     } catch (err: any) {
-      alert("Failed to refresh media: " + (err.message || "Network error"));
+      showToast({
+        type: "error",
+        title: "Connection Error",
+        message: "Failed to refresh media: " + (err.message || "Network error"),
+      });
     } finally {
       setIsRefreshingMedia(false);
     }

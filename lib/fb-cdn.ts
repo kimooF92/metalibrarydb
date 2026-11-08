@@ -35,6 +35,32 @@ export function isPermanentMediaUrl(url: string | null | undefined): boolean {
 }
 
 /**
+ * Checks whether a URL is a genuine video stream/file (.mp4, /videos/, video CDN, etc.)
+ * and strictly NOT a static image (.jpg, .jpeg, .png, .webp).
+ */
+export function isGenuineVideoUrl(url: string | null | undefined): boolean {
+  if (!url || typeof url !== "string") return false;
+  const clean = url.toLowerCase();
+  // Strictly filter out static raster images
+  if (
+    clean.includes(".jpg") ||
+    clean.includes(".jpeg") ||
+    clean.includes(".png") ||
+    clean.includes(".webp") ||
+    clean.includes(".gif")
+  ) {
+    return false;
+  }
+  return (
+    clean.includes(".mp4") ||
+    clean.includes("/videos/") ||
+    clean.includes("video.") ||
+    clean.includes("fbcdn.net/o1/v/") ||
+    clean.includes("b2/videos/")
+  );
+}
+
+/**
  * Inspects a Meta / Facebook CDN URL for the `oe` (expiration) parameter.
  * Meta CDN URLs embed a hexadecimal unix timestamp in `oe`.
  * e.g., `?oe=67C5A3E0` -> 1740973024 seconds since epoch.
