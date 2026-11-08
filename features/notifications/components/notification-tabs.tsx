@@ -13,7 +13,7 @@ const TABS = [
 
 export function NotificationTabs({ activeTab, onTabChange }: NotificationTabsProps) {
   return (
-    <div className="flex items-center px-3 py-2 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/30 dark:bg-slate-900/30 gap-1.5 text-[11px] font-semibold overflow-x-auto">
+    <div className="flex items-center px-3 py-2 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 gap-1.5 text-[11px] font-semibold overflow-x-auto">
       {TABS.map((tab) => (
         <button
           key={tab.id}
