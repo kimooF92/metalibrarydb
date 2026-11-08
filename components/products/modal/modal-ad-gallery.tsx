@@ -220,22 +220,20 @@ export function ModalAdGallery({
           <button
             type="button"
             onClick={() => setAdFilter("all")}
-            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              adFilter === "all"
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${adFilter === "all"
                 ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs"
                 : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
-            }`}
+              }`}
           >
             All ({linkedAds.length})
           </button>
           <button
             type="button"
             onClick={() => setAdFilter("active")}
-            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              adFilter === "active"
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${adFilter === "active"
                 ? "bg-emerald-600 text-white shadow-xs"
                 : "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60"
-            }`}
+              }`}
           >
             Active ({activeLinkedAds.length})
           </button>
@@ -243,11 +241,10 @@ export function ModalAdGallery({
             <button
               type="button"
               onClick={() => setAdFilter("stopped")}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                adFilter === "stopped"
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${adFilter === "stopped"
                   ? "bg-rose-600 text-white shadow-xs"
                   : "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60"
-              }`}
+                }`}
             >
               Stopped ({inactiveLinkedAds.length})
             </button>
@@ -256,11 +253,10 @@ export function ModalAdGallery({
             <button
               type="button"
               onClick={() => setAdFilter("video")}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                adFilter === "video"
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${adFilter === "video"
                   ? "bg-indigo-600 text-white shadow-xs"
                   : "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/60"
-              }`}
+                }`}
             >
               🎬 Videos ({videoLinkedAds.length})
             </button>
@@ -269,11 +265,10 @@ export function ModalAdGallery({
             <button
               type="button"
               onClick={() => setAdFilter("image")}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                adFilter === "image"
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${adFilter === "image"
                   ? "bg-purple-600 text-white shadow-xs"
                   : "bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/60"
-              }`}
+                }`}
             >
               🖼️ Images ({imageLinkedAds.length})
             </button>
@@ -339,11 +334,10 @@ export function ModalAdGallery({
               <div
                 key={ad.id}
                 onClick={() => onOpenLightbox(ad)}
-                className={`group relative flex flex-col bg-slate-50 dark:bg-slate-950 rounded-lg border overflow-hidden transition-all cursor-pointer ${
-                  isAdArchived
+                className={`group relative flex flex-col bg-slate-50 dark:bg-slate-950 rounded-lg border overflow-hidden transition-all cursor-pointer ${isAdArchived
                     ? "border-rose-500/30 opacity-75 hover:opacity-100 hover:border-rose-500"
                     : "border-slate-200 dark:border-slate-800 hover:border-indigo-500 shadow-xs"
-                }`}
+                  }`}
               >
                 <div
                   className="relative aspect-square w-full bg-slate-200 dark:bg-slate-900 flex items-center justify-center overflow-hidden"
@@ -356,9 +350,8 @@ export function ModalAdGallery({
                       fill
                       unoptimized
                       referrerPolicy="no-referrer"
-                      className={`object-cover transition-transform group-hover:scale-105 ${
-                        isAdArchived ? "grayscale-[40%]" : ""
-                      }`}
+                      className={`object-cover transition-transform group-hover:scale-105 ${isAdArchived ? "grayscale-[40%]" : ""
+                        }`}
                     />
                   ) : isVideo ? (
                     <div className="flex flex-col items-center justify-center gap-1 text-indigo-400">

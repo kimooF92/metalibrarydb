@@ -97,7 +97,7 @@ export function ProductClusterModal({
             });
           }
         })
-        .catch(() => {})
+        .catch(() => { })
         .finally(() => setIsRefreshingPreviewAd(false));
     }
   };
@@ -382,8 +382,8 @@ export function ProductClusterModal({
             previewAd.mediaType === "carousel" && (previewAd.mediaUrls?.filter((u: string) => !isGenuineVideoUrl(u)).length || 0) > 0
               ? previewAd.mediaUrls!.filter((u: string) => !isGenuineVideoUrl(u))
               : previewAd.signedThumbnailUrl || previewAd.thumbnailUrl
-              ? [previewAd.signedThumbnailUrl || previewAd.thumbnailUrl!]
-              : []
+                ? [previewAd.signedThumbnailUrl || previewAd.thumbnailUrl!]
+                : []
           }
           videoUrl={previewAd.mediaUrls?.find(isGenuineVideoUrl) || null}
           fallbackThumbnail={previewAd.signedThumbnailUrl || previewAd.thumbnailUrl}

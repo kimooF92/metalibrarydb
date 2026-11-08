@@ -122,7 +122,7 @@ export function ProductDetailsModal({
             setLinkedAds((prev) => prev.map((a) => (a.id === data.ad.id ? { ...a, ...data.ad } : a)));
           }
         })
-        .catch(() => {})
+        .catch(() => { })
         .finally(() => setIsRefreshingLightboxAd(false));
     }
   };
@@ -454,11 +454,10 @@ export function ProductDetailsModal({
                     key={item.id}
                     type="button"
                     onClick={() => handleSwitchCarouselItem(item)}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer text-left shrink-0 ${
-                      isSelected
+                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer text-left shrink-0 ${isSelected
                         ? "bg-white dark:bg-slate-900 border-indigo-500 text-indigo-600 dark:text-indigo-400 shadow-xs ring-1 ring-indigo-500/30 font-bold"
                         : "bg-white/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
-                    }`}
+                      }`}
                     title={item.title || `Item ${idx + 1}`}
                   >
                     {item.mainImageUrl && (
@@ -510,11 +509,10 @@ export function ProductDetailsModal({
             <button
               type="button"
               onClick={() => setActiveTab("all")}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${
-                activeTab === "all"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${activeTab === "all"
                   ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm"
                   : "text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/60"
-              }`}
+                }`}
             >
               <Layers className="w-3.5 h-3.5" />
               <span>All</span>
@@ -523,11 +521,10 @@ export function ProductDetailsModal({
             <button
               type="button"
               onClick={() => setActiveTab("overview")}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${
-                activeTab === "overview"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${activeTab === "overview"
                   ? "bg-indigo-600 text-white shadow-sm"
                   : "text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/60"
-              }`}
+                }`}
             >
               <Package className="w-3.5 h-3.5" />
               <span>Overview & Pricing</span>
@@ -536,20 +533,18 @@ export function ProductDetailsModal({
             <button
               type="button"
               onClick={() => setActiveTab("ads")}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${
-                activeTab === "ads"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${activeTab === "ads"
                   ? "bg-indigo-600 text-white shadow-sm"
                   : "text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/60"
-              }`}
+                }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>Ad Creatives</span>
               {linkedAds.length > 0 && (
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                  activeTab === "ads"
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === "ads"
                     ? "bg-white/20 text-white"
                     : "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
-                }`}>
+                  }`}>
                   {linkedAds.length}
                 </span>
               )}
@@ -558,20 +553,18 @@ export function ProductDetailsModal({
             <button
               type="button"
               onClick={() => setActiveTab("suppliers")}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${
-                activeTab === "suppliers"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${activeTab === "suppliers"
                   ? "bg-indigo-600 text-white shadow-sm"
                   : "text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/60"
-              }`}
+                }`}
             >
               <Boxes className="w-3.5 h-3.5" />
               <span>Sourcing</span>
               {supplierUrls.length > 0 && (
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                  activeTab === "suppliers"
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === "suppliers"
                     ? "bg-white/20 text-white"
                     : "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
-                }`}>
+                  }`}>
                   {supplierUrls.length}
                 </span>
               )}
@@ -580,11 +573,10 @@ export function ProductDetailsModal({
             <button
               type="button"
               onClick={() => setActiveTab("network")}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${
-                activeTab === "network"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${activeTab === "network"
                   ? "bg-purple-600 text-white shadow-sm"
                   : "text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/60"
-              }`}
+                }`}
             >
               <Building2 className="w-3.5 h-3.5" />
               <span>Network Intel</span>
@@ -661,8 +653,8 @@ export function ProductDetailsModal({
             lightboxAd.mediaType === "carousel" && (lightboxAd.mediaUrls?.filter((u: string) => !isGenuineVideoUrl(u)).length || 0) > 0
               ? lightboxAd.mediaUrls!.filter((u: string) => !isGenuineVideoUrl(u))
               : lightboxAd.signedThumbnailUrl || lightboxAd.thumbnailUrl
-              ? [lightboxAd.signedThumbnailUrl || lightboxAd.thumbnailUrl!]
-              : []
+                ? [lightboxAd.signedThumbnailUrl || lightboxAd.thumbnailUrl!]
+                : []
           }
           videoUrl={lightboxAd.mediaUrls?.find(isGenuineVideoUrl) || null}
           fallbackThumbnail={lightboxAd.signedThumbnailUrl || lightboxAd.thumbnailUrl}
