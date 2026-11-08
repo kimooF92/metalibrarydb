@@ -29,7 +29,8 @@ import { useAuth } from "@/components/auth-context";
 import { useAddUrlModal } from "@/components/add-url-modal";
 import { useProductBadge } from "@/hooks/use-product-badge";
 import { useSupplierBadge } from "@/hooks/use-supplier-badge";
-import { Plus, PlusCircle, ShieldCheck, Building2, Truck } from "lucide-react";
+import { useGlobalSearch } from "@/components/global-search-dialog";
+import { Plus, PlusCircle, ShieldCheck, Building2, Truck, Search, Command as CommandIcon } from "lucide-react";
 
 export function Navigation() {
   const pathname = usePathname();
@@ -49,6 +50,7 @@ export function Navigation() {
   const { openAddUrlModal } = useAddUrlModal();
   const { count: newProductsCount } = useProductBadge();
   const { count: supplierDropCount } = useSupplierBadge();
+  const { openSearch } = useGlobalSearch();
 
   interface NavItem {
     href: string;
@@ -183,6 +185,31 @@ export function Navigation() {
                   </button>
                 </>
               )}
+            </div>
+
+            {/* Quick Search Shortcut Trigger */}
+            <div className="mb-2">
+              <button
+                type="button"
+                onClick={openSearch}
+                title="Search (⌘K or Ctrl+K)"
+                className={`group flex items-center h-8 rounded-md text-xs font-medium transition-all ${
+                  isCollapsed
+                    ? "w-9 h-8 mx-auto justify-center p-0"
+                    : "w-full px-2.5 gap-2.5 justify-start"
+                } text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-white/[0.04] border border-slate-200/80 dark:border-slate-800/80 cursor-pointer`}
+              >
+                <Search className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 group-hover:text-indigo-500 transition-colors shrink-0" />
+                {!isCollapsed && (
+                  <div className="flex items-center justify-between min-w-0 flex-1">
+                    <span className="truncate">Search...</span>
+                    <kbd className="inline-flex items-center gap-0.5 text-[10px] font-mono px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700/60 leading-none">
+                      <CommandIcon className="w-2.5 h-2.5 inline" />
+                      <span>K</span>
+                    </kbd>
+                  </div>
+                )}
+              </button>
             </div>
 
             {/* Navigation Groups with Hairline Dividers */}
@@ -329,6 +356,15 @@ export function Navigation() {
         </div>
 
         <div className="flex items-center space-x-2">
+          <button
+            type="button"
+            onClick={openSearch}
+            aria-label="Search"
+            title="Search (⌘K)"
+            className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 transition-all cursor-pointer"
+          >
+            <Search className="w-4 h-4" />
+          </button>
           {!isStaff && <SmallPagesScanBadge />}
           {!isStaff && <NotificationCenter layout="navbar" />}
           {isStaff ? (

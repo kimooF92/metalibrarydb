@@ -12,6 +12,7 @@ import { WorkspaceProvider } from "@/components/workspace-context";
 import { ManageWorkspaceModal } from "@/components/manage-workspace-modal";
 import { AuthProvider } from "@/components/auth-context";
 import { AddUrlModalProvider } from "@/components/add-url-modal";
+import { GlobalSearchProvider } from "@/components/global-search-dialog";
 import { UserRole } from "@/lib/auth";
 
 export function AppShell({
@@ -52,20 +53,22 @@ export function AppShell({
         <SidebarProvider>
           <SmallPagesScanProvider>
             <AddUrlModalProvider>
-              <Navigation />
-              <div className="flex-1 min-w-0 h-full flex flex-col overflow-hidden bg-background">
-                <TopBar />
-                <SmallPagesScanBanner />
-                <main
-                  className={`flex-1 min-w-0 flex flex-col bg-background ${
-                    isFullCanvasPage ? "h-full overflow-hidden p-0" : "overflow-y-auto p-4 md:px-6 md:py-5"
-                  }`}
-                >
-                  {children}
-                </main>
-              </div>
-              <ManageWorkspaceModal />
-              {modal}
+              <GlobalSearchProvider>
+                <Navigation />
+                <div className="flex-1 min-w-0 h-full flex flex-col overflow-hidden bg-background">
+                  <TopBar />
+                  <SmallPagesScanBanner />
+                  <main
+                    className={`flex-1 min-w-0 flex flex-col bg-background ${
+                      isFullCanvasPage ? "h-full overflow-hidden p-0" : "overflow-y-auto p-4 md:px-6 md:py-5"
+                    }`}
+                  >
+                    {children}
+                  </main>
+                </div>
+                <ManageWorkspaceModal />
+                {modal}
+              </GlobalSearchProvider>
             </AddUrlModalProvider>
           </SmallPagesScanProvider>
         </SidebarProvider>

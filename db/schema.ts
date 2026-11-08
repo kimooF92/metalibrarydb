@@ -243,6 +243,8 @@ export const scrapedProducts = pgTable(
       table.scrapeStatus,
       table.createdAt.desc()
     ),
+    index("idx_scraped_products_title_trgm").using("gin", sql`${table.title} extensions.gin_trgm_ops`),
+    index("idx_scraped_products_domain_trgm").using("gin", sql`${table.domain} extensions.gin_trgm_ops`),
   ]
 );
 
@@ -290,6 +292,7 @@ export const ads = pgTable(
     index("idx_ads_link_url_lower_trimmed").on(
       sql`LOWER(TRIM(TRAILING '/' FROM ${table.linkUrl}))`
     ),
+    index("idx_ads_page_name_trgm").using("gin", sql`${table.pageName} extensions.gin_trgm_ops`),
   ]
 );
 
