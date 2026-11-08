@@ -336,13 +336,20 @@ export async function scanAdCreatives(
     const initialWaitTime = isDirectPageSearch ? 3500 : 7000;
     await page.waitForTimeout(initialWaitTime);
 
-    // Initial page checks
-    const pageContent = await page.content();
-    if (
-      pageContent.includes("unusual activity") ||
-      pageContent.includes("Security Check") ||
-      pageContent.includes("captcha")
-    ) {
+    // Check page state for authentic CAPTCHA / Security Check challenges
+    const isRealCaptcha = await page.evaluate(() => {
+      const bodyText = document.body?.innerText || "";
+      const hasCaptchaIframe = !!document.querySelector(
+        'iframe[src*="captcha"], iframe[src*="recaptcha"], #captcha_dialog'
+      );
+      const hasChallengeHeading =
+        /security check|confirm it'?s you|unusual activity/i.test(document.title || "") ||
+        (/security check|confirm it'?s you/i.test(bodyText) && !bodyText.includes("Ad Library"));
+
+      return hasCaptchaIframe || hasChallengeHeading;
+    });
+
+    if (isRealCaptcha) {
       return {
         status: "failed",
         extractedCount: 0,
