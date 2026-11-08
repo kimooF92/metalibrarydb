@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { SmartPreset } from "../types";
 import { parseNicheParam, parseSubNicheParam } from "@/lib/niches-taxonomy";
 
 export function useProductFilters(onFilterChange?: () => void) {
+  const searchParams = useSearchParams();
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [brandInput, setBrandInput] = useState("");
@@ -103,7 +105,7 @@ export function useProductFilters(onFilterChange?: () => void) {
     else if (adLaunchParam && adLaunchParam !== "all") setStillRunningOnly(true);
     const groupCarouselsParam = params.get("groupCarousels");
     if (groupCarouselsParam !== null) setGroupCarousels(groupCarouselsParam === "true");
-  }, []);
+  }, [searchParams]);
 
   // Continuous sync between active filters and URL search params
   const isFilterHydratedRef = useRef(false);

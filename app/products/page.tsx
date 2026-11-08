@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { ScrapedProduct } from "@/types";
 import { ProductRow } from "@/components/products/product-row";
@@ -25,7 +25,7 @@ import {
   ProductsLoadMore,
 } from "@/features/products";
 
-export default function ProductsPage() {
+function ProductsPageContent() {
   const router = useRouter();
   const { isStaff } = useAuth();
 
@@ -377,5 +377,19 @@ export default function ProductsPage() {
         }}
       />
     </div>
+  );
+}
+
+export default function ProductsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex-1 h-full w-full flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <ProductsPageContent />
+    </Suspense>
   );
 }
