@@ -1,16 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect, Suspense } from "react";
-import Link from "next/link";
-import { Ad } from "@/types";
+import { Suspense } from "react";
 import { useAdFeed, useAdStats, useIncomingAdsStream } from "@/hooks/use-spy";
-import { AdCard } from "@/components/spy/ad-card";
-import { AdRow } from "@/components/spy/ad-row";
-import { SpyFilters } from "@/components/spy/spy-filters";
-import { ApifyCreditBadge } from "@/components/apify-credit-badge";
-import { useToast } from "@/components/toast-context";
-import { useWorkspace } from "@/components/workspace-context";
-import { Layers, Calendar, Video, Image as ImageIcon, RefreshCw, Eye, ArrowUp, Sparkles, X, Radio } from "lucide-react";
+import { useSpyFeedUi } from "@/features/spy/hooks/use-spy-feed-ui";
+import { SpyHeader, SpyIncomingAlert, SpyFeedGrid } from "@/features/spy/components/feed";
+import { SpyFilters } from "@/features/spy/components/spy-filters";
+import { ArrowUp } from "lucide-react";
 
 function AdSpyContent() {
   const {
@@ -27,7 +22,9 @@ function AdSpyContent() {
     prependAds,
     refetch,
   } = useAdFeed();
+
   const { stats, refetch: refetchStats } = useAdStats();
+
   const {
     incomingAds,
     incomingCount,
@@ -35,73 +32,21 @@ function AdSpyContent() {
     autoStream,
     setAutoStream,
   } = useIncomingAdsStream();
-  const { activeWorkspace } = useWorkspace();
-  const { showToast } = useToast();
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [showBackToTop, setShowBackToTop] = useState(false);
-  const [manualRefreshing, setManualRefreshing] = useState(false);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // Re-fetch ad feed & stats only when switching from one workspace to a different workspace
-  const prevWorkspaceIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!activeWorkspace?.id) return;
-    if (prevWorkspaceIdRef.current && prevWorkspaceIdRef.current !== activeWorkspace.id) {
-      refetch();
-      refetchStats();
-    }
-    prevWorkspaceIdRef.current = activeWorkspace.id;
-  }, [activeWorkspace?.id, refetch, refetchStats]);
-
-  // Auto-stream effect: if autoStream is active, automatically inject new incoming ads
-  useEffect(() => {
-    if (autoStream && incomingAds.length > 0) {
-      prependAds(incomingAds);
-      clearIncoming();
-      showToast({
-        type: "info",
-        title: "Real-time Ad Stream",
-        message: `Automatically loaded ${incomingAds.length} newly scraped creative(s) to the feed.`,
-      });
-    }
-  }, [autoStream, incomingAds, prependAds, clearIncoming, showToast]);
-
-  // Scroll listener for back to top button
-  useEffect(() => {
-    const container = document.querySelector("main") || window;
-    const handleScroll = () => {
-      const scrollPos = window.scrollY || document.documentElement.scrollTop;
-      setShowBackToTop(scrollPos > 300);
-    };
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  // Load viewMode preference from localStorage on mount
-  useEffect(() => {
-    try {
-      const savedMode = localStorage.getItem("ad_spy_view_mode");
-      if (savedMode === "grid" || savedMode === "list") {
-        setViewMode(savedMode);
-      }
-    } catch (e) {
-      console.error("Error reading viewMode preference:", e);
-    }
-  }, []);
-
-  const handleViewModeChange = (mode: "grid" | "list") => {
-    setViewMode(mode);
-    try {
-      localStorage.setItem("ad_spy_view_mode", mode);
-    } catch (e) {
-      console.error("Error saving viewMode preference:", e);
-    }
-  };
-
-  const handleResetFilters = () => {
-    resetFilters();
-  };
+  const {
+    viewMode,
+    showBackToTop,
+    manualRefreshing,
+    handleViewModeChange,
+    handleRefreshFeed,
+  } = useSpyFeedUi({
+    incomingAds,
+    autoStream,
+    prependAds,
+    clearIncoming,
+    refetch,
+    refetchStats,
+  });
 
   const handleExcludeBrand = (pageId: string) => {
     const currentExcluded = params.excludePageIds || [];
@@ -110,165 +55,17 @@ function AdSpyContent() {
     }
   };
 
-  const handleRefreshFeed = async () => {
-    if (manualRefreshing) return;
-    setManualRefreshing(true);
-    try {
-      await Promise.all([
-        refetch(),
-        refetchStats(),
-      ]);
-      showToast({
-        type: "success",
-        title: "Feed Refreshed",
-        message: "Latest ad creatives, stats, and Apify cloud sync completed.",
-      });
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent("apify:refresh-balance"));
-      }
-    } catch (err: any) {
-      showToast({
-        type: "error",
-        title: "Refresh Error",
-        message: err.message || "Failed to refresh feed.",
-      });
-    } finally {
-      setManualRefreshing(false);
-    }
-  };
-
-  // IntersectionObserver for continuous infinite scroll
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const first = entries[0];
-        if (
-          first.isIntersecting &&
-          !isLoading &&
-          !isFetchingMore &&
-          !manualRefreshing &&
-          pagination.page < pagination.totalPages
-        ) {
-          updateFilters({ page: pagination.page + 1 });
-        }
-      },
-      { threshold: 0.1 }
-    );
-
-    const currentSentinel = sentinelRef.current;
-    if (currentSentinel) {
-      observer.observe(currentSentinel);
-    }
-
-    return () => {
-      if (currentSentinel) {
-        observer.unobserve(currentSentinel);
-      }
-    };
-  }, [isLoading, isFetchingMore, manualRefreshing, pagination.page, pagination.totalPages, updateFilters]);
-
-  const isSpinning = manualRefreshing || isRefreshing;
-
   return (
     <div className="h-full overflow-y-auto overflow-x-hidden bg-background text-foreground space-y-4">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800/40">
-        <div className="flex items-center space-x-2">
-          <Eye className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
-          <h1 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight">
-            Ad Spy Feed
-          </h1>
-          <span className="text-[10px] bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 px-2.5 py-0.5 rounded-full font-medium hidden md:inline-flex items-center gap-1.5">
-            <span className="font-bold text-indigo-600 dark:text-indigo-400">{pagination.total.toLocaleString()} filtered ads</span>
-            <span className="text-slate-300 dark:text-slate-700">•</span>
-            <span>{stats.totalAdsCaptured.toLocaleString()} total captured</span>
-            <span className="text-slate-300 dark:text-slate-700">•</span>
-            <span>{stats.launchedLast7Days.toLocaleString()} new this week</span>
-          </span>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          {/* Live Auto-Stream Toggle */}
-          <button
-            onClick={() => setAutoStream(!autoStream)}
-            className={`flex items-center space-x-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition-all cursor-pointer shrink-0 ${
-              autoStream
-                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 ring-1 ring-emerald-500/30"
-                : "bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700"
-            }`}
-            title={autoStream ? "Auto-streaming is ON. New ads appear automatically." : "Click to auto-stream new ads to feed"}
-          >
-            <span className={`w-2 h-2 rounded-full ${autoStream ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
-            <span>Live Stream: {autoStream ? "ON" : "OFF"}</span>
-          </button>
-
-          <ApifyCreditBadge />
-          <button
-            onClick={handleRefreshFeed}
-            disabled={manualRefreshing}
-            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shrink-0 disabled:opacity-60"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSpinning ? "animate-spin text-indigo-500" : ""}`} />
-            <span>{manualRefreshing ? "Refreshing..." : "Refresh Feed"}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Summary Metrics Banner */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-2.5 sm:p-3 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Total Captured
-            </span>
-            <Layers className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
-          </div>
-          <p className="text-lg sm:text-xl font-black text-slate-900 dark:text-slate-100 mt-1">
-            {stats.totalAdsCaptured}
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-2.5 sm:p-3 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Launched (7 Days)
-            </span>
-            <Calendar className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
-          </div>
-          <p className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
-            {stats.launchedLast7Days}
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-2.5 sm:p-3 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Scaled Ads (5+)
-            </span>
-            <Layers className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
-          </div>
-          <p className="text-lg sm:text-xl font-black text-amber-600 dark:text-amber-400 mt-1">
-            {stats.scaledAdsCount}
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-2.5 sm:p-3 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Media Formats
-            </span>
-            <Video className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
-          </div>
-          <div className="flex items-center gap-1.5 mt-1.5 text-xs font-semibold flex-wrap">
-            <span className="inline-flex items-center gap-1 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-800 text-[11px]">
-              <ImageIcon className="w-3 h-3 text-indigo-500 dark:text-indigo-400" /> {stats.mediaDistribution.image} img
-            </span>
-            <span className="inline-flex items-center gap-1 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-800 text-[11px]">
-              <Video className="w-3 h-3 text-purple-500 dark:text-purple-400" /> {stats.mediaDistribution.video} vid
-            </span>
-          </div>
-        </div>
-      </div>
+      {/* Header & Metrics Banner */}
+      <SpyHeader
+        stats={stats}
+        filteredTotal={pagination.total}
+        autoStream={autoStream}
+        onToggleAutoStream={() => setAutoStream(!autoStream)}
+        isRefreshing={manualRefreshing || isRefreshing}
+        onRefresh={handleRefreshFeed}
+      />
 
       {/* Filter Toolbar & View Switcher */}
       <SpyFilters
@@ -279,172 +76,49 @@ function AdSpyContent() {
         isLoading={isLoading || isFetchingMore}
         onViewModeChange={handleViewModeChange}
         onFilterChange={updateFilters}
-        onReset={handleResetFilters}
+        onReset={resetFilters}
       />
 
-      {/* Non-destructive error notice if background refetch fails but ads are already displayed */}
-      {error && ads.length > 0 && (
-        <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="font-bold">Error updating ad feed:</span>
-            <span>{error}</span>
-          </div>
-          <button
-            onClick={() => refetch()}
-            className="px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-bold text-xs cursor-pointer transition-colors shrink-0"
-          >
-            Retry
-          </button>
-        </div>
-      )}
+      {/* Realtime Alert for Incoming Ads */}
+      <SpyIncomingAlert
+        incomingCount={incomingCount}
+        autoStream={autoStream}
+        latestPageName={incomingAds[0]?.pageName || undefined}
+        onLoadIntoFeed={() => {
+          prependAds(incomingAds);
+          clearIncoming();
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }}
+        onDismiss={clearIncoming}
+      />
 
-      {/* Realtime Feature 3: Live Incoming Ads Alert Pill */}
-      {incomingCount > 0 && !autoStream && (
-        <div className="sticky top-2 z-30 flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-700 text-white shadow-xl shadow-indigo-600/30 backdrop-blur-md animate-in slide-in-from-top-2 duration-200">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="relative flex items-center justify-center w-8 h-8 rounded-xl bg-white/20 text-white shrink-0">
-              <Sparkles className="w-4 h-4 animate-spin text-amber-300" />
-              <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400"></span>
-              </span>
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold flex items-center gap-2">
-                <span>✨ {incomingCount} new {incomingCount === 1 ? "ad creative" : "ad creatives"} discovered!</span>
-              </div>
-              <p className="text-[11px] text-indigo-100 truncate">
-                {incomingAds[0]?.pageName ? `Latest: "${incomingAds[0].pageName}" • ` : ""}Click below to inject into feed without losing your scroll position.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => {
-                prependAds(incomingAds);
-                clearIncoming();
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white text-indigo-700 hover:bg-indigo-50 font-extrabold text-xs shadow-md transition-all cursor-pointer"
-            >
-              <ArrowUp className="w-3.5 h-3.5" />
-              <span>Load into Feed</span>
-            </button>
-
-            <button
-              onClick={clearIncoming}
-              className="p-1.5 text-white/80 hover:text-white rounded-lg hover:bg-white/15 transition-colors cursor-pointer"
-              title="Dismiss alert"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Main Feed Content */}
-      {isLoading && ads.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-64 text-slate-500 dark:text-slate-400 gap-2.5">
-          <RefreshCw className="w-7 h-7 animate-spin text-indigo-500" />
-          <span className="text-xs font-semibold">Loading ad creatives feed...</span>
-        </div>
-      ) : error && ads.length === 0 ? (
-        <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="font-bold">Error loading ad feed:</span>
-            <span>{error}</span>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => refetch()}
-              className="px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-bold text-xs cursor-pointer transition-colors"
-            >
-              Retry
-            </button>
-            {error.toLowerCase().includes("session") || error.toLowerCase().includes("auth") ? (
-              <Link
-                href="/login"
-                className="px-3 py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 rounded-lg font-bold text-xs cursor-pointer"
-              >
-                Log In
-              </Link>
-            ) : null}
-          </div>
-        </div>
-      ) : ads.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-64 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center">
-          <Layers className="w-10 h-10 text-slate-400 dark:text-slate-600 mb-2.5" />
-          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">No ad creatives match your filters</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mt-1 mb-3">
-            Try resetting your filters or run an Ad Spy extraction scan on your tracked brand pages from the main dashboard.
-          </p>
-          <button
-            onClick={handleResetFilters}
-            className="px-3.5 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors cursor-pointer"
-          >
-            Reset Filters
-          </button>
-        </div>
-      ) : (
-        <>
-          {/* Conditional Layout: Grid Cards vs List / Line by Line */}
-          {viewMode === "grid" ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5">
-              {ads.map((ad) => (
-                <AdCard
-                  key={ad.id}
-                  ad={ad}
-                  onArchiveToggle={() => refetch()}
-                  onExcludeBrand={handleExcludeBrand}
-                  onMediaRefreshed={updateAdInFeed}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2.5">
-              {ads.map((ad) => (
-                <AdRow
-                  key={ad.id}
-                  ad={ad}
-                  onArchiveToggle={() => refetch()}
-                  onExcludeBrand={handleExcludeBrand}
-                  onMediaRefreshed={updateAdInFeed}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Sentinel element for infinite scroll */}
-          <div ref={sentinelRef} className="h-4 w-full" />
-
-          {/* Inline Loading Footer when fetching next page */}
-          {isFetchingMore && (
-            <div className="flex items-center justify-center py-4 text-xs font-medium text-slate-500 dark:text-slate-400 gap-2">
-              <RefreshCw className="w-4 h-4 animate-spin text-indigo-500" />
-              <span>Loading more ad creatives...</span>
-            </div>
-          )}
-
-          {/* Clean Streamlined Feed Summary Footer */}
-          <div className="flex items-center justify-between pt-4 pb-8 border-t border-slate-200 dark:border-slate-800/60 text-xs text-slate-500 dark:text-slate-400">
-            <span>
-              Showing <strong className="text-slate-900 dark:text-slate-100">{ads.length}</strong> of{" "}
-              <strong className="text-slate-900 dark:text-slate-100">{pagination.total}</strong> total ads
-            </span>
-
-            {ads.length >= pagination.total && pagination.total > 0 && (
-              <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-900 px-2.5 py-0.5 rounded-full">
-                All captured ads loaded
-              </span>
-            )}
-          </div>
-        </>
-      )}
+      {/* Main Feed Content (Grid vs List, Infinite Scroll, Empty State) */}
+      <SpyFeedGrid
+        ads={ads}
+        viewMode={viewMode}
+        status={{
+          isLoading,
+          isFetchingMore,
+          error,
+        }}
+        pagination={{
+          page: pagination.page,
+          totalPages: pagination.totalPages,
+          total: pagination.total,
+        }}
+        actions={{
+          onLoadMore: () => updateFilters({ page: pagination.page + 1 }),
+          onRetry: () => refetch(),
+          onResetFilters: resetFilters,
+          onExcludeBrand: handleExcludeBrand,
+          onUpdateAd: updateAdInFeed,
+        }}
+      />
 
       {/* Floating Back-to-Top Button */}
       {showBackToTop && (
         <button
+          type="button"
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
           aria-label="Back to top"
           title="Scroll to top"
