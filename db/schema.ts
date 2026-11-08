@@ -492,6 +492,9 @@ export const appSettings = pgTable("app_settings", {
   autoB2Backup: boolean("auto_b2_backup").default(true).notNull(),
   savedOpportunityReport: json("saved_opportunity_report"),
   savedMarketForecast: json("saved_market_forecast"),
+  appPasswordHash: text("app_password_hash"),
+  appPasswordSalt: text("app_password_salt"),
+  appPasswordUpdatedAt: timestamp("app_password_updated_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

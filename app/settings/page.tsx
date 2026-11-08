@@ -37,6 +37,7 @@ import {
   type SettingsTab,
 } from "@/components/settings/settings-sidebar";
 import { SettingsCard } from "@/components/settings/settings-card";
+import { ChangePasswordCard } from "@/components/settings/change-password-card";
 
 interface AppSettingsData {
   defaultCountry: string;
@@ -919,15 +920,7 @@ function SettingsContent() {
                 </div>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                {telemetry.isProduction ? (
-                  <span>
-                    Lock your session immediately on this device, or update your password in your <strong>hosting provider&apos;s Environment Variables</strong> (e.g. Vercel Dashboard → Settings → Environment Variables).
-                  </span>
-                ) : (
-                  <span>
-                    Lock your session immediately on this device, or update your password in <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px] font-mono">.env.local</code>.
-                  </span>
-                )}
+                Lock your session immediately on this device to require password re-entry, or update your workspace credentials below.
               </p>
               <div className="pt-2">
                 <button
@@ -940,6 +933,11 @@ function SettingsContent() {
                   <span>{isLoggingOut ? "Locking Session..." : "Lock Session / Sign Out"}</span>
                 </button>
               </div>
+            </div>
+
+            {/* Change Master Password Card */}
+            <div className="md:col-span-2">
+              <ChangePasswordCard />
             </div>
 
             {/* Background Workers & API Key Access */}
