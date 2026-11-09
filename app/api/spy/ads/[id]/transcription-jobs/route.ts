@@ -35,7 +35,7 @@ export async function GET(
   const cached = await getCached<any>(cacheKey);
   if (cached) {
     return NextResponse.json({
-      status: "completed",
+      status: cached.status || "completed",
       source: "cache",
       transcript: cached,
     });
@@ -137,9 +137,9 @@ export async function POST(
 
   // 2. Check if already completed in DB or Redis
   const cached = await getCached<any>(`cache:transcript:${adId}`);
-  if (cached && cached.status === "completed") {
+  if (cached && (cached.status === "completed" || cached.status === "no_speech")) {
     return NextResponse.json({
-      status: "completed",
+      status: cached.status,
       source: "cache",
       jobId: cached.id,
       transcript: cached,

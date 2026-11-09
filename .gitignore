@@ -69,3 +69,5 @@ skills-lock.json
 /blob-report/
 /playwright/.cache/
 logs/
+config.bat
+.env.local

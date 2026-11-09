@@ -71,7 +71,23 @@ export async function handleTranscribeTask(req: Request | NextRequest) {
         );
 
       // 4. Cache in Upstash Redis for 7 days (0 DB egress on future reads)
-      await setCached(`cache:transcript:${adId}`, data, 7 * 86400).catch(() => {});
+      const normalizedCache = {
+        id: adId,
+        adId,
+        status: data.status,
+        language: data.language,
+        languageConfidence: data.language_confidence,
+        fullText: data.full_text,
+        hookText: data.hook_text,
+        words: data.words,
+        segments: data.segments,
+        durationSeconds: data.duration_seconds,
+        isTruncated: data.is_truncated,
+        full_text: data.full_text,
+        hook_text: data.hook_text,
+        duration_seconds: data.duration_seconds,
+      };
+      await setCached(`cache:transcript:${adId}`, normalizedCache, 7 * 86400).catch(() => {});
       await forceReleaseLock(lockKey).catch(() => {});
 
       return NextResponse.json({ success: true, status: data.status });

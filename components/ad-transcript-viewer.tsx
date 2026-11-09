@@ -144,12 +144,18 @@ export function AdTranscriptViewer({ adId, onSeek, compact = false }: AdTranscri
       e.preventDefault();
       e.stopPropagation();
     }
-    if (data?.fullText) {
-      navigator.clipboard.writeText(data.fullText);
+    const textToCopy = data?.fullText || (data as any)?.full_text;
+    if (textToCopy) {
+      navigator.clipboard.writeText(textToCopy);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
   };
+
+  // Normalize camelCase and snake_case to support both DB records and cached MicroVM payloads
+  const fullText = data?.fullText || (data as any)?.full_text;
+  const hookText = data?.hookText || (data as any)?.hook_text;
+  const durationSeconds = data?.durationSeconds || (data as any)?.duration_seconds;
 
   // 1. Loading State: Live animated feedback
   if (isLoading || data?.status === "processing" || data?.status === "pending") {
@@ -189,8 +195,8 @@ export function AdTranscriptViewer({ adId, onSeek, compact = false }: AdTranscri
     );
   }
 
-  // 4. Completed Transcript View
-  if (data?.status === "completed" && data.fullText) {
+  // 4. Completed Transcript View (Handles both fullText and full_text)
+  if (data?.status === "completed" && fullText) {
     return (
       <div className="pt-2 space-y-2">
         {/* Header Ribbon */}
@@ -201,9 +207,9 @@ export function AdTranscriptViewer({ adId, onSeek, compact = false }: AdTranscri
               <span>{data.language ? data.language.toUpperCase() : "VOICEOVER"}</span>
             </span>
 
-            {data.durationSeconds && (
+            {durationSeconds && (
               <span className="text-[10px] text-muted-foreground font-mono">
-                {Math.round(Number(data.durationSeconds))}s
+                {Math.round(Number(durationSeconds))}s
               </span>
             )}
           </div>
@@ -233,14 +239,14 @@ export function AdTranscriptViewer({ adId, onSeek, compact = false }: AdTranscri
         </div>
 
         {/* Highlight Opening Hook (0-3.2s) */}
-        {data.hookText && !isExpanded && (
+        {hookText && !isExpanded && (
           <div className="p-2 rounded-lg bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-800/60 text-[11px] leading-relaxed">
             <div className="flex items-center gap-1 text-[9.5px] font-black uppercase text-indigo-600 dark:text-indigo-400 mb-0.5 tracking-wider">
               <Sparkles className="w-2.5 h-2.5" />
               <span>Opening Hook (0–3.2s)</span>
             </div>
             <p className="text-foreground font-medium italic">
-              &ldquo;{data.hookText}&rdquo;
+              &ldquo;{hookText}&rdquo;
             </p>
           </div>
         )}
@@ -271,7 +277,7 @@ export function AdTranscriptViewer({ adId, onSeek, compact = false }: AdTranscri
                 ))}
               </div>
             ) : (
-              <p className="text-foreground whitespace-pre-line">{data.fullText}</p>
+              <p className="text-foreground whitespace-pre-line">{fullText}</p>
             )}
 
             {data.isTruncated && (
