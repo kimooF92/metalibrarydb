@@ -3,6 +3,7 @@
 import NextImage from "next/image";
 import { Ad } from "@/types";
 import { useToast } from "@/components/toast-context";
+import { AdTranscriptViewer } from "@/components/ad-transcript-viewer";
 import {
   X,
   Sparkles,
@@ -49,6 +50,7 @@ export function ModalAdLightbox({ ad, onClose }: ModalAdLightboxProps) {
   };
 
   const isArchived = Boolean(ad.isArchived || ad.isActive === false);
+  const isVideo = ad.mediaType === "video" || (ad.mediaUrls && ad.mediaUrls.some((u: string) => u.includes(".mp4")));
   const mediaUrl = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.[0];
 
   return (
@@ -129,6 +131,12 @@ export function ModalAdLightbox({ ad, onClose }: ModalAdLightboxProps) {
                   {ad.caption}
                 </p>
               )}
+            </div>
+          )}
+
+          {isVideo && ad.id && (
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800">
+              <AdTranscriptViewer adId={ad.id} />
             </div>
           )}
 

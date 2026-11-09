@@ -170,19 +170,19 @@ export async function POST(
     );
   }
 
-  // 4. Upsert pending record in DB
+  // 4. Upsert processing record in DB
   const [job] = await db
     .insert(adTranscripts)
     .values({
       adId,
       mediaHash,
       modelVersion,
-      status: "pending",
+      status: "processing",
     })
     .onConflictDoUpdate({
       target: [adTranscripts.adId, adTranscripts.mediaHash, adTranscripts.modelVersion],
       set: {
-        status: "pending",
+        status: "processing",
         errorCode: null,
         errorMessage: null,
         updatedAt: new Date(),
@@ -192,59 +192,86 @@ export async function POST(
 
   const jobId = job?.id || existing?.id || adId;
 
-  // 5. Enqueue via QStash or direct fallback
-  const enqueueRes = await enqueueAdTranscription({
-    adId,
-    mediaUrl: videoUrl,
-    mediaHash,
-  });
-
-  // If QStash is not configured (e.g. local dev), process in background directly
-  if (!enqueueRes.success && enqueueRes.error === "qstash_not_configured") {
-    // Fire-and-forget direct execution
-    (async () => {
-      try {
-        await db.update(adTranscripts).set({ status: "processing" }).where(eq(adTranscripts.id, jobId));
-        const res = await executeTranscriptionOnInstaBox({ adId, mediaUrl: videoUrl, mediaHash });
-        if (res.success) {
-          const d = res.data;
-          await db.update(adTranscripts).set({
-            status: d.status,
-            language: d.language,
-            languageConfidence: d.language_confidence ? String(d.language_confidence) : null,
-            fullText: d.full_text,
-            hookText: d.hook_text,
-            words: d.words,
-            segments: d.segments,
-            durationSeconds: d.duration_seconds ? String(d.duration_seconds) : null,
-            isTruncated: d.is_truncated,
-            updatedAt: new Date(),
-          }).where(eq(adTranscripts.id, jobId));
-          await setCached(`cache:transcript:${adId}`, d, 7 * 86400).catch(() => {});
-        } else {
-          await db.update(adTranscripts).set({
-            status: "failed",
-            errorCode: "DIRECT_EXEC_FAILED",
-            errorMessage: res.error,
-            updatedAt: new Date(),
-          }).where(eq(adTranscripts.id, jobId));
-        }
-      } catch (err: any) {
-        await db.update(adTranscripts).set({
-          status: "failed",
-          errorCode: "UNHANDLED_EXCEPTION",
-          errorMessage: err.message,
+  // 5. Directly execute on-demand transcription on InstaBox MicroVM
+  try {
+    const res = await executeTranscriptionOnInstaBox({ adId, mediaUrl: videoUrl, mediaHash });
+    if (res.success) {
+      const d = res.data;
+      const [updatedRecord] = await db
+        .update(adTranscripts)
+        .set({
+          status: d.status,
+          language: d.language,
+          languageConfidence: d.language_confidence ? String(d.language_confidence) : null,
+          fullText: d.full_text,
+          hookText: d.hook_text,
+          words: d.words,
+          segments: d.segments,
+          durationSeconds: d.duration_seconds ? String(d.duration_seconds) : null,
+          isTruncated: d.is_truncated,
+          errorCode: null,
+          errorMessage: null,
           updatedAt: new Date(),
-        }).where(eq(adTranscripts.id, jobId));
-      } finally {
-        await forceReleaseLock(lockKey).catch(() => {});
-      }
-    })();
-  }
+        })
+        .where(eq(adTranscripts.id, jobId))
+        .returning({
+          id: adTranscripts.id,
+          adId: adTranscripts.adId,
+          status: adTranscripts.status,
+          language: adTranscripts.language,
+          languageConfidence: adTranscripts.languageConfidence,
+          fullText: adTranscripts.fullText,
+          hookText: adTranscripts.hookText,
+          words: adTranscripts.words,
+          segments: adTranscripts.segments,
+          durationSeconds: adTranscripts.durationSeconds,
+          isTruncated: adTranscripts.isTruncated,
+          updatedAt: adTranscripts.updatedAt,
+        });
 
-  return NextResponse.json({
-    jobId,
-    status: "pending",
-    message: "Transcription queued successfully",
-  }, { status: 202 });
+      const responsePayload = updatedRecord || d;
+      await setCached(`cache:transcript:${adId}`, responsePayload, 7 * 86400).catch(() => {});
+      await forceReleaseLock(lockKey).catch(() => {});
+
+      return NextResponse.json({
+        jobId,
+        status: d.status,
+        transcript: responsePayload,
+      });
+    } else {
+      await db
+        .update(adTranscripts)
+        .set({
+          status: "failed",
+          errorCode: "INSTABOX_FAILED",
+          errorMessage: res.error,
+          updatedAt: new Date(),
+        })
+        .where(eq(adTranscripts.id, jobId));
+
+      await forceReleaseLock(lockKey).catch(() => {});
+
+      return NextResponse.json(
+        { jobId, status: "failed", error: res.error },
+        { status: res.statusCode || 400 }
+      );
+    }
+  } catch (err: any) {
+    await db
+      .update(adTranscripts)
+      .set({
+        status: "failed",
+        errorCode: "UNHANDLED_EXCEPTION",
+        errorMessage: err.message,
+        updatedAt: new Date(),
+      })
+      .where(eq(adTranscripts.id, jobId));
+
+    await forceReleaseLock(lockKey).catch(() => {});
+
+    return NextResponse.json(
+      { jobId, status: "failed", error: err.message || "Transcription failed" },
+      { status: 500 }
+    );
+  }
 }

@@ -25,11 +25,13 @@ import { cn, getCleanDomain, resolveDestinationUrl } from "@/lib/utils";
 import { isFbCdnUrlExpired } from "@/lib/fb-cdn";
 import { getProxiedImageUrl, getSmartMediaUrl } from "@/lib/image-proxy-url";
 import { BrandLogo } from "@/components/brand-logo";
+import { AdTranscriptViewer } from "@/components/ad-transcript-viewer";
 import { useToast } from "@/components/toast-context";
 
 export interface ImagePreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
+  adId?: string | null;
   imageUrls: string[];
   initialIndex?: number;
   title?: string | null;
@@ -56,6 +58,7 @@ function isRtlText(text?: string | null): boolean {
 export function ImagePreviewModal({
   isOpen,
   onClose,
+  adId,
   imageUrls,
   initialIndex = 0,
   title,
@@ -619,6 +622,12 @@ export function ImagePreviewModal({
                       )}
                     >
                       {caption}
+                    </div>
+                  )}
+
+                  {adId && (isVideoAd || activeVideo) && (
+                    <div className="pt-1">
+                      <AdTranscriptViewer adId={adId} />
                     </div>
                   )}
                 </div>

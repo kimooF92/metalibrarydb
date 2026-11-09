@@ -378,6 +378,7 @@ export function ProductClusterModal({
         <ImagePreviewModal
           isOpen={Boolean(previewAd)}
           onClose={() => setPreviewAd(null)}
+          adId={previewAd.id}
           imageUrls={
             previewAd.mediaType === "carousel" && (previewAd.mediaUrls?.filter((u: string) => !isGenuineVideoUrl(u)).length || 0) > 0
               ? previewAd.mediaUrls!.filter((u: string) => !isGenuineVideoUrl(u))

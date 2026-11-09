@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Ad } from "@/types";
 import { resolveDestinationUrl, getCleanDomain } from "@/lib/utils";
 import { getSmartMediaUrl } from "@/lib/image-proxy-url";
+import { AdTranscriptViewer } from "@/components/ad-transcript-viewer";
 import {
   X,
   ExternalLink,
@@ -309,6 +310,12 @@ export function CreativeClusterModal({
                               <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 leading-relaxed font-normal">
                                 {ad.caption}
                               </p>
+                            )}
+
+                            {ad.mediaType === "video" && (
+                              <div className="mt-1">
+                                <AdTranscriptViewer adId={ad.id} />
+                              </div>
                             )}
                           </div>
 
