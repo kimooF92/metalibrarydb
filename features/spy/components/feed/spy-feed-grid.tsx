@@ -6,6 +6,7 @@ import type { Ad } from "@/types";
 import { AdCard } from "../ad-card";
 import { AdRow } from "@/components/spy/ad-row";
 import { RefreshCw, Layers } from "lucide-react";
+import { SpyFeedSkeleton } from "./spy-feed-skeleton";
 
 export interface SpyFeedGridStatus {
   isLoading: boolean;
@@ -66,12 +67,7 @@ export function SpyFeedGrid({
   }, [isLoading, isFetchingMore, pagination.page, pagination.totalPages, onLoadMore]);
 
   if (isLoading && ads.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 text-slate-500 dark:text-slate-400 gap-2.5">
-        <RefreshCw className="w-7 h-7 animate-spin text-indigo-500" />
-        <span className="text-xs font-semibold">Loading ad creatives feed...</span>
-      </div>
-    );
+    return <SpyFeedSkeleton viewMode={viewMode} count={viewMode === "grid" ? 8 : 6} />;
   }
 
   if (error && ads.length === 0) {
@@ -173,12 +169,13 @@ export function SpyFeedGrid({
       {/* Sentinel element for infinite scroll (persistent DOM node) */}
       <div ref={sentinelRef} className="h-4 w-full" />
 
-      {/* Inline Loading Footer when fetching next page */}
+      {/* Inline Loading Skeleton when fetching next page */}
       {isFetchingMore && (
-        <div className="flex items-center justify-center py-4 text-xs font-medium text-slate-500 dark:text-slate-400 gap-2">
-          <RefreshCw className="w-4 h-4 animate-spin text-indigo-500" />
-          <span>Loading more ad creatives...</span>
-        </div>
+        <SpyFeedSkeleton
+          viewMode={viewMode}
+          count={viewMode === "grid" ? 4 : 3}
+          className="pt-2"
+        />
       )}
 
       {/* Clean Streamlined Feed Summary Footer */}
