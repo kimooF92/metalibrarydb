@@ -522,7 +522,17 @@ export function PagesTable({
               hasPendingReSort={hasPendingReSort}
               onSortChange={onSortChange}
             />
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
+            <tbody
+              className="divide-y divide-slate-200 dark:divide-slate-800/60"
+              style={
+                loading
+                  ? {
+                      maskImage: "linear-gradient(to bottom, black 50%, transparent 100%)",
+                      WebkitMaskImage: "linear-gradient(to bottom, black 50%, transparent 100%)",
+                    }
+                  : undefined
+              }
+            >
               {loading ? (
                 <TableSkeletonRows count={pageSize > 0 ? Math.min(pageSize, 10) : 8} />
               ) : pages.length === 0 ? (

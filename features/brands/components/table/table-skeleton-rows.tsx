@@ -11,9 +11,14 @@ export function TableSkeletonRows({ count = 8 }: TableSkeletonRowsProps) {
   return (
     <>
       {[...Array(count)].map((_, i) => {
-        // Vertical opacity ramp so rows subtly dissolve into transparent toward table bottom
-        const rowOpacity =
-          count > 2 ? Math.max(0.18, 1 - (i / (count - 1)) * 0.8) : 1;
+        // Rows 1-4 (indices 0, 1, 2, 3) are 100% clearly visible.
+        // Rows 5-8 (indices 4+) softly fade out into transparent.
+        let rowOpacity = 1;
+        if (i >= 4) {
+          const remaining = Math.max(1, count - 4);
+          const progress = remaining > 1 ? (i - 4) / (remaining - 1) : 1;
+          rowOpacity = Math.max(0.04, 0.75 - progress * 0.70);
+        }
 
         return (
           <tr

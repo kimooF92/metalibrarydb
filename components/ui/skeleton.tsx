@@ -3,23 +3,23 @@ import { cn } from "@/lib/utils";
 export interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
   /**
    * Gradient fade direction:
-   * - "right" / true: fades horizontally to transparent (default)
-   * - "bottom": fades vertically to transparent
+   * - "bottom" / true: fades vertically top-to-bottom into transparent (default)
+   * - "right": fades horizontally to transparent
    * - "none": uniform subtle muted background without gradient fade
    */
-  fade?: boolean | "right" | "bottom" | "none";
+  fade?: boolean | "bottom" | "right" | "none";
 }
 
 function Skeleton({
   className,
-  fade = "right",
+  fade = "bottom",
   ...props
 }: SkeletonProps) {
   const fadeClass =
-    fade === "right" || fade === true
-      ? "bg-gradient-to-r from-slate-200/90 via-slate-200/40 to-transparent dark:from-slate-800/90 dark:via-slate-800/40 dark:to-transparent"
-      : fade === "bottom"
+    fade === "bottom" || fade === true
       ? "bg-gradient-to-b from-slate-200/90 via-slate-200/40 to-transparent dark:from-slate-800/90 dark:via-slate-800/40 dark:to-transparent"
+      : fade === "right"
+      ? "bg-gradient-to-r from-slate-200/90 via-slate-200/40 to-transparent dark:from-slate-800/90 dark:via-slate-800/40 dark:to-transparent"
       : "bg-slate-200/70 dark:bg-slate-800/70";
 
   return (

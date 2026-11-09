@@ -20,10 +20,12 @@ export function ProductsGridSkeleton({
     return (
       <div className={`products-cards-grid ${className}`}>
         {[...Array(defaultCount)].map((_, i) => {
-          const itemOpacity =
-            defaultCount > 4
-              ? Math.max(0.2, 1 - (i / (defaultCount - 1)) * 0.75)
-              : 1;
+          let itemOpacity = 1;
+          if (i >= 4) {
+            const remaining = Math.max(1, defaultCount - 4);
+            const progress = remaining > 1 ? (i - 4) / (remaining - 1) : 1;
+            itemOpacity = Math.max(0.04, 0.75 - progress * 0.70);
+          }
 
           return (
             <div
@@ -46,10 +48,12 @@ export function ProductsGridSkeleton({
   return (
     <div className={`flex flex-col gap-2.5 ${className}`}>
       {[...Array(defaultCount)].map((_, i) => {
-        const itemOpacity =
-          defaultCount > 3
-            ? Math.max(0.2, 1 - (i / (defaultCount - 1)) * 0.75)
-            : 1;
+        let itemOpacity = 1;
+        if (i >= 3) {
+          const remaining = Math.max(1, defaultCount - 3);
+          const progress = remaining > 1 ? (i - 3) / (remaining - 1) : 1;
+          itemOpacity = Math.max(0.04, 0.75 - progress * 0.70);
+        }
 
         return (
           <div
