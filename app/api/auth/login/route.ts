@@ -89,7 +89,7 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             success: false,
-            error: "Server configuration missing: Neither APP_PASSWORD nor STAFF_PASSWORD is set in environment variables.",
+            error: "Server configuration missing: No master password is set in the database or environment variables.",
           },
           { status: 500 }
         );

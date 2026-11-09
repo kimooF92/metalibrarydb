@@ -65,24 +65,30 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const appPassword = process.env.APP_PASSWORD;
-  const staffPassword = process.env.STAFF_PASSWORD;
-
-  // 2. If no passwords at all are configured, allow requests (local unconfigured dev mode)
-  if ((!appPassword || appPassword.trim() === "") && (!staffPassword || staffPassword.trim() === "")) {
+  // 2. Allow explicitly disabled auth (for CI / automated tests)
+  if (process.env.DISABLE_AUTH === "true") {
     return NextResponse.next();
   }
+
+  const appPassword = process.env.APP_PASSWORD;
+  const staffPassword = process.env.STAFF_PASSWORD;
+  const apiSecret = process.env.API_SECRET;
+  const authSecret = process.env.AUTH_SECRET;
 
   // 3. Check for API Secret / Bearer Token authorization (for background workers & automation)
   const apiSecretHeader = request.headers.get("x-api-secret");
   const authHeader = request.headers.get("authorization");
   const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : null;
-  const configuredApiSecret = process.env.API_SECRET || appPassword;
 
-  // Admin secret match
+  // Admin secret match (API_SECRET, AUTH_SECRET, or legacy APP_PASSWORD if still present)
+  const matchesAdminSecret = (token: string) =>
+    (apiSecret && timingSafeEqual(token, apiSecret)) ||
+    (authSecret && timingSafeEqual(token, authSecret)) ||
+    (appPassword && timingSafeEqual(token, appPassword));
+
   if (
-    (apiSecretHeader && ((configuredApiSecret && timingSafeEqual(apiSecretHeader, configuredApiSecret)) || (appPassword && timingSafeEqual(apiSecretHeader, appPassword)))) ||
-    (bearerToken && ((configuredApiSecret && timingSafeEqual(bearerToken, configuredApiSecret)) || (appPassword && timingSafeEqual(bearerToken, appPassword))))
+    (apiSecretHeader && matchesAdminSecret(apiSecretHeader)) ||
+    (bearerToken && matchesAdminSecret(bearerToken))
   ) {
     return NextResponse.next();
   }

@@ -34,31 +34,37 @@ function getSessionCookie(request: Request): string | null {
  * - If unauthenticated, returns null
  */
 export async function getRoleFromRequest(request: Request): Promise<UserRole | null> {
+  // Allow explicitly disabled auth (for CI / automated tests)
+  if (process.env.DISABLE_AUTH === "true") {
+    return "admin";
+  }
+
   const appPassword = process.env.APP_PASSWORD;
   const staffPassword = process.env.STAFF_PASSWORD;
   const apiSecret = process.env.API_SECRET;
-  const requiredSecret = apiSecret || appPassword;
-
-  // Local dev mode without any passwords
-  if ((!appPassword || appPassword.trim() === "") && (!staffPassword || staffPassword.trim() === "")) {
-    return "admin";
-  }
+  const authSecret = process.env.AUTH_SECRET;
 
   // Check header credentials (API secret / Bearer)
   const clientSecret = request.headers.get("x-api-secret");
   const authHeader = request.headers.get("authorization");
   const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : null;
 
+  const matchesAdmin = (token: string) =>
+    (apiSecret && timingSafeEqual(token, apiSecret)) ||
+    (authSecret && timingSafeEqual(token, authSecret)) ||
+    (appPassword && timingSafeEqual(token, appPassword));
+
+  const matchesStaff = (token: string) =>
+    Boolean(staffPassword && timingSafeEqual(token, staffPassword));
+
   if (clientSecret) {
-    if (requiredSecret && timingSafeEqual(clientSecret, requiredSecret)) return "admin";
-    if (appPassword && timingSafeEqual(clientSecret, appPassword)) return "admin";
-    if (staffPassword && timingSafeEqual(clientSecret, staffPassword)) return "staff";
+    if (matchesAdmin(clientSecret)) return "admin";
+    if (matchesStaff(clientSecret)) return "staff";
   }
 
   if (bearerToken) {
-    if (requiredSecret && timingSafeEqual(bearerToken, requiredSecret)) return "admin";
-    if (appPassword && timingSafeEqual(bearerToken, appPassword)) return "admin";
-    if (staffPassword && timingSafeEqual(bearerToken, staffPassword)) return "staff";
+    if (matchesAdmin(bearerToken)) return "admin";
+    if (matchesStaff(bearerToken)) return "staff";
   }
 
   // Check browser session cookie

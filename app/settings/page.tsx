@@ -947,10 +947,10 @@ function SettingsContent() {
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">Automated Workers & API Access</h3>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                Background scraping cron jobs and external automation scripts can authenticate by supplying the <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px] font-mono">x-api-secret</code> header or a Bearer token matching <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px] font-mono">API_SECRET</code> or <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px] font-mono">APP_PASSWORD</code>.
+                Background scraping cron jobs and external automation scripts authenticate by supplying the <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px] font-mono">x-api-secret</code> header or Bearer token matching <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px] font-mono">API_SECRET</code>. Your web login password is stored securely in the database.
               </p>
               <div className="p-3 rounded-xl bg-slate-900 text-slate-200 font-mono text-[11px] overflow-x-auto">
-                <code>curl -H &quot;x-api-secret: YOUR_PASSWORD&quot; https://your-domain.com/api/spy/scans/sync</code>
+                <code>curl -H &quot;x-api-secret: YOUR_API_SECRET&quot; https://your-domain.com/api/cron/trigger-workers</code>
               </div>
             </div>
           </div>

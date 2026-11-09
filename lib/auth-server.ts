@@ -6,11 +6,8 @@ import { SESSION_COOKIE_NAME, verifySessionToken, UserRole } from "@/lib/auth";
  * Returns null if not authenticated.
  */
 export async function getServerSessionRole(): Promise<UserRole | null> {
-  const appPassword = process.env.APP_PASSWORD;
-  const staffPassword = process.env.STAFF_PASSWORD;
-
-  // Local development fallback when no passwords configured
-  if ((!appPassword || appPassword.trim() === "") && (!staffPassword || staffPassword.trim() === "")) {
+  // Allow explicitly disabled auth (for CI / automated tests)
+  if (process.env.DISABLE_AUTH === "true") {
     return "admin";
   }
 
