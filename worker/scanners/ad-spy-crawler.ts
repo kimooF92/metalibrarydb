@@ -11,6 +11,8 @@ import { linkAndAutoScrapeProduct } from "../../lib/product-ingest";
 import { selectBestProductCandidateUrl } from "../../lib/discovery-product-selector";
 import { processAdMedia } from "./media-pipeline";
 import { ExtractedAdData, SpyScanOutcome } from "./scanner-types";
+import { isQStashConfigured, dispatchBatchToQStash } from "../../lib/qstash";
+import type { BatchIngestPayload } from "../../lib/qstash-types";
 
 export type { ExtractedAdData, SpyScanOutcome };
 
@@ -468,145 +470,11 @@ export async function scanAdCreatives(
       };
     }
 
-    // Close heavy browser tab to release RAM
-    console.log(`[Spy Scanner] 🧹 Closing heavy Facebook browser tab to free RAM before frame extraction...`);
+    // Close heavy browser tab to release RAM immediately
+    console.log(`[Spy Scanner] 🧹 Closing heavy Facebook browser tab to free RAM before batch dispatch...`);
     await page.close().catch(() => {});
 
-    // 4. Save extracted ads and observations transactionally
-    let savedCount = 0;
-    let newProductsCount = 0;
-    const savedAdIds: string[] = [];
-
-    for (const adData of collectedAds.values()) {
-      const mediaResult = await processAdMedia(adData);
-
-      // Upsert canonical ad record
-      const [upsertedAd] = await db
-        .insert(ads)
-        .values({
-          adArchiveId: adData.adArchiveId,
-          pageId: (adData.pageId && !adData.pageId.includes("-")) ? adData.pageId : (extractedPageIds[0] || "0"),
-          pageName: adData.pageName,
-          startedRunningOn: adData.startedRunningOn,
-          caption: adData.caption,
-          title: adData.title,
-          ctaText: adData.ctaText,
-          linkUrl: adData.linkUrl,
-          mediaType: adData.mediaType,
-          mediaUrls: mediaResult.finalMediaUrls,
-          thumbnailUrl: mediaResult.finalThumbnailUrl,
-          thumbnailStoragePath: mediaResult.storagePath,
-          mediaHash: mediaResult.mediaHash,
-          perceptualHash: mediaResult.perceptualHash,
-          firstSeenAt: now,
-          lastSeenAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: ads.adArchiveId,
-          set: {
-            pageName: adData.pageName,
-            ...(adData.startedRunningOn ? { startedRunningOn: adData.startedRunningOn } : {}),
-            caption: adData.caption,
-            title: adData.title,
-            ctaText: adData.ctaText,
-            linkUrl: adData.linkUrl,
-            mediaType: adData.mediaType,
-            mediaUrls: mediaResult.finalMediaUrls,
-            thumbnailUrl: sql`CASE 
-              WHEN ${ads.thumbnailUrl} LIKE '%b2%' OR ${ads.thumbnailUrl} LIKE '%backblazeb2%' THEN ${ads.thumbnailUrl}
-              ELSE COALESCE(${mediaResult.finalThumbnailUrl}, ${ads.thumbnailUrl})
-            END`,
-            thumbnailStoragePath: sql`COALESCE(${mediaResult.storagePath}, ${ads.thumbnailStoragePath})`,
-            ...(mediaResult.mediaHash ? { mediaHash: mediaResult.mediaHash } : {}),
-            ...(mediaResult.perceptualHash ? { perceptualHash: mediaResult.perceptualHash } : {}),
-            lastSeenAt: now,
-            updatedAt: now,
-            isArchived: false,
-            archivedAt: null,
-          },
-        })
-        .returning({ id: ads.id });
-
-      if (upsertedAd) {
-        savedAdIds.push(upsertedAd.id);
-
-        let priorDuplication: number | undefined = undefined;
-        try {
-          const priorObs = await db.query.adObservations.findFirst({
-            where: and(
-              eq(adObservations.adId, upsertedAd.id),
-              ne(adObservations.creativeScanId, creativeScanId)
-            ),
-            orderBy: [desc(adObservations.observedAt)],
-          });
-          if (priorObs) {
-            priorDuplication = priorObs.duplicationCount;
-          }
-        } catch {}
-
-        await db.insert(adObservations).values({
-          creativeScanId,
-          adId: upsertedAd.id,
-          trackedPageId,
-          isActive: adData.isActive,
-          duplicationCount: adData.duplicationCount,
-          collationId: adData.collationId,
-          observedAt: now,
-        });
-
-        if (adData.duplicationCount >= 3) {
-          checkAndRecordBreakout({
-            adId: upsertedAd.id,
-            adArchiveId: adData.adArchiveId,
-            pageId: adData.pageId || (extractedPageIds[0] ?? ""),
-            brandName: adData.pageName || "Brand",
-            trackedPageId,
-            currentDuplication: adData.duplicationCount,
-            prevDuplication: priorDuplication,
-            startedRunningOn: adData.startedRunningOn,
-            firstSeenAt: now,
-            lastSeenAt: now,
-            mediaType: adData.mediaType,
-            linkUrl: adData.linkUrl,
-            isActive: adData.isActive,
-          }).catch((err) => console.warn("[Worker Spy Scanner] Breakout check error:", err));
-        }
-
-        if (adData.linkUrl) {
-          try {
-            const prodRes = await linkAndAutoScrapeProduct({
-              adId: upsertedAd.id,
-              linkUrl: adData.linkUrl,
-              pageId: (adData.pageId && !adData.pageId.includes("-")) ? adData.pageId : (extractedPageIds[0] && !extractedPageIds[0].includes("-") ? extractedPageIds[0] : null),
-              adCopy: adData.caption,
-              workspaceId: pageRecord?.workspaceId || null,
-            });
-            if (prodRes?.isNew) {
-              newProductsCount++;
-            }
-          } catch (e: any) {
-            console.warn(`[Worker Spy Scanner] Auto-scrape product warning:`, e.message);
-          }
-        }
-
-        savedCount++;
-      }
-    }
-
-    const finalStatus: "completed" | "partial" =
-      noProgressCount >= NO_PROGRESS_CAP ? "completed" : "partial";
-
-    if (savedCount > 0 && finalStatus === "completed") {
-      const currentlyObservedArchiveIds = new Set(
-        Array.from(collectedAds.values()).map((a) => a.adArchiveId)
-      );
-      const { reconcileArchivedAds } = await import("../../lib/ad-reconciliation");
-      await reconcileArchivedAds(trackedPageId, creativeScanId, currentlyObservedArchiveIds, now, {
-        isFullScan: true,
-      });
-    }
-
+    // 4. Resolve canonical Page ID and Page Name from extracted metadata
     let resolvedPageId = (trackedPageRecord?.pageId && /^\d{6,25}$/.test(trackedPageRecord.pageId.trim()))
       ? trackedPageRecord.pageId.trim()
       : null;
@@ -640,6 +508,60 @@ export async function scanAdCreatives(
           }
         }
       }
+    }
+
+    const finalStatus: "completed" | "partial" =
+      noProgressCount >= NO_PROGRESS_CAP ? "completed" : "partial";
+
+    // 5. Decoupled Page-Batch Ingestion via Upstash QStash
+    // Consolidates all 20-50 extracted ads into 1 atomic QStash message, preserving the 1k/day free tier quota.
+    const batchPayload: BatchIngestPayload = {
+      creativeScanId,
+      trackedPageId,
+      pageId: resolvedPageId || (extractedPageIds[0] ?? "0"),
+      pageName: resolvedPageName || trackedPageRecord?.displayName || null,
+      totalExtractedCount: collectedAds.size,
+      ads: Array.from(collectedAds.values()).slice(0, 100).map((a) => ({
+        adArchiveId: a.adArchiveId,
+        pageId: (a.pageId && !a.pageId.includes("-")) ? a.pageId : (resolvedPageId || extractedPageIds[0] || "0"),
+        pageName: a.pageName || resolvedPageName || trackedPageRecord?.displayName || null,
+        startedRunningOn: a.startedRunningOn ? a.startedRunningOn.toISOString() : null,
+        caption: a.caption || null,
+        title: a.title || null,
+        ctaText: a.ctaText || null,
+        linkUrl: a.linkUrl || null,
+        mediaType: (a.mediaType as any) || "unknown",
+        mediaUrls: a.mediaUrls || [],
+        thumbnailUrl: a.thumbnailUrl || null,
+        duplicationCount: a.duplicationCount || 1,
+        collationId: a.collationId || null,
+        isActive: a.isActive ?? true,
+      })),
+      observedAt: now.toISOString(),
+      scanQuality: finalStatus === "completed" ? "complete" : "partial",
+    };
+
+    let batchDispatched = false;
+    if (isQStashConfigured()) {
+      console.log(`[Spy Scanner] 🚀 Dispatching batch of ${batchPayload.ads.length} ads to QStash for decoupled ingestion...`);
+      const dispatchRes = await dispatchBatchToQStash(batchPayload);
+      if (dispatchRes.success) {
+        batchDispatched = true;
+        console.log(`[Spy Scanner] ✅ QStash batch message enqueued (Message ID: ${dispatchRes.messageId})`);
+      } else {
+        console.warn(`[Spy Scanner] ⚠️ QStash dispatch error (${dispatchRes.error}); falling back to direct batch handler...`);
+      }
+    }
+
+    if (!batchDispatched) {
+      console.log(`[Spy Scanner] 🔄 Executing local batch ingestion handler...`);
+      const { handleBatchIngest } = await import("../../app/api/qstash/ingest-scan-batch/route");
+      const localReq = new Request("http://localhost:3000/api/qstash/ingest-scan-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(batchPayload),
+      });
+      await handleBatchIngest(localReq);
     }
 
     let resolvedProfilePicUrl: string | null = null;
@@ -729,7 +651,7 @@ export async function scanAdCreatives(
                 pageRole: "primary",
                 canonicalDomain: bDomain.domain,
                 status: "success",
-                currentResults: savedAdIds.length,
+                currentResults: collectedAds.size,
                 lastChecked: now,
                 lastSuccessAt: now,
                 lastCreativeScan: now,
@@ -752,15 +674,15 @@ export async function scanAdCreatives(
         }
       }
 
-      if (savedAdIds.length > 0) {
+      if (collectedAds.size > 0 && resolvedPageId) {
         try {
           await db.execute(sql`
             UPDATE ads
             SET page_id = ${resolvedPageId},
                 page_name = COALESCE(NULLIF(${resolvedPageName || null}, ''), page_name),
                 updated_at = NOW()
-            WHERE id IN (${sql.join(savedAdIds.map((id) => sql`${id}`), sql`, `)})
-              AND (page_id = '0' OR page_id IS NULL OR page_id = '')
+            WHERE (page_id = '0' OR page_id IS NULL OR page_id = '')
+              AND ad_archive_id IN (${sql.join(Array.from(collectedAds.keys()).map((id) => sql`${id}`), sql`, `)})
           `);
         } catch (adErr) {
           console.warn("[Spy Scanner] Non-fatal error backfilling ads with resolvedPageId:", adErr);
@@ -806,10 +728,10 @@ export async function scanAdCreatives(
 
     return {
       status: finalStatus,
-      extractedCount: savedCount,
-      newProductsCount,
+      extractedCount: collectedAds.size,
+      newProductsCount: 0,
       extractedPageIds,
-      outcomeDetails: `Successfully extracted and normalized ${savedCount} ad creatives${newProductsCount > 0 ? ` and ${newProductsCount} new product(s)` : ""}.`,
+      outcomeDetails: `Successfully extracted and dispatched ${collectedAds.size} ad creatives (decoupled page-batch ingestion).`,
     };
   } catch (err: any) {
     const isTimeout =

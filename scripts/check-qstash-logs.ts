@@ -11,14 +11,14 @@ async function main() {
   }
 
   console.log("Fetching recent QStash events...");
-  const res = await client.events({ limit: 20 });
-  console.log(`Retrieved ${res.events.length} events:\n`);
+  const res = await (client as any).events({ limit: 20 });
+  console.log(`Retrieved ${res.events?.length || 0} events:\n`);
 
-  for (const e of res.events.slice(0, 10)) {
+  for (const e of (res.events || []).slice(0, 10)) {
     console.log(`[${e.state}] ${new Date(e.time).toISOString()}`);
     console.log(`  Message ID: ${e.messageId}`);
     console.log(`  URL:        ${e.url}`);
-    if (e.responseStatus) console.log(`  HTTP Status: ${e.responseStatus}`);
+    if ((e as any).responseStatus) console.log(`  HTTP Status: ${(e as any).responseStatus}`);
     if (e.error) console.log(`  Error:       ${e.error}`);
     console.log("---");
   }

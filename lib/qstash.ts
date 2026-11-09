@@ -1,5 +1,6 @@
 import { Client, QstashDailyRatelimitError } from "@upstash/qstash";
 import crypto from "crypto";
+import type { BatchIngestPayload } from "./qstash-types";
 
 let cachedClient: Client | null = null;
 let lastToken: string | undefined = undefined;
@@ -145,5 +146,51 @@ export async function enqueueProductScrape(
     }
     console.error("[QStash] Failed to enqueue product scrape:", error?.message || error);
     return { success: false, error: error?.message || "enqueue_failed" };
+  }
+}
+
+/**
+ * Dispatches an entire page scan's collected ads as a single atomic QStash message.
+ * Bounds daily QStash commands to 1 message per brand scan (500-800 scans/day on free tier).
+ */
+export async function dispatchBatchToQStash(
+  payload: BatchIngestPayload
+): Promise<EnqueueResult> {
+  const client = getQstashClient();
+  if (!client) {
+    return { success: false, error: "qstash_not_configured" };
+  }
+
+  const appUrl = getAppBaseUrl();
+  const destinationUrl = `${appUrl}/api/qstash/ingest-scan-batch`;
+  // QStash deduplication ID: stable per creativeScanId, underscores only (colons disallowed)
+  const deduplicationId = getDeduplicationId("batch", payload.creativeScanId);
+
+  try {
+    const configuredSecret = process.env.API_SECRET || process.env.APP_PASSWORD;
+    const headers: Record<string, string> = {};
+    if (configuredSecret) {
+      headers["x-api-secret"] = configuredSecret;
+    }
+
+    const res = await client.publishJSON({
+      url: destinationUrl,
+      body: payload,
+      deduplicationId,
+      retries: 3,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
+    });
+
+    return {
+      success: true,
+      messageId: res.messageId,
+    };
+  } catch (error: any) {
+    if (error instanceof QstashDailyRatelimitError) {
+      console.warn(`[QStash] Daily free-tier rate limit reached on batch publish. Reset at: ${error.reset}`);
+      return { success: false, rateLimited: true, error: "daily_rate_limit_exceeded" };
+    }
+    console.error("[QStash] Failed to publish scan batch:", error?.message || error);
+    return { success: false, error: error?.message || "publish_failed" };
   }
 }
