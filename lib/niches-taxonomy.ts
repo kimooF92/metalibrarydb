@@ -326,6 +326,46 @@ export const NICHE_TAXONOMY: NicheDefinition[] = [
     ],
   },
   {
+    id: "pet-supplies",
+    dbCategory: "Pet Supplies",
+    label: "Pet Supplies",
+    icon: "PawPrint",
+    subNiches: [
+      {
+        id: "pet-beds-furniture",
+        label: "Beds & Furniture",
+        dbValues: ["Pet Beds & Furniture", "Pet Beds", "Cat Trees", "Pet Furniture", "Cages & Crates"],
+      },
+      {
+        id: "pet-grooming-hygiene",
+        label: "Grooming & Hygiene",
+        dbValues: [
+          "Pet Grooming & Hygiene",
+          "Pet Grooming",
+          "Cat Litter",
+          "Deshedding",
+          "Pet Hygiene",
+          "Shampoo & Brushes",
+        ],
+      },
+      {
+        id: "pet-leashes-harnesses",
+        label: "Leashes & Collars",
+        dbValues: ["Pet Leashes & Harnesses", "Collars & Harnesses", "Pet Accessories", "Harnesses & Leashes"],
+      },
+      {
+        id: "pet-feeding-bowls",
+        label: "Feeding & Bowls",
+        dbValues: ["Pet Feeding & Bowls", "Pet Feeders", "Water Fountains", "Bowls & Feeders"],
+      },
+      {
+        id: "pet-toys-training",
+        label: "Toys & Training",
+        dbValues: ["Pet Toys & Training", "Pet Toys", "Training Accessories"],
+      },
+    ],
+  },
+  {
     id: "general-seasonal",
     dbCategory: "General & Other",
     label: "General & Seasonal",

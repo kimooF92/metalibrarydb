@@ -33,7 +33,27 @@ const categoryCache = new Map<string, ProductClassificationResult>();
 export function classifyProductOffline(title: string): ProductClassificationResult {
   const text = (title || "").toLowerCase();
 
-  // 1. Electronics & Tech
+  // 1. Pet Supplies (Evaluated first to prevent pet clippers, brushes, beds & shampoos from falsely matching Beauty or Home)
+  if (
+    /(?:chien|chiens|chat|chats|chiot|chaton|animaux|animalerie|litiere|litière|laisse|collier chien|gamelle|croquette|croquettes|toilettage|arbre a chat|griffoir|harnais chien|harnais chat|poils animaux|anti-puces|كلب|كلاب|قط|قطط|حيوانات|طوق كلاب|أليف|طعام قطط|dog|cat|puppy|kitten|pet|pets|leash|harness|litter box|cat tree)/i.test(
+      text
+    )
+  ) {
+    let sub = "Pet Grooming & Hygiene";
+    if (/\blit\b|\blits\b|coussin|arbre a chat|griffoir|cage|سرير/i.test(text)) sub = "Pet Beds & Furniture";
+    else if (/laisse|collier|harnais|طوق/i.test(text)) sub = "Pet Leashes & Harnesses";
+    else if (/gamelle|fontaine|distributeur|nourriture|croquette|croquettes|أكل|طعام/i.test(text)) sub = "Pet Feeding & Bowls";
+    else if (/jouet|balle|laser|jeu|لعبة/i.test(text)) sub = "Pet Toys & Training";
+
+    return {
+      category: "Pet Supplies",
+      subCategory: sub,
+      targetAudience: "unisex",
+      modelUsed: "offline_rules",
+    };
+  }
+
+  // 2. Electronics & Tech
   if (
     /(tablette|phone|ecouteur|écouteur|casque|montre connect|smartwatch|airpod|bluetooth|chargeur|cable|powerbank|camera|caméra|souris|clavier|laptop|pc|projecteur|speaker|baffle|tv|ring light|support telephone|micro|usb|wifi|led rgb|smart watch|rechargeable|haut-parleur|سماعات|ساعة ذكية|هاتف|شاحن|كاميرا|طابليت|لوحة مضيئة|لوح ذكي)/i.test(
       text

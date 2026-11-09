@@ -248,7 +248,7 @@ export function FreshWinnersToolbar({
             <option value="Automotive">Automotive</option>
             <option value="Kids & Toys">Kids & Toys</option>
             <option value="Sports & Fitness">Sports & Fitness</option>
-            <option value="Pets">Pet Supplies</option>
+            <option value="Pet Supplies">Pet Supplies</option>
           </select>
         </div>
 

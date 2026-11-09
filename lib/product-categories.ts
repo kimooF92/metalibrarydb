@@ -6,6 +6,7 @@ export const PRODUCT_CATEGORIES = [
   "Sports, Fitness & Outdoor",
   "Kids, Baby & Toys",
   "Automotive & Tools",
+  "Pet Supplies",
   "General & Other",
 ] as const;
 

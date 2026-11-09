@@ -16,6 +16,7 @@ import {
   Baby,
   Package,
   Layers,
+  PawPrint,
 } from "lucide-react";
 import { NICHE_TAXONOMY, NicheDefinition, SubNicheDefinition } from "@/lib/niches-taxonomy";
 
@@ -28,6 +29,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   Wrench,
   Baby,
   Package,
+  PawPrint,
 };
 
 export interface NicheCountItem {

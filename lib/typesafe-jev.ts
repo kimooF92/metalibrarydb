@@ -228,6 +228,14 @@ function deriveSubCategory(title: string, category: ProductCategory): string {
       if (/voiture|auto|moto|pneu|dashcam|سيارة/i.test(text)) return "Car Accessories";
       return "Automotive & Tools";
 
+    case "Pet Supplies":
+      if (/\blit\b|\blits\b|coussin|arbre a chat|griffoir|cage|سرير/i.test(text)) return "Pet Beds & Furniture";
+      if (/laisse|collier|harnais|طوق/i.test(text)) return "Pet Leashes & Harnesses";
+      if (/gamelle|fontaine|distributeur|nourriture|croquette|croquettes|أكل|طعام/i.test(text)) return "Pet Feeding & Bowls";
+      if (/jouet|balle|laser|jeu|لعبة/i.test(text)) return "Pet Toys & Training";
+      if (/brosse|toilettage|shampoing|litiere|litière|litter|poil|تنظيف/i.test(text)) return "Pet Grooming & Hygiene";
+      return "Pet Grooming & Hygiene";
+
     default:
       return "General & Essentials";
   }
@@ -282,6 +290,13 @@ export const DECISION_SUBNICHE_CRITERIA: Record<string, string> = {
   "Toys & Games": "Toys, RC vehicles, action figures, and recreational games",
   "Educational & Montessori": "Educational toys, learning books, drawing boards, and puzzles",
   "Baby Essentials": "Baby care essentials, strollers, baby monitors, and feeding gear",
+
+  // Pet Supplies
+  "Pet Beds & Furniture": "Pet beds, cat trees, scratchers, crates, cages, and resting cushions",
+  "Pet Grooming & Hygiene": "Pet grooming clippers, deshedding brushes, pet shampoos, cat litter boxes, and hygiene aids",
+  "Pet Leashes & Harnesses": "Dog leashes, walking harnesses, collars, and pet tracking accessories",
+  "Pet Feeding & Bowls": "Automatic pet feeders, drinking water fountains, slow-feed bowls, and feeding accessories",
+  "Pet Toys & Training": "Interactive pet toys, dog chew toys, training clickers, laser toys, and scratch toys",
 };
 
 export const SUBNICHE_TO_CATEGORY_MAP: Record<string, ProductCategory> = {
@@ -333,6 +348,13 @@ export const SUBNICHE_TO_CATEGORY_MAP: Record<string, ProductCategory> = {
   "Toys & Games": "Kids, Baby & Toys",
   "Educational & Montessori": "Kids, Baby & Toys",
   "Baby Essentials": "Kids, Baby & Toys",
+
+  // Pet Supplies
+  "Pet Beds & Furniture": "Pet Supplies",
+  "Pet Grooming & Hygiene": "Pet Supplies",
+  "Pet Leashes & Harnesses": "Pet Supplies",
+  "Pet Feeding & Bowls": "Pet Supplies",
+  "Pet Toys & Training": "Pet Supplies",
 };
 
 /**
@@ -411,6 +433,7 @@ export async function classifyProductWithJev(
     "Sports, Fitness & Outdoor": "Sports, gym, fitness equipment, body supports, and outdoor camping",
     "Kids, Baby & Toys": "Toys, games, educational items, and baby care essentials",
     "Automotive & Tools": "Car accessories, vehicle care, DIY hand tools, and hardware equipment",
+    "Pet Supplies": "Pet accessories, pet grooming, dog & cat beds, leashes, feeders, litter, and animal toys",
   };
 
   // Only allow General & Other if explicitly requested
