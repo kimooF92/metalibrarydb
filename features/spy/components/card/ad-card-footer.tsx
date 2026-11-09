@@ -111,7 +111,7 @@ export function AdCardFooter({
         title={`${duplicationCount} ad copies running simultaneously`}
       >
         <Flame className="w-3.5 h-3.5 text-amber-500 fill-amber-500/20 animate-pulse" />
-        <span>{duplicationCount} Copies (Scaled)</span>
+        <span>{duplicationCount}x Copies</span>
       </span>
     ) : duplicationCount >= 2 ? (
       <span
@@ -119,7 +119,7 @@ export function AdCardFooter({
         title={`${duplicationCount} active ad copies running`}
       >
         <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0" />
-        <span>{duplicationCount} Copies</span>
+        <span>{duplicationCount}x Copies</span>
       </span>
     ) : (
       <span
@@ -127,7 +127,7 @@ export function AdCardFooter({
         title="1 active ad running"
       >
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/80 inline-block shrink-0" />
-        <span>1 Copy</span>
+        <span>1x Copy</span>
       </span>
     );
 

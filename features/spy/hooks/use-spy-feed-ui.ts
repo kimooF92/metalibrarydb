@@ -11,7 +11,7 @@ interface UseSpyFeedUiOptions {
   prependAds: (ads: Ad[]) => void;
   clearIncoming: () => void;
   refetch: () => Promise<any>;
-  refetchStats: () => Promise<any>;
+  refetchStats?: () => Promise<any>;
 }
 
 export function useSpyFeedUi({
@@ -35,7 +35,7 @@ export function useSpyFeedUi({
     if (!activeWorkspace?.id) return;
     if (prevWorkspaceIdRef.current && prevWorkspaceIdRef.current !== activeWorkspace.id) {
       refetch();
-      refetchStats();
+      if (refetchStats) refetchStats();
     }
     prevWorkspaceIdRef.current = activeWorkspace.id;
   }, [activeWorkspace?.id, refetch, refetchStats]);
@@ -88,7 +88,7 @@ export function useSpyFeedUi({
     if (manualRefreshing) return;
     setManualRefreshing(true);
     try {
-      await Promise.all([refetch(), refetchStats()]);
+      await Promise.all([refetch(), refetchStats ? refetchStats() : Promise.resolve()]);
       showToast({
         type: "success",
         title: "Feed Refreshed",
