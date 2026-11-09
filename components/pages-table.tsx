@@ -12,7 +12,7 @@ import { TablePagination } from "@/features/brands/components/table/table-pagina
 import { TableModals } from "@/features/brands/components/table/table-modals";
 import { NotePopover } from "@/features/brands/components/table/note-popover";
 import { InlineSparkline } from "@/features/brands/components/table/sparkline-cell";
-import { Loader2 } from "lucide-react";
+import { TableSkeletonRows } from "@/features/brands/components/table/table-skeleton-rows";
 
 export { InlineSparkline };
 
@@ -524,12 +524,7 @@ export function PagesTable({
             />
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
               {loading ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-slate-500 dark:text-slate-400">
-                    <Loader2 className="w-6 h-6 animate-spin text-indigo-500 dark:text-indigo-400 mx-auto mb-2" />
-                    <span>Loading tracked pages...</span>
-                  </td>
-                </tr>
+                <TableSkeletonRows count={pageSize > 0 ? Math.min(pageSize, 10) : 8} />
               ) : pages.length === 0 ? (
                 <TableEmptyState
                   filters={{

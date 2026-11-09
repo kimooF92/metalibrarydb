@@ -19,7 +19,8 @@ import { CreativesTab } from "@/components/spy/creatives-tab";
 import { ProductDetailsModal } from "@/components/products/product-details-modal";
 import { ExportDossierModal } from "@/components/export-dossier-modal";
 import { ManageDomainModal } from "@/components/manage-domain-modal";
-import { ArrowLeft, RefreshCw } from "lucide-react";
+import { BrandDeepDiveSkeleton } from "./brand-deep-dive-skeleton";
+import { ArrowLeft } from "lucide-react";
 
 export function BrandDeepDiveView({
   id,
@@ -194,14 +195,7 @@ export function BrandDeepDiveView({
   };
 
   if (isLoadingAnalytics && !data) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3 text-slate-500">
-        <RefreshCw className="w-8 h-8 animate-spin text-indigo-500" />
-        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-          Loading Brand Intelligence & Analytics...
-        </p>
-      </div>
-    );
+    return <BrandDeepDiveSkeleton isModal={isModal} />;
   }
 
   if (error || !data) {
