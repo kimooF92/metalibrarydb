@@ -57,4 +57,69 @@ describe("Upstash QStash Utility Suite", () => {
       `Expected 400, 401, or 403 unauthorized, got status ${response.status}`
     );
   });
+
+  it("should bypass signature check when valid x-api-secret header is supplied", async () => {
+    const { POST } = await import("../app/api/qstash/extract-product/route");
+    const testSecret = "test-secret-fastpath";
+    process.env.API_SECRET = testSecret;
+
+    // Send invalid payload to test that it reached handleProductExtraction instead of being rejected by signature verifier
+    const mockReq = new Request("http://localhost:3000/api/qstash/extract-product", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-secret": testSecret,
+      },
+      body: JSON.stringify({
+        url: "", // Invalid URL triggers 400 from handler, proving it bypassed QStash 403 signature rejection
+      }),
+    });
+
+    const response = await POST(mockReq);
+    assert.strictEqual(response.status, 400);
+    const data = await response.json();
+    assert.strictEqual(data.error, "Missing required 'url' in payload");
+  });
+
+  it("should allow /api/qstash/ routes through middleware without 401 blocking", async () => {
+    const { middleware } = await import("../middleware");
+    const { NextRequest } = await import("next/server");
+
+    process.env.APP_PASSWORD = "production-app-password";
+
+    const qstashReq = new NextRequest("https://metalibrarydb.vercel.app/api/qstash/extract-product", {
+      method: "POST",
+    });
+
+    const res = await middleware(qstashReq);
+    // When middleware allows a path through, it returns NextResponse.next() with status 200 and x-middleware-next header
+    assert.notStrictEqual(res.status, 401, "Middleware must NOT reject /api/qstash/ with 401");
+    assert.strictEqual(res.headers.get("x-middleware-next"), "1");
+  });
+
+  it("should allow cron triggers authenticated via secret or reject when unauthenticated", async () => {
+    const { POST: cronPost } = await import("../app/api/cron/trigger-workers/route");
+    const { NextRequest } = await import("next/server");
+
+    process.env.CRON_SECRET = "cron-test-secret";
+
+    // Unauthenticated request
+    const unauthReq = new NextRequest("https://metalibrarydb.vercel.app/api/cron/trigger-workers?target=keepalive", {
+      method: "POST",
+    });
+    const unauthRes = await cronPost(unauthReq);
+    assert.strictEqual(unauthRes.status, 401);
+
+    // Authenticated request with x-api-secret
+    const authReq = new NextRequest("https://metalibrarydb.vercel.app/api/cron/trigger-workers?target=keepalive", {
+      method: "POST",
+      headers: {
+        "x-api-secret": "cron-test-secret",
+      },
+    });
+    const authRes = await authReq;
+    // We only test that auth passes past the 401 check
+    const authCall = await cronPost(authReq);
+    assert.notStrictEqual(authCall.status, 401);
+  });
 });

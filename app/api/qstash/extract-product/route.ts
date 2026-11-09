@@ -5,6 +5,7 @@ import { scrapedProducts } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { processProductExtraction } from "@/lib/product-ingest";
 import { normalizeProductUrl } from "@/lib/firecrawl";
+import { timingSafeEqual } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // Up to 60s for serverless extraction
@@ -110,8 +111,24 @@ async function handleProductExtraction(req: Request | NextRequest) {
   }
 }
 
-// Lazy signature verification wrapper to prevent build-time crashes when env vars are missing
+// Lazy signature verification wrapper with API secret fast-path support
 export async function POST(req: Request | NextRequest) {
+  // 1. Fast-path: If caller provides valid internal API secret or APP_PASSWORD
+  const apiSecretHeader = req.headers.get("x-api-secret");
+  const authHeader = req.headers.get("authorization");
+  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : null;
+  const configuredApiSecret = process.env.API_SECRET || process.env.APP_PASSWORD;
+
+  const isAuthorizedSecret =
+    Boolean(configuredApiSecret) &&
+    ((apiSecretHeader && timingSafeEqual(apiSecretHeader, configuredApiSecret!)) ||
+      (bearerToken && timingSafeEqual(bearerToken, configuredApiSecret!)));
+
+  if (isAuthorizedSecret) {
+    return handleProductExtraction(req);
+  }
+
+  // 2. Upstash QStash cryptographic signature verification
   const currentSigningKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
   const nextSigningKey = process.env.QSTASH_NEXT_SIGNING_KEY;
 
@@ -129,7 +146,7 @@ export async function POST(req: Request | NextRequest) {
   const verified = verifySignatureAppRouter(handleProductExtraction, {
     currentSigningKey,
     nextSigningKey,
-    clockTolerance: 10,
+    clockTolerance: 60,
   });
 
   return verified(req);

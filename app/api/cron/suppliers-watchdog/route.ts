@@ -24,9 +24,38 @@ async function handleCron(req: NextRequest) {
   try {
     const authHeader = req.headers.get("authorization");
     const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7).trim() : null;
-    const cronSecret = process.env.CRON_SECRET || process.env.API_SECRET;
+    const apiSecretHeader = req.headers.get("x-api-secret");
+    const cronSecret = process.env.CRON_SECRET || process.env.API_SECRET || process.env.APP_PASSWORD;
     const isVercelCron = req.headers.get("x-vercel-cron") === "1";
-    const isAuthorized = !cronSecret || isVercelCron || bearerToken === cronSecret;
+    const isAuthorizedSecret = cronSecret && (bearerToken === cronSecret || apiSecretHeader === cronSecret);
+
+    // Verify QStash signature if triggered by Upstash QStash Cron
+    let isQStashVerified = false;
+    const upstashSignature = req.headers.get("upstash-signature");
+    if (upstashSignature) {
+      const currentSigningKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
+      const nextSigningKey = process.env.QSTASH_NEXT_SIGNING_KEY;
+      if (currentSigningKey || nextSigningKey) {
+        try {
+          const { Receiver } = await import("@upstash/qstash");
+          const receiver = new Receiver({
+            currentSigningKey,
+            nextSigningKey,
+          });
+          const reqClone = req.clone();
+          const rawBody = await reqClone.text();
+          isQStashVerified = await receiver.verify({
+            signature: upstashSignature,
+            body: rawBody,
+            clockTolerance: 60,
+          });
+        } catch (sigErr: any) {
+          console.warn("[Suppliers Watchdog Cron] QStash signature verification failed:", sigErr?.message || sigErr);
+        }
+      }
+    }
+
+    const isAuthorized = !cronSecret || isVercelCron || isAuthorizedSecret || isQStashVerified;
 
     if (!isAuthorized) {
       return NextResponse.json({ error: "Unauthorized cron request" }, { status: 401 });

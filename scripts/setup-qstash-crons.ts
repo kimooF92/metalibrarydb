@@ -37,8 +37,21 @@ async function main() {
     }
 
     const args = process.argv.slice(2);
+    const forceSync = args.includes("--sync") || args.includes("--force");
     if (args.includes("--list-only")) {
       process.exit(0);
+    }
+
+    const cronSecret = process.env.CRON_SECRET || process.env.API_SECRET || process.env.APP_PASSWORD;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (cronSecret) {
+      headers["Authorization"] = `Bearer ${cronSecret}`;
+      headers["x-api-secret"] = cronSecret;
+      console.log(`🔐 Authorization headers will be attached using configured secret.`);
+    } else {
+      console.log(`ℹ️ No CRON_SECRET or APP_PASSWORD detected in local env; relying on cryptographic signature.`);
     }
 
     // Define standard recurring jobs
@@ -60,7 +73,7 @@ async function main() {
       },
     ];
 
-    console.log("🚀 Registering desired recurring schedules...");
+    console.log("🚀 Registering and synchronizing desired recurring schedules...");
 
     for (const job of desiredJobs) {
       // Check if already registered with exact destination
@@ -68,14 +81,25 @@ async function main() {
         (s) => s.destination === job.destination && s.cron === job.cron
       );
 
-      if (alreadyRegistered) {
-        console.log(`✅ [Already Active] ${job.name} (${job.cron}) -> Schedule ID: ${alreadyRegistered.scheduleId}`);
+      const hasAuthHeader =
+        alreadyRegistered &&
+        alreadyRegistered.header &&
+        (alreadyRegistered.header["x-api-secret"] || alreadyRegistered.header["authorization"] || alreadyRegistered.header["Authorization"]);
+
+      if (alreadyRegistered && hasAuthHeader && !forceSync) {
+        console.log(`✅ [Already Active & Configured] ${job.name} (${job.cron}) -> Schedule ID: ${alreadyRegistered.scheduleId}`);
       } else {
+        if (alreadyRegistered) {
+          console.log(`🔄 [Updating Schedule] Deleting outdated schedule ${alreadyRegistered.scheduleId} to refresh headers...`);
+          await client.schedules.delete(alreadyRegistered.scheduleId);
+        }
+
         const created = await client.schedules.create({
           destination: job.destination,
           cron: job.cron,
+          headers,
         });
-        console.log(`🎉 [Created] ${job.name} (${job.cron}) -> Schedule ID: ${created.scheduleId}`);
+        console.log(`🎉 [Configured] ${job.name} (${job.cron}) -> Schedule ID: ${created.scheduleId}`);
       }
     }
 

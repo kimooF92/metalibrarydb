@@ -33,8 +33,34 @@ async function handleCronTrigger(req: NextRequest) {
     const isVercelCron = req.headers.get("x-vercel-cron") === "1";
     const isAuthorizedSecret = cronSecret && (bearerToken === cronSecret || req.headers.get("x-api-secret") === cronSecret);
 
-    // Allow if: Vercel Cron, or matches CRON_SECRET, or provides a GitHub PAT token, or no CRON_SECRET is configured
-    if (cronSecret && !isVercelCron && !isAuthorizedSecret && !isGithubTokenInHeader) {
+    // Verify QStash signature if triggered by Upstash QStash Cron
+    let isQStashVerified = false;
+    const upstashSignature = req.headers.get("upstash-signature");
+    if (upstashSignature) {
+      const currentSigningKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
+      const nextSigningKey = process.env.QSTASH_NEXT_SIGNING_KEY;
+      if (currentSigningKey || nextSigningKey) {
+        try {
+          const { Receiver } = await import("@upstash/qstash");
+          const receiver = new Receiver({
+            currentSigningKey,
+            nextSigningKey,
+          });
+          const reqClone = req.clone();
+          const rawBody = await reqClone.text();
+          isQStashVerified = await receiver.verify({
+            signature: upstashSignature,
+            body: rawBody,
+            clockTolerance: 60,
+          });
+        } catch (sigErr: any) {
+          console.warn("[Cron Trigger] QStash signature verification failed:", sigErr?.message || sigErr);
+        }
+      }
+    }
+
+    // Allow if: Vercel Cron, matches CRON_SECRET, provides a GitHub PAT token, verified QStash signature, or no CRON_SECRET is configured
+    if (cronSecret && !isVercelCron && !isAuthorizedSecret && !isGithubTokenInHeader && !isQStashVerified) {
       return NextResponse.json({ error: "Unauthorized cron request" }, { status: 401 });
     }
 

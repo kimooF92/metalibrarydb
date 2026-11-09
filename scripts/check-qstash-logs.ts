@@ -1,0 +1,28 @@
+import dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
+
+import { getQstashClient } from "../lib/qstash";
+
+async function main() {
+  const client = getQstashClient();
+  if (!client) {
+    console.error("No QStash client configured.");
+    return;
+  }
+
+  console.log("Fetching recent QStash events...");
+  const res = await client.events({ limit: 20 });
+  console.log(`Retrieved ${res.events.length} events:\n`);
+
+  for (const e of res.events.slice(0, 10)) {
+    console.log(`[${e.state}] ${new Date(e.time).toISOString()}`);
+    console.log(`  Message ID: ${e.messageId}`);
+    console.log(`  URL:        ${e.url}`);
+    if (e.responseStatus) console.log(`  HTTP Status: ${e.responseStatus}`);
+    if (e.error) console.log(`  Error:       ${e.error}`);
+    console.log("---");
+  }
+}
+
+main().catch(console.error);
+

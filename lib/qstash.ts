@@ -119,12 +119,19 @@ export async function enqueueProductScrape(
   try {
     await ensureProductExtractionQueue();
 
+    const configuredSecret = process.env.API_SECRET || process.env.APP_PASSWORD;
+    const headers: Record<string, string> = {};
+    if (configuredSecret) {
+      headers["x-api-secret"] = configuredSecret;
+    }
+
     const queue = client.queue({ queueName: "product-extraction" });
     const res = await queue.enqueueJSON({
       url: destinationUrl,
       body: payload,
       deduplicationId,
       retries: 3,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
     });
 
     return {
