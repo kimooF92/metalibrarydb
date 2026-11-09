@@ -1,16 +1,38 @@
 import { cn } from "@/lib/utils";
 
+export interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
+  /**
+   * Gradient fade direction:
+   * - "right" / true: fades horizontally to transparent (default)
+   * - "bottom": fades vertically to transparent
+   * - "none": uniform subtle muted background without gradient fade
+   */
+  fade?: boolean | "right" | "bottom" | "none";
+}
+
 function Skeleton({
   className,
+  fade = "right",
   ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
+}: SkeletonProps) {
+  const fadeClass =
+    fade === "right" || fade === true
+      ? "bg-gradient-to-r from-slate-200/90 via-slate-200/40 to-transparent dark:from-slate-800/90 dark:via-slate-800/40 dark:to-transparent"
+      : fade === "bottom"
+      ? "bg-gradient-to-b from-slate-200/90 via-slate-200/40 to-transparent dark:from-slate-800/90 dark:via-slate-800/40 dark:to-transparent"
+      : "bg-slate-200/70 dark:bg-slate-800/70";
+
   return (
     <div
-      className={cn("animate-pulse rounded-md bg-muted", className)}
+      className={cn(
+        "relative overflow-hidden rounded-md animate-pulse",
+        fadeClass,
+        "before:absolute before:inset-0 before:-translate-x-full before:animate-[shimmer_2s_infinite] before:bg-gradient-to-r before:from-transparent before:via-white/20 dark:before:via-white/5 before:to-transparent",
+        className
+      )}
       {...props}
     />
   );
 }
 
 export { Skeleton };
-
