@@ -45,7 +45,8 @@ export function AppShell({
   const isFullCanvasPage =
     activeBaseRoute.startsWith("/products") ||
     activeBaseRoute.startsWith("/discovery") ||
-    activeBaseRoute.startsWith("/settings");
+    activeBaseRoute.startsWith("/settings") ||
+    activeBaseRoute === "/spy";
 
   return (
     <AuthProvider initialRole={initialRole}>

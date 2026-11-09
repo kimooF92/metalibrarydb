@@ -1,6 +1,11 @@
 "use client";
 
 const SPY_SORT_LABEL_MAP: Record<string, string> = {
+  started_running_on: "Newest First",
+  duplication_count: "Most Scaled Copies",
+  winner_score: "Highest Winner Score",
+  first_seen_at: "Recently Discovered",
+  product_creatives: "Most Creative Angles",
   newest: "Newest First",
   oldest: "Oldest First",
   scale: "Most Scaled Copies",
@@ -9,6 +14,15 @@ const SPY_SORT_LABEL_MAP: Record<string, string> = {
   score: "Highest Winner Score",
   latest: "Newest First",
 };
+
+function formatSortLabel(sortBy?: string): string {
+  if (!sortBy) return "Newest First";
+  if (SPY_SORT_LABEL_MAP[sortBy]) return SPY_SORT_LABEL_MAP[sortBy];
+  return sortBy
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
 
 export interface SpyResultsBarProps {
   loading: boolean;
@@ -23,7 +37,7 @@ export function SpyResultsBar({
   adsCount,
   totalCount,
   isFetchingMore,
-  sortBy = "newest",
+  sortBy = "started_running_on",
 }: SpyResultsBarProps) {
   return (
     <div className="flex items-center justify-between text-xs text-muted-foreground px-1 py-0.5">
@@ -49,10 +63,9 @@ export function SpyResultsBar({
       <div className="hidden sm:flex items-center gap-1.5 text-[11px]">
         <span>Sorted by:</span>
         <span className="font-medium text-foreground bg-muted px-2 py-0.5 rounded-md border border-border/70">
-          {SPY_SORT_LABEL_MAP[sortBy] || sortBy}
+          {formatSortLabel(sortBy)}
         </span>
       </div>
     </div>
   );
 }
-

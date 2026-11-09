@@ -145,7 +145,7 @@ export function SpyFeedGrid({
 
       {/* Conditional Layout: Grid Cards vs List / Line by Line */}
       {viewMode === "grid" ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,290px),1fr))] gap-3.5">
           {ads.map((ad) => (
             <AdCard
               key={ad.id}
