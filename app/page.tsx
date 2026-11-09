@@ -78,7 +78,7 @@ interface OverviewData {
 function DashboardOverviewContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { activeWorkspace } = useWorkspace();
+  const { activeWorkspace, isLoading: isWorkspaceLoading } = useWorkspace();
   const { openAddUrlModal } = useAddUrlModal();
   const { showToast } = useToast();
   const currencySymbol = activeWorkspace?.currencySymbol || "DT";
@@ -133,9 +133,10 @@ function DashboardOverviewContent() {
   );
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // Avoid speculative duplicate fetch on mount while WorkspaceProvider is resolving the active workspace
+    if (isWorkspaceLoading) return;
     loadOverview();
-  }, [loadOverview, activeWorkspace?.id]);
+  }, [loadOverview, isWorkspaceLoading, activeWorkspace?.id]);
 
   // Proactively poll overview while scans are in flight so the banner clears automatically
   useEffect(() => {
@@ -147,7 +148,9 @@ function DashboardOverviewContent() {
 
     const interval = setInterval(() => {
       if (!document.hidden) {
-        loadOverview(true, true);
+        // Pass isManual=false so polling leverages the short 15s Redis cache during scans
+        // without bypassing the cache with forceRefresh=true
+        loadOverview(false, true);
       }
     }, 5000);
 

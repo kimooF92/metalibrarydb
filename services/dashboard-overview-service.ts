@@ -521,6 +521,7 @@ export async function fetchDashboardOverview(options: FetchDashboardOverviewOpti
             duplication_count,
             is_active
           FROM ad_observations
+          WHERE observed_at >= NOW() - INTERVAL '30 days'
           ORDER BY ad_id, observed_at DESC
         ) latest_obs ON latest_obs.ad_id = a.id
         LEFT JOIN tracked_pages tp ON tp.id = latest_obs.tracked_page_id
