@@ -19,6 +19,7 @@ import {
 import type { FreshWinnerProduct, Ad } from "@/types";
 import { formatPrice } from "@/lib/format-price";
 import { useWorkspace } from "@/components/workspace-context";
+import { AdTranscriptViewer } from "./ad-transcript-viewer";
 
 interface ProductCreativesDrawerProps {
   product: FreshWinnerProduct | null;
@@ -79,6 +80,14 @@ export function ProductCreativesDrawer({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
+
+  const handleSeek = (adId: string, seconds: number) => {
+    const videoEl = document.getElementById(`video-player-${adId}`) as HTMLVideoElement | null;
+    if (videoEl) {
+      videoEl.currentTime = seconds;
+      videoEl.play().catch(() => {});
+    }
+  };
 
   if (!isOpen || !product) return null;
 
@@ -253,6 +262,7 @@ export function ProductCreativesDrawer({
                   <div className="relative w-full md:w-48 aspect-4/3 md:aspect-square rounded-lg overflow-hidden bg-muted/60 shrink-0 border border-border/80">
                     {isVideo && mediaUrl?.includes(".mp4") ? (
                       <video
+                        id={`video-player-${ad.id}`}
                         src={mediaUrl}
                         poster={ad.thumbnailUrl || undefined}
                         controls
@@ -302,6 +312,13 @@ export function ProductCreativesDrawer({
                         <p className="text-xs text-muted-foreground italic mt-1">
                           No text caption provided.
                         </p>
+                      )}
+
+                      {isVideo && (
+                        <AdTranscriptViewer
+                          adId={ad.id}
+                          onSeek={(seconds) => handleSeek(ad.id, seconds)}
+                        />
                       )}
                     </div>
 

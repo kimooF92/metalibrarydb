@@ -3,12 +3,15 @@ import {
   pgTable,
   uuid,
   text,
+  varchar,
+  numeric,
   integer,
   boolean,
   timestamp,
   index,
   uniqueIndex,
   json,
+  jsonb,
 } from "drizzle-orm/pg-core";
 
 // 0a. Workspaces Table (Multi-Workspace Isolation & Management)
@@ -599,4 +602,38 @@ export const supplierPhotos = pgTable(
     uniqueIndex("idx_supplier_photos_unique").on(table.supplierId, table.photoUrl),
   ]
 );
+
+// 16. Ad Transcripts Table (On-Demand Video Speech-to-Text & Hook Intelligence)
+export const adTranscripts = pgTable(
+  "ad_transcripts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    adId: uuid("ad_id")
+      .references(() => ads.id, { onDelete: "cascade" })
+      .notNull(),
+    mediaHash: text("media_hash").notNull(),
+    modelVersion: varchar("model_version", { length: 50 }).notNull().default("faster-whisper-turbo-int8-v1"),
+    status: varchar("status", { length: 20 }).notNull().default("pending"), // 'pending' | 'processing' | 'completed' | 'no_speech' | 'failed'
+    language: varchar("language", { length: 10 }),
+    languageConfidence: numeric("language_confidence", { precision: 3, scale: 2 }),
+    fullText: text("full_text"),
+    hookText: text("hook_text"), // Words strictly spoken within t <= 3.2s
+    words: jsonb("words"), // [{ word: string, start: number, end: number, prob: number }] (capped at 600)
+    segments: jsonb("segments"), // [{ id: number, start: number, end: number, text: string }] (capped at 100)
+    durationSeconds: numeric("duration_seconds", { precision: 6, scale: 2 }),
+    isTruncated: boolean("is_truncated").default(false),
+    errorCode: varchar("error_code", { length: 50 }),
+    errorMessage: text("error_message"),
+    attemptCount: integer("attempt_count").default(0).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("idx_ad_transcripts_ad_media_model").on(table.adId, table.mediaHash, table.modelVersion),
+    index("idx_ad_transcripts_ad_id").on(table.adId),
+    index("idx_ad_transcripts_status").on(table.status),
+    index("idx_ad_transcripts_language").on(table.language),
+  ]
+);
+
 

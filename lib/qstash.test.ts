@@ -10,10 +10,21 @@ import {
 } from "./qstash";
 
 describe("Upstash QStash Utility Suite", () => {
-  it("should confirm QStash is configured when token is provided", () => {
+  it("should confirm QStash configuration status properly", () => {
     assert.strictEqual(typeof isQStashConfigured(), "boolean");
-    // With .env.local loaded, token should be configured
-    assert.strictEqual(isQStashConfigured(), true);
+    const originalToken = process.env.QSTASH_TOKEN;
+    try {
+      process.env.QSTASH_TOKEN = "qstash_test_token_12345";
+      assert.strictEqual(isQStashConfigured(), true);
+      delete process.env.QSTASH_TOKEN;
+      assert.strictEqual(isQStashConfigured(), false);
+    } finally {
+      if (originalToken !== undefined) {
+        process.env.QSTASH_TOKEN = originalToken;
+      } else {
+        delete process.env.QSTASH_TOKEN;
+      }
+    }
   });
 
   it("should generate deterministic deduplication IDs", () => {
