@@ -649,6 +649,7 @@ export function ProductDetailsModal({
         <ImagePreviewModal
           isOpen={Boolean(lightboxAd)}
           onClose={() => setLightboxAd(null)}
+          adId={lightboxAd.id}
           imageUrls={
             lightboxAd.mediaType === "carousel" && (lightboxAd.mediaUrls?.filter((u: string) => !isGenuineVideoUrl(u)).length || 0) > 0
               ? lightboxAd.mediaUrls!.filter((u: string) => !isGenuineVideoUrl(u))
