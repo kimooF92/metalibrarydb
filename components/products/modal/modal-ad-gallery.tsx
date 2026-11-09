@@ -206,10 +206,10 @@ export function ModalAdGallery({
             onClick={onQueueVerify}
             disabled={isQueueingVerify || linkedAds.length === 0}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 transition-all cursor-pointer disabled:opacity-50"
-            title="Marks all linked ads as Pending so the next worker or GitHub Action scans them"
+            title="Live on-demand check for active status and fresh media via Trigger.dev"
           >
             <RotateCw className={`w-3.5 h-3.5 ${isQueueingVerify ? "animate-spin" : ""}`} />
-            <span>{isQueueingVerify ? "Queueing..." : "Scan All Ads"}</span>
+            <span>{isQueueingVerify ? "Rechecking..." : "Recheck All Ads"}</span>
           </button>
         </div>
       </div>

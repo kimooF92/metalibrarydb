@@ -8,6 +8,11 @@ import { markJobCompleted } from "../../worker/db";
 import { acquireLock, acquireLockDetailed, releaseLock, deleteCached, deleteByPrefix, setCached } from "../../lib/cache-service";
 import { broadcastScanStep } from "../../lib/realtime-scan";
 import { refreshSingleAdMedia, RefreshAdMediaOptions } from "./ad-media-refresher";
+import {
+  recheckProductLinkedAds,
+  RecheckProductLinkedAdsOptions,
+  RecheckProductLinkedAdsResult,
+} from "./product-linked-ads-refresher";
 
 export interface ScanPageCountPayload {
   pageId?: string;
@@ -658,4 +663,36 @@ export const refreshAdMediaTask = task({
     return result;
   },
 });
+
+export interface RecheckProductLinkedAdsPayload extends RecheckProductLinkedAdsOptions {}
+
+/**
+ * Task: recheckProductLinkedAdsTask
+ * On-demand batch refresh of all linked ads for a specific product.
+ * Replaces Apify for product ad verification, detects active/inactive status,
+ * updates video/image media streams, and syncs Postgres.
+ */
+export const recheckProductLinkedAdsTask = task({
+  id: "recheck-product-linked-ads",
+  machine: "medium-1x",
+  retry: {
+    maxAttempts: 2,
+    factor: 2,
+    minTimeoutInMs: 3000,
+  },
+  queue: {
+    concurrencyLimit: 2,
+  },
+  run: async (payload: RecheckProductLinkedAdsPayload) => {
+    logger.info(
+      `[recheck-product-linked-ads] Starting on-demand recheck for productId=${payload.productId}`
+    );
+    const result = await recheckProductLinkedAds(payload);
+    logger.info(
+      `[recheck-product-linked-ads] Finished recheck for productId=${payload.productId}. Success=${result.success}, Checked=${result.checkedCount}, Active=${result.activeCount}, Inactive=${result.inactiveCount}`
+    );
+    return result;
+  },
+});
+
 

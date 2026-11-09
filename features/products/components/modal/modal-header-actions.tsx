@@ -346,7 +346,7 @@ export function ModalHeaderActions({
                 />
                 <div>
                   <div className="font-semibold text-slate-900 dark:text-slate-100">Recheck Linked Ads</div>
-                  <div className="text-[10px] text-slate-400">Queue for verifier status check</div>
+                  <div className="text-[10px] text-slate-400">Live on-demand status & media check</div>
                 </div>
               </DropdownMenuItem>
 

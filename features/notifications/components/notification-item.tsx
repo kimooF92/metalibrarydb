@@ -277,7 +277,7 @@ export function NotificationItem({
         n.isRead
           ? "bg-transparent hover:bg-slate-100/70 dark:hover:bg-slate-800/50 opacity-75 hover:opacity-100"
           : isSupplierDrop
-          ? "bg-indigo-500/[0.04] dark:bg-indigo-500/[0.07] hover:bg-indigo-500/[0.1] dark:hover:bg-indigo-500/[0.14] border-l-2 border-indigo-500"
+          ? "bg-indigo-500/[0.04] dark:bg-indigo-500/[0.07] hover:bg-indigo-500/[0.1] dark:hover:bg-indigo-500/[0.14]"
           : isBreakout
           ? "bg-gradient-to-r from-rose-500/[0.08] via-pink-500/[0.06] to-amber-500/[0.08] hover:from-rose-500/[0.14] hover:to-amber-500/[0.14]"
           : isWentDark

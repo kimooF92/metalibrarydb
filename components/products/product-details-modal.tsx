@@ -265,27 +265,38 @@ export function ProductDetailsModal({
       const res = await fetch(`/api/products/${currentProduct.id}/queue-verify`, {
         method: "POST",
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        showToast({
-          type: "success",
-          title: "Queued for Scan",
-          message: "All linked ads marked as Pending for next scan.",
-        });
+        if (data.isCompleted) {
+          const activeText = `${data.activeCount ?? 0} active`;
+          const inactiveText = `${data.inactiveCount ?? 0} inactive`;
+          showToast({
+            type: "success",
+            title: "Linked Ads Verified",
+            message: `Verified ${data.checkedCount ?? 0} ads (${activeText}, ${inactiveText}). Media refreshed.`,
+          });
+        } else {
+          showToast({
+            type: "info",
+            title: "Verification Dispatched",
+            message: data.message || "Checking linked ads via Trigger.dev in the background...",
+          });
+        }
         await fetchLinkedAds(currentProduct.id);
         onRefresh?.(currentProduct.id);
       } else {
         showToast({
           type: "error",
-          title: "Error",
-          message: "Failed to queue product for ad verification",
+          title: "Verification Error",
+          message: data.error || "Failed to recheck linked ads",
         });
       }
     } catch (err) {
-      console.error("Failed to queue verify:", err);
+      console.error("Failed to recheck linked ads:", err);
       showToast({
         type: "error",
         title: "Network Error",
-        message: "Network error queueing ad verification",
+        message: "Network error rechecking linked ads",
       });
     } finally {
       setIsQueueingVerify(false);
