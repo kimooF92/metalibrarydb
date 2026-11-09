@@ -112,22 +112,20 @@ export function FreshWinnersToolbar({
             <button
               onClick={() => onChangeViewMode("grid")}
               title="Grid View"
-              className={`p-1.5 rounded-md transition-all cursor-pointer ${
-                viewMode === "grid"
+              className={`p-1.5 rounded-md transition-all cursor-pointer ${viewMode === "grid"
                   ? "bg-card text-foreground shadow-xs"
                   : "text-muted-foreground hover:text-foreground"
-              }`}
+                }`}
             >
               <LayoutGrid className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => onChangeViewMode("list")}
               title="List View"
-              className={`p-1.5 rounded-md transition-all cursor-pointer ${
-                viewMode === "list"
+              className={`p-1.5 rounded-md transition-all cursor-pointer ${viewMode === "list"
                   ? "bg-card text-foreground shadow-xs"
                   : "text-muted-foreground hover:text-foreground"
-              }`}
+                }`}
             >
               <LayoutList className="w-3.5 h-3.5" />
             </button>
@@ -142,31 +140,28 @@ export function FreshWinnersToolbar({
           <div className="flex items-center rounded-lg bg-muted/60 p-0.5 border border-border">
             <button
               onClick={() => onChangeWindow("3d")}
-              className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                window === "3d"
+              className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${window === "3d"
                   ? "bg-rose-600 text-white shadow-xs"
                   : "text-muted-foreground hover:text-foreground"
-              }`}
+                }`}
             >
               Last 72h
             </button>
             <button
               onClick={() => onChangeWindow("7d")}
-              className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                window === "7d"
+              className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${window === "7d"
                   ? "bg-rose-600 text-white shadow-xs"
                   : "text-muted-foreground hover:text-foreground"
-              }`}
+                }`}
             >
               Past 7 Days
             </button>
             <button
               onClick={() => onChangeWindow("14d")}
-              className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                window === "14d"
+              className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${window === "14d"
                   ? "bg-rose-600 text-white shadow-xs"
                   : "text-muted-foreground hover:text-foreground"
-              }`}
+                }`}
             >
               Past 14 Days
             </button>
@@ -201,32 +196,29 @@ export function FreshWinnersToolbar({
           <div className="flex items-center rounded-lg bg-muted/60 p-0.5 border border-border">
             <button
               onClick={() => onChangeMediaType("all")}
-              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
-                mediaType === "all"
+              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${mediaType === "all"
                   ? "bg-card text-foreground font-bold shadow-xs"
                   : "text-muted-foreground hover:text-foreground"
-              }`}
+                }`}
             >
               All Formats
             </button>
             <button
               onClick={() => onChangeMediaType("video")}
-              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer flex items-center gap-1 ${
-                mediaType === "video"
+              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer flex items-center gap-1 ${mediaType === "video"
                   ? "bg-card text-foreground font-bold shadow-xs"
                   : "text-muted-foreground hover:text-foreground"
-              }`}
+                }`}
             >
               <Video className="w-3 h-3 text-indigo-500" />
               <span>Has Video</span>
             </button>
             <button
               onClick={() => onChangeMediaType("image")}
-              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
-                mediaType === "image"
+              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${mediaType === "image"
                   ? "bg-card text-foreground font-bold shadow-xs"
                   : "text-muted-foreground hover:text-foreground"
-              }`}
+                }`}
             >
               Static Only
             </button>
