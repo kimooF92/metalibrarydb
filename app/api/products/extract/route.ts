@@ -454,13 +454,17 @@ async function linkMatchingAds(productId: string, cleanUrl: string) {
   try {
     const variants = generateUrlSearchVariants(cleanUrl);
     if (variants.length === 0) return;
+    const cleanNoSlash = cleanUrl.replace(/\/+$/, "");
     await db
       .update(ads)
       .set({ productId: productId, updatedAt: new Date() })
       .where(
         and(
           isNull(ads.productId),
-          inArray(ads.linkUrl, variants)
+          or(
+            inArray(ads.linkUrl, variants),
+            sql`LOWER(TRIM(TRAILING '/' FROM SPLIT_PART(${ads.linkUrl}, '?', 1))) = LOWER(${cleanNoSlash})`
+          )
         )
       );
   } catch (err) {

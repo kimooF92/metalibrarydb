@@ -26,7 +26,7 @@ let lastRescueAttemptTime = 0;
  */
 export async function rescueFailedProductsBatch(limit = 3, force = false): Promise<number> {
   if (isRescueRunning) return 0;
-  
+
   // Throttle rescue checks to run at most once every 60 seconds unless forced (e.g. startup)
   const now = Date.now();
   if (!force && now - lastRescueAttemptTime < 60000) return 0;
@@ -276,6 +276,7 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
           .where(eq(scrapedProducts.id, item.id));
 
         // Relink unlinked ads for this product using canonical URL equality (Task 3.1)
+        const cleanTarget = targetUrl.replace(/\/+$/, "");
         await db
           .update(ads)
           .set({ productId: item.id })
@@ -284,7 +285,8 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
               isNull(ads.productId),
               or(
                 eq(ads.linkUrl, targetUrl),
-                sql`LOWER(TRIM(TRAILING '/' FROM ${ads.linkUrl})) = LOWER(TRIM(TRAILING '/' FROM ${targetUrl}))`
+                eq(ads.linkUrl, cleanTarget),
+                sql`LOWER(TRIM(TRAILING '/' FROM SPLIT_PART(${ads.linkUrl}, '?', 1))) = LOWER(${cleanTarget})`
               )
             )
           );
@@ -462,9 +464,9 @@ export async function validateForeignCurrencyProductsBatch(limit = 5, force = fa
         const isAlreadyLocalPrice = Boolean(
           item.currentPrice &&
           (item.currentPrice.toUpperCase().includes("DT") ||
-           item.currentPrice.toUpperCase().includes("DH") ||
-           item.currentPrice.toUpperCase().includes("TND") ||
-           item.currentPrice.toUpperCase().includes("MAD")) &&
+            item.currentPrice.toUpperCase().includes("DH") ||
+            item.currentPrice.toUpperCase().includes("TND") ||
+            item.currentPrice.toUpperCase().includes("MAD")) &&
           !/(?:\$|€|£|\b(?:USD|EUR|GBP)\b)/i.test(item.currentPrice)
         );
 

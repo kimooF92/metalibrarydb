@@ -247,10 +247,19 @@ export async function linkAndAutoScrapeProduct({
           .where(eq(ads.id, adId));
       }
       if (searchVariants.length > 0) {
+        const cleanNorm = normalizedUrl.replace(/\/+$/, "");
         await db
           .update(ads)
           .set({ productId: prodId, updatedAt: new Date() })
-          .where(and(isNull(ads.productId), inArray(ads.linkUrl, searchVariants)));
+          .where(
+            and(
+              isNull(ads.productId),
+              or(
+                inArray(ads.linkUrl, searchVariants),
+                sql`LOWER(TRIM(TRAILING '/' FROM SPLIT_PART(${ads.linkUrl}, '?', 1))) = LOWER(${cleanNorm})`
+              )
+            )
+          );
       }
       return { productId: prodId, isNew: false };
     }
@@ -284,7 +293,7 @@ export async function linkAndAutoScrapeProduct({
         isNewProduct: true,
         domain: domain || null,
         timestamp: Date.now(),
-      }).catch(() => {});
+      }).catch(() => { });
     }
 
     if (!targetProductId) {
@@ -326,10 +335,19 @@ export async function linkAndAutoScrapeProduct({
         .where(eq(ads.id, adId));
     }
     if (targetProductId && searchVariants.length > 0) {
+      const cleanNorm = normalizedUrl.replace(/\/+$/, "");
       await db
         .update(ads)
         .set({ productId: targetProductId, updatedAt: now })
-        .where(and(isNull(ads.productId), inArray(ads.linkUrl, searchVariants)));
+        .where(
+          and(
+            isNull(ads.productId),
+            or(
+              inArray(ads.linkUrl, searchVariants),
+              sql`LOWER(TRIM(TRAILING '/' FROM SPLIT_PART(${ads.linkUrl}, '?', 1))) = LOWER(${cleanNorm})`
+            )
+          )
+        );
     }
 
     // Insert into PostgreSQL durable queue for background worker (Task 2.1)
@@ -341,7 +359,7 @@ export async function linkAndAutoScrapeProduct({
           columns: { id: true },
         });
         if (pageRec) targetTrackedPageUuid = pageRec.id;
-      } catch {}
+      } catch { }
     }
 
     try {
@@ -458,7 +476,7 @@ export async function processProductExtraction(
         });
         if (ws?.currency) fallbackCurrency = ws.currency;
         if (ws?.currencySymbol) fallbackCurrencySymbol = ws.currencySymbol;
-      } catch {}
+      } catch { }
     }
 
     const extractionResult = await extractProductFromUrl(normalizedUrl, {
@@ -622,7 +640,7 @@ export async function processProductExtraction(
         domain: resolvedDomain || null,
         storePlatform: storePlatform || null,
         timestamp: Date.now(),
-      }).catch(() => {});
+      }).catch(() => { });
     }
 
     // When foreign currency is captured in cloud, enqueue for local worker residential validation
@@ -643,7 +661,8 @@ export async function processProductExtraction(
       }
     }
 
-    // Task 3.1: Exact canonical normalized URL equality linking (replacing unindexed LIKE)
+    // Task 3.1: Exact canonical normalized URL equality linking (including query string stripping for UTMs)
+    const cleanNormUrl = normalizedUrl.replace(/\/+$/, "");
     await db
       .update(ads)
       .set({ productId })
@@ -652,7 +671,8 @@ export async function processProductExtraction(
           isNull(ads.productId),
           or(
             eq(ads.linkUrl, normalizedUrl),
-            sql`LOWER(TRIM(TRAILING '/' FROM ${ads.linkUrl})) = LOWER(TRIM(TRAILING '/' FROM ${normalizedUrl}))`
+            eq(ads.linkUrl, cleanNormUrl),
+            sql`LOWER(TRIM(TRAILING '/' FROM SPLIT_PART(${ads.linkUrl}, '?', 1))) = LOWER(${cleanNormUrl})`
           )
         )
       );
@@ -713,7 +733,7 @@ export async function processProductExtraction(
           eq(queue.failureReason, `product:${productId}`)
         )
       )
-      .catch(() => {});
+      .catch(() => { });
 
     console.log(`[Auto-Scraper] Successfully extracted: "${extracted.title || normalizedUrl}" (${extracted.current_price || "N/A"})`);
     return { success: true, status: "success" };

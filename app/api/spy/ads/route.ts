@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ads, adObservations, trackedPages, scrapedProducts } from "@/db/schema";
-import { eq, ilike, gte, lte, and, sql, desc, asc, or, not, inArray } from "drizzle-orm";
+import { eq, ilike, gte, lte, and, sql, desc, asc, or, not, inArray, isNull } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { syncApifyRuns } from "@/lib/apify-sync";
 import { calculateWinnerScore } from "@/lib/winner-score";
@@ -181,6 +181,35 @@ export async function GET(req: NextRequest) {
     }
 
     if (productId) {
+      // 1. Resolve product destination URL to self-heal any unlinked ads on-the-fly
+      try {
+        const [prod] = await db
+          .select({ id: scrapedProducts.id, url: scrapedProducts.url })
+          .from(scrapedProducts)
+          .where(eq(scrapedProducts.id, productId))
+          .limit(1);
+
+        if (prod?.url) {
+          const cleanProdUrl = prod.url.replace(/\/+$/, "");
+          // Re-link any matching unlinked ads in PostgreSQL
+          await db
+            .update(ads)
+            .set({ productId: prod.id, updatedAt: new Date() })
+            .where(
+              and(
+                isNull(ads.productId),
+                or(
+                  eq(ads.linkUrl, cleanProdUrl),
+                  eq(ads.linkUrl, `${cleanProdUrl}/`),
+                  sql`LOWER(TRIM(TRAILING '/' FROM SPLIT_PART(${ads.linkUrl}, '?', 1))) = LOWER(${cleanProdUrl})`
+                )
+              )
+            );
+        }
+      } catch (e) {
+        console.warn("[Ad Feed] Self-heal lookup error for productId:", productId, e);
+      }
+
       conditions.push(eq(ads.productId, productId));
     }
 
@@ -337,8 +366,8 @@ export async function GET(req: NextRequest) {
         mediaUrls: ads.mediaUrls,
         ...(includeMedia
           ? {
-              storyboardUrls: ads.storyboardUrls,
-            }
+            storyboardUrls: ads.storyboardUrls,
+          }
           : {}),
         thumbnailUrl: ads.thumbnailUrl,
         thumbnailStoragePath: ads.thumbnailStoragePath,
@@ -620,8 +649,8 @@ export async function GET(req: NextRequest) {
         thumbnailStoragePath: row.thumbnailStoragePath,
         ...(includeMedia
           ? {
-              storyboardUrls: row.storyboardUrls,
-            }
+            storyboardUrls: row.storyboardUrls,
+          }
           : {}),
         firstSeenAt: row.firstSeenAt,
         lastSeenAt: row.lastSeenAt,
@@ -696,7 +725,7 @@ export async function GET(req: NextRequest) {
     };
 
     if (!forceRefresh) {
-      await setCached(cacheKey, responsePayload, 30).catch(() => {});
+      await setCached(cacheKey, responsePayload, 30).catch(() => { });
     }
 
     return NextResponse.json(responsePayload, {
