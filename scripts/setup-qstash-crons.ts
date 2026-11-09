@@ -42,16 +42,16 @@ async function main() {
       process.exit(0);
     }
 
-    const cronSecret = process.env.CRON_SECRET || process.env.API_SECRET || process.env.APP_PASSWORD;
+    const cronSecret = process.env.CRON_SECRET || process.env.API_SECRET;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
     if (cronSecret) {
       headers["Authorization"] = `Bearer ${cronSecret}`;
       headers["x-api-secret"] = cronSecret;
-      console.log(`🔐 Authorization headers will be attached using configured secret.`);
+      console.log(`🔐 Authorization headers will be attached using configured CRON_SECRET/API_SECRET.`);
     } else {
-      console.log(`ℹ️ No CRON_SECRET or APP_PASSWORD detected in local env; relying on cryptographic signature.`);
+      console.log(`ℹ️ No CRON_SECRET or API_SECRET detected in local env; relying purely on QStash cryptographic signatures.`);
     }
 
     // Define standard recurring jobs

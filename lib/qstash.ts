@@ -120,7 +120,9 @@ export async function enqueueProductScrape(
   try {
     await ensureProductExtractionQueue();
 
-    const configuredSecret = process.env.API_SECRET || process.env.APP_PASSWORD;
+    // Only attach dedicated machine-to-machine API_SECRET if explicitly configured.
+    // Never fall back to APP_PASSWORD, which is strictly for user authentication.
+    const configuredSecret = process.env.API_SECRET;
     const headers: Record<string, string> = {};
     if (configuredSecret) {
       headers["x-api-secret"] = configuredSecret;
@@ -167,7 +169,9 @@ export async function dispatchBatchToQStash(
   const deduplicationId = getDeduplicationId("batch", payload.creativeScanId);
 
   try {
-    const configuredSecret = process.env.API_SECRET || process.env.APP_PASSWORD;
+    // Only attach dedicated machine-to-machine API_SECRET if explicitly configured.
+    // Never fall back to APP_PASSWORD, which is strictly for user authentication.
+    const configuredSecret = process.env.API_SECRET;
     const headers: Record<string, string> = {};
     if (configuredSecret) {
       headers["x-api-secret"] = configuredSecret;
