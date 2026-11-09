@@ -175,6 +175,13 @@ export function ImagePreviewModal({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
+  const handleSeekVideo = useCallback((seconds: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = seconds;
+      videoRef.current.play().catch(() => {});
+    }
+  }, []);
+
   if (!isOpen || !mounted) return null;
 
   const currentMedia = displayMediaList[currentIndex] || displayMediaList[0];
@@ -182,13 +189,6 @@ export function ImagePreviewModal({
   const isExpiredImage = !isVideoAd && Boolean(currentMedia || fallbackThumbnail) && (isImageExpired || imgError);
   const downloadHref = activeVideo || currentMedia || fallbackThumbnail;
   const fullSizeHref = activeVideo || currentMedia || fallbackThumbnail;
-
-  const handleSeekVideo = useCallback((seconds: number) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = seconds;
-      videoRef.current.play().catch(() => {});
-    }
-  }, []);
 
   const handleCopyAdCopy = async (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
