@@ -9,6 +9,7 @@ import { reconcileArchivedAds } from "@/lib/ad-reconciliation";
 import { deleteCached, deleteByPrefix } from "@/lib/cache-service";
 import { checkAndRecordBreakout } from "@/lib/breakout-detector";
 import { timingSafeEqual } from "@/lib/auth";
+import { batchFindProductIdsByUrls } from "@/lib/product-url-matcher";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // 60s execution budget on Vercel
@@ -81,6 +82,12 @@ export async function handleBatchIngest(req: Request | NextRequest) {
 
     // 3. Fast Bulk Upsert into `ads` table in chunks of 50
     if (uniqueAds.length > 0) {
+      // Auto-link incoming ads with existing scraped_products matching landing URLs ($0 API tokens)
+      const batchUrls = uniqueAds
+        .map((a) => a.linkUrl)
+        .filter((u): u is string => Boolean(u && u.trim()));
+      const urlMatcher = await batchFindProductIdsByUrls(batchUrls);
+
       for (let i = 0; i < uniqueAds.length; i += CHUNK_SIZE) {
         const chunk = uniqueAds.slice(i, i + CHUNK_SIZE);
         const adInsertValues = chunk.map((a) => ({
@@ -92,6 +99,7 @@ export async function handleBatchIngest(req: Request | NextRequest) {
           title: a.title,
           ctaText: a.ctaText,
           linkUrl: a.linkUrl,
+          productId: urlMatcher.getProductId(a.linkUrl),
           mediaType: a.mediaType,
           mediaUrls: a.mediaUrls,
           thumbnailUrl: a.thumbnailUrl,
@@ -112,6 +120,7 @@ export async function handleBatchIngest(req: Request | NextRequest) {
               caption: sql`COALESCE(EXCLUDED.caption, ${ads.caption})`,
               title: sql`COALESCE(EXCLUDED.title, ${ads.title})`,
               ctaText: sql`COALESCE(EXCLUDED.cta_text, ${ads.ctaText})`,
+              productId: sql`COALESCE(${ads.productId}, EXCLUDED.product_id)`,
               mediaType: sql`COALESCE(EXCLUDED.media_type, ${ads.mediaType})`,
               mediaUrls: sql`CASE 
                 WHEN EXISTS (SELECT 1 FROM unnest(${ads.mediaUrls}) AS u WHERE u LIKE '%b2%' OR u LIKE '%backblazeb2%') THEN ${ads.mediaUrls}
@@ -220,11 +229,14 @@ export async function handleBatchIngest(req: Request | NextRequest) {
         }
 
         if (ad.linkUrl && ad.ctaText && /shop|order|buy|get offer/i.test(ad.ctaText)) {
-          enqueueProductScrape({
-            url: ad.linkUrl,
-            pageId,
-            workspaceId: pageRecord.workspaceId,
-          }).catch(() => { });
+          // Avoid exhausting scraping API quota if the product is already matched ($0 API cost)
+          if (!urlMatcher.getProductId(ad.linkUrl)) {
+            enqueueProductScrape({
+              url: ad.linkUrl,
+              pageId,
+              workspaceId: pageRecord.workspaceId,
+            }).catch(() => { });
+          }
         }
       }
     }

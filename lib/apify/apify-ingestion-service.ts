@@ -6,6 +6,7 @@ import { linkAndAutoScrapeProduct } from "@/lib/product-ingest";
 import { checkAndRecordBreakout } from "@/lib/breakout-detector";
 import { resolveDestinationUrl } from "@/lib/utils";
 import { selectBestProductCandidateUrl } from "@/lib/discovery-product-selector";
+import { batchFindProductIdsByUrls } from "@/lib/product-url-matcher";
 import {
   extractAdArchiveId,
   extractMedia,
@@ -92,6 +93,22 @@ export async function ingestApifyDatasetItems(
   const discoveredPagesMap = new Map<string, { pageId: string; pageName: string | null; adCount: number }>();
 
   const isNumericString = (str?: string | null) => Boolean(str && /^\d{6,25}$/.test(str.trim()));
+
+  // Pre-fetch matched product IDs for all candidate URLs in this scan ($0 API tokens, single lean indexed query)
+  const candidateUrls: string[] = [];
+  for (const item of items) {
+    const rawUrl = item.linkUrl || item.target_url || item.snapshot?.link_url || null;
+    if (rawUrl) candidateUrls.push(rawUrl);
+    if (item.caption) {
+      const rawMatches = item.caption.match(/https?:\/\/[^\s"'<>)\]]+/gi) || [];
+      candidateUrls.push(...rawMatches);
+    }
+    const cards = Array.isArray(item.snapshot?.cards) ? item.snapshot.cards : Array.isArray(item.cards) ? item.cards : [];
+    for (const c of cards) {
+      if (c?.link_url) candidateUrls.push(c.link_url);
+    }
+  }
+  const urlMatcher = await batchFindProductIdsByUrls(candidateUrls);
 
   for (const item of items) {
     const adArchiveId = extractAdArchiveId(item);
@@ -192,6 +209,8 @@ export async function ingestApifyDatasetItems(
     const { mediaType, mediaUrls: rawMediaUrls, thumbnailUrl: rawThumbnailUrl } = extractMedia(item);
     const duplicationCount = Math.max(1, Number(item.duplicationCount || item.collatedCount || 1));
 
+    const matchedProductId = effectiveLinkUrl ? urlMatcher.getProductId(effectiveLinkUrl) : null;
+
     // 1. Strict Ad De-duplication: Upsert canonical ad record by adArchiveId immediately
     // Preserves permanent Backblaze B2 URLs using SQL conditional expressions (BUG-11 mitigation)
     const [upsertedAd] = await db
@@ -205,6 +224,7 @@ export async function ingestApifyDatasetItems(
         title,
         ctaText,
         linkUrl: effectiveLinkUrl,
+        productId: matchedProductId || null,
         mediaType,
         mediaUrls: rawMediaUrls,
         thumbnailUrl: rawThumbnailUrl,
@@ -218,6 +238,7 @@ export async function ingestApifyDatasetItems(
           caption: sql`COALESCE(EXCLUDED.caption, ${ads.caption})`,
           title: sql`COALESCE(EXCLUDED.title, ${ads.title})`,
           ctaText: sql`COALESCE(EXCLUDED.cta_text, ${ads.ctaText})`,
+          productId: sql`COALESCE(${ads.productId}, EXCLUDED.product_id)`,
           mediaType: sql`COALESCE(EXCLUDED.media_type, ${ads.mediaType})`,
           mediaUrls: sql`CASE 
             WHEN EXISTS (SELECT 1 FROM unnest(${ads.mediaUrls}) AS u WHERE u LIKE '%b2%' OR u LIKE '%backblazeb2%') THEN ${ads.mediaUrls}
@@ -380,7 +401,8 @@ export async function ingestApifyDatasetItems(
       }
 
       // 3. Automated Product Landing Page Extraction & Background Scraper Trigger
-      if (effectiveLinkUrl) {
+      // Avoid triggering redundant scraping if the product was already matched ($0 API tokens)
+      if (effectiveLinkUrl && !matchedProductId) {
         try {
           const effectiveWsId = pageRecord?.workspaceId || null;
           const prodRes = await linkAndAutoScrapeProduct({

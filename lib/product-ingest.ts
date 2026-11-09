@@ -1,8 +1,9 @@
 import { db } from "@/db";
 import { ads, scrapedProducts, trackedPages, brandDomains, adObservations, workspaces, queue } from "@/db/schema";
-import { eq, sql, and, or, isNull } from "drizzle-orm";
+import { eq, sql, and, or, isNull, inArray } from "drizzle-orm";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 import { normalizeProductUrl, extractProductFromUrl, isCategoryUrl } from "@/lib/firecrawl";
+import { generateUrlSearchVariants } from "@/lib/product-url-matcher";
 import { getCleanDomain, isValidPageId } from "@/lib/utils";
 import {
   extractTunisianPhoneNumbers,
@@ -195,6 +196,7 @@ export async function linkAndAutoScrapeProduct({
     }
 
     // 1. Check if product already exists in scrapedProducts table
+    const searchVariants = generateUrlSearchVariants(linkUrl);
     const existing = await db
       .select({
         id: scrapedProducts.id,
@@ -205,7 +207,7 @@ export async function linkAndAutoScrapeProduct({
         lastScrapedAt: scrapedProducts.lastScrapedAt,
       })
       .from(scrapedProducts)
-      .where(eq(scrapedProducts.url, normalizedUrl))
+      .where(inArray(scrapedProducts.url, searchVariants))
       .limit(1);
 
     if (existing.length > 0) {
@@ -237,12 +239,18 @@ export async function linkAndAutoScrapeProduct({
           .where(eq(scrapedProducts.id, prodId));
       }
 
-      // Link ad to existing product record immediately
+      // Link ad and sibling unlinked ads to existing product record immediately
       if (adId) {
         await db
           .update(ads)
-          .set({ productId: prodId })
+          .set({ productId: prodId, updatedAt: new Date() })
           .where(eq(ads.id, adId));
+      }
+      if (searchVariants.length > 0) {
+        await db
+          .update(ads)
+          .set({ productId: prodId, updatedAt: new Date() })
+          .where(and(isNull(ads.productId), inArray(ads.linkUrl, searchVariants)));
       }
       return { productId: prodId, isNew: false };
     }
@@ -298,18 +306,30 @@ export async function linkAndAutoScrapeProduct({
       if (adId && prodId) {
         await db
           .update(ads)
-          .set({ productId: prodId })
+          .set({ productId: prodId, updatedAt: now })
           .where(eq(ads.id, adId));
+      }
+      if (prodId && searchVariants.length > 0) {
+        await db
+          .update(ads)
+          .set({ productId: prodId, updatedAt: now })
+          .where(and(isNull(ads.productId), inArray(ads.linkUrl, searchVariants)));
       }
       return { productId: prodId, isNew: false };
     }
 
-    // Link ad to newly created product record
+    // Link ad and sibling unlinked ads to newly created product record
     if (adId && targetProductId) {
       await db
         .update(ads)
-        .set({ productId: targetProductId })
+        .set({ productId: targetProductId, updatedAt: now })
         .where(eq(ads.id, adId));
+    }
+    if (targetProductId && searchVariants.length > 0) {
+      await db
+        .update(ads)
+        .set({ productId: targetProductId, updatedAt: now })
+        .where(and(isNull(ads.productId), inArray(ads.linkUrl, searchVariants)));
     }
 
     // Insert into PostgreSQL durable queue for background worker (Task 2.1)

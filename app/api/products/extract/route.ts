@@ -4,9 +4,10 @@ export const maxDuration = 60;
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ads, scrapedProducts } from "@/db/schema";
-import { eq, or, sql } from "drizzle-orm";
+import { eq, or, sql, and, isNull, inArray } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { normalizeProductUrl, extractProductFromUrl } from "@/lib/firecrawl";
+import { generateUrlSearchVariants } from "@/lib/product-url-matcher";
 import { isPriceString } from "@/lib/html-scraper";
 import { getCleanDomain, isValidPageId } from "@/lib/utils";
 import { getActiveWorkspace } from "@/lib/workspace-server";
@@ -446,16 +447,21 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * Background helper to link all ads that share the same clean landing page URL to the product
+ * Background helper to link all ads that share the same clean landing page URL to the product.
+ * Uses exact indexed variant matching per AGENTS.md egress & log protection rules.
  */
 async function linkMatchingAds(productId: string, cleanUrl: string) {
   try {
-    const urlPattern = `%${cleanUrl.replace(/^https?:\/\//, "")}%`;
+    const variants = generateUrlSearchVariants(cleanUrl);
+    if (variants.length === 0) return;
     await db
       .update(ads)
-      .set({ productId: productId })
+      .set({ productId: productId, updatedAt: new Date() })
       .where(
-        sql`(${ads.productId} IS NULL OR ${ads.productId} != ${productId}) AND ${ads.linkUrl} ILIKE ${urlPattern}`
+        and(
+          isNull(ads.productId),
+          inArray(ads.linkUrl, variants)
+        )
       );
   } catch (err) {
     console.error("[linkMatchingAds] Background error:", err);

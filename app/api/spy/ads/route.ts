@@ -10,6 +10,7 @@ import { enrichAdsWithCreativeClusters, getDeduplicatedCreativeHeroAds } from "@
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 import { getCached, setCached } from "@/lib/cache-service";
+import { batchFindProductsByUrls } from "@/lib/product-url-matcher";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -530,6 +531,49 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Fallback: Resolve products by URL for unlinked ads ($0 API tokens, self-healing)
+    const adToProductMap = new Map<string, any>();
+    const unlinkedUrls = Array.from(
+      new Set(
+        rows
+          .filter((r) => !r.productId && r.linkUrl && r.linkUrl.startsWith("http"))
+          .map((r) => r.linkUrl!)
+      )
+    );
+
+    if (unlinkedUrls.length > 0) {
+      try {
+        const unlinkedLookup = await batchFindProductsByUrls(unlinkedUrls);
+        if (unlinkedLookup.matchedProducts.length > 0) {
+          const adsToHeal: { adId: string; productId: string }[] = [];
+          for (const row of rows) {
+            if (!row.productId && row.linkUrl) {
+              const matchedProd = unlinkedLookup.getProduct(row.linkUrl);
+              if (matchedProd) {
+                adToProductMap.set(row.id, matchedProd);
+                adsToHeal.push({ adId: row.id, productId: matchedProd.id });
+              }
+            }
+          }
+          // Self-heal unlinked ads in PostgreSQL asynchronously ($0 API tokens)
+          if (adsToHeal.length > 0) {
+            Promise.all(
+              adsToHeal.map((item) =>
+                db
+                  .update(ads)
+                  .set({ productId: item.productId, updatedAt: new Date() })
+                  .where(eq(ads.id, item.adId))
+              )
+            ).catch((err) =>
+              console.warn("[Ad Feed] Self-healing ad product linking notice:", err)
+            );
+          }
+        }
+      } catch (err) {
+        console.warn("[Ad Feed] Unlinked product resolution warning:", err);
+      }
+    }
+
     // Synchronous row mapping with Winner Score & Product Cluster calculations
     const items = rows.map((row) => {
       const clusterInfo = clusterMap.get(row.id) || {
@@ -566,8 +610,10 @@ export async function GET(req: NextRequest) {
         title: row.title,
         ctaText: row.ctaText,
         linkUrl: row.linkUrl,
-        productId: row.productId,
-        product: row.productId ? productMap.get(row.productId) || null : null,
+        productId: row.productId || adToProductMap.get(row.id)?.id || null,
+        product: row.productId
+          ? productMap.get(row.productId) || null
+          : adToProductMap.get(row.id) || null,
         mediaType: row.mediaType,
         mediaUrls: row.mediaUrls,
         thumbnailUrl: row.thumbnailUrl,
