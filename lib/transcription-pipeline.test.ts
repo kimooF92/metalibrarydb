@@ -88,3 +88,49 @@ test("generateTranscriptionDeduplicationId produces valid QStash-compatible IDs 
   assert.equal(dedupId, dedupIdRepeat);
 });
 
+test("formatTimestamp and formatDurationLabel format time strings cleanly", async () => {
+  const { formatTimestamp, formatDurationLabel } = await import("../components/ad-transcript-viewer");
+
+  assert.equal(formatTimestamp(0), "0:00");
+  assert.equal(formatTimestamp(5), "0:05");
+  assert.equal(formatTimestamp(65), "1:05");
+  assert.equal(formatTimestamp(125), "2:05");
+
+  assert.equal(formatDurationLabel(24), "24s");
+  assert.equal(formatDurationLabel(84), "1m 24s");
+});
+
+test("calculateSpeakingPace calculates WPM and speed classification accurately", async () => {
+  const { calculateSpeakingPace } = await import("../components/ad-transcript-viewer");
+
+  // 60 words in 30 seconds = 120 WPM (Conversational)
+  const conversational = calculateSpeakingPace(60, 30);
+  assert.equal(conversational?.wpm, 120);
+  assert.equal(conversational?.label, "Conversational");
+
+  // 90 words in 30 seconds = 180 WPM (High Energy)
+  const highEnergy = calculateSpeakingPace(90, 30);
+  assert.equal(highEnergy?.wpm, 180);
+  assert.equal(highEnergy?.label, "High Energy");
+
+  // 40 words in 30 seconds = 80 WPM (Relaxed)
+  const relaxed = calculateSpeakingPace(40, 30);
+  assert.equal(relaxed?.wpm, 80);
+  assert.equal(relaxed?.label, "Relaxed");
+
+  // Invalid duration or 0 words returns null
+  assert.equal(calculateSpeakingPace(0, 30), null);
+  assert.equal(calculateSpeakingPace(50, 0), null);
+});
+
+test("isRtlText detects Arabic, Hebrew, and Persian characters reliably", async () => {
+  const { isRtlText } = await import("./utils");
+
+  assert.equal(isRtlText("عسل سدر طبيعي أصلي"), true);
+  assert.equal(isRtlText("Promo spéciale 50% de réduction"), false);
+  assert.equal(isRtlText("Buy now! عسل رائع"), true);
+  assert.equal(isRtlText(""), false);
+  assert.equal(isRtlText(null), false);
+});
+
+

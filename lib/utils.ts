@@ -56,6 +56,14 @@ export function getCleanDomain(rawUrl: string | null | undefined): string | null
 }
 
 /**
+ * Detects whether a string contains right-to-left characters (Arabic, Hebrew, Persian).
+ */
+export function isRtlText(text?: string | null): boolean {
+  if (!text) return false;
+  return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text);
+}
+
+/**
  * Strict validator for Facebook / Meta Page IDs.
  * Page IDs must be purely numeric strings between 5 and 25 digits (not '0', not alphanumeric).
  */
