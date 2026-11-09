@@ -5,6 +5,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 import { getCached, setCached, acquireLockDetailed, forceReleaseLock } from "@/lib/cache-service";
+import { isQStashConfigured } from "@/lib/qstash";
 import { enqueueAdTranscription, executeTranscriptionOnInstaBox } from "@/lib/transcription-pipeline";
 
 export const dynamic = "force-dynamic";
@@ -192,7 +193,27 @@ export async function POST(
 
   const jobId = job?.id || existing?.id || adId;
 
-  // 5. Directly execute on-demand transcription on InstaBox MicroVM
+  // 5. If QStash is configured, dispatch the job to the Upstash QStash queue
+  if (isQStashConfigured()) {
+    const enqueueRes = await enqueueAdTranscription({
+      adId,
+      mediaUrl: videoUrl,
+      mediaHash,
+    });
+
+    if (enqueueRes.success) {
+      return NextResponse.json({
+        jobId,
+        status: "pending",
+        message: "Transcription job queued in Upstash QStash",
+        messageId: enqueueRes.messageId,
+      }, { status: 202 });
+    }
+
+    console.warn("[Transcription Jobs] QStash enqueue failed, falling back to direct execution:", enqueueRes.error);
+  }
+
+  // 6. Direct execution fallback (when QStash is unconfigured or during offline dev)
   try {
     const res = await executeTranscriptionOnInstaBox({ adId, mediaUrl: videoUrl, mediaHash });
     if (res.success) {
