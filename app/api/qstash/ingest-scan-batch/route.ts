@@ -224,7 +224,7 @@ export async function handleBatchIngest(req: Request | NextRequest) {
             url: ad.linkUrl,
             pageId,
             workspaceId: pageRecord.workspaceId,
-          }).catch(() => {});
+          }).catch(() => { });
         }
       }
     }
@@ -255,9 +255,9 @@ export async function handleBatchIngest(req: Request | NextRequest) {
 
     // 8. Invalidate Workspace Caches
     if (pageRecord.workspaceId) {
-      deleteCached(`cache:stats:${pageRecord.workspaceId}`).catch(() => {});
-      deleteByPrefix(`cache:spy_ads:${pageRecord.workspaceId}:`).catch(() => {});
-      deleteByPrefix(`cache:dashboard:overview:${pageRecord.workspaceId}:`).catch(() => {});
+      deleteCached(`cache:stats:${pageRecord.workspaceId}`).catch(() => { });
+      deleteByPrefix(`cache:spy_ads:${pageRecord.workspaceId}:`).catch(() => { });
+      deleteByPrefix(`cache:dashboard:overview:${pageRecord.workspaceId}:`).catch(() => { });
     }
 
     return NextResponse.json({

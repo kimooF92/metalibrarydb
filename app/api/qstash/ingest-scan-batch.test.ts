@@ -188,3 +188,4 @@ describe("Batch Scan Ingestion API & Schema Suite (/api/qstash/ingest-scan-batch
     assert.strictEqual(data.error, "Tracked page not found");
   });
 });
+
