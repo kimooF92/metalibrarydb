@@ -11,7 +11,6 @@ import { ImagePreviewModal } from "./image-preview-modal";
 import { ProductClusterModal } from "./product-cluster-modal";
 import { CreativeClusterModal } from "./creative-cluster-modal";
 import { BrandLogo } from "@/components/brand-logo";
-import { AdTranscriptViewer } from "@/components/ad-transcript-viewer";
 import { useToast } from "@/components/toast-context";
 import { useWorkspace } from "@/components/workspace-context";
 import { formatPrice } from "@/lib/format-price";
@@ -582,12 +581,6 @@ export function AdRow({ ad, onArchiveToggle, onExcludeBrand, onMediaRefreshed }:
                   {isExpanded ? "Show less" : "Expand copy..."}
                 </button>
               )}
-            </div>
-          )}
-
-          {isVideoAd && (
-            <div className="mt-1">
-              <AdTranscriptViewer adId={currentAd.id} />
             </div>
           )}
         </div>

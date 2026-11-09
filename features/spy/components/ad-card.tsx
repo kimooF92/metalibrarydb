@@ -13,7 +13,6 @@ import {
 import { ImagePreviewModal } from "@/components/spy/image-preview-modal";
 import { ProductClusterModal } from "@/components/spy/product-cluster-modal";
 import { CreativeClusterModal } from "@/components/spy/creative-cluster-modal";
-import { AdTranscriptViewer } from "@/components/ad-transcript-viewer";
 
 export function AdCard({
   ad,
@@ -122,13 +121,6 @@ export function AdCard({
           isExpanded={isExpanded}
           onToggleExpand={() => setIsExpanded((prev) => !prev)}
         />
-
-        {/* Video Voiceover & Hook Transcription */}
-        {isVideoAd && (
-          <div className="mb-2" onClick={(e) => e.stopPropagation()}>
-            <AdTranscriptViewer adId={currentAd.id} />
-          </div>
-        )}
       </div>
 
       {/* Bottom Section */}

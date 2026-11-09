@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   X,
@@ -78,6 +78,7 @@ export function ImagePreviewModal({
 }: ImagePreviewModalProps) {
   const { showToast } = useToast();
   const [mounted, setMounted] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [videoError, setVideoError] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -465,6 +466,7 @@ export function ImagePreviewModal({
             <div className="relative flex items-center justify-center max-h-[75vh] max-w-full rounded-xl overflow-hidden shadow-2xl border border-slate-800/80 bg-slate-950">
               {activeVideo ? (
                 <video
+                  ref={videoRef}
                   src={activeVideo}
                   poster={fallbackThumbnail || undefined}
                   controls
@@ -627,7 +629,15 @@ export function ImagePreviewModal({
 
                   {adId && (isVideoAd || activeVideo) && (
                     <div className="pt-1">
-                      <AdTranscriptViewer adId={adId} />
+                      <AdTranscriptViewer
+                        adId={adId}
+                        onSeek={(seconds) => {
+                          if (videoRef.current) {
+                            videoRef.current.currentTime = seconds;
+                            videoRef.current.play().catch(() => {});
+                          }
+                        }}
+                      />
                     </div>
                   )}
                 </div>
