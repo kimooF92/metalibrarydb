@@ -523,15 +523,7 @@ export function PagesTable({
               onSortChange={onSortChange}
             />
             <tbody
-              className="divide-y divide-slate-200 dark:divide-slate-800/60"
-              style={
-                loading
-                  ? {
-                      maskImage: "linear-gradient(to bottom, black 50%, transparent 100%)",
-                      WebkitMaskImage: "linear-gradient(to bottom, black 50%, transparent 100%)",
-                    }
-                  : undefined
-              }
+              className={`divide-y divide-slate-200 dark:divide-slate-800/60 ${loading ? "skeleton-canvas-fade" : ""}`}
             >
               {loading ? (
                 <TableSkeletonRows count={pageSize > 0 ? Math.min(pageSize, 10) : 8} />

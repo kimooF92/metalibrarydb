@@ -93,6 +93,12 @@ html.theme-fade-running::before {
   }
 }
 
+/* Global Skeleton Canvas Fade (bottom dissolve mask) */
+.skeleton-canvas-fade {
+  mask-image: linear-gradient(to bottom, black 55%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 55%, transparent 100%);
+}
+
 @media (prefers-reduced-motion: reduce) {
 
   *,

@@ -18,7 +18,7 @@ export function ProductsGridSkeleton({
 
   if (viewMode === "grid") {
     return (
-      <div className={`products-cards-grid ${className}`}>
+      <div className={`products-cards-grid skeleton-canvas-fade ${className}`}>
         {[...Array(defaultCount)].map((_, i) => {
           let itemOpacity = 1;
           if (i >= 4) {
@@ -33,7 +33,7 @@ export function ProductsGridSkeleton({
               style={{ opacity: itemOpacity }}
               className="aspect-[3/4] bg-card rounded-xl border border-border p-4 flex flex-col justify-between transition-opacity"
             >
-              <Skeleton fade="bottom" className="aspect-square rounded-lg w-full" />
+              <Skeleton className="aspect-square rounded-lg w-full" />
               <div className="space-y-2 mt-4">
                 <Skeleton className="h-4 rounded w-3/4" />
                 <Skeleton className="h-3 rounded w-1/2" />
@@ -46,7 +46,7 @@ export function ProductsGridSkeleton({
   }
 
   return (
-    <div className={`flex flex-col gap-2.5 ${className}`}>
+    <div className={`flex flex-col gap-2.5 skeleton-canvas-fade ${className}`}>
       {[...Array(defaultCount)].map((_, i) => {
         let itemOpacity = 1;
         if (i >= 3) {
@@ -61,14 +61,14 @@ export function ProductsGridSkeleton({
             style={{ opacity: itemOpacity }}
             className="flex items-center gap-4 p-3.5 bg-card rounded-xl border border-border transition-opacity"
           >
-            <Skeleton fade="none" className="w-16 h-16 rounded-lg shrink-0" />
+            <Skeleton className="w-16 h-16 rounded-lg shrink-0" />
             <div className="flex-1 space-y-2 min-w-0">
               <Skeleton className="h-4 rounded w-2/3" />
               <Skeleton className="h-3 rounded w-1/3" />
             </div>
             <div className="hidden sm:flex items-center gap-3 shrink-0">
               <Skeleton className="h-5 w-16 rounded" />
-              <Skeleton fade="none" className="h-8 w-24 rounded-lg" />
+              <Skeleton className="h-8 w-24 rounded-lg" />
             </div>
           </div>
         );
