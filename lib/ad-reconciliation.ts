@@ -2,6 +2,12 @@ import { db } from "@/db";
 import type { DB } from "@/db";
 import { ads, adObservations, trackedPages } from "@/db/schema";
 import { eq, and, or, inArray, isNull } from "drizzle-orm";
+import {
+  acquireLockDetailed,
+  releaseLock,
+  deleteCached,
+  deleteByPrefix,
+} from "@/lib/cache-service";
 
 export interface ReconciliationOptions {
   isVerifiedZeroState?: boolean;
@@ -75,12 +81,36 @@ export async function reconcileArchivedAds(
   database: DB = db
 ): Promise<{ archivedCount: number }> {
   let archivedCount = 0;
+  const lockKey = `lock:reconcile:${trackedPageId}`;
+  let lockToken: string | null = null;
 
   try {
+    const lockResult = await acquireLockDetailed(lockKey, 60);
+    if (!lockResult.acquired && lockResult.reason === "contended") {
+      console.warn(
+        `[Ad Reconciliation] ⚠️ Another reconciliation is running for trackedPageId ${trackedPageId}. Skipping concurrent execution.`
+      );
+      return { archivedCount: 0 };
+    }
+    if (lockResult.acquired && lockResult.token) {
+      lockToken = lockResult.token;
+    }
+
     // 0. Safeguard: Only run auto-archival for official Meta Page targets
     const trackedPage = await database.query.trackedPages.findFirst({
       where: eq(trackedPages.id, trackedPageId),
-      columns: { id: true, searchType: true, pageId: true, displayName: true, currentResults: true, holdStatus: true, consecutiveZeroScans: true },
+      columns: {
+        id: true,
+        searchType: true,
+        pageId: true,
+        displayName: true,
+        currentResults: true,
+        holdStatus: true,
+        consecutiveZeroScans: true,
+        holdStartedAt: true,
+        lastCreativeScan: true,
+        workspaceId: true,
+      },
     });
 
     const isPageTarget = Boolean(
@@ -93,6 +123,17 @@ export async function reconcileArchivedAds(
     if (!isPageTarget) {
       console.log(
         `[Ad Reconciliation] ⚠️ Skipped archival: Tracked page ${trackedPageId} ("${trackedPage?.displayName || "unknown"}") is not an official Page target (searchType="${trackedPage?.searchType || "none"}", pageId="${trackedPage?.pageId || "none"}").`
+      );
+      return { archivedCount: 0 };
+    }
+
+    // Stale Sequence Protection: Ignore out-of-order delayed scans
+    if (
+      trackedPage?.lastCreativeScan &&
+      now.getTime() < new Date(trackedPage.lastCreativeScan).getTime()
+    ) {
+      console.warn(
+        `[Ad Reconciliation] ⚠️ Skipped archival: Ingested batch timestamp (${now.toISOString()}) is older than last recorded scan (${new Date(trackedPage.lastCreativeScan).toISOString()}).`
       );
       return { archivedCount: 0 };
     }
@@ -156,15 +197,67 @@ export async function reconcileArchivedAds(
         );
         return { archivedCount: 0 };
       }
-    } else if (!options.isFullScan) {
-      // For automated background scans that are not verified full scans, check drop-rate
-      const expectedCount = trackedPage?.currentResults || previousActiveCount;
-      const threshold = Math.min(previousActiveCount, expectedCount) * 0.7;
-      if (observedCount < threshold && observedCount < 5) {
-        console.warn(
-          `[Ad Reconciliation] ⚠️ Skipped archival: Scan captured ${observedCount} ads, which is below the threshold (${threshold}). Scan appears incomplete.`
-        );
-        return { archivedCount: 0 };
+    } else {
+      // Stateful Cliff-Drop Confirmation Guard
+      // If active ads drop by >70% (observedCount < 0.3 * previousActiveCount) and previousActiveCount >= 10:
+      // Require consecutive confirmation before archiving to protect against temporary crawler cutoffs/Meta glitches.
+      const isCliffDrop = !options.isVerifiedZeroState && previousActiveCount >= 10 && observedCount < previousActiveCount * 0.3;
+
+      if (isCliffDrop) {
+        const currentConsecutive = trackedPage?.consecutiveZeroScans ?? 0;
+        if (currentConsecutive < 2) {
+          console.warn(
+            `[Ad Reconciliation] ⚠️ Suspicious cliff drop for ${trackedPage?.displayName || trackedPageId}: ${previousActiveCount} active ads -> ${observedCount} observed. Placing on hold (${currentConsecutive + 1}/2) to confirm before archiving.`
+          );
+          await database
+            .update(trackedPages)
+            .set({
+              holdStatus: "on_hold",
+              consecutiveZeroScans: currentConsecutive + 1,
+              holdStartedAt: trackedPage?.holdStartedAt || now,
+              lastKnownValidResults: previousActiveCount,
+              updatedAt: now,
+            })
+            .where(eq(trackedPages.id, trackedPageId));
+          return { archivedCount: 0 };
+        } else {
+          console.log(
+            `[Ad Reconciliation] 📉 Confirmed cliff drop for ${trackedPage?.displayName || trackedPageId} after ${currentConsecutive + 1} consecutive scans. Proceeding with archival.`
+          );
+          // Reset hold status upon confirmed transition
+          await database
+            .update(trackedPages)
+            .set({
+              holdStatus: "active",
+              consecutiveZeroScans: 0,
+              holdStartedAt: null,
+              updatedAt: now,
+            })
+            .where(eq(trackedPages.id, trackedPageId));
+        }
+      } else if ((trackedPage?.consecutiveZeroScans ?? 0) > 0 || trackedPage?.holdStatus === "on_hold") {
+        // If observed count returned normal, recover hold status
+        await database
+          .update(trackedPages)
+          .set({
+            holdStatus: "active",
+            consecutiveZeroScans: 0,
+            holdStartedAt: null,
+            updatedAt: now,
+          })
+          .where(eq(trackedPages.id, trackedPageId));
+      }
+
+      if (!options.isFullScan) {
+        // For automated background scans that are not verified full scans, check drop-rate
+        const expectedCount = trackedPage?.currentResults || previousActiveCount;
+        const threshold = Math.min(previousActiveCount, expectedCount) * 0.7;
+        if (observedCount < threshold && observedCount < 5) {
+          console.warn(
+            `[Ad Reconciliation] ⚠️ Skipped archival: Scan captured ${observedCount} ads, which is below the threshold (${threshold}). Scan appears incomplete.`
+          );
+          return { archivedCount: 0 };
+        }
       }
     }
 
@@ -225,9 +318,28 @@ export async function reconcileArchivedAds(
       console.log(
         `[Ad Reconciliation] 📦 Archived ${archivedCount} turned-off ad(s) for tracked page ${trackedPage?.displayName || trackedPageId}.`
       );
+
+      // Invalidate Brand & Product Caches in Redis
+      if (trackedPage?.workspaceId) {
+        const wsId = trackedPage.workspaceId;
+        deleteCached(`cache:stats:${wsId}`).catch(() => {});
+        deleteByPrefix(`cache:spy_ads:${wsId}:`).catch(() => {});
+        deleteByPrefix(`cache:dashboard:overview:${wsId}:`).catch(() => {});
+        if (targetPageId) {
+          deleteByPrefix(`cache:brand:${wsId}:${targetPageId}:`).catch(() => {});
+        }
+        deleteByPrefix(`cache:brand:${wsId}:${trackedPageId}:`).catch(() => {});
+        deleteByPrefix(`cache:products:${wsId}:`).catch(() => {});
+      }
     }
   } catch (error) {
     console.error("[Ad Reconciliation] Error reconciling archived ads:", error);
+  } finally {
+    if (lockToken) {
+      await releaseLock(lockKey, lockToken).catch((err) =>
+        console.warn(`[Ad Reconciliation] Failed to release lock ${lockKey}:`, err?.message || err)
+      );
+    }
   }
 
   return { archivedCount };

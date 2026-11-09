@@ -37,7 +37,7 @@ export const BatchIngestPayloadSchema = z.object({
   totalExtractedCount: z.number().int().min(0).default(0),
   ads: z.array(RawAdItemSchema).max(100),
   observedAt: z.string().default(() => new Date().toISOString()),
-  scanQuality: z.enum(["complete", "partial", "unclear"]).default("complete"),
+  scanQuality: z.enum(["complete", "partial", "unclear"]).default("partial"),
 });
 
 export type BatchIngestPayload = z.infer<typeof BatchIngestPayloadSchema>;

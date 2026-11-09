@@ -179,6 +179,7 @@ describe("Batch Scan Ingestion API & Schema Suite (/api/qstash/ingest-scan-batch
         trackedPageId: nonExistentPageId,
         pageId: "123456789",
         ads: [],
+        scanQuality: "complete",
       }),
     });
 
@@ -186,6 +187,20 @@ describe("Batch Scan Ingestion API & Schema Suite (/api/qstash/ingest-scan-batch
     assert.strictEqual(response.status, 400);
     const data = await response.json();
     assert.strictEqual(data.error, "Tracked page not found");
+  });
+
+  it("BatchIngestPayloadSchema defaults scanQuality to 'partial' when omitted", () => {
+    const payload = {
+      creativeScanId: validCreativeScanId,
+      trackedPageId: validTrackedPageId,
+      pageId: "12345678",
+      ads: [],
+    };
+    const parsed = BatchIngestPayloadSchema.safeParse(payload);
+    assert.strictEqual(parsed.success, true);
+    if (parsed.success) {
+      assert.strictEqual(parsed.data.scanQuality, "partial");
+    }
   });
 });
 

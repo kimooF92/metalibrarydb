@@ -13,7 +13,10 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 3): Promise<{
   fixedQueue: number;
   fixedDiscoveryRuns: number;
 }> {
-  const cutoff = new Date(Date.now() - timeoutMinutes * 60 * 1000);
+  // Enforce consistent minimum 5-minute age floor across all cleanup branches
+  const cutoff = timeoutMinutes === 0
+    ? new Date(Date.now() - 5 * 60 * 1000)
+    : new Date(Date.now() - timeoutMinutes * 60 * 1000);
   const now = new Date();
 
   let fixedPages = 0;
@@ -22,21 +25,16 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 3): Promise<{
   let fixedDiscoveryRuns = 0;
 
   // 1. Reset orphaned creative_scans (running, abandoned ingesting, or abandoned pending)
-  const stuckScans = timeoutMinutes === 0
-    ? await db.query.creativeScans.findMany({
-        where: inArray(creativeScans.status, ["running", "ingesting", "pending"]),
-        columns: { id: true },
-      })
-    : await db.query.creativeScans.findMany({
-        where: and(
-          inArray(creativeScans.status, ["running", "ingesting", "pending"]),
-          or(
-            and(isNotNull(creativeScans.startedAt), lt(creativeScans.startedAt, cutoff)),
-            and(isNull(creativeScans.startedAt), lt(creativeScans.createdAt, cutoff))
-          )
-        ),
-        columns: { id: true },
-      });
+  const stuckScans = await db.query.creativeScans.findMany({
+    where: and(
+      inArray(creativeScans.status, ["running", "ingesting", "pending"]),
+      or(
+        and(isNotNull(creativeScans.startedAt), lt(creativeScans.startedAt, cutoff)),
+        and(isNull(creativeScans.startedAt), lt(creativeScans.createdAt, cutoff))
+      )
+    ),
+    columns: { id: true },
+  });
 
   if (stuckScans.length > 0) {
     const scanIds = stuckScans.map((s) => s.id);
@@ -45,30 +43,33 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 3): Promise<{
       .set({
         status: "failed",
         failureReason: "timeout",
-        outcomeDetails: `Scan automatically marked failed after ${timeoutMinutes > 0 ? `${timeoutMinutes}m of inactivity` : "orphaned job cleanup"}`,
+        outcomeDetails: `Scan automatically marked failed after ${timeoutMinutes > 0 ? `${timeoutMinutes}m` : "5m"} of inactivity`,
         finishedAt: now,
       })
-      .where(inArray(creativeScans.id, scanIds));
+      .where(
+        and(
+          inArray(creativeScans.id, scanIds),
+          inArray(creativeScans.status, ["running", "ingesting", "pending"]),
+          or(
+            and(isNotNull(creativeScans.startedAt), lt(creativeScans.startedAt, cutoff)),
+            and(isNull(creativeScans.startedAt), lt(creativeScans.createdAt, cutoff))
+          )
+        )
+      );
     fixedScans = scanIds.length;
   }
 
   // 2. Reset orphaned queue jobs
-  const stuckQueue = timeoutMinutes === 0
-    ? await db.query.queue.findMany({
-        where: eq(queue.status, "running"),
-        columns: { id: true },
-      })
-    : await db.query.queue.findMany({
-        where: and(
-          eq(queue.status, "running"),
-          or(
-            isNull(queue.startedAt),
-            lt(queue.startedAt, cutoff),
-            and(isNull(queue.startedAt), lt(queue.createdAt, cutoff))
-          )
-        ),
-        columns: { id: true },
-      });
+  const stuckQueue = await db.query.queue.findMany({
+    where: and(
+      eq(queue.status, "running"),
+      or(
+        and(isNotNull(queue.startedAt), lt(queue.startedAt, cutoff)),
+        and(isNull(queue.startedAt), lt(queue.createdAt, cutoff))
+      )
+    ),
+    columns: { id: true },
+  });
 
   if (stuckQueue.length > 0) {
     const queueIds = stuckQueue.map((q) => q.id);
@@ -79,27 +80,30 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 3): Promise<{
         failureReason: "timeout",
         finishedAt: now,
       })
-      .where(inArray(queue.id, queueIds));
+      .where(
+        and(
+          inArray(queue.id, queueIds),
+          eq(queue.status, "running"),
+          or(
+            and(isNotNull(queue.startedAt), lt(queue.startedAt, cutoff)),
+            and(isNull(queue.startedAt), lt(queue.createdAt, cutoff))
+          )
+        )
+      );
     fixedQueue = queueIds.length;
   }
 
   // 3. Reset orphaned discovery_runs in "running" status
-  const stuckDiscoveryRuns = timeoutMinutes === 0
-    ? await db.query.discoveryRuns.findMany({
-        where: eq(discoveryRuns.status, "running"),
-        columns: { id: true },
-      })
-    : await db.query.discoveryRuns.findMany({
-        where: and(
-          eq(discoveryRuns.status, "running"),
-          or(
-            isNull(discoveryRuns.startedAt),
-            lt(discoveryRuns.startedAt, cutoff),
-            and(isNull(discoveryRuns.startedAt), lt(discoveryRuns.createdAt, cutoff))
-          )
-        ),
-        columns: { id: true },
-      });
+  const stuckDiscoveryRuns = await db.query.discoveryRuns.findMany({
+    where: and(
+      eq(discoveryRuns.status, "running"),
+      or(
+        and(isNotNull(discoveryRuns.startedAt), lt(discoveryRuns.startedAt, cutoff)),
+        and(isNull(discoveryRuns.startedAt), lt(discoveryRuns.createdAt, cutoff))
+      )
+    ),
+    columns: { id: true },
+  });
 
   if (stuckDiscoveryRuns.length > 0) {
     const runIds = stuckDiscoveryRuns.map((r) => r.id);
@@ -108,35 +112,36 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 3): Promise<{
       .set({
         status: "failed",
         failureReason: "timeout",
-        outcomeDetails: `Discovery run automatically marked failed after ${timeoutMinutes > 0 ? `${timeoutMinutes}m of inactivity` : "orphaned job cleanup"}`,
+        outcomeDetails: `Discovery run automatically marked failed after ${timeoutMinutes > 0 ? `${timeoutMinutes}m` : "5m"} of inactivity`,
         finishedAt: now,
       })
-      .where(inArray(discoveryRuns.id, runIds));
+      .where(
+        and(
+          inArray(discoveryRuns.id, runIds),
+          eq(discoveryRuns.status, "running"),
+          or(
+            and(isNotNull(discoveryRuns.startedAt), lt(discoveryRuns.startedAt, cutoff)),
+            and(isNull(discoveryRuns.startedAt), lt(discoveryRuns.createdAt, cutoff))
+          )
+        )
+      );
     fixedDiscoveryRuns = runIds.length;
   }
 
   // 4. Reset orphaned tracked_pages in "scanning" status
-  // Safely exceeds worker 180s (3m) lock TTL to prevent killing active browser scrapes
-  const pageCutoffMinutes = timeoutMinutes === 0 ? 0 : Math.max(timeoutMinutes, 3.5);
-  const pageCutoff = timeoutMinutes === 0
-    ? cutoff
-    : new Date(Date.now() - pageCutoffMinutes * 60 * 1000);
+  const pageCutoffMinutes = timeoutMinutes === 0 ? 5 : Math.max(timeoutMinutes, 3.5);
+  const pageCutoff = new Date(Date.now() - pageCutoffMinutes * 60 * 1000);
 
-  const scanningPages = timeoutMinutes === 0
-    ? await db.query.trackedPages.findMany({
-        where: eq(trackedPages.status, "scanning"),
-        columns: { id: true, lastSuccessAt: true, currentResults: true },
-      })
-    : await db.query.trackedPages.findMany({
-        where: and(
-          eq(trackedPages.status, "scanning"),
-          or(
-            isNull(trackedPages.updatedAt),
-            lt(trackedPages.updatedAt, pageCutoff)
-          )
-        ),
-        columns: { id: true, lastSuccessAt: true, currentResults: true },
-      });
+  const scanningPages = await db.query.trackedPages.findMany({
+    where: and(
+      eq(trackedPages.status, "scanning"),
+      or(
+        isNull(trackedPages.updatedAt),
+        lt(trackedPages.updatedAt, pageCutoff)
+      )
+    ),
+    columns: { id: true, lastSuccessAt: true, currentResults: true },
+  });
 
   for (const page of scanningPages) {
     // If page has verified past results or lastSuccessAt, restore to "success" instead of leaving broken
@@ -150,7 +155,7 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 3): Promise<{
         status: targetStatus,
         updatedAt: now,
       })
-      .where(eq(trackedPages.id, page.id));
+      .where(and(eq(trackedPages.id, page.id), eq(trackedPages.status, "scanning")));
 
     // Cancel any stale queue entries for this page
     await db

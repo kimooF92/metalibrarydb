@@ -27,12 +27,13 @@ export async function handleBatchIngest(req: Request | NextRequest) {
       );
     }
 
-    const { creativeScanId, trackedPageId, pageId, ads: batchAds, observedAt } = parseResult.data;
+    const { creativeScanId, trackedPageId, pageId, scanQuality, ads: batchAds, observedAt } = parseResult.data;
 
     // 1. Authorize Scan & Page Relation (Derive workspaceId from DB to guarantee tenant isolation)
     const [pageRecord] = await db
       .select({
         id: trackedPages.id,
+        pageId: trackedPages.pageId,
         workspaceId: trackedPages.workspaceId,
         displayName: trackedPages.displayName,
       })
@@ -241,35 +242,52 @@ export async function handleBatchIngest(req: Request | NextRequest) {
       }
     }
 
-    // 6. Update Scan Status to Completed
+    const isAuthoritativeComplete = scanQuality === "complete";
+
+    // 6. Update Scan Status (Strictly mark partial when crawl did not reach verified completion)
     await db
       .update(creativeScans)
       .set({
-        status: "completed",
+        status: isAuthoritativeComplete ? "completed" : "partial",
         extractedCount: uniqueAds.length,
+        failureReason: null,
+        outcomeDetails: isAuthoritativeComplete
+          ? `Scan completed with ${uniqueAds.length} ads ingested`
+          : `Partial scan batch ingested with ${uniqueAds.length} ads`,
         finishedAt: new Date(),
       })
       .where(eq(creativeScans.id, creativeScanId));
 
-    // 7. Delayed Archive Reconciliation (Safely runs after 100% of the scan's ads are in PostgreSQL)
-    const activeArchiveIds = new Set(
-      uniqueAds.filter((a) => a.isActive).map((a) => a.adArchiveId)
-    );
-    await reconcileArchivedAds(
-      trackedPageId,
-      creativeScanId,
-      activeArchiveIds,
-      new Date(observedAt),
-      { isFullScan: true }
-    ).catch((err) =>
-      console.warn("[QStash Batch Ingest] Archive reconciliation notice:", err?.message || err)
-    );
+    // 7. Delayed Archive Reconciliation (Safely runs ONLY on authoritative complete scans)
+    if (isAuthoritativeComplete) {
+      const activeArchiveIds = new Set(
+        uniqueAds.filter((a) => a.isActive).map((a) => a.adArchiveId)
+      );
+      await reconcileArchivedAds(
+        trackedPageId,
+        creativeScanId,
+        activeArchiveIds,
+        new Date(observedAt),
+        { isFullScan: true }
+      ).catch((err) =>
+        console.warn("[QStash Batch Ingest] Archive reconciliation notice:", err?.message || err)
+      );
+    } else {
+      console.warn(`[QStash Batch Ingest] ⚠️ Skipping archival reconciliation: scanQuality is '${scanQuality}' (partial/unclear).`);
+    }
 
-    // 8. Invalidate Workspace Caches
+    // 8. Invalidate Workspace, Brand & Product Caches
     if (pageRecord.workspaceId) {
-      deleteCached(`cache:stats:${pageRecord.workspaceId}`).catch(() => { });
-      deleteByPrefix(`cache:spy_ads:${pageRecord.workspaceId}:`).catch(() => { });
-      deleteByPrefix(`cache:dashboard:overview:${pageRecord.workspaceId}:`).catch(() => { });
+      const wsId = pageRecord.workspaceId;
+      const targetPageId = pageRecord.pageId || pageId;
+      deleteCached(`cache:stats:${wsId}`).catch(() => { });
+      deleteByPrefix(`cache:spy_ads:${wsId}:`).catch(() => { });
+      deleteByPrefix(`cache:dashboard:overview:${wsId}:`).catch(() => { });
+      if (targetPageId) {
+        deleteByPrefix(`cache:brand:${wsId}:${targetPageId}:`).catch(() => { });
+      }
+      deleteByPrefix(`cache:brand:${wsId}:${trackedPageId}:`).catch(() => { });
+      deleteByPrefix(`cache:products:${wsId}:`).catch(() => { });
     }
 
     return NextResponse.json({

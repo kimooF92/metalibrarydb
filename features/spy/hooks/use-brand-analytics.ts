@@ -30,6 +30,7 @@ export function useBrandAnalytics({ id, activeTab }: UseBrandAnalyticsOptions) {
   const productsAbortControllerRef = useRef<AbortController | null>(null);
   const productsRequestIdRef = useRef(0);
   const pendingProductsRef = useRef<ScrapedProduct[] | null>(null);
+  const priorAdCountRef = useRef<number | null>(null);
 
   const canonicalIdRef = useRef<string | null>(null);
   const primaryRequestIdRef = useRef(0);
@@ -140,14 +141,16 @@ export function useBrandAnalytics({ id, activeTab }: UseBrandAnalyticsOptions) {
         }
 
         setData((prev) => {
-          const productsToKeep =
-            pendingProductsRef.current && pendingProductsRef.current.length > 0
-              ? pendingProductsRef.current
-              : prev?.products && prev.products.length > 0
-              ? prev.products
-              : json.products && json.products.length > 0
-              ? json.products
-              : [];
+          let productsToKeep: ScrapedProduct[] = [];
+          if (isProductsTab) {
+            productsToKeep = json.products || [];
+          } else if (pendingProductsRef.current && pendingProductsRef.current.length > 0) {
+            productsToKeep = pendingProductsRef.current;
+          } else if (prev?.products && prev.products.length > 0) {
+            productsToKeep = prev.products;
+          } else {
+            productsToKeep = json.products || [];
+          }
 
           if (productsToKeep.length > 0) {
             setIsProductsLoaded(true);
@@ -160,6 +163,10 @@ export function useBrandAnalytics({ id, activeTab }: UseBrandAnalyticsOptions) {
             products: productsToKeep,
           };
         });
+
+        if (json.brand?.currentResults !== undefined && json.brand?.currentResults !== null) {
+          priorAdCountRef.current = Number(json.brand.currentResults);
+        }
 
         if (json.brand?.pageId) {
           canonicalIdRef.current = json.brand.pageId;
@@ -237,10 +244,24 @@ export function useBrandAnalytics({ id, activeTab }: UseBrandAnalyticsOptions) {
               : null;
           const newCount = rawResults !== null ? Number(rawResults) : null;
 
+          if (newCount !== null) {
+            const previousCount = priorAdCountRef.current;
+            if (previousCount !== null && previousCount !== newCount) {
+              // Active ad count changed: invalidate cached products in React state
+              setIsProductsLoaded(false);
+              pendingProductsRef.current = null;
+            }
+            priorAdCountRef.current = newCount;
+          }
+
           setData((prev) => {
             if (!prev || !prev.brand) return prev;
+            const previousCount = prev.brand.currentResults;
+            const adCountChanged =
+              newCount !== null && previousCount !== null && previousCount !== newCount;
             return {
               ...prev,
+              products: adCountChanged ? [] : prev.products,
               brand: {
                 ...prev.brand,
                 status: updated.status ?? prev.brand.status,
@@ -255,6 +276,9 @@ export function useBrandAnalytics({ id, activeTab }: UseBrandAnalyticsOptions) {
 
           if (updated.status === "success" || updated.status === "failed") {
             fetchBrandData(true);
+            if (activeTab === "products") {
+              loadProductsTab(true);
+            }
             if (updated.status === "success") {
               showToast({
                 title: "⚡ Ad Count Updated",
@@ -270,7 +294,7 @@ export function useBrandAnalytics({ id, activeTab }: UseBrandAnalyticsOptions) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [data?.brand?.id, fetchBrandData, showToast]);
+  }, [activeTab, data?.brand?.id, fetchBrandData, loadProductsTab, showToast]);
 
   useEffect(() => {
     if (canonicalIdRef.current && id === canonicalIdRef.current && data) {

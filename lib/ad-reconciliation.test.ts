@@ -12,9 +12,17 @@ function createFakeDb(options: {
   officialPage?: boolean;
   holdStatus?: string | null;
   consecutiveZeroScans?: number | null;
+  activeRowsCount?: number;
+  lastCreativeScan?: Date | null;
 } = {}) {
   const activeRows = options.officialPage === false
     ? null
+    : options.activeRowsCount !== undefined
+    ? Array.from({ length: options.activeRowsCount }, (_, i) => ({
+        id: `ad-${i + 1}`,
+        adArchiveId: `archive-${i + 1}`,
+        isArchived: false,
+      }))
     : [
         { id: "ad-1", adArchiveId: "archive-1", isArchived: false },
         { id: "ad-2", adArchiveId: "archive-2", isArchived: null },
@@ -31,13 +39,16 @@ function createFakeDb(options: {
           searchType: options.officialPage === false ? "domain" : "page",
           pageId: options.officialPage === false ? null : "page-1",
           displayName: "Test Page",
-          currentResults: 2,
+          currentResults: options.activeRowsCount ?? 2,
           holdStatus: options.holdStatus ?? "active",
           consecutiveZeroScans: options.consecutiveZeroScans ?? 0,
+          holdStartedAt: null,
+          lastCreativeScan: options.lastCreativeScan ?? null,
+          workspaceId: "00000000-0000-0000-0000-000000000001",
         }),
       },
       adObservations: {
-        findMany: async () => [{ adId: "ad-1" }, { adId: "ad-2" }],
+        findMany: async () => (activeRows ? activeRows.map((r) => ({ adId: r.id })) : []),
         findFirst: async () => undefined,
       },
       ads: {
@@ -280,5 +291,104 @@ test("reconcileArchivedAds correctly archives missing ads for official page targ
   assert.equal(result.archivedCount, 1);
   assert.equal(updates.some((u) => u.isArchived === true), true);
   assert.equal(updates.some((u) => u.isActive === false), true);
+});
+
+test("reconcileArchivedAds prevents premature archival on sudden cliff drop (>70% drop)", async () => {
+  // Brand with 50 active ads suddenly observes only 2 ads (96% drop)
+  const { fakeDb, updates } = createFakeDb({
+    officialPage: true,
+    activeRowsCount: 50,
+    holdStatus: "active",
+    consecutiveZeroScans: 0,
+  });
+
+  const result = await reconcileArchivedAds(
+    "tracked-page-uuid",
+    "scan-1",
+    new Set<string>(["archive-1", "archive-2"]), // Only 2 ads observed
+    new Date("2026-08-31T00:00:00.000Z"),
+    { isFullScan: true },
+    fakeDb
+  );
+
+  // Must NOT archive on first drop; should place on hold
+  assert.equal(result.archivedCount, 0);
+  assert.equal(updates.some((u) => u.isArchived === true), false);
+  assert.equal(updates.some((u) => u.holdStatus === "on_hold"), true);
+  assert.equal(updates.some((u) => u.consecutiveZeroScans === 1), true);
+});
+
+test("reconcileArchivedAds confirms cliff drop after consecutive scans", async () => {
+  // Already seen 2 consecutive cliff drops (consecutiveZeroScans = 2)
+  const { fakeDb, updates } = createFakeDb({
+    officialPage: true,
+    activeRowsCount: 50,
+    holdStatus: "on_hold",
+    consecutiveZeroScans: 2,
+  });
+
+  const result = await reconcileArchivedAds(
+    "tracked-page-uuid",
+    "scan-3",
+    new Set<string>(["archive-1", "archive-2"]),
+    new Date("2026-08-31T00:00:00.000Z"),
+    { isFullScan: true },
+    fakeDb
+  );
+
+  // Third consecutive scan confirms drop -> archives 48 missing ads
+  assert.equal(result.archivedCount, 48);
+  assert.equal(updates.some((u) => u.isArchived === true), true);
+  assert.equal(updates.some((u) => u.holdStatus === "active"), true);
+  assert.equal(updates.some((u) => u.consecutiveZeroScans === 0), true);
+});
+
+test("reconcileArchivedAds recovers hold status if observed count returns to normal", async () => {
+  // Was on hold, but brand now observes 48 ads (normal)
+  const { fakeDb, updates } = createFakeDb({
+    officialPage: true,
+    activeRowsCount: 50,
+    holdStatus: "on_hold",
+    consecutiveZeroScans: 1,
+  });
+
+  const observed = new Set(Array.from({ length: 48 }, (_, i) => `archive-${i + 1}`));
+  const result = await reconcileArchivedAds(
+    "tracked-page-uuid",
+    "scan-2",
+    observed,
+    new Date("2026-08-31T00:00:00.000Z"),
+    { isFullScan: true },
+    fakeDb
+  );
+
+  // Only 2 missing ads archived, holdStatus reset to active
+  assert.equal(result.archivedCount, 2);
+  assert.equal(updates.some((u) => u.holdStatus === "active"), true);
+  assert.equal(updates.some((u) => u.consecutiveZeroScans === 0), true);
+});
+
+test("reconcileArchivedAds ignores stale out-of-order scans", async () => {
+  const newerScanDate = new Date("2026-08-31T12:00:00.000Z");
+  const olderScanDate = new Date("2026-08-31T10:00:00.000Z"); // 2 hours older
+
+  const { fakeDb, updates } = createFakeDb({
+    officialPage: true,
+    activeRowsCount: 5,
+    lastCreativeScan: newerScanDate,
+  });
+
+  const result = await reconcileArchivedAds(
+    "tracked-page-uuid",
+    "stale-scan",
+    new Set<string>(["archive-1"]),
+    olderScanDate, // Out-of-order timestamp
+    { isFullScan: true },
+    fakeDb
+  );
+
+  // Out-of-order scan must be skipped
+  assert.equal(result.archivedCount, 0);
+  assert.equal(updates.length, 0);
 });
 

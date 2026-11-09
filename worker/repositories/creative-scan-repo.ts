@@ -19,6 +19,8 @@ export async function markCreativeJobCompleted(
     .set({
       status,
       extractedCount,
+      failureReason: null,
+      outcomeDetails: null,
       finishedAt: now,
     })
     .where(eq(creativeScans.id, creativeScanId));
@@ -28,6 +30,7 @@ export async function markCreativeJobCompleted(
       .update(queue)
       .set({
         status: "completed",
+        failureReason: null,
         finishedAt: now,
       })
       .where(eq(queue.id, queueId));
