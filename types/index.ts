@@ -179,6 +179,24 @@ export interface CarouselItemSummary {
   linkedAdsCount?: number;
   isFavorite?: boolean | null;
   createdAt?: string | Date;
+  updatedAt?: string | Date;
+  scrapeStatus?: ScrapedProduct["scrapeStatus"];
+  failureReason?: string | null;
+  lastScrapedAt?: string | null;
+  pageId?: string | null;
+  brandName?: string | null;
+  brandPageId?: string | null;
+  brandProfilePic?: string | null;
+  brandHoldStatus?: ScrapedProduct["brandHoldStatus"];
+  daysRunning?: number;
+  isBreakout?: boolean;
+  breakoutScore?: number;
+  breakoutTier?: ScrapedProduct["breakoutTier"];
+  breakoutSurge?: number;
+  maxDuplications?: number;
+  earliestAdDate?: string | null;
+  latestAdDate?: string | null;
+  topCreativeThumbnail?: string | null;
 }
 
 export interface ScrapedProduct {
@@ -233,6 +251,7 @@ export interface ScrapedProduct {
   carouselItems?: CarouselItemSummary[] | null;
   isCarouselBundle?: boolean;
   carouselBundleCount?: number;
+  carouselGroupKey?: string | null;
 }
 
 export interface Ad {

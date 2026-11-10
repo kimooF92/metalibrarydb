@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, memo } from "react";
+import { useState, useEffect, useRef, memo } from "react";
 import { ScrapedProduct } from "@/types";
 import { Layers } from "lucide-react";
 import { formatPrice } from "@/lib/format-price";
@@ -10,6 +10,7 @@ import { ProductCardMedia } from "./card/product-card-media";
 import { ProductCardPricing } from "./card/product-card-pricing";
 import { ProductCardActions } from "./card/product-card-actions";
 import { ProductCardFooter } from "./card/product-card-footer";
+import { materializeCarouselItem } from "@/lib/carousel-grouping";
 
 export interface ProductCardProps {
   product: ScrapedProduct;
@@ -40,13 +41,16 @@ export const ProductCard = memo(function ProductCard({
 
   const [internalIsRefreshing, setInternalIsRefreshing] = useState(false);
   const isRefreshing = Boolean(isRefreshingProp || internalIsRefreshing);
-  const [localPrice, setLocalPrice] = useState(product.currentPrice);
-  const isFavorite = Boolean(product.isFavorite);
+  const [localPriceOverrides, setLocalPriceOverrides] = useState<Record<string, string>>({});
 
-  // Sync local price if parent updates
+  const priceSignature = [
+    product.currentPrice ?? "",
+    ...(product.carouselItems || []).map((item) => `${item.id}:${item.currentPrice ?? ""}`),
+  ].join("|");
+
   useEffect(() => {
-    setLocalPrice(product.currentPrice);
-  }, [product.currentPrice]);
+    setLocalPriceOverrides({});
+  }, [product.id, priceSignature]);
 
   // Carousel Bundle / Stacked Swiper State
   const isCarouselBundle = Boolean(
@@ -54,67 +58,92 @@ export const ProductCard = memo(function ProductCard({
   );
   const carouselItems = product.carouselItems || [];
   const [slideIndex, setSlideIndex] = useState(0);
+  const activeCarouselItemIdRef = useRef<string | null>(null);
+  const carouselIdentityRef = useRef<string | null>(null);
 
-  // If slideIndex is out of range when props change, reset to 0
+  const carouselItemIds = carouselItems.map((item) => item.id).join("|");
+  const carouselIdentity = `${product.carouselGroupKey || product.id}:${isCarouselBundle ? "bundle" : "single"}`;
+
   useEffect(() => {
-    if (slideIndex >= carouselItems.length) {
-      setSlideIndex(0);
+    const carouselItemIdList = carouselItemIds ? carouselItemIds.split("|") : [];
+    if (carouselIdentityRef.current !== carouselIdentity) {
+      carouselIdentityRef.current = carouselIdentity;
+      activeCarouselItemIdRef.current = null;
     }
-  }, [carouselItems.length, slideIndex]);
+
+    setSlideIndex((currentIndex) => {
+      const selectedId =
+        activeCarouselItemIdRef.current || carouselItemIdList[currentIndex] || carouselItemIdList[0];
+      if (!selectedId) return 0;
+      const nextIndex = carouselItemIdList.indexOf(selectedId);
+      const resolvedIndex = nextIndex >= 0 ? nextIndex : 0;
+      activeCarouselItemIdRef.current = carouselItemIdList[resolvedIndex] || null;
+      return resolvedIndex;
+    });
+  }, [carouselIdentity, carouselItemIds]);
+
+  const handleSlideChange = (nextIndex: number) => {
+    const resolvedIndex = Math.max(0, Math.min(nextIndex, carouselItems.length - 1));
+    activeCarouselItemIdRef.current = carouselItems[resolvedIndex]?.id || null;
+    setSlideIndex(resolvedIndex);
+  };
 
   const activeSlideItem = isCarouselBundle && carouselItems[slideIndex] ? carouselItems[slideIndex] : null;
 
-  // Active reactive product properties based on currently selected slide
-  const activeProductId = activeSlideItem?.id || product.id;
-  const activeTitle = activeSlideItem?.title || product.title || "Untitled Product Landing Page";
-  const activeImageUrl = activeSlideItem?.mainImageUrl || product.mainImageUrl;
-  const activePrice = activeSlideItem?.currentPrice ?? localPrice;
-  const activeUrl = activeSlideItem?.url || product.url;
-  const activeAdsCount = activeSlideItem?.activeAdsCount ?? product.activeAdsCount;
-  const activeLinkedAdsCount = activeSlideItem?.linkedAdsCount ?? product.linkedAdsCount;
-  const isSlideFavorite =
-    activeSlideItem?.isFavorite !== undefined ? Boolean(activeSlideItem.isFavorite) : isFavorite;
+  const activeProduct = activeSlideItem
+    ? materializeCarouselItem(product, activeSlideItem)
+    : product;
 
-  const isPageOnHold = product.brandHoldStatus === "on_hold";
-  const isPageInactive = product.brandHoldStatus === "inactive";
+  // Active reactive product properties based on currently selected slide
+  const activeProductId = activeProduct.id;
+  const activeTitle = activeProduct.title || "Untitled Product Landing Page";
+  const activeImageUrl = activeProduct.mainImageUrl;
+  const activePrice = localPriceOverrides[activeProductId] ?? activeProduct.currentPrice;
+  const activeUrl = activeProduct.url;
+  const activeAdsCount = activeProduct.activeAdsCount;
+  const activeLinkedAdsCount = activeProduct.linkedAdsCount;
+  const isSlideFavorite = Boolean(activeProduct.isFavorite);
+
+  const isPageOnHold = activeProduct.brandHoldStatus === "on_hold";
+  const isPageInactive = activeProduct.brandHoldStatus === "inactive";
   const isBreakout = Boolean(
     !isPageOnHold &&
     !isPageInactive &&
-    (product.isBreakout !== undefined
-      ? product.isBreakout
-      : ((product.activeAdsCount || 0) > 0 &&
-          (product.daysRunning || 1) >= 7 &&
-          (product.daysRunning || 1) <= 30 &&
-          (product.maxDuplications || 1) >= 3))
+    (activeProduct.isBreakout !== undefined
+      ? activeProduct.isBreakout
+      : ((activeProduct.activeAdsCount || 0) > 0 &&
+          (activeProduct.daysRunning || 1) >= 7 &&
+          (activeProduct.daysRunning || 1) <= 30 &&
+          (activeProduct.maxDuplications || 1) >= 3))
   );
   const isInactive =
     isPageInactive ||
-    (typeof product.activeAdsCount === "number" &&
-      product.activeAdsCount === 0 &&
-      (product.linkedAdsCount || 0) > 0);
-  const isPendingScrape = product.scrapeStatus === "pending";
+    (typeof activeProduct.activeAdsCount === "number" &&
+      activeProduct.activeAdsCount === 0 &&
+      (activeProduct.linkedAdsCount || 0) > 0);
+  const isPendingScrape = activeProduct.scrapeStatus === "pending";
 
   // Brand navigation target
   const isUuid = (s?: string | null) =>
     Boolean(s && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s));
   const rawPageId =
-    (product.pageId && !isUuid(product.pageId) ? product.pageId : null) ||
-    (product.brandPageId && !isUuid(product.brandPageId) && product.brandPageId !== "0"
-      ? product.brandPageId
+    (activeProduct.pageId && !isUuid(activeProduct.pageId) ? activeProduct.pageId : null) ||
+    (activeProduct.brandPageId && !isUuid(activeProduct.brandPageId) && activeProduct.brandPageId !== "0"
+      ? activeProduct.brandPageId
       : null);
 
   const brandTarget =
-    rawPageId || product.domain || (product.brandName && !isUuid(product.brandName) ? product.brandName : null);
-  const brandDisplayName = product.brandName || product.domain || "Brand";
+    rawPageId || activeProduct.domain || (activeProduct.brandName && !isUuid(activeProduct.brandName) ? activeProduct.brandName : null);
+  const brandDisplayName = activeProduct.brandName || activeProduct.domain || "Brand";
 
   // Meta Ad Library URL
   const metaAdLibraryUrl = rawPageId
     ? `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&view_all_page_id=${encodeURIComponent(
         rawPageId
       )}`
-    : product.brandName && !isUuid(product.brandName)
+    : activeProduct.brandName && !isUuid(activeProduct.brandName)
     ? `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&search_type=page&q=${encodeURIComponent(
-        product.brandName
+        activeProduct.brandName
       )}`
     : null;
 
@@ -144,7 +173,7 @@ export const ProductCard = memo(function ProductCard({
     if (!onRefresh || isRefreshing) return;
     setInternalIsRefreshing(true);
     try {
-      await onRefresh(product.id, product);
+      await onRefresh(activeProduct.id, activeProduct);
     } finally {
       setInternalIsRefreshing(false);
     }
@@ -152,9 +181,9 @@ export const ProductCard = memo(function ProductCard({
 
   const handleCopyLink = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!product.url) return;
+    if (!activeUrl) return;
     try {
-      await navigator.clipboard.writeText(product.url);
+      await navigator.clipboard.writeText(activeUrl);
       showToast({
         type: "success",
         title: "Link Copied",
@@ -171,17 +200,17 @@ export const ProductCard = memo(function ProductCard({
 
   const handleSyncPrice = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    const targetPrice = localPrice || product.currentPrice;
+    const targetPrice = activePrice;
     if (!targetPrice) return;
     const normalizedPrice = formatPrice(targetPrice, sym);
     try {
       const res = await fetch("/api/products", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: product.id, currentPrice: normalizedPrice }),
+        body: JSON.stringify({ id: activeProduct.id, currentPrice: normalizedPrice }),
       });
       if (res.ok) {
-        setLocalPrice(normalizedPrice);
+        setLocalPriceOverrides((prev) => ({ ...prev, [activeProduct.id]: normalizedPrice }));
         showToast({
           type: "success",
           title: "Price Updated",
@@ -206,28 +235,14 @@ export const ProductCard = memo(function ProductCard({
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!onDelete) return;
-    await onDelete(product.id);
+    await onDelete(activeProduct.id);
   };
 
   return (
     <div
       onClick={() => {
         if (!isRefreshing) {
-          const detailTarget = activeSlideItem
-            ? {
-                ...product,
-                id: activeSlideItem.id,
-                url: activeSlideItem.url,
-                title: activeSlideItem.title,
-                currentPrice: activeSlideItem.currentPrice,
-                originalPrice: activeSlideItem.originalPrice || product.originalPrice,
-                mainImageUrl: activeSlideItem.mainImageUrl || product.mainImageUrl,
-                discountOrOffer: activeSlideItem.discountOrOffer || product.discountOrOffer,
-                activeAdsCount: activeSlideItem.activeAdsCount ?? product.activeAdsCount,
-                linkedAdsCount: activeSlideItem.linkedAdsCount ?? product.linkedAdsCount,
-              }
-            : product;
-          onViewDetails?.(detailTarget);
+          onViewDetails?.(activeProduct);
         }
       }}
       className={`group relative flex flex-col justify-between rounded-xl border px-3.5 py-[19px] shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-lg ${
@@ -249,7 +264,7 @@ export const ProductCard = memo(function ProductCard({
       <div>
         {/* Brand Action Row */}
         <ProductCardActions
-          product={product}
+          product={activeProduct}
           brandDisplayName={brandDisplayName}
           brandTarget={brandTarget}
           rawPageId={rawPageId}
@@ -268,13 +283,13 @@ export const ProductCard = memo(function ProductCard({
 
         {/* Media Container */}
         <ProductCardMedia
-          product={product}
+          product={activeProduct}
           activeImageUrl={activeImageUrl}
           activeTitle={activeTitle}
           isCarouselBundle={isCarouselBundle}
           carouselItems={carouselItems}
           slideIndex={slideIndex}
-          onSlideChange={setSlideIndex}
+          onSlideChange={handleSlideChange}
           isRefreshing={isRefreshing}
         />
 
@@ -311,7 +326,7 @@ export const ProductCard = memo(function ProductCard({
 
         {/* Velocity & Longevity Footer */}
         <ProductCardFooter
-          product={product}
+          product={activeProduct}
           activeAdsCount={activeAdsCount}
           activeLinkedAdsCount={activeLinkedAdsCount}
           isInactive={isInactive}

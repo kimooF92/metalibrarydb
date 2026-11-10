@@ -4,6 +4,13 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { ScrapedProduct } from "@/types";
 import { ProductsStats, ProductsPagination, SmartPreset } from "../types";
 import { resolveProductForRefresh } from "@/lib/product-extraction";
+import {
+  findProductInCollection,
+  mergeCarouselProductPages,
+  patchProductInCollection,
+  removeProductFromCollection,
+  restoreProductInCollection,
+} from "@/lib/carousel-grouping";
 import { useToast } from "@/components/toast-context";
 import { useWorkspace } from "@/components/workspace-context";
 
@@ -26,6 +33,14 @@ interface UseProductsDataParams {
   adLaunchTo: string;
   stillRunningOnly: boolean;
   groupCarousels: boolean;
+}
+
+function representedProductCount(products: ScrapedProduct[]): number {
+  return products.reduce(
+    (total, product) =>
+      total + (product.carouselItems?.length || product.carouselBundleCount || 1),
+    0
+  );
 }
 
 export function useProductsData(filters: UseProductsDataParams) {
@@ -200,11 +215,7 @@ export function useProductsData(filters: UseProductsDataParams) {
             setGroupedCarouselsCount(data.groupedCarouselsCount);
           }
           if (append) {
-            setProducts((prev) => {
-              const existingIds = new Set(prev.map((p) => p.id));
-              const filtered = newItems.filter((p) => !existingIds.has(p.id));
-              return [...prev, ...filtered];
-            });
+            setProducts((prev) => mergeCarouselProductPages(prev, newItems));
           } else {
             setProducts(newItems);
           }
@@ -313,7 +324,7 @@ export function useProductsData(filters: UseProductsDataParams) {
   const handleToggleFavorite = useCallback(
     async (productId: string, nextFavorite: boolean) => {
       setProducts((prev) =>
-        prev.map((p) => (p.id === productId ? { ...p, isFavorite: nextFavorite } : p))
+        patchProductInCollection(prev, productId, { isFavorite: nextFavorite })
       );
       setStats((prev) => ({
         ...prev,
@@ -338,7 +349,7 @@ export function useProductsData(filters: UseProductsDataParams) {
         });
       } catch (err: any) {
         setProducts((prev) =>
-          prev.map((p) => (p.id === productId ? { ...p, isFavorite: !nextFavorite } : p))
+          patchProductInCollection(prev, productId, { isFavorite: !nextFavorite })
         );
         setStats((prev) => ({
           ...prev,
@@ -387,9 +398,7 @@ export function useProductsData(filters: UseProductsDataParams) {
 
         const data = await res.json();
         if (res.ok && data.success && data.product) {
-          setProducts((prev) =>
-            prev.map((p) => (p.id === productId ? { ...p, ...data.product } : p))
-          );
+          setProducts((prev) => patchProductInCollection(prev, productId, data.product));
           onRefreshed?.(data.product as ScrapedProduct);
           showToast({
             type: "success",
@@ -421,23 +430,30 @@ export function useProductsData(filters: UseProductsDataParams) {
   );
 
   const handleProductUpdate = useCallback((updatedProduct: ScrapedProduct) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p))
-    );
+    setProducts((prev) => patchProductInCollection(prev, updatedProduct.id, updatedProduct));
   }, []);
 
   const handleDelete = useCallback(
     async (productId: string, onDeleted?: () => void) => {
-      const targetProduct = products.find((p) => p.id === productId);
-      const targetIndex = products.findIndex((p) => p.id === productId);
+      const targetProduct = findProductInCollection(products, productId);
       if (!targetProduct) return;
+      const targetIndex = products.findIndex(
+        (product) =>
+          product.id === productId ||
+          Boolean(product.carouselItems?.some((item) => item.id === productId))
+      );
 
-      setProducts((prev) => prev.filter((p) => p.id !== productId));
+      setProducts((prev) => removeProductFromCollection(prev, productId));
       onDeleted?.();
 
-      fetch(`/api/products?id=${productId}`, { method: "DELETE" }).catch((err) =>
-        console.error("[Delete API Error]:", err)
-      );
+      fetch(`/api/products?id=${productId}`, { method: "DELETE" })
+        .then((res) => {
+          if (!res.ok) throw new Error(`Delete failed (${res.status})`);
+        })
+        .catch((err) => {
+          console.error("[Delete API Error]:", err);
+          setProducts((prev) => restoreProductInCollection(prev, targetProduct, targetIndex));
+        });
 
       showToast({
         type: "info",
@@ -447,16 +463,7 @@ export function useProductsData(filters: UseProductsDataParams) {
         action: {
           label: "↩ Undo",
           onClick: async () => {
-            setProducts((prev) => {
-              if (prev.some((p) => p.id === productId)) return prev;
-              const next = [...prev];
-              if (targetIndex >= 0 && targetIndex <= next.length) {
-                next.splice(targetIndex, 0, targetProduct);
-              } else {
-                next.unshift(targetProduct);
-              }
-              return next;
-            });
+            setProducts((prev) => restoreProductInCollection(prev, targetProduct, targetIndex));
 
             try {
               const res = await fetch("/api/products/restore", {
@@ -465,6 +472,7 @@ export function useProductsData(filters: UseProductsDataParams) {
                 body: JSON.stringify({ id: productId }),
               });
               if (res.ok) {
+                await fetchProducts(1, false);
                 showToast({
                   type: "success",
                   title: "Product Restored",
@@ -475,7 +483,7 @@ export function useProductsData(filters: UseProductsDataParams) {
               }
             } catch (err) {
               console.error("[Restore Error]:", err);
-              setProducts((prev) => prev.filter((p) => p.id !== productId));
+              setProducts((prev) => removeProductFromCollection(prev, productId));
               showToast({
                 type: "error",
                 title: "Restore Failed",
@@ -486,7 +494,7 @@ export function useProductsData(filters: UseProductsDataParams) {
         },
       });
     },
-    [products, showToast]
+    [fetchProducts, products, showToast]
   );
 
   return {
@@ -496,6 +504,7 @@ export function useProductsData(filters: UseProductsDataParams) {
     isFetchingMore,
     error,
     groupedCarouselsCount,
+    totalItemsRepresented: representedProductCount(products),
     page,
     setPage,
     pagination,

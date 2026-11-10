@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { ScrapedProduct } from "@/types";
+import { findProductInCollection, preserveCarouselContext } from "@/lib/carousel-grouping";
 
 interface UseProductDetailsModalParams {
   products: ScrapedProduct[];
@@ -11,6 +12,14 @@ export function useProductDetailsModal({ products }: UseProductDetailsModalParam
   const [selectedProduct, setSelectedProduct] = useState<ScrapedProduct | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const detailRequestIdRef = useRef(0);
+
+  const preserveKnownCarouselContext = useCallback(
+    (detailedProduct: ScrapedProduct, productId: string) => {
+      const sourceProduct = findProductInCollection(products, productId);
+      return preserveCarouselContext(detailedProduct, sourceProduct || detailedProduct);
+    },
+    [products]
+  );
 
   // Recently inspected products tracking (session-based)
   const [recentlyViewedIds, setRecentlyViewedIds] = useState<string[]>([]);
@@ -30,17 +39,47 @@ export function useProductDetailsModal({ products }: UseProductDetailsModalParam
     const params = new URLSearchParams(window.location.search);
     const idParam = params.get("id") || params.get("productId");
     if (idParam) {
+      const requestId = ++detailRequestIdRef.current;
       fetch(`/api/products?id=${encodeURIComponent(idParam)}`)
         .then((res) => res.json())
         .then((data) => {
-          if (data.success && data.products && data.products.length > 0) {
-            setSelectedProduct(data.products[0]);
+          if (
+            requestId === detailRequestIdRef.current &&
+            data.success &&
+            data.products &&
+            data.products.length > 0
+          ) {
+            const sourceProduct = findProductInCollection(products, idParam);
+            setSelectedProduct(
+              preserveCarouselContext(data.products[0], sourceProduct || data.products[0])
+            );
             setIsModalOpen(true);
           }
         })
         .catch((err) => console.error("[Products Page] Deep-link product fetch error:", err));
     }
+  // The follow-up products effect below repairs context when the feed arrives later.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A deep link can resolve before the paginated product feed. Re-attach its
+  // bundle context once the matching grouped product is available locally.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const idParam = params.get("id") || params.get("productId");
+    if (!idParam) return;
+
+    const sourceProduct = findProductInCollection(products, idParam);
+    if (!sourceProduct) return;
+
+    setSelectedProduct((previous) =>
+      previous?.id === idParam
+        ? preserveCarouselContext(previous, sourceProduct)
+        : sourceProduct
+    );
+    setIsModalOpen(true);
+  }, [products]);
 
   // Popstate listener for browser back/forward buttons
   useEffect(() => {
@@ -49,7 +88,8 @@ export function useProductDetailsModal({ products }: UseProductDetailsModalParam
       const params = new URLSearchParams(window.location.search);
       const idParam = params.get("id") || params.get("productId");
       if (idParam) {
-        const found = products.find((p) => p.id === idParam);
+        const requestId = ++detailRequestIdRef.current;
+        const found = findProductInCollection(products, idParam);
         if (found) {
           setSelectedProduct(found);
           setIsModalOpen(true);
@@ -57,14 +97,20 @@ export function useProductDetailsModal({ products }: UseProductDetailsModalParam
           fetch(`/api/products?id=${encodeURIComponent(idParam)}`)
             .then((res) => res.json())
             .then((data) => {
-              if (data.success && data.products && data.products.length > 0) {
-                setSelectedProduct(data.products[0]);
+              if (
+                requestId === detailRequestIdRef.current &&
+                data.success &&
+                data.products &&
+                data.products.length > 0
+              ) {
+                setSelectedProduct(preserveKnownCarouselContext(data.products[0], idParam));
                 setIsModalOpen(true);
               }
             })
             .catch((err) => console.error("[Products Page] Popstate product fetch error:", err));
         }
       } else {
+        detailRequestIdRef.current += 1;
         setIsModalOpen(false);
         setSelectedProduct(null);
       }
@@ -72,7 +118,7 @@ export function useProductDetailsModal({ products }: UseProductDetailsModalParam
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [products]);
+  }, [products, preserveKnownCarouselContext]);
 
   // Continuous sync between active modal state and URL address bar
   useEffect(() => {
@@ -115,7 +161,7 @@ export function useProductDetailsModal({ products }: UseProductDetailsModalParam
       const json = await res.json();
       const detailedProduct = json.products?.[0];
       if (requestId === detailRequestIdRef.current && res.ok && detailedProduct) {
-        setSelectedProduct(detailedProduct);
+        setSelectedProduct(preserveCarouselContext(detailedProduct, product));
       }
     } catch {
       // Keep lean product card available if detail loading fails
@@ -137,7 +183,11 @@ export function useProductDetailsModal({ products }: UseProductDetailsModalParam
 
   // Modal sequential navigation
   const currentProductIndex = selectedProduct
-    ? products.findIndex((p) => p.id === selectedProduct.id)
+    ? products.findIndex(
+        (p) =>
+          p.id === selectedProduct.id ||
+          Boolean(p.carouselItems?.some((item) => item.id === selectedProduct.id))
+      )
     : -1;
 
   const handleNavigatePrev = useCallback(() => {

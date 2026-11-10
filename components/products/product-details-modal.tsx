@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import NextImage from "next/image";
 import { ScrapedProduct, Ad, CarouselItemSummary } from "@/types";
+import { materializeCarouselItem } from "@/lib/carousel-grouping";
 import { useToast } from "@/components/toast-context";
 import {
   ChevronLeft,
@@ -67,6 +68,7 @@ export function ProductDetailsModal({
   const [isEditMode, setIsEditMode] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const editFormRef = useRef<ModalEditFormHandle>(null);
+  const carouselSwitchRequestIdRef = useRef(0);
   const [linkedAds, setLinkedAds] = useState<Ad[]>([]);
   const [loadingAds, setLoadingAds] = useState(false);
   const [network, setNetwork] = useState<any>(null);
@@ -161,6 +163,7 @@ export function ProductDetailsModal({
 
   // Sync state on product prop change
   useEffect(() => {
+    carouselSwitchRequestIdRef.current += 1;
     if (product) {
       setCurrentProduct(product);
       setIsEditMode(false);
@@ -343,36 +346,31 @@ export function ProductDetailsModal({
   const handleSwitchCarouselItem = async (item: CarouselItemSummary) => {
     if (item.id === currentProduct?.id) return;
     const carouselItems = currentProduct?.carouselItems;
-    const optimistic: ScrapedProduct = {
-      ...currentProduct!,
-      id: item.id,
-      url: item.url,
-      title: item.title,
-      currentPrice: item.currentPrice,
-      originalPrice: item.originalPrice || currentProduct!.originalPrice,
-      mainImageUrl: item.mainImageUrl || currentProduct!.mainImageUrl,
-      discountOrOffer: item.discountOrOffer || currentProduct!.discountOrOffer,
-      activeAdsCount: item.activeAdsCount ?? currentProduct!.activeAdsCount,
-      linkedAdsCount: item.linkedAdsCount ?? currentProduct!.linkedAdsCount,
-      carouselItems: carouselItems,
-      isCarouselBundle: true,
-      carouselBundleCount: carouselItems?.length,
-    };
+    const previousProduct = currentProduct;
+    const requestId = ++carouselSwitchRequestIdRef.current;
+    const optimistic = materializeCarouselItem(currentProduct!, item);
     setCurrentProduct(optimistic);
 
     try {
       const res = await fetch(`/api/products?id=${encodeURIComponent(item.id)}`);
       const data = await res.json();
+      if (requestId !== carouselSwitchRequestIdRef.current) return;
       if (data.success && data.products && data.products.length > 0) {
         setCurrentProduct({
           ...data.products[0],
           carouselItems: carouselItems,
           isCarouselBundle: true,
           carouselBundleCount: carouselItems?.length,
+          carouselGroupKey: currentProduct?.carouselGroupKey,
         });
+      } else if (previousProduct) {
+        setCurrentProduct(previousProduct);
       }
     } catch (err) {
       console.warn("[Modal] Failed deep fetch for carousel sibling:", err);
+      if (requestId === carouselSwitchRequestIdRef.current && previousProduct) {
+        setCurrentProduct(previousProduct);
+      }
     }
   };
 

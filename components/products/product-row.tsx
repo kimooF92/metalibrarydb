@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, memo } from "react";
+import { useState, useEffect, useRef, memo } from "react";
 import NextImage from "next/image";
 import Link from "next/link";
 import { ScrapedProduct } from "@/types";
@@ -20,11 +20,14 @@ import {
   Calendar,
   Pause,
   Layers,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { formatDiscoveryDate, formatDiscoveryLabel } from "@/lib/format-date";
 import { useWorkspace } from "@/components/workspace-context";
 import { useAuth } from "@/components/auth-context";
 import { formatPrice } from "@/lib/format-price";
+import { materializeCarouselItem } from "@/lib/carousel-grouping";
 
 interface ProductRowProps {
   product: ScrapedProduct;
@@ -38,7 +41,7 @@ interface ProductRowProps {
 }
 
 export const ProductRow = memo(function ProductRow({
-  product,
+  product: sourceProduct,
   onRefresh,
   onDelete,
   onToggleFavorite,
@@ -50,12 +53,52 @@ export const ProductRow = memo(function ProductRow({
   const { activeWorkspace } = useWorkspace();
   const { isStaff } = useAuth();
   const sym = activeWorkspace?.currencySymbol || "DT";
-  const [imgError, setImgError] = useState(false);
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const carouselItems = sourceProduct.carouselItems || [];
+  const isCarouselBundle = Boolean(
+    sourceProduct.isCarouselBundle && carouselItems.length > 1
+  );
+  const [slideIndex, setSlideIndex] = useState(0);
+  const activeCarouselItemIdRef = useRef<string | null>(null);
+  const carouselIdentityRef = useRef<string | null>(null);
+  const activeSlideItem = isCarouselBundle ? carouselItems[slideIndex] : null;
+  const product = activeSlideItem
+    ? materializeCarouselItem(sourceProduct, activeSlideItem)
+    : sourceProduct;
   const isFavorite = Boolean(product.isFavorite);
   const [isTogglingFav, setIsTogglingFav] = useState(false);
   const [isQueueingVerify, setIsQueueingVerify] = useState(false);
+
+  const carouselItemIds = carouselItems.map((item) => item.id).join("|");
+  const carouselIdentity = `${sourceProduct.carouselGroupKey || sourceProduct.id}:${isCarouselBundle ? "bundle" : "single"}`;
+
+  useEffect(() => {
+    const carouselItemIdList = carouselItemIds ? carouselItemIds.split("|") : [];
+    if (carouselIdentityRef.current !== carouselIdentity) {
+      carouselIdentityRef.current = carouselIdentity;
+      activeCarouselItemIdRef.current = null;
+    }
+
+    setSlideIndex((currentIndex) => {
+      const selectedId =
+        activeCarouselItemIdRef.current || carouselItemIdList[currentIndex] || carouselItemIdList[0];
+      if (!selectedId) return 0;
+      const nextIndex = carouselItemIdList.indexOf(selectedId);
+      const resolvedIndex = nextIndex >= 0 ? nextIndex : 0;
+      activeCarouselItemIdRef.current = carouselItemIdList[resolvedIndex] || null;
+      return resolvedIndex;
+    });
+  }, [carouselIdentity, carouselItemIds]);
+
+  const imgError = Boolean(product.mainImageUrl && failedImageUrl === product.mainImageUrl);
+
+  const handleCarouselSlideChange = (nextIndex: number) => {
+    const resolvedIndex = Math.max(0, Math.min(nextIndex, carouselItems.length - 1));
+    activeCarouselItemIdRef.current = carouselItems[resolvedIndex]?.id || null;
+    setSlideIndex(resolvedIndex);
+  };
 
   const handleQueueVerify = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -177,7 +220,7 @@ export const ProductRow = memo(function ProductRow({
                     ? "grayscale contrast-90 group-hover:grayscale-0 group-hover:contrast-100"
                     : ""
                 }`}
-                onError={() => setImgError(true)}
+                onError={() => setFailedImageUrl(product.mainImageUrl)}
               />
             ) : (
               <ShoppingBag className="w-5 h-5 text-slate-400" />
@@ -372,6 +415,34 @@ export const ProductRow = memo(function ProductRow({
                 <Layers className="w-3 h-3 text-indigo-500" />
                 <span>{product.carouselItems?.length || product.carouselBundleCount} in Carousel</span>
               </span>
+            )}
+            {isCarouselBundle && (
+              <div
+                role="group"
+                className="inline-flex items-center gap-0.5 shrink-0"
+                onClick={(e) => e.stopPropagation()}
+                aria-label="Carousel product navigation"
+              >
+                <button
+                  type="button"
+                  className="p-0.5 rounded text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 cursor-pointer"
+                  onClick={() => handleCarouselSlideChange(slideIndex > 0 ? slideIndex - 1 : carouselItems.length - 1)}
+                  aria-label="Previous carousel product"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 tabular-nums">
+                  {slideIndex + 1}/{carouselItems.length}
+                </span>
+                <button
+                  type="button"
+                  className="p-0.5 rounded text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 cursor-pointer"
+                  onClick={() => handleCarouselSlideChange((slideIndex + 1) % carouselItems.length)}
+                  aria-label="Next carousel product"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             )}
             <h4
               className={`text-xs font-bold truncate transition-colors ${

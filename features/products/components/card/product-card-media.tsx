@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import NextImage from "next/image";
-import { ScrapedProduct } from "@/types";
+import type { CarouselItemSummary, ScrapedProduct } from "@/types";
 import {
   ShoppingBag,
   Sparkles,
@@ -24,7 +24,7 @@ export interface ProductCardMediaProps {
   activeImageUrl: string | null;
   activeTitle: string;
   isCarouselBundle: boolean;
-  carouselItems: any[];
+  carouselItems: CarouselItemSummary[];
   slideIndex: number;
   onSlideChange: (index: number) => void;
   isRefreshing?: boolean;
@@ -40,7 +40,8 @@ export function ProductCardMedia({
   onSlideChange,
   isRefreshing = false,
 }: ProductCardMediaProps) {
-  const [imgError, setImgError] = useState(false);
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
+  const imgError = Boolean(activeImageUrl && failedImageUrl === activeImageUrl);
 
   const isPageOnHold = product.brandHoldStatus === "on_hold";
   const isPageInactive = product.brandHoldStatus === "inactive";
@@ -84,12 +85,35 @@ export function ProductCardMedia({
 
   return (
     <div
+      role={isCarouselBundle ? "region" : undefined}
+      aria-roledescription={isCarouselBundle ? "carousel" : undefined}
+      aria-label={isCarouselBundle ? `${carouselItems.length} product carousel` : undefined}
+      tabIndex={isCarouselBundle ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (!isCarouselBundle || carouselItems.length < 2) return;
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+        e.preventDefault();
+        e.stopPropagation();
+        onSlideChange(
+          e.key === "ArrowLeft"
+            ? slideIndex > 0
+              ? slideIndex - 1
+              : carouselItems.length - 1
+            : (slideIndex + 1) % carouselItems.length
+        );
+      }}
       className={`relative w-full aspect-square overflow-hidden rounded-xl border mb-2.5 flex items-center justify-center transition-all ${
         isInactive
           ? "border-slate-200/70 dark:border-slate-800/50 bg-slate-100/70 dark:bg-slate-950/60"
           : "border-slate-200 dark:border-slate-800/80 bg-slate-900/95 dark:bg-slate-950"
       }`}
     >
+      {isCarouselBundle && (
+        <span className="sr-only" aria-live="polite">
+          Product {slideIndex + 1} of {carouselItems.length}: {activeTitle || "Untitled product"}
+        </span>
+      )}
+
       {/* Ambient Re-scraping Loading Overlay */}
       {isRefreshing && (
         <div className="absolute inset-0 z-30 bg-slate-950/80 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2.5 text-center p-3 animate-in fade-in duration-200">
@@ -136,7 +160,7 @@ export function ProductCardMedia({
                   ? "grayscale contrast-90 opacity-70 group-hover:grayscale-0 group-hover:opacity-100"
                   : ""
               }`}
-              onError={() => setImgError(true)}
+              onError={() => setFailedImageUrl(activeImageUrl)}
             />
           </div>
         </>
@@ -157,11 +181,11 @@ export function ProductCardMedia({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              setImgError(false);
               onSlideChange(slideIndex > 0 ? slideIndex - 1 : carouselItems.length - 1);
             }}
             className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/80 hover:bg-black text-white flex items-center justify-center transition-all cursor-pointer z-25 shadow-md border border-white/20 opacity-0 group-hover:opacity-100 active:scale-95"
             title="Previous Carousel Product"
+            aria-label="Previous carousel product"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -171,24 +195,23 @@ export function ProductCardMedia({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              setImgError(false);
               onSlideChange((slideIndex + 1) % carouselItems.length);
             }}
             className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/80 hover:bg-black text-white flex items-center justify-center transition-all cursor-pointer z-25 shadow-md border border-white/20 opacity-0 group-hover:opacity-100 active:scale-95"
             title="Next Carousel Product"
+            aria-label="Next carousel product"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
 
           {/* Dot Pagination Rail */}
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-25 flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/75 backdrop-blur-md border border-white/15 shadow-md pointer-events-auto">
-            {carouselItems.slice(0, 8).map((_, idx) => (
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-25 max-w-[80%] overflow-x-auto flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/75 backdrop-blur-md border border-white/15 shadow-md pointer-events-auto">
+            {carouselItems.map((_, idx) => (
               <button
                 key={idx}
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setImgError(false);
                   onSlideChange(idx);
                 }}
                 className={`transition-all rounded-full cursor-pointer ${
@@ -196,14 +219,11 @@ export function ProductCardMedia({
                     ? "w-2.5 h-1.5 bg-indigo-400"
                     : "w-1.5 h-1.5 bg-white/40 hover:bg-white/70"
                 }`}
+                aria-label={`Show product ${idx + 1} of ${carouselItems.length}`}
+                aria-current={idx === slideIndex ? "true" : undefined}
                 title={`Product ${idx + 1}`}
               />
             ))}
-            {carouselItems.length > 8 && (
-              <span className="text-[9px] font-bold text-white/70 pl-0.5">
-                +{carouselItems.length - 8}
-              </span>
-            )}
           </div>
         </>
       )}

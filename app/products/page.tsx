@@ -188,7 +188,7 @@ function ProductsPageContent() {
 
         <ProductsResultsBar
           loading={data.loading}
-          productsCount={data.products.length}
+          productsCount={data.totalItemsRepresented}
           totalCount={data.pagination.total}
           isFetchingMore={data.isFetchingMore}
           sortBy={filters.sortBy}
@@ -274,7 +274,7 @@ function ProductsPageContent() {
             )}
 
             <ProductsLoadMore
-              productsCount={data.products.length}
+              productsCount={data.totalItemsRepresented}
               totalCount={data.pagination.total}
               hasMore={data.page < data.pagination.totalPages}
               isFetchingMore={data.isFetchingMore}

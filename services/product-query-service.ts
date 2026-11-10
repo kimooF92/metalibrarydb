@@ -28,6 +28,7 @@ import {
   resolveNicheDbCategories,
 } from "@/lib/niches-taxonomy";
 import { CarouselItemSummary } from "@/types";
+import { toCarouselItemSummary } from "@/lib/carousel-grouping";
 import {
   resolveTimezone,
   getStartOfTodaySql,
@@ -112,11 +113,33 @@ export interface ProductsQueryResult {
   fromCache?: boolean;
 }
 
+function normalizeCarouselIdentity(value: unknown): string | null {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized || normalized === "0" || normalized === "null" || normalized === "undefined") {
+    return null;
+  }
+  return normalized;
+}
+
+export function getCarouselGroupKey(product: any): string | null {
+  if (!product?.hasCarouselAd) return null;
+  const pageIdentity =
+    normalizeCarouselIdentity(product.brandPageId) || normalizeCarouselIdentity(product.pageId);
+  return pageIdentity ? `page:${pageIdentity}` : null;
+}
+
+export function shouldGroupCarousels(
+  groupCarousels: boolean,
+  isLean: boolean,
+  includeDetails: boolean
+): boolean {
+  return groupCarousels && !isLean && !includeDetails;
+}
+
 /**
- * Groups sibling products belonging to the same brand / carousel campaign into master bundles.
- * Preserves BUG-02 and BUG-22 invariants:
- * - If skipGrouping is true (e.g. single product / includeDetails), skip immediately.
- * - Caps consolidated list to limit.
+ * Groups carousel-marked products from the same page into a bounded bundle.
+ * Campaign identity is not represented in the current schema, so products without
+ * a reliable page identity remain flat rather than being merged by domain.
  */
 export function groupProductsIntoCarousels(
   products: any[],
@@ -130,20 +153,11 @@ export function groupProductsIntoCarousels(
   const carouselGroups = new Map<string, any[]>();
 
   for (const p of products) {
-    if (p.hasCarouselAd) {
-      const groupKey = p.brandPageId
-        ? `brand:${p.brandPageId}`
-        : p.pageId
-        ? `page:${p.pageId}`
-        : p.domain
-        ? `domain:${p.domain.toLowerCase()}`
-        : null;
-
-      if (groupKey) {
-        const existing = carouselGroups.get(groupKey) || [];
-        existing.push(p);
-        carouselGroups.set(groupKey, existing);
-      }
+    const groupKey = getCarouselGroupKey(p);
+    if (groupKey) {
+      const existing = carouselGroups.get(groupKey) || [];
+      existing.push(p);
+      carouselGroups.set(groupKey, existing);
     }
   }
 
@@ -151,53 +165,30 @@ export function groupProductsIntoCarousels(
   const processedGroupKeys = new Set<string>();
 
   for (const p of products) {
-    if (p.hasCarouselAd) {
-      const groupKey = p.brandPageId
-        ? `brand:${p.brandPageId}`
-        : p.pageId
-        ? `page:${p.pageId}`
-        : p.domain
-        ? `domain:${p.domain.toLowerCase()}`
-        : null;
+    const groupKey = getCarouselGroupKey(p);
+    if (groupKey) {
+      if (processedGroupKeys.has(groupKey)) continue;
+      processedGroupKeys.add(groupKey);
 
-      if (groupKey) {
-        if (processedGroupKeys.has(groupKey)) continue;
-        processedGroupKeys.add(groupKey);
+      const group = carouselGroups.get(groupKey) || [p];
+      if (group.length > 1) {
+        group.sort(
+          (a, b) =>
+            (b.activeAdsCount || 0) - (a.activeAdsCount || 0) ||
+            (b.linkedAdsCount || 0) - (a.linkedAdsCount || 0) ||
+            (b.maxDuplications || 1) - (a.maxDuplications || 1)
+        );
 
-        const group = carouselGroups.get(groupKey) || [p];
-        if (group.length > 1) {
-          // Rank within cluster so the highest active ads / strongest product serves as Hero (index 0)
-          group.sort(
-            (a, b) =>
-              (b.activeAdsCount || 0) - (a.activeAdsCount || 0) ||
-              (b.linkedAdsCount || 0) - (a.linkedAdsCount || 0) ||
-              (b.maxDuplications || 1) - (a.maxDuplications || 1)
-          );
-
-          const hero = { ...group[0] };
-          hero.isCarouselBundle = true;
-          hero.carouselBundleCount = group.length;
-          hero.carouselItems = group.map((item) => ({
-            id: item.id,
-            url: item.url,
-            title: item.title,
-            currentPrice: item.currentPrice,
-            originalPrice: item.originalPrice,
-            currency: item.currency,
-            discountOrOffer: item.discountOrOffer,
-            mainImageUrl: item.mainImageUrl,
-            activeAdsCount: item.activeAdsCount,
-            linkedAdsCount: item.linkedAdsCount,
-            isFavorite: item.isFavorite,
-            createdAt: item.createdAt,
-          }));
-          consolidated.push(hero);
-          continue;
-        } else {
-          consolidated.push(p);
-          continue;
-        }
+        const hero = { ...group[0] };
+        hero.isCarouselBundle = true;
+        hero.carouselBundleCount = group.length;
+        hero.carouselGroupKey = groupKey;
+        hero.carouselItems = group.map(toCarouselItemSummary);
+        consolidated.push(hero);
+      } else {
+        consolidated.push({ ...p, carouselGroupKey: groupKey });
       }
+      continue;
     }
     consolidated.push(p);
   }
@@ -294,9 +285,8 @@ export async function fetchProducts(
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "24", 10)));
   const offset = (page - 1) * limit;
   const isLean = searchParams.get("lean") === "true" || limit > 50;
-  // BUG-22: Guard rawLimit when includeDetails is true
-  const rawLimit =
-    groupCarousels && !includeDetails ? Math.min(100, Math.max(limit, limit * 2)) : limit;
+  const canGroupCarousels = shouldGroupCarousels(groupCarousels, isLean, includeDetails);
+  const rawLimit = limit;
 
   const userTz = resolveTimezone({
     clientTz,
@@ -957,8 +947,7 @@ export async function fetchProducts(
     products.sort((a, b) => (b.daysRunning || 1) - (a.daysRunning || 1));
   }
 
-  // BUG-02 & BUG-22: Group carousels with strict skip guard
-  const finalProducts = groupCarousels
+  const finalProducts = canGroupCarousels
     ? groupProductsIntoCarousels(products, limit, includeDetails)
     : products.slice(0, limit);
 
