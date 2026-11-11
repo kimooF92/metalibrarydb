@@ -28,6 +28,8 @@ import { useWorkspace } from "@/components/workspace-context";
 import { useAuth } from "@/components/auth-context";
 import { formatPrice } from "@/lib/format-price";
 import { materializeCarouselItem } from "@/lib/carousel-grouping";
+import { useToast } from "@/components/toast-context";
+import { requestProductAdVerification, applyVerifiedCountsToProduct } from "@/lib/product-verify-client";
 
 interface ProductRowProps {
   product: ScrapedProduct;
@@ -38,6 +40,7 @@ interface ProductRowProps {
   onViewCreatives?: (product: ScrapedProduct) => void;
   onFilterBrand?: (brandName: string) => void;
   isRecentlyViewed?: boolean;
+  onProductUpdate?: (updated: ScrapedProduct) => void;
 }
 
 export const ProductRow = memo(function ProductRow({
@@ -49,9 +52,11 @@ export const ProductRow = memo(function ProductRow({
   onViewCreatives,
   onFilterBrand,
   isRecentlyViewed = false,
+  onProductUpdate,
 }: ProductRowProps) {
   const { activeWorkspace } = useWorkspace();
   const { isStaff } = useAuth();
+  const { showToast } = useToast();
   const sym = activeWorkspace?.currencySymbol || "DT";
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -105,12 +110,43 @@ export const ProductRow = memo(function ProductRow({
     if (isQueueingVerify) return;
     setIsQueueingVerify(true);
     try {
-      const res = await fetch(`/api/products/${product.id}/queue-verify`, {
-        method: "POST",
+      const result = await requestProductAdVerification(product.id, (msg) => {
+        showToast({
+          type: "info",
+          title: "Ad Verification",
+          message: msg,
+        });
       });
-      if (res.ok && onRefresh) {
-        await onRefresh(product.id, product);
+
+      if (result.isCompleted) {
+        const activeText = `${result.activeCount ?? 0} active`;
+        const inactiveText = `${result.inactiveCount ?? 0} inactive`;
+        showToast({
+          type: "success",
+          title: "Linked Ads Verified",
+          message: `Verified ${result.checkedCount ?? 0} ads (${activeText}, ${inactiveText}).`,
+        });
+
+        if (onProductUpdate) {
+          const updated = applyVerifiedCountsToProduct(product, {
+            activeCount: result.activeCount,
+            inactiveCount: result.inactiveCount,
+          });
+          onProductUpdate(updated);
+        }
+      } else {
+        showToast({
+          type: "info",
+          title: "Verification Dispatched",
+          message: result.message || "Checking linked ads via Trigger.dev in background...",
+        });
       }
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Verification Error",
+        message: err?.message || "Failed to recheck linked ads",
+      });
     } finally {
       setIsQueueingVerify(false);
     }

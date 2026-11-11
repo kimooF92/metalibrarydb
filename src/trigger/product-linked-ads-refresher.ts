@@ -437,9 +437,14 @@ export async function recheckProductLinkedAds(
       .where(eq(scrapedProducts.id, productId))
       .catch(() => {});
 
-    // Invalidate product & ad caches
-    deleteByPrefix("cache:spy_ads:").catch(() => {});
-    deleteByPrefix(`cache:product:${productId}`).catch(() => {});
+    // Invalidate product & ad caches (Upstash Redis)
+    await Promise.allSettled([
+      deleteByPrefix("cache:spy_ads:"),
+      deleteByPrefix(`cache:product:${productId}`),
+      deleteByPrefix("cache:products:"),
+      deleteByPrefix("cache:fresh_winners:"),
+      deleteByPrefix("cache:stats:"),
+    ]);
 
     return {
       success: true,

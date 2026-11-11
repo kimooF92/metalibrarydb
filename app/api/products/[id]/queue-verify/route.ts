@@ -117,3 +117,70 @@ export async function POST(
     );
   }
 }
+
+/**
+ * GET /api/products/[id]/queue-verify?runId=<id>
+ * Lightweight status check for background Trigger.dev runs.
+ * Queries Trigger.dev Cloud API directly (0 Supabase DB queries, 0 DB egress).
+ */
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const authError = await validateApiSecret(request);
+  if (authError) return authError;
+
+  try {
+    const { id } = await context.params;
+    const { searchParams } = new URL(request.url);
+    const runId = searchParams.get("runId");
+
+    if (!runId) {
+      return NextResponse.json({ error: "runId parameter is required" }, { status: 400 });
+    }
+
+    if (!process.env.TRIGGER_SECRET_KEY) {
+      return NextResponse.json({
+        success: true,
+        isCompleted: true,
+        productId: id,
+        message: "Trigger.dev not configured",
+      });
+    }
+
+    const run = await runs.retrieve(runId);
+    if (!run) {
+      return NextResponse.json({ error: "Run not found" }, { status: 404 });
+    }
+
+    if (run.isCompleted) {
+      const output = run.output as RecheckProductLinkedAdsResult | undefined;
+      return NextResponse.json({
+        success: run.status === "COMPLETED",
+        isCompleted: true,
+        status: run.status,
+        runId,
+        productId: id,
+        activeCount: output?.activeCount ?? 0,
+        inactiveCount: output?.inactiveCount ?? 0,
+        checkedCount: output?.checkedCount ?? 0,
+        totalLinkedAds: output?.totalLinkedAds ?? 0,
+        message: output?.message || `Run finished with status: ${run.status}`,
+      });
+    }
+
+    return NextResponse.json({
+      success: true,
+      isCompleted: false,
+      status: run.status,
+      runId,
+      productId: id,
+    });
+  } catch (error: any) {
+    console.error("[Queue Verify GET API] Error:", error);
+    return NextResponse.json(
+      { error: error?.message || "Failed to check run status" },
+      { status: 500 }
+    );
+  }
+}

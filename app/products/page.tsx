@@ -258,6 +258,7 @@ function ProductsPageContent() {
                     onViewCreatives={handleViewCreatives}
                     onFilterBrand={(brand) => { filters.handleFilterBrand(brand); data.setPage(1); }}
                     isRecentlyViewed={modal.recentlyViewedIds.includes(product.id)}
+                    onProductUpdate={data.handleProductUpdate}
                   />
                 ))}
               </div>

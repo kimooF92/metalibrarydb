@@ -27,6 +27,7 @@ import { ModalAdGallery } from "./modal/modal-ad-gallery";
 import { ModalEditForm, ModalEditFormHandle } from "./modal/modal-edit-form";
 import { ImagePreviewModal } from "@/components/spy/image-preview-modal";
 import { isGenuineVideoUrl, isFbCdnUrlExpired } from "@/lib/fb-cdn";
+import { requestProductAdVerification, applyVerifiedCountsToProduct } from "@/lib/product-verify-client";
 
 // Re-export getSupplierPlatformInfo for backward compatibility
 export { getSupplierPlatformInfo };
@@ -265,41 +266,44 @@ export function ProductDetailsModal({
     if (!currentProduct?.id || isQueueingVerify) return;
     setIsQueueingVerify(true);
     try {
-      const res = await fetch(`/api/products/${currentProduct.id}/queue-verify`, {
-        method: "POST",
+      const data = await requestProductAdVerification(currentProduct.id, (msg) => {
+        showToast({
+          type: "info",
+          title: "Verification Dispatched",
+          message: msg,
+        });
       });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        if (data.isCompleted) {
-          const activeText = `${data.activeCount ?? 0} active`;
-          const inactiveText = `${data.inactiveCount ?? 0} inactive`;
-          showToast({
-            type: "success",
-            title: "Linked Ads Verified",
-            message: `Verified ${data.checkedCount ?? 0} ads (${activeText}, ${inactiveText}). Media refreshed.`,
-          });
-        } else {
-          showToast({
-            type: "info",
-            title: "Verification Dispatched",
-            message: data.message || "Checking linked ads via Trigger.dev in the background...",
-          });
-        }
+
+      if (data.isCompleted) {
+        const activeText = `${data.activeCount ?? 0} active`;
+        const inactiveText = `${data.inactiveCount ?? 0} inactive`;
+        showToast({
+          type: "success",
+          title: "Linked Ads Verified",
+          message: `Verified ${data.checkedCount ?? 0} ads (${activeText}, ${inactiveText}). Media refreshed.`,
+        });
+
+        const updated = applyVerifiedCountsToProduct(currentProduct, {
+          activeCount: data.activeCount,
+          inactiveCount: data.inactiveCount,
+        });
+        setCurrentProduct(updated);
+        onProductUpdate?.(updated);
         await fetchLinkedAds(currentProduct.id);
-        onRefresh?.(currentProduct.id);
       } else {
         showToast({
-          type: "error",
-          title: "Verification Error",
-          message: data.error || "Failed to recheck linked ads",
+          type: "info",
+          title: "Verification Dispatched",
+          message: data.message || "Checking linked ads via Trigger.dev in background...",
         });
+        await fetchLinkedAds(currentProduct.id);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to recheck linked ads:", err);
       showToast({
         type: "error",
-        title: "Network Error",
-        message: "Network error rechecking linked ads",
+        title: "Verification Error",
+        message: err?.message || "Failed to recheck linked ads",
       });
     } finally {
       setIsQueueingVerify(false);
