@@ -113,8 +113,28 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
+      - name: Configure APT Mirror & Network Timeouts
+        run: |
+          FILES=$(sudo grep -Irl "azure\.archive\.ubuntu\.com" /etc/apt || true)
+          if [ -n "$FILES" ]; then
+            echo "$FILES" | xargs -r sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g'
+          fi
+          printf 'Acquire::ForceIPv4 "true";\nAcquire::Retries "3";\nAcquire::http::Timeout "15";\nAcquire::https::Timeout "15";\n' | sudo tee /etc/apt/apt.conf.d/99ci-network > /dev/null
+
       - name: Install Playwright OS Dependencies
-        run: npx playwright install-deps chromium
+        timeout-minutes: 5
+        run: |
+          for attempt in 1 2 3; do
+            if npx playwright install-deps chromium; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Retrying Playwright OS dependency installation (attempt $((attempt + 1))/3)..."
+              sudo dpkg --configure -a || true
+              sleep 5
+            fi
+          done
+          exit 1
 
       - name: Install Playwright Chromium Browser
         if: steps.playwright-cache.outputs.cache-hit != 'true'
