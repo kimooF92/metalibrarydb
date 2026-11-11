@@ -25,6 +25,11 @@ jobs:
   verify-favorites-matrix:
     name: Shard ${{ matrix.shard_num }}/4
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --user 1001 --ipc=host
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     timeout-minutes: 60
 
     strategy:
@@ -61,39 +66,12 @@ jobs:
         if: steps.node-modules-cache.outputs.cache-hit != 'true'
         run: npm ci --prefer-offline --no-audit
 
-      - name: Cache Playwright Browsers
-        uses: actions/cache@v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-
-      - name: Configure APT Mirror & Network Timeouts
+      - name: Ensure Playwright Chromium Binary Matches Lockfile
         run: |
-          FILES=$(sudo grep -Irl "azure\.archive\.ubuntu\.com" /etc/apt || true)
-          if [ -n "$FILES" ]; then
-            echo "$FILES" | xargs -r sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g'
+          if ! node -e "const fs=require('fs'), {chromium}=require('playwright'); process.exit(fs.existsSync(chromium.executablePath()) ? 0 : 1)"; then
+            echo "Container Chromium mismatch; downloading matching browser binary..."
+            npx playwright install chromium
           fi
-          printf 'Acquire::ForceIPv4 "true";\nAcquire::Retries "3";\nAcquire::http::Timeout "15";\nAcquire::https::Timeout "15";\n' | sudo tee /etc/apt/apt.conf.d/99ci-network > /dev/null
-
-      - name: Install Playwright OS Dependencies
-        timeout-minutes: 5
-        run: |
-          for attempt in 1 2 3; do
-            if npx playwright install-deps chromium; then
-              exit 0
-            fi
-            if [ "$attempt" -lt 3 ]; then
-              echo "Retrying Playwright OS dependency installation (attempt $((attempt + 1))/3)..."
-              sudo dpkg --configure -a || true
-              sleep 5
-            fi
-          done
-          exit 1
-
-      - name: Install Playwright Chromium Browser
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install chromium
 
       - name: Run Shard ${{ matrix.shard_num }}/4
         env:
