@@ -427,23 +427,23 @@ function DashboardOverviewContent() {
           />
         </div>
 
-        {/* RIGHT COLUMN: Brand Ad Velocity & Scan Operations (5 cols on lg, 4 cols on xl) */}
+        {/* RIGHT COLUMN: Scan Operations & Brand Ad Velocity (5 cols on lg, 4 cols on xl) */}
         <div className="lg:col-span-5 xl:col-span-4 space-y-4">
-          {/* Section 3: Brand Ad Velocity (Scaling vs Descaling) */}
+          {/* Section 3: Scan Operations & Coverage Hub */}
+          <ScanOperationsCard
+            data={data?.scanOperations}
+            loading={loading}
+            onRefresh={() => loadOverview(true)}
+            refreshing={refreshing}
+          />
+
+          {/* Section 4: Brand Ad Velocity (Scaling vs Descaling) */}
           <BrandVelocityBoard
             scalingBrands={data?.scalingBrands || []}
             descalingBrands={data?.descalingBrands || []}
             darkCount={data?.scanOperations?.darkCount ?? 0}
             revivedCount={data?.scanOperations?.revivedCount ?? 0}
             loading={loading}
-          />
-
-          {/* Section 4: Scan Operations & Coverage Hub */}
-          <ScanOperationsCard
-            data={data?.scanOperations}
-            loading={loading}
-            onRefresh={() => loadOverview(true)}
-            refreshing={refreshing}
           />
         </div>
       </div>
