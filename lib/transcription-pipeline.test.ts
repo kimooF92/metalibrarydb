@@ -133,4 +133,56 @@ test("isRtlText detects Arabic, Hebrew, and Persian characters reliably", async 
   assert.equal(isRtlText(null), false);
 });
 
+test("executeTranscriptionOnInstaBox retries on 502 cold-start response and recovers", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+
+  process.env.INSTABOX_TRANSCRIPTION_URL = "https://mock-instabox.local";
+  process.env.INSTABOX_TRANSCRIPTION_KEY = "mock_key";
+
+  globalThis.fetch = (async (url: any, init?: any) => {
+    // If it's the health probe, ignore
+    if (String(url).includes("/health")) {
+      return new Response("OK", { status: 200 });
+    }
+    calls++;
+    if (calls === 1) {
+      // First attempt: cold start 502 Bad Gateway
+      return new Response("Bad Gateway", { status: 502 });
+    }
+    // Second attempt: warm start 200 OK
+    return new Response(
+      JSON.stringify({
+        status: "completed",
+        media_hash: "hash123",
+        duration_seconds: 15,
+        is_truncated: false,
+        full_text: "Test transcription successful",
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  }) as any;
+
+  try {
+    const { executeTranscriptionOnInstaBox } = await import("./transcription-pipeline");
+    const result = await executeTranscriptionOnInstaBox(
+      {
+        adId: "ad-123",
+        mediaUrl: "https://video.faep7-1.fna.fbcdn.net/test.mp4",
+        mediaHash: "hash123",
+      },
+      { maxRetries: 2, initialBackoffMs: 10 }
+    );
+
+    assert.equal(result.success, true);
+    if (result.success) {
+      assert.equal(result.data.full_text, "Test transcription successful");
+    }
+    assert.equal(calls, 2, "Expected exactly 2 transcribe fetch attempts (1 cold-start failure + 1 recovery)");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
 

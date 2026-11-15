@@ -92,7 +92,18 @@ export async function handleTranscribeTask(req: Request | NextRequest) {
 
       return NextResponse.json({ success: true, status: data.status });
     } else {
-      // 5. Record failure in DB
+      // 5. Check if transient error and QStash has remaining retries
+      const retryHeader = req.headers.get("upstash-retried") || req.headers.get("x-upstash-retried");
+      const retryCount = retryHeader ? parseInt(retryHeader, 10) : 0;
+      const isTransient = [502, 503, 504].includes(result.statusCode || 500);
+
+      if (isTransient && retryCount < 2) {
+        console.warn(`[QStash Transcribe Task] Transient InstaBox error (${result.error}), attempt ${retryCount + 1}. Keeping processing state for QStash retry.`);
+        await forceReleaseLock(lockKey).catch(() => {});
+        return NextResponse.json({ error: result.error, willRetry: true }, { status: result.statusCode || 502 });
+      }
+
+      // Record terminal failure in DB
       await db
         .update(adTranscripts)
         .set({

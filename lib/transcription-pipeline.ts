@@ -137,11 +137,20 @@ export interface InstaBoxTranscriptionResult {
   segments?: Array<{ id: number; start: number; end: number; text: string }>;
 }
 
+export interface ExecuteTranscriptionOptions {
+  maxRetries?: number;
+  initialBackoffMs?: number;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
  * Directly dispatches an audio extraction and Whisper inference job to the live InstaBox MicroVM.
+ * Automatically retries with exponential backoff on transient cold-start gateway errors (502, 503, 504).
  */
 export async function executeTranscriptionOnInstaBox(
-  payload: EnqueueTranscriptionPayload
+  payload: EnqueueTranscriptionPayload,
+  options?: ExecuteTranscriptionOptions
 ): Promise<{ success: true; data: InstaBoxTranscriptionResult } | { success: false; error: string; statusCode?: number }> {
   const instaboxUrl = process.env.INSTABOX_TRANSCRIPTION_URL?.replace(/\/$/, "");
   const apiKey = process.env.INSTABOX_TRANSCRIPTION_KEY;
@@ -154,33 +163,78 @@ export async function executeTranscriptionOnInstaBox(
     return { success: false, error: `Media host not allowed: ${payload.mediaUrl}`, statusCode: 400 };
   }
 
-  try {
-    const res = await fetch(`${instaboxUrl}/v1/transcribe`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Auth-Token": apiKey,
-      },
-      body: JSON.stringify({
-        signed_media_url: payload.mediaUrl,
-        media_hash: payload.mediaHash,
-        language: payload.language || null,
-        model: payload.model || "turbo",
-      }),
-      signal: AbortSignal.timeout(60000), // 60s timeout for cold starts and inference
-    });
+  const maxRetries = options?.maxRetries ?? 3;
+  const initialBackoffMs = options?.initialBackoffMs ?? 2500;
+  const retryableStatuses = new Set([502, 503, 504]);
 
-    if (!res.ok) {
-      const errText = await res.text();
-      return { success: false, error: `InstaBox responded with HTTP ${res.status}: ${errText.slice(0, 300)}`, statusCode: res.status };
+  let lastError = "";
+  let lastStatusCode = 500;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(`${instaboxUrl}/v1/transcribe`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Auth-Token": apiKey,
+        },
+        body: JSON.stringify({
+          signed_media_url: payload.mediaUrl,
+          media_hash: payload.mediaHash,
+          language: payload.language || null,
+          model: payload.model || "turbo",
+        }),
+        signal: AbortSignal.timeout(65000), // 65s timeout for inference and download
+      });
+
+      if (res.ok) {
+        const data = (await res.json()) as InstaBoxTranscriptionResult;
+        return { success: true, data };
+      }
+
+      const errText = await res.text().catch(() => "");
+      lastStatusCode = res.status;
+      lastError = `InstaBox responded with HTTP ${res.status}: ${errText.slice(0, 300)}`;
+
+      if (retryableStatuses.has(res.status) && attempt < maxRetries) {
+        const backoff = initialBackoffMs * attempt;
+        console.warn(`[InstaBox Client] Cold-start HTTP ${res.status} on attempt ${attempt}/${maxRetries}. MicroVM waking up. Retrying in ${backoff}ms...`);
+        // Lightweight probe to help wake the microVM in background
+        fetch(`${instaboxUrl}/health`, { signal: AbortSignal.timeout(3000) }).catch(() => {});
+        await sleep(backoff);
+        continue;
+      }
+
+      return { success: false, error: lastError, statusCode: lastStatusCode };
+    } catch (error: any) {
+      const errMsg = error?.message || String(error);
+      const isAbortOrTimeout = error?.name === "AbortError" || error?.name === "TimeoutError";
+      const isNetworkError =
+        isAbortOrTimeout ||
+        error?.code === "ECONNRESET" ||
+        error?.code === "ECONNREFUSED" ||
+        error?.code === "ETIMEDOUT" ||
+        errMsg.toLowerCase().includes("fetch failed") ||
+        errMsg.toLowerCase().includes("network");
+
+      lastStatusCode = 502;
+      lastError = `InstaBox network error: ${errMsg}${error?.cause ? ` [cause: ${error.cause.message || error.cause}]` : ""}`;
+
+      if (isNetworkError && attempt < maxRetries) {
+        const backoff = initialBackoffMs * attempt;
+        console.warn(`[InstaBox Client] Network error on attempt ${attempt}/${maxRetries} (${errMsg}). Retrying in ${backoff}ms...`);
+        fetch(`${instaboxUrl}/health`, { signal: AbortSignal.timeout(3000) }).catch(() => {});
+        await sleep(backoff);
+        continue;
+      }
+
+      return {
+        success: false,
+        error: lastError,
+        statusCode: lastStatusCode,
+      };
     }
-
-    const data = (await res.json()) as InstaBoxTranscriptionResult;
-    return { success: true, data };
-  } catch (error: any) {
-    return {
-      success: false,
-      error: `InstaBox network error: ${error.message || String(error)}${error?.cause ? ` [cause: ${error.cause.message || error.cause}]` : ""}`,
-    };
   }
+
+  return { success: false, error: lastError || "InstaBox transcription failed after retries", statusCode: lastStatusCode };
 }

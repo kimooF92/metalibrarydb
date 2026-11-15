@@ -174,15 +174,27 @@ export function AdTranscriptViewer({
     setError(null);
 
     try {
-      const res = await fetch(`/api/spy/ads/${adId}/transcription-jobs`, {
-        method: "POST",
-      });
+      const executePost = async (attempt = 1): Promise<any> => {
+        const res = await fetch(`/api/spy/ads/${adId}/transcription-jobs`, {
+          method: "POST",
+        });
 
-      const resData = await res.json().catch(() => ({}));
+        const resData = await res.json().catch(() => ({}));
 
-      if (!res.ok) {
-        throw new Error(resData.error || `HTTP ${res.status}`);
-      }
+        // If cold start returns 502/504 on first attempt, retry once after 3 seconds
+        if ((res.status === 502 || res.status === 504) && attempt < 2) {
+          await new Promise((r) => setTimeout(r, 3000));
+          return executePost(attempt + 1);
+        }
+
+        if (!res.ok) {
+          throw new Error(resData.error || `HTTP ${res.status}`);
+        }
+
+        return resData;
+      };
+
+      const resData = await executePost();
 
       if (resData.status === "completed" && resData.transcript) {
         setData(resData.transcript);
@@ -200,11 +212,11 @@ export function AdTranscriptViewer({
         return;
       }
 
-      // If async processing, poll until finished (max 45 seconds)
+      // If async processing, poll until finished (up to 75 seconds for cold start + inference)
       const startTime = Date.now();
       const pollInterval = setInterval(async () => {
         try {
-          if (Date.now() - startTime > 45000) {
+          if (Date.now() - startTime > 75000) {
             clearInterval(pollInterval);
             setIsLoading(false);
             setError("Transcription timed out. Please try again.");
@@ -226,6 +238,13 @@ export function AdTranscriptViewer({
               setIsLoading(false);
               onTranscribeComplete?.(pollData.transcript);
             } else if (pollData.transcript?.status === "failed") {
+              // If it's a transient 502 cold-start error and within first 30s, give retry time before aborting
+              const isTransient502 =
+                pollData.transcript?.errorCode?.includes("502") ||
+                pollData.transcript?.errorMessage?.includes("502");
+              if (isTransient502 && Date.now() - startTime < 30000) {
+                return;
+              }
               clearInterval(pollInterval);
               setError(pollData.transcript.errorMessage || "Transcription failed");
               setIsLoading(false);
@@ -523,6 +542,12 @@ export function AdTranscriptViewer({
               <Loader2 className="w-3 h-3 animate-spin" />
               <span>Detecting dialect & generating word timestamps</span>
             </div>
+            {elapsedSeconds > 10 && (
+              <div className="flex items-center gap-1.5 text-amber-300 animate-pulse">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span>Waking up MicroVM & loading model weights...</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
