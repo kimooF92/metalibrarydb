@@ -59,6 +59,7 @@ next-env.d.ts
 /.agents/
 _bmad-output/implementation-artifacts/sprint-status.yaml
 .mcp.json
+.gemini/
 debug.log
 skills-lock.json
 
@@ -71,3 +72,4 @@ skills-lock.json
 logs/
 config.bat
 .env.local
+.gemini/settings.json
