@@ -20,6 +20,7 @@
     "spy:apify": "npx tsx scripts/run-apify-spy-cron.ts",
     "apify:check": "npx tsx scripts/check-apify-tokens.ts",
     "scrape:products": "npx tsx scripts/run-product-scraper.ts",
+    "queue:failed-products": "npx tsx scripts/queue-failed-products.ts",
     "scrape:browser": "npx tsx scripts/scrape-with-local-browser.ts",
     "scrape:browser:head": "npx tsx scripts/scrape-with-local-browser.ts --head",
     "scrape:browser:headless": "npx tsx scripts/scrape-with-local-browser.ts --headless",
