@@ -20,7 +20,8 @@ import {
   getSupplierPlatformInfo,
 } from "./modal/modal-types";
 import { ModalHeader } from "./modal/modal-header";
-import { ModalOverviewSection } from "./modal/modal-overview-section";
+import { ModalProductHeroCard } from "./modal/modal-product-hero-card";
+import { ModalProductSpecsSection } from "./modal/modal-product-specs-section";
 import { ModalSourcingSection } from "./modal/modal-sourcing-section";
 import { ModalNetworkIntelligence } from "./modal/modal-network-intelligence";
 import { ModalAdGallery } from "./modal/modal-ad-gallery";
@@ -66,7 +67,7 @@ export function ProductDetailsModal({
 
   // Internal product state synced to prop, allowing modal to update immediately even if caller omits onProductUpdate
   const [currentProduct, setCurrentProduct] = useState<ScrapedProduct | null>(product);
-  const [activeTab, setActiveTab] = useState<ModalTab>("all");
+  const [activeTab, setActiveTab] = useState<ModalTab>("ads");
   const [isEditMode, setIsEditMode] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const editFormRef = useRef<ModalEditFormHandle>(null);
@@ -461,10 +462,7 @@ export function ProductDetailsModal({
       )}
 
       <div
-        className={cn(
-          "relative w-full max-h-[92vh] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col transition-all duration-200",
-          lightboxAd ? "max-w-6xl" : "max-w-4xl"
-        )}
+        className="relative w-full max-w-6xl max-h-[92vh] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col transition-all duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {lightboxAd ? (
@@ -484,244 +482,216 @@ export function ProductDetailsModal({
           <>
             {/* Header Component */}
             <ModalHeader
-          product={currentProduct}
-          linkedAds={linkedAds}
-          supplierUrls={supplierUrls}
-          allImages={allImages}
-          isEditMode={isEditMode}
-          isSavingEdit={isSavingEdit}
-          onSaveEdit={() => editFormRef.current?.save()}
-          onCancelEdit={() => setIsEditMode(false)}
-          onStartEdit={() => setIsEditMode(true)}
-          onSwitchTab={(tab) => setActiveTab(tab)}
-          onFavoriteToggle={handleFavoriteToggle}
-          onQueueVerify={handleQueueVerify}
-          isQueueingVerify={isQueueingVerify}
-          onRefresh={onRefresh ? handleRefresh : undefined}
-          isRefreshing={isRefreshing}
-          onQueueLocalRescan={handleQueueLocalRescan}
-          isQueueingLocalRescan={isQueueingLocalRescan}
-          onDelete={onDelete}
-          onClose={onClose}
-          currentIndex={currentIndex}
-          totalCount={totalCount}
-          hasPrev={hasPrev}
-          hasNext={hasNext}
-          onNavigatePrev={onNavigatePrev}
-          onNavigateNext={onNavigateNext}
-        />
+              product={currentProduct}
+              linkedAds={linkedAds}
+              supplierUrls={supplierUrls}
+              allImages={allImages}
+              isEditMode={isEditMode}
+              isSavingEdit={isSavingEdit}
+              onSaveEdit={() => editFormRef.current?.save()}
+              onCancelEdit={() => setIsEditMode(false)}
+              onStartEdit={() => setIsEditMode(true)}
+              onSwitchTab={(tab) => setActiveTab(tab)}
+              onFavoriteToggle={handleFavoriteToggle}
+              onQueueVerify={handleQueueVerify}
+              isQueueingVerify={isQueueingVerify}
+              onRefresh={onRefresh ? handleRefresh : undefined}
+              isRefreshing={isRefreshing}
+              onQueueLocalRescan={handleQueueLocalRescan}
+              isQueueingLocalRescan={isQueueingLocalRescan}
+              onDelete={onDelete}
+              onClose={onClose}
+              currentIndex={currentIndex}
+              totalCount={totalCount}
+              hasPrev={hasPrev}
+              hasNext={hasNext}
+              onNavigatePrev={onNavigatePrev}
+              onNavigateNext={onNavigateNext}
+            />
 
-        {/* Carousel Siblings Rail */}
-        {currentProduct?.carouselItems && currentProduct.carouselItems.length > 1 && (
-          <div className="mx-6 mt-3 p-2.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/70 dark:border-indigo-800/60 flex items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="p-1 rounded-md bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
-                <Layers className="w-3.5 h-3.5" />
-              </span>
-              <span className="font-bold text-slate-800 dark:text-slate-200">
-                Carousel Collection ({currentProduct.carouselItems.length} products):
-              </span>
-            </div>
+            {/* On Hold Notification Banner */}
+            {currentProduct?.brandHoldStatus === "on_hold" && (
+              <div className="mx-6 mt-3 px-3.5 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 text-xs text-amber-800 dark:text-amber-300">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                  <span>
+                    <strong>Brand on Hold:</strong> {(currentProduct?.activeAdsCount ?? 0) === 0 ? "Meta Ad Library detected 0 active ads during recent scans." : "Meta Ad Library detected an ad volume drop during recent scans."} This product is preserved under the grace period before being marked off-air.
+                  </span>
+                </div>
+                <span className="shrink-0 text-[10px] font-bold uppercase bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30 inline-flex items-center gap-1">
+                  <Pause className="w-2.5 h-2.5" />
+                  <span>Paused</span>
+                </span>
+              </div>
+            )}
 
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-none py-0.5">
-              {currentProduct.carouselItems.map((item, idx) => {
-                const isSelected = item.id === currentProduct.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => handleSwitchCarouselItem(item)}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer text-left shrink-0 ${isSelected
-                        ? "bg-white dark:bg-slate-900 border-indigo-500 text-indigo-600 dark:text-indigo-400 shadow-xs ring-1 ring-indigo-500/30 font-bold"
-                        : "bg-white/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
-                      }`}
-                    title={item.title || `Item ${idx + 1}`}
-                  >
-                    {item.mainImageUrl && (
-                      <div className="relative w-5 h-5 rounded overflow-hidden shrink-0 bg-slate-100 dark:bg-slate-800">
-                        <NextImage
-                          src={item.mainImageUrl}
-                          alt=""
-                          fill
-                          unoptimized
-                          referrerPolicy="no-referrer"
-                          className="object-cover"
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-6">
+              {isEditMode ? (
+                <ModalEditForm
+                  ref={editFormRef}
+                  product={currentProduct}
+                  linkedAds={linkedAds}
+                  isSaving={isSavingEdit}
+                  onSavingChange={setIsSavingEdit}
+                  onCancelEdit={() => setIsEditMode(false)}
+                  onProductUpdate={handleProductUpdateInternal}
+                  onRefreshAds={() => fetchLinkedAds(currentProduct.id)}
+                  onRefreshProduct={onRefresh ? () => onRefresh(currentProduct.id, currentProduct) : undefined}
+                />
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                  {/* Left Column: Product Visual & Commercial Hero Card (5 cols, sticky) */}
+                  <div className="lg:col-span-5 lg:sticky lg:top-0 space-y-4">
+                    <ModalProductHeroCard
+                      product={currentProduct}
+                      allImages={allImages}
+                      isRefreshing={isRefreshing}
+                      onSwitchCarouselItem={handleSwitchCarouselItem}
+                    />
+                  </div>
+
+                  {/* Right Column: Exploration & Intelligence Tabs (7 cols) */}
+                  <div className="lg:col-span-7 space-y-4">
+                    {/* Navigation Tabs Bar */}
+                    <div className="flex items-center gap-1.5 p-1 bg-slate-100/80 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/60 overflow-x-auto shrink-0 scrollbar-none">
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("ads")}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0",
+                          activeTab === "ads"
+                            ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs font-bold"
+                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                        )}
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Ad Creatives</span>
+                        {linkedAds.length > 0 && (
+                          <span className={cn(
+                            "px-1.5 py-0.2 rounded-full text-[10px] font-bold",
+                            activeTab === "ads"
+                              ? "bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300"
+                              : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+                          )}>
+                            {linkedAds.length}
+                          </span>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("overview")}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0",
+                          activeTab === "overview"
+                            ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs font-bold"
+                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                        )}
+                      >
+                        <Package className="w-3.5 h-3.5" />
+                        <span>Offers & Specs</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("suppliers")}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0",
+                          activeTab === "suppliers"
+                            ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs font-bold"
+                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                        )}
+                      >
+                        <Boxes className="w-3.5 h-3.5" />
+                        <span>Sourcing</span>
+                        {supplierUrls.length > 0 && (
+                          <span className={cn(
+                            "px-1.5 py-0.2 rounded-full text-[10px] font-bold",
+                            activeTab === "suppliers"
+                              ? "bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300"
+                              : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+                          )}>
+                            {supplierUrls.length}
+                          </span>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("network")}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0",
+                          activeTab === "network"
+                            ? "bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 shadow-xs font-bold"
+                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                        )}
+                      >
+                        <Building2 className="w-3.5 h-3.5" />
+                        <span>Network Intel</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("all")}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0",
+                          activeTab === "all"
+                            ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-bold"
+                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                        )}
+                      >
+                        <Layers className="w-3.5 h-3.5" />
+                        <span>All</span>
+                      </button>
+                    </div>
+
+                    {/* Tab Content Panes */}
+                    {(activeTab === "all" || activeTab === "ads") && (
+                      <div>
+                        <ModalAdGallery
+                          productId={currentProduct.id}
+                          linkedAds={linkedAds}
+                          loadingAds={loadingAds}
+                          onRefreshAds={() => fetchLinkedAds(currentProduct.id)}
+                          onRefreshProduct={onRefresh ? () => onRefresh(currentProduct.id, currentProduct) : undefined}
+                          onQueueVerify={handleQueueVerify}
+                          isQueueingVerify={isQueueingVerify}
+                          onOpenLightbox={handleOpenAdPreview}
                         />
                       </div>
                     )}
-                    <span className="truncate max-w-[120px] text-[11px]">
-                      {item.title || `Product ${idx + 1}`}
-                    </span>
-                    {item.currentPrice && (
-                      <span className="text-[10px] opacity-75 font-mono">
-                        {item.currentPrice}
-                      </span>
+
+                    {(activeTab === "all" || activeTab === "overview") && (
+                      <div className={activeTab === "all" ? "pt-4 border-t border-slate-200 dark:border-slate-800" : ""}>
+                        <ModalProductSpecsSection product={currentProduct} />
+                      </div>
                     )}
-                  </button>
-                );
-              })}
+
+                    {(activeTab === "all" || activeTab === "suppliers") && (
+                      <div className={activeTab === "all" ? "pt-4 border-t border-slate-200 dark:border-slate-800" : ""}>
+                        <ModalSourcingSection
+                          product={currentProduct}
+                          onProductUpdate={handleProductUpdateInternal}
+                        />
+                      </div>
+                    )}
+
+                    {(activeTab === "all" || activeTab === "network") && (
+                      <div className={activeTab === "all" ? "pt-4 border-t border-slate-200 dark:border-slate-800" : ""}>
+                        <ModalNetworkIntelligence
+                          network={network}
+                          loadingNetwork={loadingNetwork}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+          </>
         )}
-
-        {/* On Hold Notification Banner */}
-        {currentProduct?.brandHoldStatus === "on_hold" && (
-          <div className="mx-6 mt-3 px-3.5 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 text-xs text-amber-800 dark:text-amber-300">
-            <div className="flex items-center gap-2">
-              <span className="flex h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
-              <span>
-                <strong>Brand on Hold:</strong> {(currentProduct?.activeAdsCount ?? 0) === 0 ? "Meta Ad Library detected 0 active ads during recent scans." : "Meta Ad Library detected an ad volume drop during recent scans."} This product is preserved under the grace period before being marked off-air.
-              </span>
-            </div>
-            <span className="shrink-0 text-[10px] font-bold uppercase bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30 inline-flex items-center gap-1">
-              <Pause className="w-2.5 h-2.5" />
-              <span>Paused</span>
-            </span>
-          </div>
-        )}
-
-        {/* Segmented Navigation Tab Bar */}
-        {!isEditMode && (
-          <div className="px-6 pt-3 pb-1 border-b border-slate-200 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-950/20 flex items-center gap-1.5 overflow-x-auto shrink-0">
-            <button
-              type="button"
-              onClick={() => setActiveTab("all")}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${activeTab === "all"
-                  ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/60"
-                }`}
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>All</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("overview")}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${activeTab === "overview"
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/60"
-                }`}
-            >
-              <Package className="w-3.5 h-3.5" />
-              <span>Overview & Pricing</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("ads")}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${activeTab === "ads"
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/60"
-                }`}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Ad Creatives</span>
-              {linkedAds.length > 0 && (
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === "ads"
-                    ? "bg-white/20 text-white"
-                    : "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
-                  }`}>
-                  {linkedAds.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("suppliers")}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${activeTab === "suppliers"
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/60"
-                }`}
-            >
-              <Boxes className="w-3.5 h-3.5" />
-              <span>Sourcing</span>
-              {supplierUrls.length > 0 && (
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === "suppliers"
-                    ? "bg-white/20 text-white"
-                    : "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
-                  }`}>
-                  {supplierUrls.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("network")}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ${activeTab === "network"
-                  ? "bg-purple-600 text-white shadow-sm"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/60"
-                }`}
-            >
-              <Building2 className="w-3.5 h-3.5" />
-              <span>Network Intel</span>
-            </button>
-          </div>
-        )}
-
-        {/* Modal Body */}
-        <div className="p-6 overflow-y-auto space-y-6">
-          {isEditMode ? (
-            <ModalEditForm
-              ref={editFormRef}
-              product={currentProduct}
-              linkedAds={linkedAds}
-              isSaving={isSavingEdit}
-              onSavingChange={setIsSavingEdit}
-              onCancelEdit={() => setIsEditMode(false)}
-              onProductUpdate={handleProductUpdateInternal}
-              onRefreshAds={() => fetchLinkedAds(currentProduct.id)}
-              onRefreshProduct={onRefresh ? () => onRefresh(currentProduct.id, currentProduct) : undefined}
-            />
-          ) : (
-            <>
-              {(activeTab === "all" || activeTab === "overview") && (
-                <ModalOverviewSection
-                  product={currentProduct}
-                  allImages={allImages}
-                />
-              )}
-
-              {(activeTab === "all" || activeTab === "suppliers") && (
-                <div className={activeTab === "all" ? "pt-4 border-t border-slate-200 dark:border-slate-800" : ""}>
-                  <ModalSourcingSection
-                    product={currentProduct}
-                    onProductUpdate={handleProductUpdateInternal}
-                  />
-                </div>
-              )}
-
-              {(activeTab === "all" || activeTab === "network") && (
-                <div className={activeTab === "all" ? "pt-4 border-t border-slate-200 dark:border-slate-800" : ""}>
-                  <ModalNetworkIntelligence
-                    network={network}
-                    loadingNetwork={loadingNetwork}
-                  />
-                </div>
-              )}
-
-              {(activeTab === "all" || activeTab === "ads") && (
-                <div className={activeTab === "all" ? "pt-4 border-t border-slate-200 dark:border-slate-800" : ""}>
-                  <ModalAdGallery
-                    productId={currentProduct.id}
-                    linkedAds={linkedAds}
-                    loadingAds={loadingAds}
-                    onRefreshAds={() => fetchLinkedAds(currentProduct.id)}
-                    onRefreshProduct={onRefresh ? () => onRefresh(currentProduct.id, currentProduct) : undefined}
-                    onQueueVerify={handleQueueVerify}
-                    isQueueingVerify={isQueueingVerify}
-                    onOpenLightbox={handleOpenAdPreview}
-                  />
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </>
-    )}
-  </div>
+      </div>
 </div>
 );
 }
