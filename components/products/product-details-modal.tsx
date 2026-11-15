@@ -486,7 +486,10 @@ export function ProductDetailsModal({
       )}
 
       <div
-        className="relative w-full max-w-6xl max-h-[92vh] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col transition-all duration-200"
+        className={cn(
+          "relative w-full max-w-6xl max-h-[92vh] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col transition-all duration-200",
+          lightboxAd && "h-[92vh]"
+        )}
         onClick={(e) => e.stopPropagation()}
       >
         {lightboxAd ? (

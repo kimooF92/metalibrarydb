@@ -77,32 +77,62 @@ export function ModalProductHeroCard({
           ) : null}
         </div>
 
-        {/* Shipping badge */}
-        {(() => {
-          const delivery = product.deliveryCost;
-          const formattedLabel = delivery ? formatDelivery(delivery, sym) : `Livraison: 7 ${sym} (Standard COD)`;
-          const isFree =
-            formattedLabel.toLowerCase().includes("gratuit") ||
-            formattedLabel.toLowerCase().includes("free") ||
-            formattedLabel.toLowerCase().includes("مجاني");
-          const isPaid = formattedLabel && formattedLabel !== "Livraison Non Spécifiée" && !isFree;
+        {/* Shipping badge & Status Tag */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          {(() => {
+            const delivery = product.deliveryCost;
+            const formattedLabel = delivery ? formatDelivery(delivery, sym) : `Livraison: 7 ${sym} (Standard COD)`;
+            const isFree =
+              formattedLabel.toLowerCase().includes("gratuit") ||
+              formattedLabel.toLowerCase().includes("free") ||
+              formattedLabel.toLowerCase().includes("مجاني");
+            const isPaid = formattedLabel && formattedLabel !== "Livraison Non Spécifiée" && !isFree;
 
-          return (
-            <div
-              className={cn(
-                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border",
-                isFree
-                  ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-                  : isPaid
-                  ? "bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border-amber-500/20"
-                  : "bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800"
-              )}
+            return (
+              <div
+                className={cn(
+                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border",
+                  isFree
+                    ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                    : isPaid
+                    ? "bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                    : "bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800"
+                )}
+              >
+                <Truck className="w-3.5 h-3.5 shrink-0" />
+                <span>{formattedLabel}</span>
+              </div>
+            );
+          })()}
+
+          {/* Product Active Status Tag */}
+          {product.brandHoldStatus === "on_hold" ? (
+            <span
+              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200/80 dark:border-amber-800/80 shrink-0"
+              title="Brand account is on pause / hold (under grace period recheck)"
             >
-              <Truck className="w-3.5 h-3.5 shrink-0" />
-              <span>{formattedLabel}</span>
-            </div>
-          );
-        })()}
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+              <span>Paused</span>
+            </span>
+          ) : product.brandHoldStatus === "inactive" ||
+            (typeof product.activeAdsCount === "number" && product.activeAdsCount === 0) ? (
+            <span
+              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 shrink-0"
+              title="No active ads detected"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
+              <span>Off-Air</span>
+            </span>
+          ) : (
+            <span
+              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800/80 shrink-0"
+              title="Active ads running"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+              <span>Active</span>
+            </span>
+          )}
+        </div>
       </div>
 
       {/* 2. PRODUCT IMAGE VIEWPORT (Compact vertical height to prevent content cutoff) */}

@@ -6,7 +6,7 @@ import { useAuth } from "@/components/auth-context";
 import { useToast } from "@/components/toast-context";
 import {
   ExternalLink,
-  Star,
+  Bookmark,
   Edit3,
   Check,
   Copy,
@@ -182,33 +182,18 @@ export function ModalHeaderActions({
 
       {/* Right: Unified Action Toolbar */}
       <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-        {/* Star Favorite Toggle */}
+        {/* Bookmark Favorite Toggle (Unified with Card) */}
         <button
           type="button"
           onClick={handlers.onFavoriteToggle}
-          className={`p-1.5 rounded-lg border transition-all cursor-pointer shadow-xs ${
+          className={`w-8 h-8 flex items-center justify-center rounded-lg border transition-all duration-200 cursor-pointer shadow-xs ${
             product.isFavorite
-              ? "bg-amber-500 text-slate-950 border-amber-400 font-bold"
-              : "bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:text-amber-500 hover:bg-slate-50 dark:hover:bg-slate-700"
+              ? "border-amber-500/50 bg-amber-500/15 text-amber-500 dark:text-amber-400 hover:bg-amber-500/25 shadow-amber-500/10"
+              : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-400 hover:text-amber-500 hover:border-amber-500/35 hover:bg-amber-500/10 dark:hover:bg-amber-500/15"
           }`}
           title={product.isFavorite ? "Remove from Favorites" : "Add to Favorites"}
         >
-          <Star className={`w-3.5 h-3.5 ${product.isFavorite ? "fill-current" : ""}`} />
-        </button>
-
-        {/* Edit Icon Button */}
-        <button
-          key="modal-header-edit-btn"
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            handlers.onStartEdit();
-          }}
-          className="p-1.5 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xs transition-all cursor-pointer"
-          title="Edit Product Details, Prices, Links & Taxonomy"
-        >
-          <Edit3 className="w-3.5 h-3.5" />
+          <Bookmark className={`w-4 h-4 ${product.isFavorite ? "fill-current text-amber-500" : ""}`} />
         </button>
 
         {/* 1-Click Copy Dropdown (shadcn DropdownMenu) */}
@@ -332,6 +317,21 @@ export function ModalHeaderActions({
               <div className="px-3 py-1.5 border-b border-slate-100 dark:border-slate-800 text-[10px] uppercase font-bold text-slate-400">
                 Product Operations
               </div>
+
+              {/* Edit Product Details */}
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.preventDefault();
+                  handlers.onStartEdit();
+                }}
+                className="px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-2 cursor-pointer"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                <div>
+                  <div className="font-semibold text-slate-900 dark:text-slate-100">Edit Product</div>
+                  <div className="text-[10px] text-slate-400">Modify title, prices, links & taxonomy</div>
+                </div>
+              </DropdownMenuItem>
 
               {/* Recheck Ads */}
               <DropdownMenuItem

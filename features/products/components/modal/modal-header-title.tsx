@@ -64,70 +64,13 @@ export function ModalHeaderTitle({
             <span className="text-xs text-slate-500 truncate">{product.title}</span>
           </div>
         ) : (
-          <div className="flex items-center gap-2.5 min-w-0 flex-wrap sm:flex-nowrap">
+          <div className="flex items-center gap-2.5 min-w-0">
             <h2
               className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 truncate"
               title={product.title || "Product Landing Page"}
             >
               {product.title || "Product Landing Page"}
             </h2>
-
-            {/* Status Indicator Dot Tag */}
-            {product.brandHoldStatus === "on_hold" ? (
-              <span
-                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200/80 dark:border-amber-800/80 shrink-0"
-                title="Brand account is on pause / hold (under grace period recheck)"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-                <span>Paused</span>
-              </span>
-            ) : product.brandHoldStatus === "inactive" ||
-              (typeof product.activeAdsCount === "number" && product.activeAdsCount === 0) ? (
-              <span
-                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 shrink-0"
-                title="No active ads detected"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
-                <span>Off-Air</span>
-              </span>
-            ) : (
-              <span
-                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800/80 shrink-0"
-                title="Active ads running"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
-                <span>Active</span>
-              </span>
-            )}
-
-            {/* Carousel Ad Format Badge */}
-            {hasCarouselAd && (
-              <span
-                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-400 border border-indigo-200/80 dark:border-indigo-800/80 shrink-0"
-                title="Promoted in Meta Carousel Ad format"
-              >
-                <Layers className="w-3 h-3 text-indigo-500 shrink-0" />
-                <span>Carousel Ad</span>
-              </span>
-            )}
-
-            {/* Category / Niche Badge */}
-            {product.category && (
-              <span
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/80 truncate shrink-0 max-w-[220px]"
-                title={`Niche: ${getNicheDisplayLabel(product.category)}${
-                  product.subCategory ? ` > ${getSubNicheDisplayLabel(product.subCategory)}` : ""
-                }${product.targetAudience ? ` (${product.targetAudience})` : ""}`}
-              >
-                <Tag className="w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0" />
-                <span className="truncate">{getNicheDisplayLabel(product.category)}</span>
-                {product.subCategory && (
-                  <span className="text-slate-400 dark:text-slate-500 font-normal truncate">
-                    › {getSubNicheDisplayLabel(product.subCategory)}
-                  </span>
-                )}
-              </span>
-            )}
           </div>
         )}
       </div>

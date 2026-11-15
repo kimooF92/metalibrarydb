@@ -22,6 +22,7 @@ import {
   RotateCw,
   Play,
   Layers,
+  FileText,
   Sparkles,
   ShoppingBag,
   Building2,
@@ -235,8 +236,8 @@ export function ProductCreativeView({
   const downloadUrl = activeVideo || smartThumbnail || rawThumbnail;
 
   return (
-    <div className="flex flex-col w-full h-full animate-in fade-in duration-150">
-      {/* TOP BAR: Drill-down Back Breadcrumb, Nav Stepper, View Tabs & Global Actions */}
+    <div className="flex flex-col w-full h-full min-h-0 overflow-hidden animate-in fade-in duration-150">
+      {/* TOP BAR: Drill-down Back Breadcrumb, Nav Stepper, Actions & Close */}
       <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90 shrink-0">
         {/* Left: Drill-down Back Button & Sibling Stepper */}
         <div className="flex items-center gap-2.5">
@@ -258,87 +259,30 @@ export function ProductCreativeView({
 
           {/* Sibling Stepper */}
           {ads.length > 1 && (
-            <div className="flex items-center gap-1.5">
-              <div className="flex items-center bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700/80 p-0.5 shadow-xs">
-                <button
-                  type="button"
-                  onClick={handlePrev}
-                  disabled={!canGoPrev}
-                  className="p-1.5 rounded text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-                  title="Previous Creative (← Left Arrow)"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <span className="px-2.5 text-xs font-bold font-mono text-slate-700 dark:text-slate-200 select-none">
-                  Ad {currentIndex + 1} of {ads.length}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleNext}
-                  disabled={!canGoNext}
-                  className="p-1.5 rounded text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-                  title="Next Creative (→ Right Arrow)"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-              <span className="hidden md:inline-flex text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-slate-800/80 text-slate-500 border border-slate-300/60 dark:border-slate-700/60 select-none" title="Use Left and Right arrow keys">
-                ← / →
+            <div className="flex items-center bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700/80 p-0.5 shadow-xs">
+              <button
+                type="button"
+                onClick={handlePrev}
+                disabled={!canGoPrev}
+                className="p-1.5 rounded text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                title="Previous Creative (← Left Arrow)"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="px-2.5 text-xs font-bold font-mono text-slate-700 dark:text-slate-200 select-none">
+                Ad {currentIndex + 1} of {ads.length}
               </span>
+              <button
+                type="button"
+                onClick={handleNext}
+                disabled={!canGoNext}
+                className="p-1.5 rounded text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                title="Next Creative (→ Right Arrow)"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
           )}
-
-          {/* Status & duration badges */}
-          <div className="hidden sm:flex items-center gap-1.5">
-            {isArchived ? (
-              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
-                Stopped
-              </span>
-            ) : (
-              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Active
-              </span>
-            )}
-
-            {adDuration && (
-              <span className="hidden lg:inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                <Flame className="w-3 h-3 text-amber-500" />
-                {adDuration}d running
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Center Tabs: Overview vs Transcript */}
-        <div className="flex items-center bg-slate-200/70 dark:bg-slate-800/80 p-0.5 rounded-xl border border-slate-300/60 dark:border-slate-700/60 text-xs font-bold">
-          <button
-            type="button"
-            onClick={() => setActiveTab("overview")}
-            className={cn(
-              "px-3 py-1 rounded-lg transition-all cursor-pointer",
-              activeTab === "overview"
-                ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs"
-                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-            )}
-          >
-            Overview
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("transcript")}
-            className={cn(
-              "px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer",
-              activeTab === "transcript"
-                ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs"
-                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-            )}
-          >
-            <span>Transcript & Hooks</span>
-            {ad.id && isVideo && (
-              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-            )}
-          </button>
         </div>
 
         {/* Action Links & Close */}
@@ -348,7 +292,7 @@ export function ProductCreativeView({
               href={cleanDestUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-colors shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-colors shadow-xs"
             >
               <ShoppingBag className="w-3.5 h-3.5 text-indigo-500" />
               <span>Visit Store</span>
@@ -361,7 +305,7 @@ export function ProductCreativeView({
               href={`https://www.facebook.com/ads/library/?id=${ad.adArchiveId}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors shadow-xs"
             >
               <span>Meta Ad Library</span>
               <ExternalLink className="w-3.5 h-3.5" />
@@ -379,8 +323,8 @@ export function ProductCreativeView({
         </div>
       </div>
 
-      {/* MAIN BODY: 2-Column Responsive Layout */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+      {/* MAIN BODY: 2-Column Responsive Layout (Fully scrollable) */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
           {/* LEFT COLUMN: Authentic Meta Feed Simulation Card (5 cols) */}
           <div className="lg:col-span-5 flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-md overflow-hidden lg:sticky lg:top-0">
@@ -551,7 +495,64 @@ export function ProductCreativeView({
           </div>
 
           {/* RIGHT COLUMN: Bento Intelligence Grid OR Transcript Viewer (7 cols) */}
-          <div className="lg:col-span-7">
+          <div className="lg:col-span-7 space-y-4">
+            {/* Right Column Header: Segmented Tabs (Overview vs Transcript) + Status & Duration */}
+            <div className="flex items-center justify-between gap-3 flex-wrap bg-slate-50/80 dark:bg-slate-900/60 p-2 rounded-2xl border border-slate-200 dark:border-slate-800/80">
+              {/* Segmented Tabs */}
+              <div className="flex items-center bg-white dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700/80 text-xs font-bold shadow-xs">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("overview")}
+                  className={cn(
+                    "px-3.5 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
+                    activeTab === "overview"
+                      ? "bg-indigo-600 text-white shadow-xs font-bold"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  )}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>Overview</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("transcript")}
+                  className={cn(
+                    "px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer",
+                    activeTab === "transcript"
+                      ? "bg-indigo-600 text-white shadow-xs font-bold"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  )}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Transcript & Hooks</span>
+                  {ad.id && isVideo && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                  )}
+                </button>
+              </div>
+
+              {/* Status & Running Days Badges */}
+              <div className="flex items-center gap-2">
+                {isArchived ? (
+                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                    Stopped
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    Active
+                  </span>
+                )}
+
+                {adDuration && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                    <Flame className="w-3.5 h-3.5 text-amber-500" />
+                    {adDuration}d running
+                  </span>
+                )}
+              </div>
+            </div>
+
             {activeTab === "transcript" ? (
               <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4 shadow-xs">
                 {ad.id ? (
@@ -788,7 +789,7 @@ export function ProductCreativeModal({
       onClick={onClose}
     >
       <div
-        className="relative flex flex-col w-full max-w-6xl max-h-[94vh] bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150"
+        className="relative flex flex-col w-full max-w-6xl h-[94vh] max-h-[94vh] bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         <ProductCreativeView {...props} ad={ad} onClose={onClose} />
