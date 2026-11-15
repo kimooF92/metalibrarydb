@@ -26,7 +26,7 @@ interface ModalAdGalleryProps {
   onRefreshProduct?: (productId: string) => Promise<void>;
   onQueueVerify: () => void;
   isQueueingVerify: boolean;
-  onOpenLightbox: (ad: Ad) => void;
+  onOpenLightbox: (ad: Ad, filteredAds?: Ad[]) => void;
 }
 
 export function ModalAdGallery({
@@ -333,7 +333,7 @@ export function ModalAdGallery({
             return (
               <div
                 key={ad.id}
-                onClick={() => onOpenLightbox(ad)}
+                onClick={() => onOpenLightbox(ad, displayAds)}
                 className={`group relative flex flex-col bg-slate-50 dark:bg-slate-950 rounded-lg border overflow-hidden transition-all cursor-pointer ${isAdArchived
                     ? "border-rose-500/30 opacity-75 hover:opacity-100 hover:border-rose-500"
                     : "border-slate-200 dark:border-slate-800 hover:border-indigo-500 shadow-xs"

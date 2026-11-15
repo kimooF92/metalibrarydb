@@ -25,7 +25,7 @@ import { ModalSourcingSection } from "./modal/modal-sourcing-section";
 import { ModalNetworkIntelligence } from "./modal/modal-network-intelligence";
 import { ModalAdGallery } from "./modal/modal-ad-gallery";
 import { ModalEditForm, ModalEditFormHandle } from "./modal/modal-edit-form";
-import { ImagePreviewModal } from "@/components/spy/image-preview-modal";
+import { ProductCreativeModal } from "./modal/product-creative-modal";
 import { isGenuineVideoUrl, isFbCdnUrlExpired } from "@/lib/fb-cdn";
 import { requestProductAdVerification, applyVerifiedCountsToProduct } from "@/lib/product-verify-client";
 
@@ -78,16 +78,20 @@ export function ProductDetailsModal({
   const [isQueueingVerify, setIsQueueingVerify] = useState(false);
   const [isQueueingLocalRescan, setIsQueueingLocalRescan] = useState(false);
   const [lightboxAd, setLightboxAd] = useState<Ad | null>(null);
+  const [activeLightboxAdsList, setActiveLightboxAdsList] = useState<Ad[]>([]);
+  const [activeLightboxIndex, setActiveLightboxIndex] = useState<number>(0);
   const [isRefreshingLightboxAd, setIsRefreshingLightboxAd] = useState(false);
 
-  const handleRefreshLightboxAd = async () => {
-    if (!lightboxAd) return;
+  const handleRefreshLightboxAd = async (targetAd?: Ad) => {
+    const adToRefresh = targetAd || lightboxAd;
+    if (!adToRefresh) return;
     setIsRefreshingLightboxAd(true);
     try {
-      const res = await fetch(`/api/spy/ads/${lightboxAd.id}/refresh`, { method: "POST" });
+      const res = await fetch(`/api/spy/ads/${adToRefresh.id}/refresh`, { method: "POST" });
       const data = await res.json();
       if (data.success && data.ad) {
         setLightboxAd(data.ad);
+        setActiveLightboxAdsList((prev) => prev.map((a) => (a.id === data.ad.id ? { ...a, ...data.ad } : a)));
         setLinkedAds((prev) => prev.map((a) => (a.id === data.ad.id ? { ...a, ...data.ad } : a)));
         showToast({
           type: "success",
@@ -106,7 +110,11 @@ export function ProductDetailsModal({
     }
   };
 
-  const handleOpenAdPreview = (ad: Ad) => {
+  const handleOpenAdPreview = (ad: Ad, filteredAds?: Ad[]) => {
+    const list = filteredAds && filteredAds.length > 0 ? filteredAds : linkedAds;
+    setActiveLightboxAdsList(list);
+    const idx = list.findIndex((a) => a.id === ad.id);
+    setActiveLightboxIndex(idx >= 0 ? idx : 0);
     setLightboxAd(ad);
 
     // Auto-refresh strictly when modal is opened AND media CDN link is expired
@@ -122,11 +130,42 @@ export function ProductDetailsModal({
         .then((data) => {
           if (data.success && data.ad) {
             setLightboxAd(data.ad);
+            setActiveLightboxAdsList((prev) => prev.map((a) => (a.id === data.ad.id ? { ...a, ...data.ad } : a)));
             setLinkedAds((prev) => prev.map((a) => (a.id === data.ad.id ? { ...a, ...data.ad } : a)));
           }
         })
         .catch(() => { })
         .finally(() => setIsRefreshingLightboxAd(false));
+    }
+  };
+
+  const handleNavigateLightboxAdIndex = (newIndex: number) => {
+    const list = activeLightboxAdsList.length > 0 ? activeLightboxAdsList : linkedAds;
+    if (newIndex >= 0 && newIndex < list.length) {
+      const nextAd = list[newIndex];
+      setActiveLightboxIndex(newIndex);
+      setLightboxAd(nextAd);
+
+      // Check if newly navigated ad has expired media
+      const vid = nextAd.mediaUrls?.find(isGenuineVideoUrl) || null;
+      const thumb = nextAd.signedThumbnailUrl || nextAd.thumbnailUrl || (nextAd.mediaUrls?.[0] ?? null);
+      const isVidExpired = vid ? isFbCdnUrlExpired(vid) : false;
+      const isImgExpired = thumb ? isFbCdnUrlExpired(thumb) : false;
+
+      if ((isVidExpired || isImgExpired) && !isRefreshingLightboxAd) {
+        setIsRefreshingLightboxAd(true);
+        fetch(`/api/spy/ads/${nextAd.id}/refresh`, { method: "POST" })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success && data.ad) {
+              setLightboxAd(data.ad);
+              setActiveLightboxAdsList((prev) => prev.map((a) => (a.id === data.ad.id ? { ...a, ...data.ad } : a)));
+              setLinkedAds((prev) => prev.map((a) => (a.id === data.ad.id ? { ...a, ...data.ad } : a)));
+            }
+          })
+          .catch(() => { })
+          .finally(() => setIsRefreshingLightboxAd(false));
+      }
     }
   };
 
@@ -202,6 +241,12 @@ export function ProductDetailsModal({
         return;
       }
 
+      // If ad creative modal is open, do not handle ArrowLeft / ArrowRight here
+      // ProductCreativeModal handles its own sibling navigation
+      if (lightboxAd) {
+        return;
+      }
+
       if (e.key === "ArrowLeft") {
         if (hasPrev && onNavigatePrev) {
           e.preventDefault();
@@ -217,7 +262,7 @@ export function ProductDetailsModal({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, isEditMode, hasPrev, hasNext, onNavigatePrev, onNavigateNext]);
+  }, [isOpen, isEditMode, hasPrev, hasNext, onNavigatePrev, onNavigateNext, lightboxAd]);
 
   if (!isOpen || !currentProduct) return null;
 
@@ -659,32 +704,15 @@ export function ProductDetailsModal({
 
       {/* Creative Preview Modal mounted at root */}
       {lightboxAd && (
-        <ImagePreviewModal
+        <ProductCreativeModal
           isOpen={Boolean(lightboxAd)}
           onClose={() => setLightboxAd(null)}
-          adId={lightboxAd.id}
-          imageUrls={
-            lightboxAd.mediaType === "carousel" && (lightboxAd.mediaUrls?.filter((u: string) => !isGenuineVideoUrl(u)).length || 0) > 0
-              ? lightboxAd.mediaUrls!.filter((u: string) => !isGenuineVideoUrl(u))
-              : lightboxAd.signedThumbnailUrl || lightboxAd.thumbnailUrl
-                ? [lightboxAd.signedThumbnailUrl || lightboxAd.thumbnailUrl!]
-                : []
-          }
-          videoUrl={lightboxAd.mediaUrls?.find(isGenuineVideoUrl) || null}
-          fallbackThumbnail={lightboxAd.signedThumbnailUrl || lightboxAd.thumbnailUrl}
-          isVideoAd={
-            lightboxAd.mediaType === "video" ||
-            Boolean(lightboxAd.mediaUrls?.find(isGenuineVideoUrl)) ||
-            Boolean(lightboxAd.storyboardUrls?.length)
-          }
-          title={lightboxAd.title}
-          pageName={lightboxAd.pageName || (lightboxAd.pageId ? `Page ${lightboxAd.pageId}` : null)}
-          pageId={lightboxAd.pageId}
-          caption={lightboxAd.caption}
-          destinationUrl={lightboxAd.linkUrl}
-          adArchiveId={lightboxAd.adArchiveId}
-          startedRunningOn={lightboxAd.startedRunningOn}
-          isActive={!lightboxAd.isArchived && lightboxAd.isActive !== false}
+          ad={lightboxAd}
+          ads={activeLightboxAdsList.length > 0 ? activeLightboxAdsList : linkedAds}
+          currentIndex={activeLightboxIndex}
+          onNavigateIndex={handleNavigateLightboxAdIndex}
+          product={currentProduct}
+          network={network}
           onRefreshMedia={handleRefreshLightboxAd}
           isRefreshingMedia={isRefreshingLightboxAd}
         />
