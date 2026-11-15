@@ -9,7 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Package,
-  Sparkles,
+  Film,
   Boxes,
   Building2,
   Layers,
@@ -592,7 +592,7 @@ export function ProductDetailsModal({
                             : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
                         )}
                       >
-                        <Sparkles className="w-3.5 h-3.5" />
+                        <Film className="w-3.5 h-3.5" />
                         <span>Ad Creatives</span>
                         {linkedAds.length > 0 && (
                           <span className={cn(
