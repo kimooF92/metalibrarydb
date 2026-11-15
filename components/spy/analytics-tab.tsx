@@ -261,10 +261,10 @@ export const AnalyticsTab = memo(function AnalyticsTab({
                   >
                     <div
                       className={`w-full rounded-t transition-all ${isPositive
-                          ? "bg-emerald-500 hover:bg-emerald-400"
-                          : isNegative
-                            ? "bg-rose-500 hover:bg-rose-400"
-                            : "bg-indigo-500/80 hover:bg-indigo-400"
+                        ? "bg-emerald-500 hover:bg-emerald-400"
+                        : isNegative
+                          ? "bg-rose-500 hover:bg-rose-400"
+                          : "bg-indigo-500/80 hover:bg-indigo-400"
                         }`}
                       style={{ height: `${heightPct}%` }}
                     />
@@ -515,7 +515,7 @@ export const AnalyticsTab = memo(function AnalyticsTab({
             <span className="text-xs text-slate-500">Highest Scaling &amp; Longevity</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             {topWinners.map((ad) => (
               <AdCard
                 key={ad.id}

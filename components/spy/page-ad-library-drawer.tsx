@@ -205,7 +205,7 @@ export function PageAdLibraryDrawer({
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {ads.map((ad: Ad) => (
                 <AdCard key={ad.id} ad={ad} onArchiveToggle={() => refetch()} />
               ))}

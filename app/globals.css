@@ -143,7 +143,7 @@ html.theme-fade-running::before {
 .products-cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 /* Custom Scrollbar */

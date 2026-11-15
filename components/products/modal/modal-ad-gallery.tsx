@@ -329,7 +329,7 @@ export function ModalAdGallery({
             : `No ad creatives match the "${adFilter}" filter.`}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
           {displayAds.map((ad: any) => {
             const isAdArchived = Boolean(ad.isArchived || ad.isActive === false);
             const isVideo = ad.mediaType === "video" || (ad.mediaUrls && ad.mediaUrls.some((u: string) => isGenuineVideoUrl(u)));

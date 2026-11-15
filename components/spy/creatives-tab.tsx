@@ -255,7 +255,7 @@ export const CreativesTab = memo(function CreativesTab({
       ) : (
         <>
           {viewMode === "grid" ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
               {ads.map((ad: Ad) => (
                 <AdCard
                   key={ad.id}
