@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import NextImage from "next/image";
 import { Ad } from "@/types";
 import { useToast } from "@/components/toast-context";
 import { getSmartMediaUrl } from "@/lib/image-proxy-url";
 import { isGenuineVideoUrl } from "@/lib/fb-cdn";
+import { cn } from "@/lib/utils";
 import {
   Sparkles,
   RotateCw,
@@ -45,13 +46,40 @@ export function ModalAdGallery({
   const [isLinkingAd, setIsLinkingAd] = useState(false);
   const [unlinkingAdId, setUnlinkingAdId] = useState<string | null>(null);
 
-  const activeLinkedAds = linkedAds.filter((a: any) => !a.isArchived && a.isActive !== false);
-  const inactiveLinkedAds = linkedAds.filter((a: any) => a.isArchived || a.isActive === false);
-  const videoLinkedAds = linkedAds.filter((a: any) => a.mediaType === "video");
-  const imageLinkedAds = linkedAds.filter((a: any) => a.mediaType === "image" || a.mediaType === "carousel");
-  const isAllInactive = linkedAds.length > 0 && activeLinkedAds.length === 0;
+  // Deduplicate linkedAds by id, adArchiveId, and primary media signature
+  const uniqueLinkedAds = useMemo(() => {
+    const seenArchiveIds = new Set<string>();
+    const seenMediaSignatures = new Set<string>();
+    const seenIds = new Set<string>();
+    const result: Ad[] = [];
 
-  const displayAds = linkedAds.filter((a: any) => {
+    for (const ad of linkedAds) {
+      if (!ad || !ad.id) continue;
+      if (seenIds.has(ad.id)) continue;
+
+      const archiveId = ad.adArchiveId?.trim();
+      if (archiveId && seenArchiveIds.has(archiveId)) continue;
+
+      const rawThumb = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.[0] || "";
+      const baseThumb = rawThumb.split("?")[0].trim();
+      const sig = baseThumb && baseThumb.length > 10 ? `${ad.mediaType}:${baseThumb}` : null;
+      if (sig && seenMediaSignatures.has(sig)) continue;
+
+      seenIds.add(ad.id);
+      if (archiveId) seenArchiveIds.add(archiveId);
+      if (sig) seenMediaSignatures.add(sig);
+      result.push(ad);
+    }
+    return result;
+  }, [linkedAds]);
+
+  const activeLinkedAds = uniqueLinkedAds.filter((a: any) => !a.isArchived && a.isActive !== false);
+  const inactiveLinkedAds = uniqueLinkedAds.filter((a: any) => a.isArchived || a.isActive === false);
+  const videoLinkedAds = uniqueLinkedAds.filter((a: any) => a.mediaType === "video");
+  const imageLinkedAds = uniqueLinkedAds.filter((a: any) => a.mediaType === "image" || a.mediaType === "carousel");
+  const isAllInactive = uniqueLinkedAds.length > 0 && activeLinkedAds.length === 0;
+
+  const displayAds = uniqueLinkedAds.filter((a: any) => {
     const isAdArchived = Boolean(a.isArchived || a.isActive === false);
     if (adFilter === "active") return !isAdArchived;
     if (adFilter === "stopped") return isAdArchived;
@@ -180,7 +208,7 @@ export function ModalAdGallery({
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-indigo-500" />
           <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-            Linked Ad Creatives Gallery ({linkedAds.length})
+            Linked Ad Creatives Gallery ({uniqueLinkedAds.length})
           </h4>
           {activeLinkedAds.length >= 3 && (
             <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[11px] font-bold border border-amber-500/20">
@@ -189,22 +217,10 @@ export function ModalAdGallery({
           )}
         </div>
         <div className="flex items-center gap-2">
-          {firstValidPageId && (
-            <a
-              href={`https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&view_all_page_id=${encodeURIComponent(firstValidPageId)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 transition-all cursor-pointer"
-              title="Open advertiser in Meta Ad Library"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span>Brand in Meta Library</span>
-            </a>
-          )}
           <button
             type="button"
             onClick={onQueueVerify}
-            disabled={isQueueingVerify || linkedAds.length === 0}
+            disabled={isQueueingVerify || uniqueLinkedAds.length === 0}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 transition-all cursor-pointer disabled:opacity-50"
             title="Live on-demand check for active status and fresh media via Trigger.dev"
           >
@@ -215,7 +231,7 @@ export function ModalAdGallery({
       </div>
 
       {/* Filter Pills */}
-      {linkedAds.length > 0 && (
+      {uniqueLinkedAds.length > 0 && (
         <div className="flex items-center gap-1.5 flex-wrap pb-1">
           <button
             type="button"
@@ -225,7 +241,7 @@ export function ModalAdGallery({
                 : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
               }`}
           >
-            All ({linkedAds.length})
+            All ({uniqueLinkedAds.length})
           </button>
           <button
             type="button"
@@ -321,7 +337,7 @@ export function ModalAdGallery({
             : `No ad creatives match the "${adFilter}" filter.`}
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
           {displayAds.map((ad: any) => {
             const isAdArchived = Boolean(ad.isArchived || ad.isActive === false);
             const isVideo = ad.mediaType === "video" || (ad.mediaUrls && ad.mediaUrls.some((u: string) => isGenuineVideoUrl(u)));
@@ -334,105 +350,65 @@ export function ModalAdGallery({
               <div
                 key={ad.id}
                 onClick={() => onOpenLightbox(ad, displayAds)}
-                className={`group relative flex flex-col bg-slate-50 dark:bg-slate-950 rounded-lg border overflow-hidden transition-all cursor-pointer ${isAdArchived
-                    ? "border-rose-500/30 opacity-75 hover:opacity-100 hover:border-rose-500"
-                    : "border-slate-200 dark:border-slate-800 hover:border-indigo-500 shadow-xs"
-                  }`}
+                className={cn(
+                  "group relative flex flex-col bg-white dark:bg-slate-900 rounded-xl border overflow-hidden transition-all duration-200 cursor-pointer shadow-xs hover:shadow-md",
+                  isAdArchived
+                    ? "border-rose-500/25 opacity-80 hover:opacity-100 hover:border-rose-500/60"
+                    : "border-slate-200 dark:border-slate-800 hover:border-indigo-500 dark:hover:border-indigo-500"
+                )}
               >
+                {/* Card Header Strip: Status, Duration & Actions */}
                 <div
-                  className="relative aspect-square w-full bg-slate-200 dark:bg-slate-900 flex items-center justify-center overflow-hidden"
-                  title={`${ad.title || ad.caption || "Ad Creative"} (Click to enlarge & view ad copy)`}
-                >
-                  {smartThumb ? (
-                    <NextImage
-                      src={smartThumb}
-                      alt="Ad creative"
-                      fill
-                      unoptimized
-                      referrerPolicy="no-referrer"
-                      className={`object-cover transition-transform group-hover:scale-105 ${isAdArchived ? "grayscale-[40%]" : ""
-                        }`}
-                    />
-                  ) : isVideo ? (
-                    <div className="flex flex-col items-center justify-center gap-1 text-indigo-400">
-                      <Play className="w-8 h-8 fill-indigo-500/20" />
-                      <span className="text-[9px] font-bold">Watch Video</span>
-                    </div>
-                  ) : (
-                    <ImageIcon className="w-6 h-6 text-slate-400" />
-                  )}
-
-                  {/* Top-Left: Duration & Duplication Badges */}
-                  <div className="absolute top-1.5 left-1.5 z-10 flex flex-col items-start gap-1">
-                    {duration && (
-                      <span className="px-1.5 py-0.5 rounded bg-slate-900/85 backdrop-blur-xs text-slate-200 text-[9px] font-bold border border-slate-700/80 shadow-xs">
-                        ⏳ {duration}
-                      </span>
-                    )}
-                    {ad.duplicationCount && ad.duplicationCount > 1 && (
-                      <span className="px-1.5 py-0.5 rounded bg-gradient-to-r from-amber-500 to-rose-500 text-white text-[9px] font-black shadow-xs">
-                        🔥 {ad.duplicationCount}x
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Status Badge */}
-                  <div className="absolute top-1.5 right-1.5 z-10">
-                    {isAdArchived ? (
-                      <span className="px-1.5 py-0.5 rounded bg-rose-950/80 backdrop-blur-sm text-rose-300 text-[9px] font-bold border border-rose-500/40">
-                        Inactive
-                      </span>
-                    ) : (
-                      <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 backdrop-blur-sm text-emerald-300 text-[9px] font-bold border border-emerald-500/40">
-                        Active
-                      </span>
-                    )}
-                  </div>
-
-                  {isVideo && (
-                    <div className="absolute bottom-1.5 left-1.5 w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-md">
-                      <Play className="w-2.5 h-2.5 fill-current ml-0.5" />
-                    </div>
-                  )}
-
-                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <span className="px-2 py-0.5 rounded-full bg-slate-900/90 text-white text-[9px] font-bold backdrop-blur-xs shadow-md">
-                      Preview Ad
-                    </span>
-                  </div>
-                </div>
-
-                <div
-                  className="p-2 truncate text-[10px] font-medium text-slate-600 dark:text-slate-400 flex items-center justify-between"
+                  className="px-2.5 py-1.5 bg-slate-50/80 dark:bg-slate-950/60 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-1.5"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <span className="truncate">{ad.pageName || `Page ${ad.pageId}`}</span>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold",
+                        isAdArchived
+                          ? "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                          : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                      )}
+                    >
+                      <span className={cn("w-1.5 h-1.5 rounded-full", isAdArchived ? "bg-rose-500" : "bg-emerald-500 animate-pulse")} />
+                      <span>{isAdArchived ? "Stopped" : "Active"}</span>
+                    </span>
+                    {duration && (
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate">
+                        • {duration}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-0.5 shrink-0">
                     {(ad.caption || ad.title) && (
                       <button
                         type="button"
                         onClick={(e) => handleCopyAdCopy(ad, e)}
-                        className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-0.5 rounded transition-colors cursor-pointer"
-                        title="Copy Ad Copywriting / Text"
+                        className="p-1 rounded text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors"
+                        title="Copy caption"
                       >
-                        <Copy className="w-3 h-3" />
+                        <Copy className="w-3.5 h-3.5" />
                       </button>
                     )}
-                    <a
-                      href={`https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&id=${ad.adArchiveId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-slate-400 hover:text-indigo-600 p-0.5 rounded transition-colors"
-                      title="Open in Meta Ad Library"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
+                    {ad.adArchiveId && (
+                      <a
+                        href={`https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&id=${ad.adArchiveId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-1 rounded text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors"
+                        title="Open in Meta Ad Library"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
                     <button
                       type="button"
                       onClick={() => handleUnlinkAd(ad.id, ad.adArchiveId)}
                       disabled={isThisUnlinking}
-                      className="text-slate-400 hover:text-rose-500 p-0.5 rounded transition-colors cursor-pointer"
-                      title="Unlink ad from product"
+                      className="p-1 rounded text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors"
+                      title="Unlink ad"
                     >
                       {isThisUnlinking ? (
                         <RotateCw className="w-3.5 h-3.5 animate-spin text-rose-500" />
@@ -441,6 +417,70 @@ export function ModalAdGallery({
                       )}
                     </button>
                   </div>
+                </div>
+
+                {/* Media Viewport */}
+                <div className="relative aspect-[4/3] w-full bg-slate-100 dark:bg-slate-950 flex items-center justify-center overflow-hidden">
+                  {smartThumb ? (
+                    <NextImage
+                      src={smartThumb}
+                      alt="Ad creative"
+                      fill
+                      unoptimized
+                      referrerPolicy="no-referrer"
+                      className={cn(
+                        "object-cover transition-transform duration-300 group-hover:scale-105",
+                        isAdArchived && "grayscale-[30%]"
+                      )}
+                    />
+                  ) : isVideo ? (
+                    <div className="flex flex-col items-center justify-center gap-1.5 text-indigo-500">
+                      <Play className="w-10 h-10 fill-indigo-500/20" />
+                      <span className="text-[10px] font-bold">Watch Video</span>
+                    </div>
+                  ) : (
+                    <ImageIcon className="w-8 h-8 text-slate-400" />
+                  )}
+
+                  {/* Centered Translucent Play Icon for Videos */}
+                  {isVideo && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="w-10 h-10 rounded-full bg-slate-950/70 text-white backdrop-blur-xs border border-white/20 flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:bg-indigo-600 transition-all">
+                        <Play className="w-4 h-4 fill-white ml-0.5" />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Duplication Count Pill */}
+                  {ad.duplicationCount && ad.duplicationCount > 1 && (
+                    <div className="absolute bottom-1.5 left-1.5 z-10">
+                      <span className="px-1.5 py-0.5 rounded-md bg-gradient-to-r from-amber-500 to-rose-500 text-white text-[9px] font-black shadow-xs">
+                        🔥 {ad.duplicationCount}x
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Hover Overlay */}
+                  <div className="absolute inset-0 bg-slate-950/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <span className="px-2.5 py-1 rounded-full bg-slate-900/90 text-white text-[10px] font-bold backdrop-blur-xs shadow-md border border-white/10">
+                      Inspect Creative ↗
+                    </span>
+                  </div>
+                </div>
+
+                {/* Card Footer: Page Name & Caption Snippet */}
+                <div className="p-2.5 space-y-1 bg-white dark:bg-slate-900">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-800 dark:text-slate-200">
+                    <span className="truncate">{ad.pageName || `Advertiser ${ad.pageId || ""}`}</span>
+                    <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 shrink-0">
+                      {isVideo ? "Video" : "Image"}
+                    </span>
+                  </div>
+                  {ad.caption && (
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-1 text-left">
+                      {ad.caption}
+                    </p>
+                  )}
                 </div>
               </div>
             );

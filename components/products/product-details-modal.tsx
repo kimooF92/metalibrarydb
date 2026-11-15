@@ -177,7 +177,31 @@ export function ProductDetailsModal({
       const res = await fetch(`/api/spy/ads?productId=${encodeURIComponent(productId)}&limit=50&includeMedia=true`);
       if (res.ok) {
         const data = await res.json();
-        setLinkedAds(data.ads || data.items || []);
+        const rawAds: Ad[] = data.ads || data.items || [];
+        // Deduplicate ads by id, adArchiveId, and normalized media URL
+        const seenArchiveIds = new Set<string>();
+        const seenMediaSigs = new Set<string>();
+        const seenIds = new Set<string>();
+        const uniqueList: Ad[] = [];
+
+        for (const ad of rawAds) {
+          if (!ad || !ad.id) continue;
+          if (seenIds.has(ad.id)) continue;
+          const archiveId = ad.adArchiveId?.trim();
+          if (archiveId && seenArchiveIds.has(archiveId)) continue;
+
+          const rawThumb = ad.signedThumbnailUrl || ad.thumbnailUrl || ad.mediaUrls?.[0] || "";
+          const baseThumb = rawThumb.split("?")[0].trim();
+          const sig = baseThumb && baseThumb.length > 10 ? `${ad.mediaType}:${baseThumb}` : null;
+          if (sig && seenMediaSigs.has(sig)) continue;
+
+          seenIds.add(ad.id);
+          if (archiveId) seenArchiveIds.add(archiveId);
+          if (sig) seenMediaSigs.add(sig);
+          uniqueList.push(ad);
+        }
+
+        setLinkedAds(uniqueList);
       }
     } catch (err) {
       console.error("Failed to fetch linked ads:", err);
@@ -584,51 +608,23 @@ export function ProductDetailsModal({
                         onClick={() => setActiveTab("overview")}
                         className={cn(
                           "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0",
-                          activeTab === "overview"
+                          activeTab === "overview" || activeTab === "suppliers" || activeTab === "network"
                             ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs font-bold"
                             : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
                         )}
                       >
                         <Package className="w-3.5 h-3.5" />
-                        <span>Offers & Specs</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab("suppliers")}
-                        className={cn(
-                          "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0",
-                          activeTab === "suppliers"
-                            ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs font-bold"
-                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-                        )}
-                      >
-                        <Boxes className="w-3.5 h-3.5" />
-                        <span>Sourcing</span>
+                        <span>Offers, Sourcing & Intel</span>
                         {supplierUrls.length > 0 && (
                           <span className={cn(
                             "px-1.5 py-0.2 rounded-full text-[10px] font-bold",
-                            activeTab === "suppliers"
+                            activeTab === "overview" || activeTab === "suppliers" || activeTab === "network"
                               ? "bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300"
                               : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
                           )}>
                             {supplierUrls.length}
                           </span>
                         )}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab("network")}
-                        className={cn(
-                          "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0",
-                          activeTab === "network"
-                            ? "bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 shadow-xs font-bold"
-                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-                        )}
-                      >
-                        <Building2 className="w-3.5 h-3.5" />
-                        <span>Network Intel</span>
                       </button>
 
                       <button
@@ -662,27 +658,26 @@ export function ProductDetailsModal({
                       </div>
                     )}
 
-                    {(activeTab === "all" || activeTab === "overview") && (
-                      <div className={activeTab === "all" ? "pt-4 border-t border-slate-200 dark:border-slate-800" : ""}>
+                    {(activeTab === "all" || activeTab === "overview" || activeTab === "suppliers" || activeTab === "network") && (
+                      <div className={cn("space-y-6", activeTab === "all" && "pt-6 border-t border-slate-200 dark:border-slate-800")}>
+                        {/* 1. Offers, Taxonomy & Audience Specs */}
                         <ModalProductSpecsSection product={currentProduct} />
-                      </div>
-                    )}
 
-                    {(activeTab === "all" || activeTab === "suppliers") && (
-                      <div className={activeTab === "all" ? "pt-4 border-t border-slate-200 dark:border-slate-800" : ""}>
-                        <ModalSourcingSection
-                          product={currentProduct}
-                          onProductUpdate={handleProductUpdateInternal}
-                        />
-                      </div>
-                    )}
+                        {/* 2. Sourcing & Supplier Links */}
+                        <div className="pt-5 border-t border-slate-200 dark:border-slate-800">
+                          <ModalSourcingSection
+                            product={currentProduct}
+                            onProductUpdate={handleProductUpdateInternal}
+                          />
+                        </div>
 
-                    {(activeTab === "all" || activeTab === "network") && (
-                      <div className={activeTab === "all" ? "pt-4 border-t border-slate-200 dark:border-slate-800" : ""}>
-                        <ModalNetworkIntelligence
-                          network={network}
-                          loadingNetwork={loadingNetwork}
-                        />
+                        {/* 3. Connected Brand Network & Related Stores */}
+                        <div className="pt-5 border-t border-slate-200 dark:border-slate-800">
+                          <ModalNetworkIntelligence
+                            network={network}
+                            loadingNetwork={loadingNetwork}
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
