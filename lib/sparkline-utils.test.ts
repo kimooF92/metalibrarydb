@@ -2,9 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert";
 import {
   calculateSparklineGeometry,
+  calculateCurvedSparklineGeometry,
   getSparklineTrend,
   appendLiveHistoryPoint,
   computeDeltaDifference,
+  filterTransientZeros,
+  downsampleToKeyPeaks,
   SPARKLINE_COLORS,
 } from "./sparkline-utils";
 
@@ -107,5 +110,57 @@ describe("sparkline-utils", () => {
       assert.strictEqual(computeDeltaDifference(15, undefined, -1), -1);
     });
   });
+
+  describe("filterTransientZeros", () => {
+    it("interpolates isolated transient zeros surrounded by positive counts", () => {
+      const raw = [100, 110, 0, 110, 120];
+      const cleaned = filterTransientZeros(raw);
+      assert.deepStrictEqual(cleaned, [100, 110, 110, 110, 120]);
+    });
+
+    it("preserves genuine trailing zeros (went dark/on hold)", () => {
+      const wentDark = [100, 50, 0, 0, 0];
+      const cleaned = filterTransientZeros(wentDark);
+      assert.deepStrictEqual(cleaned, [100, 50, 0, 0, 0]);
+    });
+  });
+
+  describe("downsampleToKeyPeaks", () => {
+    it("downsamples long series to targetCount preserving endpoints and peaks", () => {
+      const points = [10, 12, 14, 50, 48, 20, 15, 30, 28, 60];
+      const downsampled = downsampleToKeyPeaks(points, 4);
+
+      assert.strictEqual(downsampled.length, 4);
+      assert.strictEqual(downsampled[0], 10); // First
+      assert.strictEqual(downsampled[3], 60); // Last
+      // Middle peaks should capture the major spike
+      assert.strictEqual(downsampled.includes(50), true);
+    });
+
+    it("returns original array if points length <= targetCount", () => {
+      const points = [10, 20, 30];
+      assert.deepStrictEqual(downsampleToKeyPeaks(points, 4), [10, 20, 30]);
+    });
+  });
+
+  describe("calculateCurvedSparklineGeometry", () => {
+    it("calculates smooth curved path and area string for valid points", () => {
+      const points = [10, 20, 50, 30, 70];
+      const geo = calculateCurvedSparklineGeometry(points, 64, 18, 2, 4);
+
+      assert.notStrictEqual(geo, null);
+      if (!geo) return;
+      assert.strictEqual(geo.coords.length, 4);
+      assert.strictEqual(geo.pathStr.startsWith("M"), true);
+      assert.strictEqual(geo.pathStr.includes("C"), true);
+      assert.strictEqual(geo.areaStr.endsWith("Z"), true);
+    });
+
+    it("returns null for insufficient points", () => {
+      assert.strictEqual(calculateCurvedSparklineGeometry([10]), null);
+      assert.strictEqual(calculateCurvedSparklineGeometry(null), null);
+    });
+  });
 });
+
 

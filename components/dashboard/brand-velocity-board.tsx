@@ -3,6 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { TrendingUp, TrendingDown, Eye, ArrowRight, Building2, AlertTriangle, Moon, Sparkles } from "lucide-react";
+import {
+  calculateCurvedSparklineGeometry,
+  filterTransientZeros,
+} from "@/lib/sparkline-utils";
 
 export interface BrandVelocityItem {
   id: string;
@@ -33,35 +37,56 @@ interface BrandVelocityBoardProps {
   loading?: boolean;
 }
 
-// Mini SVG Sparkline Component
-function Sparkline({ points, isUp }: { points: number[]; isUp: boolean }) {
-  if (!points || points.length < 2) {
+// Mini SVG Sparkline Component — smooth Bézier curve downsampled to 3-4 key peaks with subtle area glow
+function Sparkline({
+  points,
+  isUp,
+  type = "scaling",
+  brandId = "default",
+}: {
+  points?: number[];
+  isUp?: boolean;
+  type?: "scaling" | "descaling";
+  brandId?: string;
+}) {
+  const geo = calculateCurvedSparklineGeometry(points, 64, 18, 2, 4);
+  if (!geo) {
     return <span className="text-[10px] text-slate-400">---</span>;
   }
-  const min = Math.min(...points);
-  const max = Math.max(...points);
-  const range = max - min || 1;
-  const width = 64;
-  const height = 18;
-  const step = width / (points.length - 1);
 
-  const coords = points
-    .map((p, idx) => {
-      const x = idx * step;
-      const y = height - ((p - min) / range) * (height - 4) - 2;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
+  // Scaling tab is always green (#10b981), Descaling is rose (#f43f5e)
+  const isPositive = type === "scaling" ? true : type === "descaling" ? false : Boolean(isUp);
+  const strokeColor = isPositive ? "#10b981" : "#f43f5e";
+  const gradId = `spark-grad-${brandId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   return (
-    <svg className="w-16 h-4.5 overflow-visible" viewBox={`0 0 ${width} ${height}`}>
-      <polyline
+    <svg
+      className="w-16 h-4.5 overflow-visible select-none shrink-0"
+      viewBox={`0 0 ${geo.width} ${geo.height}`}
+    >
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={strokeColor} stopOpacity="0.25" />
+          <stop offset="100%" stopColor={strokeColor} stopOpacity="0.0" />
+        </linearGradient>
+      </defs>
+      {/* Soft area glow beneath the curve */}
+      <path d={geo.areaStr} fill={`url(#${gradId})`} />
+      {/* Smooth Catmull-Rom / Bézier trend curve */}
+      <path
+        d={geo.pathStr}
         fill="none"
-        stroke={isUp ? "#10b981" : "#f43f5e"}
+        stroke={strokeColor}
         strokeWidth="1.75"
         strokeLinecap="round"
         strokeLinejoin="round"
-        points={coords}
+      />
+      {/* Endpoint dot for latest value */}
+      <circle
+        cx={geo.lastPoint.x}
+        cy={geo.lastPoint.y}
+        r="2"
+        fill={strokeColor}
       />
     </svg>
   );
@@ -155,8 +180,13 @@ export function BrandVelocityBoard({
           </div>
         ) : (
           currentList.map((brand, idx) => {
-            const isPositive = (brand.difference ?? 0) > 0;
-            const isNegative = (brand.difference ?? 0) < 0;
+            const cleanPts = filterTransientZeros(brand.historyPoints);
+            const windowDelta = cleanPts.length >= 2
+              ? (cleanPts[cleanPts.length - 1] - cleanPts[0])
+              : 0;
+            const effectiveDiff = brand.difference !== 0 ? brand.difference : windowDelta;
+            const isPositive = effectiveDiff > 0;
+            const isNegative = effectiveDiff < 0;
 
             return (
               <div
@@ -188,7 +218,14 @@ export function BrandVelocityBoard({
                         </span>
                       )}
                     </div>
-                    {brand.consecutiveZeroScans && brand.consecutiveZeroScans >= 2 ? (
+                    {brand.scalingPattern?.label && brand.scalingPattern.archetype !== "inactive" ? (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-0.5 truncate">
+                          <span>{brand.scalingPattern.icon}</span>
+                          <span>{brand.scalingPattern.label}</span>
+                        </span>
+                      </div>
+                    ) : brand.consecutiveZeroScans && brand.consecutiveZeroScans >= 2 ? (
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span className="text-[9px] font-black text-rose-500 bg-rose-500/10 px-1 py-0.2 rounded">
                           {brand.consecutiveZeroScans}x 0 ads
@@ -200,8 +237,16 @@ export function BrandVelocityBoard({
 
                 {/* Sparkline & Counts */}
                 <div className="flex items-center gap-3 shrink-0">
-                  <div className="hidden sm:block">
-                    <Sparkline points={brand.historyPoints} isUp={isPositive} />
+                  <div
+                    className="hidden sm:block"
+                    title={`Trajectory: ${(cleanPts.length > 0 ? cleanPts : [brand.currentResults ?? 0]).join(" → ")} ads`}
+                  >
+                    <Sparkline
+                      points={cleanPts.length > 0 ? cleanPts : brand.historyPoints}
+                      type={activeTab}
+                      isUp={isPositive}
+                      brandId={brand.id}
+                    />
                   </div>
 
                   <div className="text-right min-w-[60px]">
@@ -209,8 +254,12 @@ export function BrandVelocityBoard({
                       {brand.currentResults?.toLocaleString() ?? 0} ads
                     </div>
                     {brand.difference !== 0 ? (
-                      <div className={`text-[10px] font-bold ${isPositive ? "text-emerald-500" : "text-rose-500"}`}>
-                        {isPositive ? `+${brand.difference}` : brand.difference}
+                      <div className={`text-[10px] font-bold ${brand.difference > 0 ? "text-emerald-500" : "text-rose-500"}`}>
+                        {brand.difference > 0 ? `+${brand.difference}` : brand.difference}
+                      </div>
+                    ) : windowDelta !== 0 ? (
+                      <div className={`text-[10px] font-bold ${windowDelta > 0 ? "text-emerald-500" : "text-rose-500"}`}>
+                        {windowDelta > 0 ? `+${windowDelta} (14d)` : `${windowDelta} (14d)`}
                       </div>
                     ) : (
                       <div className="text-[10px] font-medium text-slate-400">stable</div>

@@ -45,14 +45,15 @@ export async function fetchDashboardOverview(options: FetchDashboardOverviewOpti
   }
 
   // BUG-06: Partition-bounded 14-day window avoids full table history scans on scan_history
-  const differenceSql = sql<number>`(
+  const differenceSql = sql<number>`COALESCE((
     SELECT s.difference
     FROM scan_history s
     WHERE s.tracked_page_id = ${trackedPages.id}
       AND s.checked_at >= NOW() - INTERVAL '14 days'
+      AND s.difference IS NOT NULL
     ORDER BY s.checked_at DESC
     LIMIT 1
-  )`;
+  ), 0)`;
 
   // BATCH 1: Core Entity KPIs (Brands, Products, Ads, Categories)
   const [brandStatsRows, productStatsRows, adsStatsRows, topCategoriesRows] = await Promise.all([
@@ -649,9 +650,10 @@ export async function fetchDashboardOverview(options: FetchDashboardOverviewOpti
         consecutiveZeroScans: brand.consecutiveZeroScans,
       }
     );
+    const windowDiff = points.length >= 2 ? points[points.length - 1] - points[0] : 0;
     return {
       ...brand,
-      difference: brand.difference ?? 0,
+      difference: brand.difference !== null && brand.difference !== 0 ? brand.difference : windowDiff,
       historyPoints: points,
       scalingPattern: pattern,
     };
