@@ -109,11 +109,12 @@ export async function GET(
       }
 
       if (!trackedPage) {
-        // Try finding by pageId, landingPage, displayName, or URL in tracked_pages
+        // Try finding by pageId, landingPage, canonicalDomain, displayName, or URL in tracked_pages
         trackedPage = await db.query.trackedPages.findFirst({
           where: or(
             eq(trackedPages.pageId, decodedId),
             sql`lower(${trackedPages.landingPage}) = ${decodedId.toLowerCase()}`,
+            sql`lower(${trackedPages.canonicalDomain}) = ${decodedId.toLowerCase()}`,
             sql`lower(trim(${trackedPages.displayName})) = ${decodedId.toLowerCase()}`,
             eq(trackedPages.url, decodedId)
           ),
@@ -122,6 +123,135 @@ export async function GET(
         if (trackedPage) {
           pageId = trackedPage.pageId || decodedId;
           displayName = trackedPage.displayName || `Brand ${trackedPage.pageId || decodedId}`;
+        }
+      }
+
+      // Domain-level fallback resolution: if decodedId is a store domain (e.g. jommana.tun-1.com)
+      if (!trackedPage && (decodedId.includes(".") || decodedId.includes("/"))) {
+        const cleanDomain = getCleanDomain(decodedId) || decodedId.toLowerCase();
+
+        // Check if a brand domain portfolio matches the clean domain
+        brandDomain = await db.query.brandDomains.findFirst({
+          where: eq(brandDomains.domain, cleanDomain),
+          columns: BRAND_DOMAIN_COLUMNS,
+        });
+
+        if (brandDomain) {
+          sisterPages = await db.query.trackedPages.findMany({
+            where: eq(trackedPages.brandDomainId, brandDomain.id),
+            columns: TRACKED_PAGE_COLUMNS,
+            orderBy: [
+              sql`CASE WHEN ${trackedPages.pageRole} = 'primary' THEN 0 ELSE 1 END`,
+              desc(trackedPages.currentResults),
+            ],
+          });
+          const primaryPage = sisterPages.find((p) => p.pageRole === "primary") || sisterPages[0] || null;
+          pageId = primaryPage?.pageId || null;
+          displayName = brandDomain.displayName || brandDomain.domain;
+          trackedPage = primaryPage;
+        }
+
+        // Check trackedPages by canonicalDomain or landingPage match in this workspace
+        if (!trackedPage && !brandDomain) {
+          trackedPage = await db.query.trackedPages.findFirst({
+            where: and(
+              eq(trackedPages.workspaceId, activeWorkspace.id),
+              or(
+                sql`lower(${trackedPages.canonicalDomain}) = ${cleanDomain}`,
+                sql`lower(${trackedPages.landingPage}) = ${cleanDomain}`,
+                sql`lower(${trackedPages.landingPage}) LIKE ${'%' + cleanDomain + '%'}`
+              )
+            ),
+            columns: TRACKED_PAGE_COLUMNS,
+          });
+          if (trackedPage) {
+            pageId = trackedPage.pageId || decodedId;
+            displayName = trackedPage.displayName || `Brand ${trackedPage.pageId || decodedId}`;
+          }
+        }
+
+        // Check if scraped_products has products from this domain linked to a tracked page
+        if (!trackedPage && !brandDomain) {
+          const sampleProduct = await db.query.scrapedProducts.findFirst({
+            where: and(
+              eq(scrapedProducts.workspaceId, activeWorkspace.id),
+              sql`lower(${scrapedProducts.domain}) = ${cleanDomain}`,
+              sql`${scrapedProducts.pageId} IS NOT NULL AND ${scrapedProducts.pageId} != ''`
+            ),
+            columns: { pageId: true, brandDomainId: true },
+          });
+
+          if (sampleProduct?.brandDomainId) {
+            brandDomain = await db.query.brandDomains.findFirst({
+              where: eq(brandDomains.id, sampleProduct.brandDomainId),
+              columns: BRAND_DOMAIN_COLUMNS,
+            });
+            if (brandDomain) {
+              sisterPages = await db.query.trackedPages.findMany({
+                where: eq(trackedPages.brandDomainId, brandDomain.id),
+                columns: TRACKED_PAGE_COLUMNS,
+                orderBy: [
+                  sql`CASE WHEN ${trackedPages.pageRole} = 'primary' THEN 0 ELSE 1 END`,
+                  desc(trackedPages.currentResults),
+                ],
+              });
+              const primaryPage = sisterPages.find((p) => p.pageRole === "primary") || sisterPages[0] || null;
+              pageId = primaryPage?.pageId || null;
+              displayName = brandDomain.displayName || brandDomain.domain;
+              trackedPage = primaryPage;
+            }
+          }
+
+          if (!trackedPage && sampleProduct?.pageId) {
+            trackedPage = await db.query.trackedPages.findFirst({
+              where: and(
+                eq(trackedPages.workspaceId, activeWorkspace.id),
+                eq(trackedPages.pageId, sampleProduct.pageId)
+              ),
+              columns: TRACKED_PAGE_COLUMNS,
+            });
+            if (trackedPage) {
+              pageId = trackedPage.pageId;
+              displayName = trackedPage.displayName || `Brand ${trackedPage.pageId}`;
+            }
+          }
+        }
+
+        // Check if ads has ads linking to this domain in this workspace
+        if (!trackedPage && !brandDomain) {
+          const sampleAdWithDomain = await db
+            .select({
+              pageId: ads.pageId,
+              pageName: ads.pageName,
+            })
+            .from(ads)
+            .innerJoin(adObservations, eq(ads.id, adObservations.adId))
+            .innerJoin(trackedPages, eq(adObservations.trackedPageId, trackedPages.id))
+            .where(
+              and(
+                eq(trackedPages.workspaceId, activeWorkspace.id),
+                sql`lower(${ads.linkUrl}) LIKE ${'%' + cleanDomain + '%'}`
+              )
+            )
+            .limit(1);
+
+          if (sampleAdWithDomain.length > 0 && sampleAdWithDomain[0].pageId) {
+            const resolvedPid = sampleAdWithDomain[0].pageId;
+            trackedPage = await db.query.trackedPages.findFirst({
+              where: and(
+                eq(trackedPages.workspaceId, activeWorkspace.id),
+                eq(trackedPages.pageId, resolvedPid)
+              ),
+              columns: TRACKED_PAGE_COLUMNS,
+            });
+            if (trackedPage) {
+              pageId = trackedPage.pageId;
+              displayName = trackedPage.displayName || sampleAdWithDomain[0].pageName || `Brand ${resolvedPid}`;
+            } else {
+              pageId = resolvedPid;
+              displayName = sampleAdWithDomain[0].pageName || `Brand ${resolvedPid}`;
+            }
+          }
         }
       }
 

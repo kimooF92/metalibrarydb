@@ -804,6 +804,7 @@ export async function fetchProducts(
     new Set(rawProducts.map((p) => p.domain).filter((d): d is string => Boolean(d && d.trim())))
   );
   const domainPicMap = new Map<string, string>();
+  const domainToPageMap = new Map<string, any>();
 
   if (!isLean && domainsFromProducts.length > 0) {
     asyncLookups.push(
@@ -825,6 +826,46 @@ export async function fetchProducts(
           console.warn("[Products Query Service] Brand domains batch lookup warning:", domainErr);
         })
     );
+
+    asyncLookups.push(
+      db
+        .select({
+          id: trackedPages.id,
+          pageId: trackedPages.pageId,
+          displayName: trackedPages.displayName,
+          profilePicUrl: trackedPages.profilePicUrl,
+          holdStatus: trackedPages.holdStatus,
+          currentResults: trackedPages.currentResults,
+          canonicalDomain: trackedPages.canonicalDomain,
+          landingPage: trackedPages.landingPage,
+          pageRole: trackedPages.pageRole,
+        })
+        .from(trackedPages)
+        .where(
+          or(
+            inArray(trackedPages.canonicalDomain, domainsFromProducts),
+            inArray(trackedPages.landingPage, domainsFromProducts)
+          )
+        )
+        .then((rows) => {
+          rows.sort((a, b) => {
+            if (a.pageRole === "primary" && b.pageRole !== "primary") return -1;
+            if (b.pageRole === "primary" && a.pageRole !== "primary") return 1;
+            return (b.currentResults || 0) - (a.currentResults || 0);
+          });
+          rows.forEach((row) => {
+            if (row.canonicalDomain && !domainToPageMap.has(row.canonicalDomain.toLowerCase())) {
+              domainToPageMap.set(row.canonicalDomain.toLowerCase(), row);
+            }
+            if (row.landingPage && !domainToPageMap.has(row.landingPage.toLowerCase())) {
+              domainToPageMap.set(row.landingPage.toLowerCase(), row);
+            }
+          });
+        })
+        .catch((pageErr) => {
+          console.warn("[Products Query Service] Tracked pages by domain batch lookup warning:", pageErr);
+        })
+    );
   }
 
   if (asyncLookups.length > 0) {
@@ -833,7 +874,10 @@ export async function fetchProducts(
 
   const products = rawProducts.map((p) => {
     const m = metricsMap.get(p.id);
-    const pageInfo = p.pageId ? pageMap.get(p.pageId) : null;
+    const pageInfo =
+      (p.pageId ? pageMap.get(p.pageId) : null) ||
+      (p.domain ? domainToPageMap.get(p.domain.toLowerCase()) : null) ||
+      null;
     const earliest = m?.earliestAdDate || p.createdAt;
     const brandHoldStatus = (m?.brandHoldStatus || pageInfo?.holdStatus || "active") as any;
     const isProductActive = (m?.activeAdsCount || 0) > 0 && brandHoldStatus !== "inactive";
@@ -843,7 +887,7 @@ export async function fetchProducts(
       ? Math.max(1, Math.round((endTimestamp - new Date(earliest).getTime()) / 86400000))
       : 1;
 
-    const brandPageId = m?.brandPageId || p.pageId || null;
+    const brandPageId = m?.brandPageId || p.pageId || pageInfo?.pageId || null;
     const brandName = m?.brandName || pageInfo?.displayName || null;
     const brandProfilePic =
       m?.brandProfilePic ||

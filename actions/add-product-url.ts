@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { trackedPages, queue, scrapedProducts } from "@/db/schema";
+import { trackedPages, queue, scrapedProducts, brandDomains } from "@/db/schema";
 import { eq, or, sql, and, isNotNull } from "drizzle-orm";
 import { parseTrackableUrl } from "@/lib/url-parser";
 import { linkAndAutoScrapeProduct } from "@/lib/product-ingest";
@@ -38,19 +38,35 @@ export async function findExistingBrandByDomain(
 ): Promise<typeof trackedPages.$inferSelect | null> {
   const normDomain = domain.toLowerCase().trim();
 
-  // Tier 1: Exact match on landingPage column
+  // Tier 1: Exact match on landingPage or canonicalDomain column
   const byLandingPage = await db.query.trackedPages.findFirst({
-    where: sql`lower(${trackedPages.landingPage}) = ${normDomain}`,
+    where: or(
+      sql`lower(${trackedPages.landingPage}) = ${normDomain}`,
+      sql`lower(${trackedPages.canonicalDomain}) = ${normDomain}`
+    ),
   });
   if (byLandingPage) return byLandingPage;
 
-  // Tier 2: Exact match on displayName
+  // Tier 2: Check brand_domains portfolio registry
+  const brandDomainRecord = await db.query.brandDomains.findFirst({
+    where: sql`lower(${brandDomains.domain}) = ${normDomain}`,
+    columns: { id: true },
+  });
+  if (brandDomainRecord?.id) {
+    const byBrandDomain = await db.query.trackedPages.findFirst({
+      where: eq(trackedPages.brandDomainId, brandDomainRecord.id),
+      orderBy: (tp, { desc }) => [desc(tp.pageRole), desc(tp.currentResults)],
+    });
+    if (byBrandDomain) return byBrandDomain;
+  }
+
+  // Tier 3: Exact match on displayName
   const byDisplayName = await db.query.trackedPages.findFirst({
     where: sql`lower(trim(${trackedPages.displayName})) = ${normDomain}`,
   });
   if (byDisplayName) return byDisplayName;
 
-  // Tier 3: Exact match on Ad Library search URL
+  // Tier 4: Exact match on Ad Library search URL
   if (canonicalSearchUrl) {
     const byUrl = await db.query.trackedPages.findFirst({
       where: eq(trackedPages.url, canonicalSearchUrl),
@@ -58,7 +74,7 @@ export async function findExistingBrandByDomain(
     if (byUrl) return byUrl;
   }
 
-  // Tier 4: Scraped products cross-reference (check if products from this domain have a resolved pageId)
+  // Tier 5: Scraped products cross-reference (check if products from this domain have a resolved pageId)
   const linkedProduct = await db.query.scrapedProducts.findFirst({
     where: and(
       sql`lower(${scrapedProducts.domain}) = ${normDomain}`,

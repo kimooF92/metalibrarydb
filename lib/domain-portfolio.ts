@@ -173,14 +173,28 @@ export async function linkPageToDomain(
         })
         .where(eq(trackedPages.id, page.id));
 
-      // Backfill products matching this domain to link to the brandDomainId
+      // Backfill products matching this domain to link to the brandDomainId and pageId
+      const productUpdates: { brandDomainId: string; updatedAt: Date; pageId?: string; workspaceId?: string } = {
+        brandDomainId: resolvedBrandDomainId,
+        updatedAt: now,
+      };
+      if (page.pageId && page.pageId !== "0" && !page.pageId.includes("-")) {
+        productUpdates.pageId = page.pageId;
+      }
+      if (page.workspaceId) {
+        productUpdates.workspaceId = page.workspaceId;
+      }
+
       await tx
         .update(scrapedProducts)
-        .set({ brandDomainId: resolvedBrandDomainId, updatedAt: now })
+        .set(productUpdates)
         .where(
           and(
             eq(scrapedProducts.domain, domainRecord.domain),
-            isNull(scrapedProducts.brandDomainId)
+            or(
+              isNull(scrapedProducts.brandDomainId),
+              ...(productUpdates.pageId ? [isNull(scrapedProducts.pageId), eq(scrapedProducts.pageId, "0")] : [])
+            )
           )
         );
     });

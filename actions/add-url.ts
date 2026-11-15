@@ -48,16 +48,27 @@ export async function addSingleUrl(
   if (!allowDuplicate) {
     const nameNorm = meta.displayName ? meta.displayName.trim().toLowerCase() : "";
 
+    const domainCondition = landingPageDomain
+      ? or(
+          sql`lower(${trackedPages.landingPage}) = ${landingPageDomain.toLowerCase()}`,
+          sql`lower(${trackedPages.canonicalDomain}) = ${landingPageDomain.toLowerCase()}`
+        )
+      : undefined;
+
     const duplicateCondition = meta.pageId
-      ? or(eq(trackedPages.url, meta.url), eq(trackedPages.pageId, meta.pageId))
+      ? or(
+          eq(trackedPages.url, meta.url),
+          eq(trackedPages.pageId, meta.pageId),
+          domainCondition ?? sql`FALSE`
+        )
       : nameNorm
       ? or(
           eq(trackedPages.url, meta.url),
           sql`lower(trim(${trackedPages.displayName})) = ${nameNorm}`,
-          landingPageDomain
-            ? sql`lower(${trackedPages.landingPage}) = ${landingPageDomain.toLowerCase()}`
-            : sql`FALSE`
+          domainCondition ?? sql`FALSE`
         )
+      : domainCondition
+      ? or(eq(trackedPages.url, meta.url), domainCondition)
       : eq(trackedPages.url, meta.url);
 
     const existing = await db.query.trackedPages.findFirst({

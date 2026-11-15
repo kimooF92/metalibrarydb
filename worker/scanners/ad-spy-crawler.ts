@@ -1,6 +1,6 @@
 import { Page, Response } from "playwright";
 import { db } from "../../db";
-import { ads, adObservations, trackedPages, scanHistory, brandDomains } from "../../db/schema";
+import { ads, adObservations, trackedPages, scanHistory, brandDomains, scrapedProducts } from "../../db/schema";
 import { eq, sql, and, desc, ne, isNull, or } from "drizzle-orm";
 import { checkAndRecordBreakout } from "../../lib/breakout-detector";
 import { extractAdsFromDOM, extractPageIdsFromPage } from "../dom-scanner";
@@ -652,6 +652,32 @@ export async function scanAdCreatives(
         }
       }
 
+      if (!targetDomain && collectedAds.size > 0) {
+        const domainCounts = new Map<string, number>();
+        for (const ad of collectedAds.values()) {
+          const urlsToCheck = [ad.linkUrl, ...(ad.secondaryProductUrls || [])].filter(Boolean) as string[];
+          for (const u of urlsToCheck) {
+            const extracted = extractStoreDomain(u);
+            if (extracted) {
+              domainCounts.set(extracted, (domainCounts.get(extracted) || 0) + 1);
+            }
+          }
+        }
+        if (domainCounts.size > 0) {
+          let bestDomain: string | null = null;
+          let maxCount = 0;
+          for (const [dom, count] of domainCounts.entries()) {
+            if (count > maxCount) {
+              maxCount = count;
+              bestDomain = dom;
+            }
+          }
+          if (bestDomain) {
+            targetDomain = bestDomain;
+          }
+        }
+      }
+
       if (targetDomain) {
         try {
           const { getOrCreateBrandDomain, linkPageToDomain } = await import("../../lib/domain-portfolio");
@@ -688,7 +714,32 @@ export async function scanAdCreatives(
               await linkPageToDomain(existingSister.id, bDomain.id, "primary", { forceReassign: false });
             }
           } else {
+            pageUpdates.brandDomainId = bDomain.id;
+            pageUpdates.canonicalDomain = bDomain.domain;
+            if (!trackedPageRecord?.landingPage) {
+              pageUpdates.landingPage = bDomain.domain;
+            }
             await linkPageToDomain(trackedPageId, bDomain.id, "primary", { forceReassign: false });
+          }
+
+          // Backfill any products of this domain that were missing page_id
+          try {
+            await db
+              .update(scrapedProducts)
+              .set({
+                pageId: resolvedPageId,
+                brandDomainId: bDomain.id,
+                workspaceId: bDomain.workspaceId ?? trackedPageRecord?.workspaceId,
+                updatedAt: now,
+              })
+              .where(
+                and(
+                  eq(scrapedProducts.domain, targetDomain),
+                  or(isNull(scrapedProducts.pageId), eq(scrapedProducts.pageId, "0"))
+                )
+              );
+          } catch (prodErr) {
+            console.warn("[Spy Scanner] Non-fatal error backfilling scraped_products by domain:", prodErr);
           }
         } catch (domainErr) {
           console.warn("[Spy Scanner] Non-fatal error managing brand domain portfolio:", domainErr);

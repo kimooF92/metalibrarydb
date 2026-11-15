@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { ads, adObservations, creativeScans, trackedPages, brandDomains } from "@/db/schema";
+import { ads, adObservations, creativeScans, trackedPages, brandDomains, scrapedProducts } from "@/db/schema";
 import { eq, and, sql, desc, ne, isNull, or } from "drizzle-orm";
 import { uploadMediaWithHashing, isB2Configured, registerPendingB2Upload } from "@/lib/b2-storage";
 import { linkAndAutoScrapeProduct } from "@/lib/product-ingest";
@@ -7,6 +7,7 @@ import { checkAndRecordBreakout } from "@/lib/breakout-detector";
 import { resolveDestinationUrl } from "@/lib/utils";
 import { selectBestProductCandidateUrl } from "@/lib/discovery-product-selector";
 import { batchFindProductIdsByUrls } from "@/lib/product-url-matcher";
+import { extractStoreDomain } from "@/lib/url-parser";
 import {
   extractAdArchiveId,
   extractMedia,
@@ -518,6 +519,47 @@ export async function ingestApifyDatasetItems(
     pageUpdates.discoveredPagesCount = candidatePages.length;
   }
 
+  // Resolve effective Page ID and store domain across candidates, metadata and ad links
+  const effectivePageId = (detectedPageId && isNumericString(detectedPageId))
+    ? detectedPageId
+    : (pageRecord?.pageId && pageRecord.pageId !== "0" && !pageRecord.pageId.includes("-") ? pageRecord.pageId : null);
+
+  let resolvedStoreDomain: string | null = null;
+  const domainCandidates = [
+    pageRecord?.landingPage,
+    pageRecord?.canonicalDomain,
+    pageRecord?.displayName,
+    pageRecord?.url,
+  ].filter(Boolean) as string[];
+
+  for (const cand of domainCandidates) {
+    const ext = extractStoreDomain(cand);
+    if (ext) {
+      resolvedStoreDomain = ext;
+      break;
+    }
+  }
+
+  if (!resolvedStoreDomain && items.length > 0) {
+    const domainCounts = new Map<string, number>();
+    for (const item of items) {
+      const rawUrl = item.linkUrl || item.target_url || item.snapshot?.link_url || null;
+      if (rawUrl) {
+        const ext = extractStoreDomain(rawUrl);
+        if (ext) domainCounts.set(ext, (domainCounts.get(ext) || 0) + 1);
+      }
+    }
+    if (domainCounts.size > 0) {
+      let maxCount = 0;
+      for (const [dom, count] of domainCounts.entries()) {
+        if (count > maxCount) {
+          maxCount = count;
+          resolvedStoreDomain = dom;
+        }
+      }
+    }
+  }
+
   // Update tracked page metadata (status, timestamps, candidate counts)
   if (pageRecord && (!pageRecord.pageId || pageRecord.pageId === "0") && detectedPageId && isNumericString(detectedPageId)) {
     pageUpdates.pageId = detectedPageId;
@@ -540,38 +582,59 @@ export async function ingestApifyDatasetItems(
     } catch (adErr) {
       console.warn("[Apify Ingest] Non-fatal error backfilling ads with detectedPageId:", adErr);
     }
+  }
 
-    // Backfill any unlinked scraped products for this domain
-    const targetDomain = pageRecord.landingPage || pageRecord.displayName;
-    if (targetDomain && targetDomain.includes(".")) {
-      try {
-        await db.execute(sql`
-          UPDATE scraped_products
-          SET page_id = COALESCE(page_id, ${detectedPageId}),
-              workspace_id = COALESCE(${pageRecord.workspaceId || null}, workspace_id),
-              brand_domain_id = COALESCE(${pageRecord.brandDomainId || null}, brand_domain_id),
-              updated_at = NOW()
-          WHERE (lower(domain) = ${targetDomain.toLowerCase().trim()} OR url ILIKE ${`%${targetDomain.trim()}%`})
-            AND (page_id IS NULL OR page_id = '0' OR workspace_id IS NULL OR workspace_id != ${pageRecord.workspaceId})
-        `);
-      } catch (prodErr) {
-        console.warn("[Apify Ingest] Non-fatal error backfilling scraped_products:", prodErr);
+  // Auto-link brand domain if resolved
+  if (resolvedStoreDomain && pageRecord) {
+    try {
+      const { getOrCreateBrandDomain, linkPageToDomain } = await import("@/lib/domain-portfolio");
+      const bDomain = await getOrCreateBrandDomain(resolvedStoreDomain, pageRecord.displayName, pageRecord.workspaceId);
+
+      if (!pageRecord.brandDomainId || !pageRecord.canonicalDomain) {
+        pageUpdates.brandDomainId = bDomain.id;
+        pageUpdates.canonicalDomain = bDomain.domain;
+        if (!pageRecord.landingPage) {
+          pageUpdates.landingPage = bDomain.domain;
+        }
+        if (pageRecord.searchType === "page") {
+          await linkPageToDomain(trackedPageId, bDomain.id, "primary", { forceReassign: false });
+        }
       }
+
+      // Backfill any unlinked scraped products for this domain
+      if (effectivePageId) {
+        await db
+          .update(scrapedProducts)
+          .set({
+            pageId: effectivePageId,
+            brandDomainId: bDomain.id,
+            workspaceId: pageRecord.workspaceId,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(scrapedProducts.domain, resolvedStoreDomain),
+              or(isNull(scrapedProducts.pageId), eq(scrapedProducts.pageId, "0"), isNull(scrapedProducts.brandDomainId))
+            )
+          );
+      }
+    } catch (domErr) {
+      console.warn("[Apify Ingest] Non-fatal error managing brand domain portfolio:", domErr);
     }
+  }
 
-    if (pageRecord.workspaceId) {
-      try {
-        await db.execute(sql`
-          UPDATE scraped_products
-          SET workspace_id = ${pageRecord.workspaceId},
-              brand_domain_id = COALESCE(${pageRecord.brandDomainId || null}, brand_domain_id),
-              updated_at = NOW()
-          WHERE page_id = ${detectedPageId}
-            AND (workspace_id IS NULL OR workspace_id != ${pageRecord.workspaceId})
-        `);
-      } catch (prodErr) {
-        console.warn("[Apify Ingest] Non-fatal error syncing scraped_products workspace_id by page_id:", prodErr);
-      }
+  if (effectivePageId && pageRecord?.workspaceId) {
+    try {
+      await db.execute(sql`
+        UPDATE scraped_products
+        SET workspace_id = ${pageRecord.workspaceId},
+            brand_domain_id = COALESCE(${pageRecord.brandDomainId || null}, brand_domain_id),
+            updated_at = NOW()
+        WHERE page_id = ${effectivePageId}
+          AND (workspace_id IS NULL OR workspace_id != ${pageRecord.workspaceId})
+      `);
+    } catch (prodErr) {
+      console.warn("[Apify Ingest] Non-fatal error syncing scraped_products workspace_id by page_id:", prodErr);
     }
   }
 
@@ -603,7 +666,7 @@ export async function ingestApifyDatasetItems(
     } else if (candidatePages.length > 1) {
       console.log(`[Apify Ingest] Multi-page detected: ${candidatePages.length} Facebook Pages detected for "${pageRecord.displayName || pageRecord.url}".`);
 
-      const targetDomain = pageRecord.landingPage || pageRecord.displayName || pageRecord.url;
+      const targetDomain = resolvedStoreDomain || pageRecord.landingPage || pageRecord.displayName || pageRecord.url;
       try {
         const { getOrCreateBrandDomain, linkPageToDomain } = await import("@/lib/domain-portfolio");
         const bDomain = await getOrCreateBrandDomain(targetDomain, pageRecord.displayName, pageRecord.workspaceId);

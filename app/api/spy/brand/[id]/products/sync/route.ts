@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { ads, adObservations, trackedPages, scrapedProducts } from "@/db/schema";
-import { eq, or, inArray, sql, and } from "drizzle-orm";
+import { ads, adObservations, trackedPages, scrapedProducts, brandDomains } from "@/db/schema";
+import { eq, or, inArray, sql, and, desc } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { normalizeProductUrl, extractProductFromUrl } from "@/lib/firecrawl";
 import { getCleanDomain } from "@/lib/utils";
@@ -94,9 +94,66 @@ export async function POST(
 
     if (!trackedPage) {
       trackedPage = await db.query.trackedPages.findFirst({
-        where: eq(trackedPages.pageId, decodedId),
+        where: or(
+          eq(trackedPages.pageId, decodedId),
+          sql`lower(${trackedPages.landingPage}) = ${decodedId.toLowerCase()}`,
+          sql`lower(${trackedPages.canonicalDomain}) = ${decodedId.toLowerCase()}`,
+          sql`lower(trim(${trackedPages.displayName})) = ${decodedId.toLowerCase()}`
+        ),
       });
       if (trackedPage) pageId = trackedPage.pageId;
+    }
+
+    if (!pageId && (decodedId.includes(".") || decodedId.includes("/"))) {
+      const cleanDomain = getCleanDomain(decodedId) || decodedId.toLowerCase();
+      // Look up brand domain
+      const bd = await db.query.brandDomains.findFirst({
+        where: eq(brandDomains.domain, cleanDomain),
+      });
+      if (bd) {
+        const primary = await db.query.trackedPages.findFirst({
+          where: eq(trackedPages.brandDomainId, bd.id),
+          orderBy: [
+            sql`CASE WHEN ${trackedPages.pageRole} = 'primary' THEN 0 ELSE 1 END`,
+            desc(trackedPages.currentResults),
+          ],
+        });
+        if (primary) {
+          trackedPage = primary;
+          pageId = primary.pageId;
+        }
+      }
+
+      if (!pageId) {
+        const sampleProduct = await db.query.scrapedProducts.findFirst({
+          where: and(
+            eq(scrapedProducts.workspaceId, activeWorkspace.id),
+            sql`lower(${scrapedProducts.domain}) = ${cleanDomain}`,
+            sql`${scrapedProducts.pageId} IS NOT NULL AND ${scrapedProducts.pageId} != ''`
+          ),
+          columns: { pageId: true },
+        });
+        if (sampleProduct?.pageId) {
+          pageId = sampleProduct.pageId;
+          trackedPage = await db.query.trackedPages.findFirst({
+            where: eq(trackedPages.pageId, sampleProduct.pageId),
+          });
+        }
+      }
+
+      if (!pageId) {
+        const sampleAdWithDomain = await db
+          .select({ pageId: ads.pageId })
+          .from(ads)
+          .where(sql`lower(${ads.linkUrl}) LIKE ${'%' + cleanDomain + '%'}`)
+          .limit(1);
+        if (sampleAdWithDomain.length > 0 && sampleAdWithDomain[0].pageId) {
+          pageId = sampleAdWithDomain[0].pageId;
+          trackedPage = await db.query.trackedPages.findFirst({
+            where: eq(trackedPages.pageId, pageId),
+          });
+        }
+      }
     }
 
     if (!pageId) {

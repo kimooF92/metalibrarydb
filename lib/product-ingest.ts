@@ -146,7 +146,37 @@ export async function linkAndAutoScrapeProduct({
     let resolvedWorkspaceId = workspaceId;
     let resolvedBrandDomainId: string | null = null;
 
-    const cleanPageId = isValidPageId(pageId) ? (pageId as string) : null;
+    let cleanPageId = isValidPageId(pageId) ? (pageId as string) : null;
+
+    if (!cleanPageId && adId) {
+      const adRec = await db.query.ads.findFirst({
+        where: eq(ads.id, adId),
+        columns: { pageId: true },
+      });
+      if (adRec?.pageId && isValidPageId(adRec.pageId)) {
+        cleanPageId = adRec.pageId;
+      }
+    }
+
+    if (!cleanPageId && domain) {
+      const pageRec = await db.query.trackedPages.findFirst({
+        where: or(
+          sql`lower(${trackedPages.canonicalDomain}) = ${domain.toLowerCase()}`,
+          sql`lower(${trackedPages.landingPage}) = ${domain.toLowerCase()}`
+        ),
+        columns: { pageId: true, brandDomainId: true, workspaceId: true },
+      });
+      if (pageRec?.pageId && isValidPageId(pageRec.pageId)) {
+        cleanPageId = pageRec.pageId;
+      }
+      if (pageRec?.brandDomainId && !resolvedBrandDomainId) {
+        resolvedBrandDomainId = pageRec.brandDomainId;
+      }
+      if (pageRec?.workspaceId && !resolvedWorkspaceId) {
+        resolvedWorkspaceId = pageRec.workspaceId;
+      }
+    }
+
     if (cleanPageId) {
       const pageRec = await db.query.trackedPages.findFirst({
         where: eq(trackedPages.pageId, cleanPageId),
@@ -384,7 +414,7 @@ export async function linkAndAutoScrapeProduct({
       enqueueProductScrape({
         url: normalizedUrl,
         productId: targetProductId,
-        pageId,
+        pageId: cleanPageId,
         adId,
         workspaceId: resolvedWorkspaceId,
       }).catch((err) => {
@@ -401,6 +431,7 @@ export async function linkAndAutoScrapeProduct({
 
         const scrapePromise = processProductExtraction(targetProductId, normalizedUrl, {
           workspaceId: resolvedWorkspaceId,
+          pageId: cleanPageId,
           adCopy,
         }).finally(() => {
           inFlightScrapes.delete(normalizedUrl);
@@ -428,6 +459,7 @@ export async function processProductExtraction(
   options?: {
     workspaceId?: string | null;
     adCopy?: string | null;
+    pageId?: string | null;
   }
 ): Promise<{ success: boolean; status: string; error?: string }> {
   try {
@@ -602,11 +634,72 @@ export async function processProductExtraction(
       finalFailureReason = `Foreign currency detected (${effectivePrice}) - Queued for local worker residential validation`;
     }
 
+    // Resolve pageId and brandDomainId if not already set on product
+    let resolvedPageId = isValidPageId(options?.pageId) ? (options!.pageId as string) : null;
+    let resolvedBrandDomainId: string | null = null;
+
+    if (!resolvedPageId && productId) {
+      const existingProd = await db.query.scrapedProducts.findFirst({
+        where: eq(scrapedProducts.id, productId),
+        columns: { pageId: true, brandDomainId: true },
+      });
+      if (existingProd?.pageId && isValidPageId(existingProd.pageId)) {
+        resolvedPageId = existingProd.pageId;
+      }
+      if (existingProd?.brandDomainId) {
+        resolvedBrandDomainId = existingProd.brandDomainId;
+      }
+    }
+
+    if (!resolvedPageId) {
+      const cleanNorm = normalizedUrl.replace(/\/+$/, "");
+      const matchingAd = await db.query.ads.findFirst({
+        where: or(
+          eq(ads.productId, productId),
+          eq(ads.linkUrl, normalizedUrl),
+          eq(ads.linkUrl, cleanNorm),
+          sql`LOWER(TRIM(TRAILING '/' FROM SPLIT_PART(${ads.linkUrl}, '?', 1))) = LOWER(${cleanNorm})`
+        ),
+        columns: { pageId: true },
+      });
+      if (matchingAd?.pageId && isValidPageId(matchingAd.pageId)) {
+        resolvedPageId = matchingAd.pageId;
+      }
+    }
+
+    if (resolvedDomain) {
+      if (!resolvedBrandDomainId) {
+        const bd = await db.query.brandDomains.findFirst({
+          where: sql`lower(${brandDomains.domain}) = ${resolvedDomain.toLowerCase()}`,
+          columns: { id: true },
+        });
+        if (bd) resolvedBrandDomainId = bd.id;
+      }
+
+      if (!resolvedPageId) {
+        const trackedByDomain = await db.query.trackedPages.findFirst({
+          where: or(
+            sql`lower(${trackedPages.canonicalDomain}) = ${resolvedDomain.toLowerCase()}`,
+            sql`lower(${trackedPages.landingPage}) = ${resolvedDomain.toLowerCase()}`
+          ),
+          columns: { pageId: true, brandDomainId: true },
+        });
+        if (trackedByDomain?.pageId && isValidPageId(trackedByDomain.pageId)) {
+          resolvedPageId = trackedByDomain.pageId;
+          if (trackedByDomain.brandDomainId && !resolvedBrandDomainId) {
+            resolvedBrandDomainId = trackedByDomain.brandDomainId;
+          }
+        }
+      }
+    }
+
     const updateTime = new Date();
     await db
       .update(scrapedProducts)
       .set({
         domain: resolvedDomain || undefined,
+        ...(resolvedPageId ? { pageId: resolvedPageId } : {}),
+        ...(resolvedBrandDomainId ? { brandDomainId: resolvedBrandDomainId } : {}),
         title: effectiveTitle,
         currentPrice: effectivePrice,
         originalPrice: effectiveOriginalPrice,
