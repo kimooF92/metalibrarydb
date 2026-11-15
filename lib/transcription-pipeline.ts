@@ -184,7 +184,7 @@ export async function executeTranscriptionOnInstaBox(
           language: payload.language || null,
           model: payload.model || "turbo",
         }),
-        signal: AbortSignal.timeout(65000), // 65s timeout for inference and download
+        signal: AbortSignal.timeout(90000), // 90s timeout for inference and download
       });
 
       if (res.ok) {

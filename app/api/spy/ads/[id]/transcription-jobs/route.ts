@@ -9,7 +9,7 @@ import { isQStashConfigured } from "@/lib/qstash";
 import { enqueueAdTranscription, executeTranscriptionOnInstaBox } from "@/lib/transcription-pipeline";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 /**
  * GET /api/spy/ads/[id]/transcription-jobs

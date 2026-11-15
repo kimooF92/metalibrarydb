@@ -7,7 +7,7 @@ import { setCached, forceReleaseLock } from "@/lib/cache-service";
 import { executeTranscriptionOnInstaBox, EnqueueTranscriptionPayload } from "@/lib/transcription-pipeline";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function handleTranscribeTask(req: Request | NextRequest) {
   try {

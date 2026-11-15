@@ -137,6 +137,9 @@ export function AdTranscriptViewer({
         const json = await res.json();
         if (json.transcript) {
           setData(json.transcript);
+          if (json.transcript.status === "completed" || json.transcript.status === "no_speech") {
+            setError(null);
+          }
           onTranscribeComplete?.(json.transcript);
         }
       }
@@ -212,13 +215,25 @@ export function AdTranscriptViewer({
         return;
       }
 
-      // If async processing, poll until finished (up to 75 seconds for cold start + inference)
+      // If async processing, poll until finished (up to 180 seconds for cold start + longer videos)
       const startTime = Date.now();
       const pollInterval = setInterval(async () => {
         try {
-          if (Date.now() - startTime > 75000) {
+          if (Date.now() - startTime > 180000) {
             clearInterval(pollInterval);
             setIsLoading(false);
+            // Final check to see if it completed right at the limit
+            const finalRes = await fetch(`/api/spy/ads/${adId}/transcription-jobs`).catch(() => null);
+            if (finalRes?.ok) {
+              const finalData = await finalRes.json().catch(() => null);
+              if (finalData?.transcript?.status === "completed") {
+                setData(finalData.transcript);
+                setError(null);
+                setIsExpanded(true);
+                onTranscribeComplete?.(finalData.transcript);
+                return;
+              }
+            }
             setError("Transcription timed out. Please try again.");
             return;
           }
@@ -229,20 +244,22 @@ export function AdTranscriptViewer({
             if (pollData.transcript?.status === "completed") {
               clearInterval(pollInterval);
               setData(pollData.transcript);
+              setError(null);
               setIsLoading(false);
               setIsExpanded(true);
               onTranscribeComplete?.(pollData.transcript);
             } else if (pollData.transcript?.status === "no_speech") {
               clearInterval(pollInterval);
               setData(pollData.transcript);
+              setError(null);
               setIsLoading(false);
               onTranscribeComplete?.(pollData.transcript);
             } else if (pollData.transcript?.status === "failed") {
-              // If it's a transient 502 cold-start error and within first 30s, give retry time before aborting
+              // If it's a transient 502 cold-start error and within first 45s, give retry time before aborting
               const isTransient502 =
                 pollData.transcript?.errorCode?.includes("502") ||
                 pollData.transcript?.errorMessage?.includes("502");
-              if (isTransient502 && Date.now() - startTime < 30000) {
+              if (isTransient502 && Date.now() - startTime < 45000) {
                 return;
               }
               clearInterval(pollInterval);
@@ -378,7 +395,7 @@ export function AdTranscriptViewer({
       );
     }
 
-    if (error || data?.status === "failed") {
+    if ((error || data?.status === "failed") && data?.status !== "completed" && data?.status !== "no_speech") {
       const errorMsg = error || data?.errorMessage || "Transcription failed";
       return (
         <div className="pt-2 flex items-center gap-2 text-[11px] text-destructive">
@@ -554,8 +571,8 @@ export function AdTranscriptViewer({
     );
   }
 
-  // B. Error State
-  if (error || data?.status === "failed") {
+  // B. Error State (only shown if not completed or no speech)
+  if ((error || data?.status === "failed") && data?.status !== "completed" && data?.status !== "no_speech") {
     const errorMsg = error || data?.errorMessage || "Transcription failed";
     return (
       <div className={cn("p-5 flex flex-col items-center justify-center text-center space-y-4 min-h-[380px]", className)}>
