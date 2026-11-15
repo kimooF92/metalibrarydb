@@ -245,7 +245,7 @@ export const ProductCard = memo(function ProductCard({
           onViewDetails?.(activeProduct);
         }
       }}
-      className={`group relative flex flex-col justify-between rounded-xl border px-3.5 py-[19px] shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-lg ${
+      className={`group relative flex flex-col justify-between rounded-xl border px-2 py-[9px] shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-lg ${
         isCarouselBundle
           ? "before:absolute before:-top-1.5 before:-right-1.5 before:w-full before:h-full before:rounded-xl before:border before:border-indigo-500/25 before:bg-slate-200/60 dark:before:bg-slate-900/60 before:-z-10 after:absolute after:-top-3 after:-right-3 after:w-full after:h-full after:rounded-xl after:border after:border-indigo-500/15 after:bg-slate-300/40 dark:after:bg-slate-950/40 after:-z-20 shadow-indigo-500/5 hover:shadow-indigo-500/10"
           : ""
