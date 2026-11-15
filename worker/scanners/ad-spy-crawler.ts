@@ -536,8 +536,23 @@ export async function scanAdCreatives(
       }
     }
 
-    const finalStatus: "completed" | "partial" =
-      noProgressCount >= NO_PROGRESS_CAP ? "completed" : "partial";
+    const expectedCount =
+      totalTargetAds !== null && totalTargetAds > 0
+        ? totalTargetAds
+        : typeof (trackedPageRecord as any)?.currentResults === "number" && (trackedPageRecord as any).currentResults > 0
+          ? (trackedPageRecord as any).currentResults
+          : null;
+
+    let finalStatus: "completed" | "partial" = "partial";
+    if (expectedCount !== null) {
+      // Authoritative complete ONLY if we captured >= 80% of expected active ads (capped at 100 max per scan)
+      const threshold = Math.min(expectedCount, 100) * 0.8;
+      finalStatus = collectedAds.size >= threshold ? "completed" : "partial";
+    } else {
+      // When no prior or DOM count was available:
+      // A stall (noProgressCount >= NO_PROGRESS_CAP) on a small collection (< 15) is treated as partial
+      finalStatus = noProgressCount >= NO_PROGRESS_CAP && collectedAds.size >= 15 ? "completed" : "partial";
+    }
 
     // 5. Decoupled Page-Batch Ingestion via Upstash QStash
     // Consolidates all 20-50 extracted ads into 1 atomic QStash message, preserving the 1k/day free tier quota.

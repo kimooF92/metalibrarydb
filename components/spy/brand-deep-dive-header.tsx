@@ -269,7 +269,15 @@ export const BrandDeepDiveHeader = memo(function BrandDeepDiveHeader({
         <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-xs">
           <span className="text-base shrink-0">⏸️</span>
           <div>
-            <strong>Brand on Hold:</strong> Meta Ad Library returned 0 active ads during the last scan, but existing ads and products are temporarily preserved under grace period ({brand.consecutiveZeroScans || 1}/3 scans).
+            {(brand.currentResults ?? 0) === 0 ? (
+              <>
+                <strong>Brand on Hold:</strong> Meta Ad Library returned 0 active ads during the last scan, but existing ads and products are temporarily preserved under grace period ({brand.consecutiveZeroScans || 1}/3 scans).
+              </>
+            ) : (
+              <>
+                <strong>Ad Volume Drop Under Review:</strong> Meta Ad Library reported a sudden drop in visible creatives during the last scan ({brand.currentResults} ads vs {brand.lastKnownValidResults || brand.currentResults} baseline). Existing ads and products are preserved under grace period ({brand.consecutiveZeroScans || 1}/2 scans).
+              </>
+            )}
           </div>
         </div>
       )}

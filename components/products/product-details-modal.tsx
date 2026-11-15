@@ -506,7 +506,7 @@ export function ProductDetailsModal({
             <div className="flex items-center gap-2">
               <span className="flex h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
               <span>
-                <strong>Brand on Hold:</strong> Meta Ad Library detected 0 active ads during recent scans. This product is preserved under the grace period before being marked off-air.
+                <strong>Brand on Hold:</strong> {(currentProduct?.activeAdsCount ?? 0) === 0 ? "Meta Ad Library detected 0 active ads during recent scans." : "Meta Ad Library detected an ad volume drop during recent scans."} This product is preserved under the grace period before being marked off-air.
               </span>
             </div>
             <span className="shrink-0 text-[10px] font-bold uppercase bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30 inline-flex items-center gap-1">

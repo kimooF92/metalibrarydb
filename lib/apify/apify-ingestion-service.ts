@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { ads, adObservations, creativeScans, trackedPages, brandDomains, scrapedProducts } from "@/db/schema";
-import { eq, and, sql, desc, ne, isNull, or } from "drizzle-orm";
+import { ads, adObservations, creativeScans, trackedPages, brandDomains, scrapedProducts, queue } from "@/db/schema";
+import { eq, and, sql, desc, ne, isNull, or, inArray } from "drizzle-orm";
 import { uploadMediaWithHashing, isB2Configured, registerPendingB2Upload } from "@/lib/b2-storage";
 import { linkAndAutoScrapeProduct } from "@/lib/product-ingest";
 import { checkAndRecordBreakout } from "@/lib/breakout-detector";
@@ -804,6 +804,22 @@ export async function ingestApifyDatasetItems(
         .update(scanHistory)
         .set({ creativeScannedAt: now })
         .where(eq(scanHistory.id, latestScan.id));
+    }
+
+    // Clear any pending or running creative jobs in the queue for this page so local browser workers don't re-run redundantly
+    try {
+      await db
+        .update(queue)
+        .set({ status: "completed", finishedAt: now })
+        .where(
+          and(
+            inArray(queue.trackedPageId, [finalTrackedPageId, trackedPageId]),
+            eq(queue.jobType, "creative"),
+            inArray(queue.status, ["pending", "running"])
+          )
+        );
+    } catch (qErr) {
+      console.warn("[Apify Ingest] Non-fatal error cleaning redundant creative queue jobs:", qErr);
     }
   } catch (err) {
     console.error("[Apify Ingest] Error updating ad count and pairing creative scan:", err);
