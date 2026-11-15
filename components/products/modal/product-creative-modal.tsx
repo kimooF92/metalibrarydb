@@ -386,25 +386,9 @@ export function ProductCreativeModal({
 
         {/* MAIN BODY: 2-Column Responsive Layout */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5">
-          {activeTab === "transcript" ? (
-            <div className="max-w-4xl mx-auto py-2">
-              {ad.id ? (
-                <AdTranscriptViewer
-                  adId={ad.id}
-                  onSeek={handleSeekVideo}
-                  currentTime={currentTime}
-                  variant="full-tab"
-                />
-              ) : (
-                <div className="text-center py-12 text-sm text-slate-500">
-                  No transcript available for this creative.
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-              {/* LEFT COLUMN: Authentic Meta Feed Simulation Card (5 cols) */}
-              <div className="lg:col-span-5 flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-md overflow-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            {/* LEFT COLUMN: Authentic Meta Feed Simulation Card (5 cols) */}
+            <div className="lg:col-span-5 flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-md overflow-hidden lg:sticky lg:top-0">
                 {/* Simulated Post Header */}
                 <div className="p-3.5 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-900/50">
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -571,8 +555,25 @@ export function ProductCreativeModal({
                 </div>
               </div>
 
-              {/* RIGHT COLUMN: Bento Intelligence Grid (7 cols) */}
-              <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* RIGHT COLUMN: Bento Intelligence Grid OR Transcript Viewer (7 cols) */}
+              <div className="lg:col-span-7">
+                {activeTab === "transcript" ? (
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4 shadow-xs">
+                    {ad.id ? (
+                      <AdTranscriptViewer
+                        adId={ad.id}
+                        onSeek={handleSeekVideo}
+                        currentTime={currentTime}
+                        variant="full-tab"
+                      />
+                    ) : (
+                      <div className="text-center py-12 text-sm text-slate-500">
+                        No transcript available for this creative.
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* BENTO CARD 1: Ad Velocity & Scaling Signals */}
                 <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 space-y-3 flex flex-col justify-between">
                   <div className="flex items-center justify-between">
@@ -759,11 +760,12 @@ export function ProductCreativeModal({
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
-    </div>,
-    document.body
-  );
+    </div>
+  </div>,
+  document.body
+);
 }
