@@ -232,7 +232,30 @@ export async function verifyProductFavoriteAds(
     };
   }
 
-  const adsToCheck = options.forceAll ? allLinkedAds : activeAds;
+  // When forceAll is enabled, still respect the 5-scan dormancy cutoff so we never resurrect dead ads older than 5 days
+  const DORMANT_GRACE_PERIOD_DAYS = 5;
+  const graceCutoff = new Date(Date.now() - DORMANT_GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000);
+  const adsToCheck = options.forceAll
+    ? allLinkedAds.filter((a) => !a.isArchived || (a.archivedAt && new Date(a.archivedAt) >= graceCutoff))
+    : activeAds;
+
+  if (adsToCheck.length === 0) {
+    return {
+      productId: product.id,
+      productTitle: product.title,
+      productUrl: product.url,
+      totalLinkedAds: allLinkedAds.length,
+      activeAdsBefore: 0,
+      checkedAdsCount: 0,
+      activeCount: 0,
+      inactiveCount: allLinkedAds.length,
+      notFoundCount: 0,
+      errorCount: 0,
+      skipped: true,
+      skipReason: "All linked ads are confirmed dead beyond 5-scan grace period",
+      updatedAds: [],
+    };
+  }
   const updatedAds: VerifyProductResult["updatedAds"] = [];
 
   let activeCount = 0;

@@ -8,7 +8,7 @@ if (typeof globalThis.WebSocket === "undefined") {
 
 import { db, client } from "../db";
 import { scrapedProducts, ads } from "../db/schema";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, or, isNull } from "drizzle-orm";
 import { getBrowserSession, closeBrowserSession } from "../worker/browser";
 import {
   checkSingleAdStatus,
@@ -176,13 +176,44 @@ async function runFavoriteAdsVerifier() {
       targetProducts = pendingRows;
       console.log(`🎯 [Pending Only Mode] Found ${targetProducts.length} favorite product(s) with queued/pending ads to verify.\n`);
     } else {
-      // Fetch all favorite products ordered deterministically by ID
-      targetProducts = await db.query.scrapedProducts.findMany({
-        where: eq(scrapedProducts.isFavorite, true),
-        columns: { id: true, title: true, url: true },
-        orderBy: [desc(scrapedProducts.id)],
-        limit: options.limit || 500,
-      });
+      // 5-scan grace period dormancy: Skip sure inactive favorite products whose ads have been dead > 5 days (~5 daily scans).
+      // Active favorites OR favorites whose ads were archived within the last 5 days are evaluated.
+      const allFavoritesCountRes = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(scrapedProducts)
+        .where(eq(scrapedProducts.isFavorite, true));
+      const totalFavCount = allFavoritesCountRes[0]?.count || 0;
+
+      const eligibleFavorites = await db
+        .selectDistinctOn([scrapedProducts.id], {
+          id: scrapedProducts.id,
+          title: scrapedProducts.title,
+          url: scrapedProducts.url,
+        })
+        .from(scrapedProducts)
+        .leftJoin(ads, eq(ads.productId, scrapedProducts.id))
+        .where(
+          and(
+            eq(scrapedProducts.isFavorite, true),
+            or(
+              // 1. Has at least one active ad
+              sql`(${ads.isArchived} = false OR ${ads.isArchived} IS NULL)`,
+              // 2. Or ads were archived recently (within 5-scan grace period)
+              sql`${ads.archivedAt} >= NOW() - INTERVAL '5 days'`,
+              // 3. Or newly added favorite product without ads yet (created within 5 days)
+              and(isNull(ads.id), sql`${scrapedProducts.createdAt} >= NOW() - INTERVAL '5 days'`)
+            )
+          )
+        )
+        .orderBy(scrapedProducts.id, desc(ads.lastSeenAt))
+        .limit(options.limit || 500);
+
+      const dormantSkipped = Math.max(0, totalFavCount - eligibleFavorites.length);
+      if (dormantSkipped > 0) {
+        console.log(`💤 [Dormancy Filter] Found ${eligibleFavorites.length} active/grace-period favorites to verify (${dormantSkipped} confirmed dead >5 scans skipped).\n`);
+      }
+
+      targetProducts = eligibleFavorites;
     }
 
     if (targetProducts.length === 0) {

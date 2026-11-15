@@ -7,10 +7,10 @@ on:
   workflow_dispatch: # Allows manual 1-click trigger from GitHub Actions UI anytime
     inputs:
       force:
-        description: 'Force recheck ALL ads (including inactive/archived to restore them)'
+        description: 'Force recheck ALL ads (including inactive/archived within grace period)'
         type: boolean
         required: false
-        default: true
+        default: false
       limit:
         description: 'Maximum products to check per run (leave empty for all favorites)'
         required: false

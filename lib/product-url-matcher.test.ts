@@ -43,3 +43,16 @@ test("generateUrlSearchVariants produces robust set covering slash variations an
   assert.ok(utmVariants.includes("https://deal-tech.store/products/interactive-learning-book-ar-fr-en"));
   assert.ok(utmVariants.includes("https://deal-tech.store/products/interactive-learning-book-ar-fr-en/"));
 });
+
+test("generateUrlSearchVariants correctly bidirectionally matches Arabic percent-encoded and raw slugs", () => {
+  const rawArabic = "https://ottashop.com/product/جهاز-تدليك-لشد-الوجه";
+  const rawVariants = generateUrlSearchVariants(rawArabic);
+  const encodedArabic = encodeURI(rawArabic);
+
+  // Raw input must generate encoded variant
+  assert.ok(rawVariants.includes(encodedArabic));
+
+  // Encoded input must generate raw Arabic variant
+  const encodedVariants = generateUrlSearchVariants(encodedArabic);
+  assert.ok(encodedVariants.includes(rawArabic));
+});

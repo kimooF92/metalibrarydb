@@ -71,6 +71,38 @@ export function generateUrlSearchVariants(rawUrl?: string | null): string[] {
     variants.add(canonNoSlash + "/");
   }
 
+  // Safe decode for Arabic & percent-encoded slugs
+  try {
+    const decoded = decodeURI(trimmed);
+    if (decoded !== trimmed) {
+      variants.add(decoded);
+      const decNoSlash = decoded.replace(/\/+$/, "");
+      variants.add(decNoSlash);
+      variants.add(decNoSlash + "/");
+      const normDecoded = normalizeProductUrl(decoded);
+      if (normDecoded) {
+        variants.add(normDecoded);
+        variants.add(normDecoded + "/");
+      }
+    }
+  } catch {}
+
+  // Safe encode for raw Unicode / Arabic slugs
+  try {
+    const encoded = encodeURI(trimmed);
+    if (encoded !== trimmed) {
+      variants.add(encoded);
+      const encNoSlash = encoded.replace(/\/+$/, "");
+      variants.add(encNoSlash);
+      variants.add(encNoSlash + "/");
+      const normEncoded = normalizeProductUrl(encoded);
+      if (normEncoded) {
+        variants.add(normEncoded);
+        variants.add(normEncoded + "/");
+      }
+    }
+  } catch {}
+
   return Array.from(variants);
 }
 
