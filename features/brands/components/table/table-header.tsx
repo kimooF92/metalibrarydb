@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Star, Package, ChevronUp, ChevronDown, ChevronsUpDown, ArrowUpRight } from "lucide-react";
+import { Star, Package, ChevronUp, ChevronDown, ChevronsUpDown, ArrowUpRight, Sparkles } from "lucide-react";
 
 export interface TableHeaderProps {
   allVisibleSelected: boolean;
@@ -149,7 +149,72 @@ export function TableHeader({
           </span>
         </th>
         {renderSortHeader("status", "Pattern & Status", "hidden md:table-cell w-[17%] min-w-[135px] whitespace-nowrap")}
-        {renderSortHeader("lastChecked", "Last Checked", "w-[13%] min-w-[100px] whitespace-nowrap")}
+        <th className="px-2.5 md:px-3.5 xl:px-4 py-2.5 whitespace-nowrap w-[15%] min-w-[135px]">
+          <div className="flex items-center gap-1.5 font-semibold text-[10px] uppercase tracking-wider select-none">
+            <button
+              type="button"
+              onClick={() => onSortChange("lastChecked")}
+              className={`flex items-center gap-0.5 group transition-colors cursor-pointer uppercase tracking-wider ${
+                sortBy === "lastChecked"
+                  ? "text-indigo-600 dark:text-indigo-400 font-bold"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+              }`}
+              title="Sort by Ad Count scan timestamp"
+            >
+              <span className="uppercase tracking-wider">Checked</span>
+              {sortBy === "lastChecked" ? (
+                <>
+                  {sortOrder === "asc" ? (
+                    <ChevronUp className="w-3.5 h-3.5 text-indigo-500" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 text-indigo-500" />
+                  )}
+                  {hasPendingReSort && (
+                    <span
+                      className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0"
+                      title="Order frozen for updated rows. Click 'Apply Sort' to re-sort."
+                    />
+                  )}
+                </>
+              ) : (
+                <ChevronsUpDown className="w-2.5 h-2.5 opacity-30 group-hover:opacity-70" />
+              )}
+            </button>
+
+            <span className="text-slate-300 dark:text-slate-700 font-normal">/</span>
+
+            <button
+              type="button"
+              onClick={() => onSortChange("lastCreativeScan")}
+              className={`flex items-center gap-0.5 group transition-colors cursor-pointer uppercase tracking-wider ${
+                sortBy === "lastCreativeScan"
+                  ? "text-purple-600 dark:text-purple-400 font-bold"
+                  : "text-slate-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-300"
+              }`}
+              title="Sort by Creative crawl timestamp (Sparkles)"
+            >
+              <Sparkles className="w-3 h-3 text-purple-500 shrink-0" />
+              <span className="uppercase tracking-wider">Scanned</span>
+              {sortBy === "lastCreativeScan" ? (
+                <>
+                  {sortOrder === "asc" ? (
+                    <ChevronUp className="w-3.5 h-3.5 text-purple-500" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 text-purple-500" />
+                  )}
+                  {hasPendingReSort && (
+                    <span
+                      className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0"
+                      title="Order frozen for updated rows. Click 'Apply Sort' to re-sort."
+                    />
+                  )}
+                </>
+              ) : (
+                <ChevronsUpDown className="w-2.5 h-2.5 opacity-30 group-hover:opacity-70" />
+              )}
+            </button>
+          </div>
+        </th>
         <th className="px-2.5 md:px-3.5 xl:px-4 py-2.5 text-right whitespace-nowrap text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase tracking-wider w-[9%] min-w-[75px]">
           <span className="uppercase tracking-wider">Actions</span>
         </th>

@@ -377,6 +377,9 @@ export async function scanAdCreatives(
       if (parsedCount.results !== null && parsedCount.results > 0) {
         totalTargetAds = parsedCount.results;
         console.log(`[Spy Scanner] 🎯 Target total ad count from DOM: ~${totalTargetAds} ads`);
+      } else if (parsedCount.results === 0) {
+        totalTargetAds = 0;
+        console.log(`[Spy Scanner] 🎯 Target total ad count from DOM: 0 ads (verified dark/inactive)`);
       }
     } catch {
       // non-fatal count read error
@@ -461,6 +464,29 @@ export async function scanAdCreatives(
     const now = new Date();
 
     if (collectedAds.size === 0) {
+      if (totalTargetAds === 0) {
+        console.log(`[Spy Scanner] ℹ️ Verified 0 active ads on Meta for this page. Gracefully concluding scan.`);
+        await page.close().catch(() => {});
+        await db
+          .update(trackedPages)
+          .set({
+            currentResults: 0,
+            adCount: 0,
+            lastCreativeScan: now,
+            lastSuccessAt: now,
+            status: "success",
+            updatedAt: now,
+          })
+          .where(eq(trackedPages.id, trackedPageId));
+
+        return {
+          status: "completed",
+          extractedCount: 0,
+          extractedPageIds,
+          outcomeDetails: "Verified 0 active ads running on Meta for this page.",
+        };
+      }
+
       return {
         status: "failed",
         extractedCount: 0,
@@ -521,6 +547,7 @@ export async function scanAdCreatives(
       pageId: resolvedPageId || (extractedPageIds[0] ?? "0"),
       pageName: resolvedPageName || trackedPageRecord?.displayName || null,
       totalExtractedCount: collectedAds.size,
+      metaReportedCount: totalTargetAds,
       ads: Array.from(collectedAds.values()).slice(0, 100).map((a) => ({
         adArchiveId: a.adArchiveId,
         pageId: (a.pageId && !a.pageId.includes("-")) ? a.pageId : (resolvedPageId || extractedPageIds[0] || "0"),
@@ -584,6 +611,7 @@ export async function scanAdCreatives(
       status: "success",
       lastCreativeScan: now,
       lastSuccessAt: now,
+      ...(totalTargetAds !== null && totalTargetAds > 0 ? { currentResults: totalTargetAds } : {}),
       ...(shouldUpdateProfilePic ? { profilePicUrl: resolvedProfilePicUrl } : {}),
       updatedAt: now,
     };

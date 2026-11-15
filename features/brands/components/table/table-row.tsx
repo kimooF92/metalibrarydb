@@ -319,6 +319,11 @@ export function TableRow({
                   </span>
                 )}
                 <span
+                  title={
+                    p.extractedAdCount !== undefined && p.extractedAdCount !== null && p.extractedAdCount > 0
+                      ? `Meta reports ~${p.currentResults.toLocaleString()} active ads (${p.extractedAdCount} creatives indexed in library)`
+                      : `Meta reports ~${p.currentResults.toLocaleString()} active ads`
+                  }
                   className={`text-[13px] font-mono tabular-nums ${
                     isHighVolume
                       ? "text-amber-500 dark:text-amber-400 font-black"
@@ -329,6 +334,14 @@ export function TableRow({
                 >
                   {p.currentResults.toLocaleString()}
                 </span>
+                {p.extractedAdCount !== undefined && p.extractedAdCount !== null && p.extractedAdCount > 0 && (
+                  <span
+                    className="text-[10px] text-slate-400 dark:text-slate-500 font-mono"
+                    title={`${p.extractedAdCount} unique creatives indexed in library`}
+                  >
+                    ({p.extractedAdCount})
+                  </span>
+                )}
               </div>
             ) : (
               <span className="text-slate-400 text-[11px]">—</span>

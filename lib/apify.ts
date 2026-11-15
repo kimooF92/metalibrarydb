@@ -170,7 +170,10 @@ export function getApifyTokens(): string[] {
 
   for (const raw of rawValues) {
     if (!raw) continue;
-    const split = raw.split(",").map((t) => t.trim()).filter(Boolean);
+    const split = raw
+      .split(",")
+      .map((t) => t.trim().replace(/^["']|["']$/g, ""))
+      .filter((t) => Boolean(t) && t.startsWith("apify_api_"));
     for (const t of split) {
       if (t && !tokens.includes(t)) {
         tokens.push(t);

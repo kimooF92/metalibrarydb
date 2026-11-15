@@ -36,6 +36,7 @@ export const BatchIngestPayloadSchema = z.object({
   pageName: z.string().nullable().optional(),
   totalExtractedCount: z.number().int().min(0).default(0),
   ads: z.array(RawAdItemSchema).max(100),
+  metaReportedCount: z.number().int().min(0).nullable().optional(),
   observedAt: z.string().default(() => new Date().toISOString()),
   scanQuality: z.enum(["complete", "partial", "unclear"]).default("partial"),
 });

@@ -49,11 +49,14 @@ export function usePagesRealtime({
                 updated.current_results !== undefined || updated.currentResults !== undefined;
               const dateUpdated =
                 updated.last_checked !== undefined || updated.lastChecked !== undefined;
+              const creativeDateUpdated =
+                updated.last_creative_scan !== undefined || updated.lastCreativeScan !== undefined;
               const rawCount = updated.current_results ?? updated.currentResults;
               const countIsZero = rawCount !== null && rawCount !== undefined && Number(rawCount) === 0;
 
               if (
                 (sortBy === "lastChecked" && dateUpdated) ||
+                (sortBy === "lastCreativeScan" && creativeDateUpdated) ||
                 (sortBy === "currentResults" && countUpdated) ||
                 (sortBy === "difference" && countUpdated) ||
                 (activeTab === "active" && countIsZero)
@@ -93,6 +96,8 @@ export function usePagesRealtime({
                 difference,
                 historyPoints,
                 lastChecked: updated.last_checked || updated.lastChecked || page.lastChecked,
+                lastCreativeScan: updated.last_creative_scan || updated.lastCreativeScan || page.lastCreativeScan,
+                adCount: updated.ad_count !== undefined ? updated.ad_count : (updated.adCount !== undefined ? updated.adCount : page.adCount),
                 lastSuccessAt: updated.last_success_at || updated.lastSuccessAt || page.lastSuccessAt,
                 updatedAt: updated.updated_at || updated.updatedAt || page.updatedAt,
                 holdStatus: updated.hold_status || updated.holdStatus || page.holdStatus,

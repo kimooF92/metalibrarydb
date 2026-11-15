@@ -223,7 +223,15 @@ export async function GET(request: Request) {
       orderClauses.push(desc(trackedPages.id));
     } else {
       const targetSortCol = sortColumns[sortBy] || trackedPages.createdAt;
-      orderClauses.push(sortOrder === "asc" ? asc(targetSortCol) : desc(targetSortCol));
+      if (sortBy === "lastCreativeScan" || sortBy === "lastChecked") {
+        orderClauses.push(
+          sortOrder === "asc"
+            ? sql`${targetSortCol} ASC NULLS LAST`
+            : sql`${targetSortCol} DESC NULLS LAST`
+        );
+      } else {
+        orderClauses.push(sortOrder === "asc" ? asc(targetSortCol) : desc(targetSortCol));
+      }
       if (sortBy !== "createdAt") {
         orderClauses.push(desc(trackedPages.createdAt));
       }
@@ -278,6 +286,7 @@ export async function GET(request: Request) {
               notes: true,
               tags: true,
               lastCreativeScan: true,
+              adCount: true,
               isWatchlisted: true,
               discoveredPagesCount: true,
               holdStatus: true,
@@ -608,7 +617,8 @@ export async function GET(request: Request) {
           lastKnownValidResults: p.lastKnownValidResults,
           consecutiveZeroScans: p.consecutiveZeroScans,
         }),
-        extractedAdCount: extractedAdCountMap[p.id] ?? 0,
+        adCount: p.adCount ?? extractedAdCountMap[p.id] ?? 0,
+        extractedAdCount: extractedAdCountMap[p.id] ?? p.adCount ?? 0,
         approxProductCount: approxProductCountMap[p.id] ?? null,
         holdStatus: p.holdStatus ?? "active",
         lastKnownValidResults: p.lastKnownValidResults ?? null,

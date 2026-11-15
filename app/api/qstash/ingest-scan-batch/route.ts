@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySignatureAppRouter } from "@upstash/qstash/nextjs";
 import { db } from "@/db";
-import { ads, adObservations, creativeScans, trackedPages } from "@/db/schema";
-import { eq, and, sql, inArray } from "drizzle-orm";
+import { ads, adObservations, creativeScans, trackedPages, scanHistory } from "@/db/schema";
+import { eq, and, sql, inArray, desc } from "drizzle-orm";
 import { BatchIngestPayloadSchema, type RawAdItem } from "@/lib/qstash-types";
 import { enqueueProductScrape } from "@/lib/qstash";
 import { reconcileArchivedAds } from "@/lib/ad-reconciliation";
@@ -27,7 +27,15 @@ export async function handleBatchIngest(req: Request | NextRequest) {
       );
     }
 
-    const { creativeScanId, trackedPageId, pageId, scanQuality, ads: batchAds, observedAt } = parseResult.data;
+    const {
+      creativeScanId,
+      trackedPageId,
+      pageId,
+      scanQuality,
+      ads: batchAds,
+      observedAt,
+      metaReportedCount,
+    } = parseResult.data;
 
     // 1. Authorize Scan & Page Relation (Derive workspaceId from DB to guarantee tenant isolation)
     const [pageRecord] = await db
@@ -276,7 +284,81 @@ export async function handleBatchIngest(req: Request | NextRequest) {
       console.warn(`[QStash Batch Ingest] ⚠️ Skipping archival reconciliation: scanQuality is '${scanQuality}' (partial/unclear).`);
     }
 
-    // 8. Invalidate Workspace, Brand & Product Caches
+    // 8. Synchronize Tracked Page Counts & History (Both Meta Live Volume & Stored Creatives)
+    const targetPageId = pageRecord.pageId || pageId;
+    let activeCreativeCount = uniqueAds.filter((a) => a.isActive).length;
+    try {
+      const [activeCreativesRes] = await db
+        .select({ count: sql<number>`count(distinct ${ads.id})` })
+        .from(ads)
+        .where(
+          and(
+            eq(ads.pageId, targetPageId),
+            eq(ads.isArchived, false)
+          )
+        );
+      if (activeCreativesRes?.count !== undefined) {
+        activeCreativeCount = Number(activeCreativesRes.count);
+      }
+    } catch (countErr) {
+      console.warn("[QStash Batch Ingest] Non-fatal error counting active creatives:", countErr);
+    }
+
+    const nowTimestamp = new Date(observedAt);
+    const trackedPageUpdates: Record<string, any> = {
+      adCount: activeCreativeCount,
+      lastCreativeScan: nowTimestamp,
+      lastSuccessAt: nowTimestamp,
+      updatedAt: new Date(),
+    };
+
+    if (typeof metaReportedCount === "number" && metaReportedCount >= 0) {
+      trackedPageUpdates.currentResults = metaReportedCount;
+      trackedPageUpdates.lastChecked = nowTimestamp;
+    }
+
+    await db
+      .update(trackedPages)
+      .set(trackedPageUpdates)
+      .where(eq(trackedPages.id, trackedPageId));
+
+    if (typeof metaReportedCount === "number" && metaReportedCount >= 0) {
+      try {
+        const [latestScan] = await db
+          .select({
+            id: scanHistory.id,
+            results: scanHistory.results,
+            checkedAt: scanHistory.checkedAt,
+          })
+          .from(scanHistory)
+          .where(eq(scanHistory.trackedPageId, trackedPageId))
+          .orderBy(desc(scanHistory.checkedAt))
+          .limit(1);
+
+        const isRecent = latestScan?.checkedAt && (Date.now() - new Date(latestScan.checkedAt).getTime()) < 15 * 60 * 1000;
+        if (latestScan && (isRecent || latestScan.results === null)) {
+          await db
+            .update(scanHistory)
+            .set({
+              creativeScannedAt: nowTimestamp,
+              ...(latestScan.results === null ? { results: metaReportedCount } : {}),
+            })
+            .where(eq(scanHistory.id, latestScan.id));
+        } else if (!latestScan || latestScan.results !== metaReportedCount) {
+          await db.insert(scanHistory).values({
+            trackedPageId,
+            results: metaReportedCount,
+            status: "success",
+            checkedAt: nowTimestamp,
+            creativeScannedAt: nowTimestamp,
+          });
+        }
+      } catch (historyErr) {
+        console.warn("[QStash Batch Ingest] Non-fatal error recording scan_history:", historyErr);
+      }
+    }
+
+    // 9. Invalidate Workspace, Brand & Product Caches
     if (pageRecord.workspaceId) {
       const wsId = pageRecord.workspaceId;
       const targetPageId = pageRecord.pageId || pageId;

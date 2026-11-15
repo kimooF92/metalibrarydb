@@ -74,6 +74,7 @@ export interface TrackedPage {
   historyPoints?: number[];
   scalingPattern?: ScalingPatternResult;
   approxProductCount?: number | null;
+  adCount?: number | null;
   extractedAdCount?: number | null;
   discoveredPagesCount?: number | null;
   holdStatus?: "active" | "on_hold" | "inactive" | null;
