@@ -8,7 +8,6 @@ import {
   BrandAnalyticsTab,
 } from "@/features/analytics";
 import { PulseBanner } from "@/components/analytics/pulse-banner";
-import { MarketForecastCard } from "@/components/analytics/market-forecast-card";
 import { ProductAnalyticsTab } from "@/components/analytics/product-analytics-tab";
 import { AdAnalyticsTab } from "@/components/analytics/ad-analytics-tab";
 
@@ -68,8 +67,6 @@ export default function AnalyticsPage() {
         dateRange={dateRange}
         isLoading={isCurrentTabLoading && !productsData && !adsData}
       />
-
-      <MarketForecastCard />
 
       <AnalyticsTabsNav
         activeTab={activeTab}

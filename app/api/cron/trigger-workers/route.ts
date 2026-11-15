@@ -130,36 +130,10 @@ async function handleCronTrigger(req: NextRequest) {
       results.githubActionsDispatched.verifyFavorites = await dispatchWorkflow("verify-favorites.yml");
     }
 
-    // 4. Pre-warm / refresh AI Market Forecast in background if target is 'all' or 'insights'
-    // Note: Opportunities AI report generation is strictly on-demand (manual only) to prevent unwanted AI spend
+    // 4. AI Refresh status (deprecated/removed in favor of deterministic telemetry)
     let aiRefreshStatus: { opportunities?: string; forecast?: string } = {
       opportunities: "manual_on_demand_only",
     };
-    if (target === "all" || target === "insights" || target === "ai") {
-      try {
-        const { generateAiMarketForecast } = await import("@/lib/market-forecaster");
-        const { appSettings } = await import("@/db/schema");
-        const { eq } = await import("drizzle-orm");
-
-        const forecastReport = await generateAiMarketForecast().catch((e) => {
-          console.warn("[Cron Forecast Pre-warm Error]:", e);
-          return null;
-        });
-
-        if (forecastReport) {
-          await db
-            .update(appSettings)
-            .set({
-              savedMarketForecast: forecastReport,
-              updatedAt: new Date(),
-            })
-            .where(eq(appSettings.id, "default"));
-          aiRefreshStatus.forecast = "refreshed";
-        }
-      } catch (aiErr: any) {
-        console.warn("[Cron AI Pre-warm Notice]:", aiErr?.message || aiErr);
-      }
-    }
 
     // 5. Record Activity Notification for Audit Trail
     await db.insert(activityNotifications).values({

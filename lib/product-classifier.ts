@@ -1,10 +1,10 @@
 /**
  * E-Commerce Product AI Classifier Engine
  * 
- * Uses the 3 Best Free Models on OpenRouter with Cascade Fallback:
- * 1. nvidia/llama-3.1-nemotron-70b-instruct:free (Primary - Top reasoning & edge-case disambiguation)
- * 2. google/gemini-2.0-flash-exp:free (Fallback 1 - Ultra-fast, best French & Arabic multilingual comprehension)
- * 3. meta-llama/llama-3.3-70b-instruct:free (Fallback 2 - Heavyweight 70B parameter taxonomy classification)
+ * Uses Decision AI models only:
+ * 1. Span model (respan/span-02) - Primary
+ * 2. Jev model (typesafe/jev-1.13) - Backup
+ * Strict rule: No generic LLMs (Gemini, Groq, OpenAI) are used.
  * 
  * Includes an Offline Deterministic Rule-Based Fallback Engine ($0 cost, 0 network failure).
  */
