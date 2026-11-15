@@ -69,8 +69,6 @@ export function ProductCreativeModal({
   const [currentTime, setCurrentTime] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const filmstripRef = useRef<HTMLDivElement>(null);
-  const activeThumbRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -93,17 +91,6 @@ export function ProductCreativeModal({
       };
     }
   }, [isOpen]);
-
-  // Auto-scroll active filmstrip thumb into view
-  useEffect(() => {
-    if (isOpen && activeThumbRef.current) {
-      activeThumbRef.current.scrollIntoView({
-        behavior: "smooth",
-        block: "nearest",
-        inline: "center",
-      });
-    }
-  }, [currentIndex, isOpen]);
 
   // Calculate ad duration in days
   const adDuration = useMemo(() => {
@@ -276,28 +263,33 @@ export function ProductCreativeModal({
           {/* Sibling Stepper */}
           <div className="flex items-center gap-2">
             {ads.length > 1 && (
-              <div className="flex items-center bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700/80 p-0.5 shadow-xs">
-                <button
-                  type="button"
-                  onClick={handlePrev}
-                  disabled={!canGoPrev}
-                  className="p-1 rounded text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-                  title="Previous Creative (← Left Arrow)"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <span className="px-2 text-xs font-bold font-mono text-slate-700 dark:text-slate-200 select-none">
-                  {currentIndex + 1} / {ads.length}
+              <div className="flex items-center gap-1.5">
+                <div className="flex items-center bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700/80 p-0.5 shadow-xs">
+                  <button
+                    type="button"
+                    onClick={handlePrev}
+                    disabled={!canGoPrev}
+                    className="p-1.5 rounded text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                    title="Previous Creative (← Left Arrow)"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="px-2.5 text-xs font-bold font-mono text-slate-700 dark:text-slate-200 select-none">
+                    Ad {currentIndex + 1} of {ads.length}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleNext}
+                    disabled={!canGoNext}
+                    className="p-1.5 rounded text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                    title="Next Creative (→ Right Arrow)"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+                <span className="hidden md:inline-flex text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-slate-800/80 text-slate-500 border border-slate-300/60 dark:border-slate-700/60 select-none" title="Use Left and Right arrow keys">
+                  ← / →
                 </span>
-                <button
-                  type="button"
-                  onClick={handleNext}
-                  disabled={!canGoNext}
-                  className="p-1 rounded text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-                  title="Next Creative (→ Right Arrow)"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
               </div>
             )}
 
@@ -770,84 +762,6 @@ export function ProductCreativeModal({
             </div>
           )}
         </div>
-
-        {/* BOTTOM RAIL (Zone C): Sibling Ads Filmstrip */}
-        {ads.length > 1 && (
-          <div className="px-4 sm:px-6 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90 shrink-0">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-indigo-500" />
-                All Creatives for this Product ({ads.length})
-              </span>
-              <span className="text-[11px] text-slate-400 hidden sm:inline">
-                Click any thumbnail or use ← → arrow keys to switch
-              </span>
-            </div>
-
-            <div
-              ref={filmstripRef}
-              className="flex items-center gap-2.5 overflow-x-auto pb-1.5 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700"
-            >
-              {ads.map((sibling, idx) => {
-                const isSelected = idx === currentIndex;
-                const siblingIsVideo = Boolean(
-                  sibling.mediaType === "video" ||
-                  sibling.mediaUrls?.some((u) => isGenuineVideoUrl(u))
-                );
-                const siblingThumb = sibling.signedThumbnailUrl || sibling.thumbnailUrl || sibling.mediaUrls?.[0] || null;
-                const smartSiblingThumb = siblingThumb ? getSmartMediaUrl(siblingThumb) : null;
-                const siblingArchived = Boolean(sibling.isArchived || sibling.isActive === false);
-
-                return (
-                  <button
-                    key={sibling.id || idx}
-                    ref={isSelected ? activeThumbRef : null}
-                    type="button"
-                    onClick={() => onNavigateIndex?.(idx)}
-                    className={cn(
-                      "relative shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden border transition-all cursor-pointer group",
-                      isSelected
-                        ? "border-indigo-600 ring-2 ring-indigo-500/50 scale-105 shadow-md"
-                        : "border-slate-200 dark:border-slate-800 hover:border-indigo-400 opacity-75 hover:opacity-100"
-                    )}
-                    title={sibling.title || sibling.caption || `Creative #${idx + 1}`}
-                  >
-                    {smartSiblingThumb ? (
-                      <NextImage
-                        src={smartSiblingThumb}
-                        alt="Creative thumbnail"
-                        fill
-                        unoptimized
-                        referrerPolicy="no-referrer"
-                        className={cn("object-cover", siblingArchived && "grayscale-[35%]")}
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center">
-                        <Play className="w-5 h-5 text-slate-400" />
-                      </div>
-                    )}
-
-                    {/* Sibling badge */}
-                    <div className="absolute top-1 left-1 z-10">
-                      <span
-                        className={cn(
-                          "w-2 h-2 rounded-full inline-block",
-                          siblingArchived ? "bg-rose-500" : "bg-emerald-500"
-                        )}
-                      />
-                    </div>
-
-                    {siblingIsVideo && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-transparent transition-colors">
-                        <Play className="w-4 h-4 text-white fill-white/80 drop-shadow-sm" />
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
     </div>,
     document.body
