@@ -41,12 +41,9 @@ export function parseResultCountFromText(bodyText: string): ScanOutcome {
     return { status: "failed", results: null, failureReason: "rate_limited" };
   }
 
-  const zeroAdRegex =
-    /no\s+ads?\s+match|no\s+results?\s+found|no\s+active\s+ads|ad\s+isn['’]?t\s+in\s+the\s+ad\s+library|ad\s+is\s+not\s+in\s+the\s+ad\s+library|aucun\s+résultat|sin\s+resultados|keine\s+ergebnisse|there\s+are\s+no\s+ads|0\s+matching\s+ads|0\s+ads\s+match|aucun\s+résultat\s+ne\s+correspond|ningún\s+anuncio\s+coincide|keine\s+anzeigen\s+stimmen|this\s+ad\s+has\s+expired|ad\s+not\s+found|ne\s+figure\s+pas\s+dans\s+la\s+bibliothèque|الإعلان\s+غير\s+موجود/i;
-
+  // 1. Explicit zero results rendered in summary header
   if (
-    zeroAdRegex.test(bodyText) ||
-    /~\s?0\s+results/i.test(bodyText) ||
+    /~\s*0\s+results/i.test(bodyText) ||
     /\b0\s+results\b/i.test(bodyText) ||
     /\b0\s+publicités\b/i.test(bodyText) ||
     /\b0\s+anuncios\b/i.test(bodyText)
@@ -54,8 +51,10 @@ export function parseResultCountFromText(bodyText: string): ScanOutcome {
     return { status: "success", results: 0 };
   }
 
-  // 1. Prioritize authentic Meta Ad Library result counts (always prefixed with '~')
+  // 2. Prioritize authentic Meta Ad Library result counts (always prefixed with '~')
   // e.g. "~209 results", "~190 résultats", "~381 resultados", "~1,200 ads"
+  // Evaluating positive count BEFORE zeroAdRegex prevents individual expired ad cards / deleted post banners
+  // (e.g. "This ad has expired") in the feed from falsely overriding positive active counts.
   const tildeRegex =
     /~\s*(\d[\d,\.\s\u00A0\u202F]*)\s*(?:results?|résultats?|resultados?|ergebnisse?|ads?|publicités?|anuncios?|anzeigen?)/i;
 
@@ -71,7 +70,7 @@ export function parseResultCountFromText(bodyText: string): ScanOutcome {
     }
   }
 
-  // 2. Secondary fallback: matches without '~' only if no tilde count was found on page
+  // 3. Secondary fallback: matches without '~' only if no tilde count was found on page
   const fallbackRegex =
     /(\d[\d,\.\s\u00A0\u202F]*)\s*(?:results?|résultats?|resultados?|ergebnisse?)/i;
 
@@ -87,13 +86,21 @@ export function parseResultCountFromText(bodyText: string): ScanOutcome {
     }
   }
 
-  // 3. Tertiary fallback: explicit "active ads" phrasing
+  // 4. Tertiary fallback: explicit "active ads" phrasing
   const secondaryMatch = bodyText.match(/(\d[\d,\.\s]*)\s+active\s+(?:ads?|publicités?|anuncios?)/i);
   if (secondaryMatch && secondaryMatch[1]) {
     const parsedNum = parseInt(secondaryMatch[1].replace(/[\s\u00A0\u202F,.]/g, ""), 10);
     if (!isNaN(parsedNum)) {
       return { status: "success", results: parsedNum };
     }
+  }
+
+  // 5. Zero-ad text fallback (only checked if NO authentic count pattern was detected on page)
+  const zeroAdRegex =
+    /no\s+ads?\s+match|no\s+results?\s+found|no\s+active\s+ads|ad\s+isn['’]?t\s+in\s+the\s+ad\s+library|ad\s+is\s+not\s+in\s+the\s+ad\s+library|aucun\s+résultat|sin\s+resultados|keine\s+ergebnisse|there\s+are\s+no\s+ads|0\s+matching\s+ads|0\s+ads\s+match|aucun\s+résultat\s+ne\s+correspond|ningún\s+anuncio\s+coincide|keine\s+anzeigen\s+stimmen|this\s+ad\s+has\s+expired|ad\s+not\s+found|ne\s+figure\s+pas\s+dans\s+la\s+bibliothèque|الإعلان\s+غير\s+موجود/i;
+
+  if (zeroAdRegex.test(bodyText)) {
+    return { status: "success", results: 0 };
   }
 
   return {
@@ -144,7 +151,7 @@ export async function scanMetaAdPage(
 
     if (onProgress) await onProgress("settling", "2. Waiting for DOM settle...", 50);
 
-    // Fast-settle: Wait for either the count pattern to render or fallback delay (max 8s)
+    // Fast-settle: Wait for either the count pattern to render or fallback delay (max 10s)
     try {
       await page.waitForFunction(
         () => {
@@ -158,7 +165,7 @@ export async function scanMetaAdPage(
           );
         },
         null,
-        { timeout: 8000 }
+        { timeout: 10000 }
       );
     } catch {
       await randomDelay(DELAY_CONFIG.afterLoadMin, DELAY_CONFIG.afterLoadMax);

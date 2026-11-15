@@ -5,6 +5,7 @@ import {
   parseAdGraphQLNode,
   processAdMedia,
 } from "./spy-scanner";
+import { parseResultCountFromText } from "./scanner";
 import {
   runDiscoveryScan,
   isMatchingEcommerceCta,
@@ -82,4 +83,43 @@ test("withDistributedScrapeLock executes callable and handles release", async ()
   assert.equal(executed, true, "Lock-protected callback should execute");
   assert.equal(result.acquired, true);
   assert.equal(result.result, "scan_completed_successfully");
+});
+
+test("parseResultCountFromText 3-tier precedence rules", () => {
+  // Case 1: Page has ~37 results AND an individual card that says 'This ad has expired'
+  // Must return 37, NOT 0!
+  const poisonedBody = `
+    Filters: Active status, Country: All
+    ~37 results
+    Some creative card text...
+    This ad has expired
+    Another creative card...
+  `;
+  const res1 = parseResultCountFromText(poisonedBody);
+  assert.equal(res1.status, "success");
+  assert.equal(res1.results, 37);
+
+  // Case 2: Page explicitly says ~0 results
+  const zeroTildeBody = `Filters: Active status\n~0 results\nNo ads to display`;
+  const res2 = parseResultCountFromText(zeroTildeBody);
+  assert.equal(res2.status, "success");
+  assert.equal(res2.results, 0);
+
+  // Case 3: Page explicitly says 0 results
+  const zeroHeaderBody = `Search results: 0 results found`;
+  const res3 = parseResultCountFromText(zeroHeaderBody);
+  assert.equal(res3.status, "success");
+  assert.equal(res3.results, 0);
+
+  // Case 4: Page has no count, but says 'No ads match your search criteria'
+  const fallbackZeroBody = `Meta Ad Library\nThere are no ads matching your search criteria.`;
+  const res4 = parseResultCountFromText(fallbackZeroBody);
+  assert.equal(res4.status, "success");
+  assert.equal(res4.results, 0);
+
+  // Case 5: French localization with ~190 résultats and an expired blurb
+  const frenchBody = `~190 résultats\nCe contenu n'est plus disponible\nCette publicité a expiré`;
+  const res5 = parseResultCountFromText(frenchBody);
+  assert.equal(res5.status, "success");
+  assert.equal(res5.results, 190);
 });

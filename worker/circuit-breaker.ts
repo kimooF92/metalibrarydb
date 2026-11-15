@@ -9,6 +9,7 @@ export interface ZeroAdAnomalyResult {
   isAnomalous: boolean;
   reason?: string;
   distinctPagesCount?: number;
+  isRegionalCluster?: boolean;
 }
 
 // Configurable constants via environment variables
@@ -108,7 +109,7 @@ export async function checkZeroAdAnomaly(
       and(
         gte(scanHistory.checkedAt, windowStart),
         eq(scanHistory.results, 0),
-        sql`(${scanHistory.failureReason} IS NULL OR ${scanHistory.failureReason} != 'circuit_breaker_meta_outage')`,
+        sql`(${scanHistory.failureReason} IS NULL OR ${scanHistory.failureReason} NOT IN ('circuit_breaker_meta_outage', 'regional_cluster_anomaly'))`,
         // Crucial Guard: Exclude inactive pages strictly!
         sql`${trackedPages.holdStatus} != 'inactive'`,
         // Strictly exclude internal synthetic test pages
@@ -144,12 +145,53 @@ export async function checkZeroAdAnomaly(
       try {
         const canary = await runCanarySanityCheck(browserPage);
         if (canary.isHealthy) {
-          console.log(
-            `[Circuit Breaker] 🟢 Canary check passed (${canary.results} active ads found). Meta Ad Library is operational! ${count} 0-ad results are natural brand pauses, not an outage.`
+          console.warn(
+            `[Circuit Breaker] ⚠️ Canary check passed (${canary.results} active ads found), but ${count} distinct pages dropped to 0 within ${config.windowMinutes}m. This indicates a regional or datacenter-IP anomaly, NOT simultaneous brand churn!`
           );
-          await updateWorkerState({ consecutiveZeroPages: 0 });
+
+          // Rescue victim pages affected during this regional cluster anomaly
+          const otherPageIds = Array.from(distinctZeroPageIds).filter((id) => id !== currentPageId);
+          if (otherPageIds.length > 0) {
+            for (const victimId of otherPageIds) {
+              try {
+                const victim = await db.query.trackedPages.findFirst({
+                  where: eq(trackedPages.id, victimId),
+                  columns: { id: true, holdStatus: true, holdStartedAt: true, displayName: true, lastKnownValidResults: true, currentResults: true },
+                });
+
+                if (victim && victim.holdStatus === "on_hold") {
+                  const enteredDuringOutage = victim.holdStartedAt
+                    ? new Date(victim.holdStartedAt) >= windowStart
+                    : true;
+
+                  if (enteredDuringOutage) {
+                    console.log(
+                      `[Circuit Breaker] 🛡️ Rescuing regional cluster victim page "${victim.displayName || victimId}" — reverting false on_hold status to active.`
+                    );
+                    await db
+                      .update(trackedPages)
+                      .set({
+                        holdStatus: "active",
+                        currentResults: victim.lastKnownValidResults ?? victim.currentResults ?? 0,
+                        consecutiveZeroScans: 0,
+                        lastKnownValidResults: null,
+                        holdStartedAt: null,
+                        status: "pending",
+                        updatedAt: new Date(),
+                      })
+                      .where(eq(trackedPages.id, victimId));
+                  }
+                }
+              } catch (rescueErr) {
+                console.error(`[Circuit Breaker] Failed to rescue regional victim ${victimId}:`, rescueErr);
+              }
+            }
+          }
+
           return {
-            isAnomalous: false,
+            isAnomalous: true,
+            isRegionalCluster: true,
+            reason: `Regional cluster anomaly: ${count} distinct brands returned 0 ads within ${config.windowMinutes}m while global canary was healthy.`,
             distinctPagesCount: count,
           };
         } else {

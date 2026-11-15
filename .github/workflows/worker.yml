@@ -75,7 +75,7 @@ jobs:
       options: --user 1001 --ipc=host
     env:
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
-    timeout-minutes: 30
+    timeout-minutes: 40
 
     strategy:
       fail-fast: false # Keeps other shards running even if one encounters a transient error

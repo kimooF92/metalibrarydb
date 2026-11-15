@@ -134,7 +134,7 @@ export async function markJobCompleted(
         checkedAt: now,
         creativeScannedAt: null,
         status: "unclear",
-        failureReason: "circuit_breaker_meta_outage",
+        failureReason: anomaly.isRegionalCluster ? "regional_cluster_anomaly" : "circuit_breaker_meta_outage",
       });
 
       // Nuanced Outage Rescue: If the trigger page entered on_hold during this outage window, rescue it back to active.
@@ -189,7 +189,7 @@ export async function markJobCompleted(
         brandName,
         results: prevCount,
         difference: 0,
-        circuitBreakerTripped: true,
+        circuitBreakerTripped: !anomaly.isRegionalCluster,
       };
     }
   }

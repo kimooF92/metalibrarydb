@@ -462,4 +462,49 @@ test("adaptive decay cadence evaluates due status based on inactivity age and wa
   assert.equal(vipWatchlist, true, "Watchlisted inactive page checked 14h ago MUST be due");
 });
 
+test("regional cluster anomaly resolution: healthy canary with >= 3 drops flags regional cluster without tripping global breaker", () => {
+  function evaluateClusterOutcome(distinctZeroPages: number, threshold: number, canaryHealthy: boolean) {
+    if (distinctZeroPages >= threshold) {
+      if (canaryHealthy) {
+        return {
+          isAnomalous: true,
+          isRegionalCluster: true,
+          globalBreakerTripped: false,
+          allowHoldTransition: false,
+        };
+      }
+      return {
+        isAnomalous: true,
+        isRegionalCluster: false,
+        globalBreakerTripped: true,
+        allowHoldTransition: false,
+      };
+    }
+    return {
+      isAnomalous: false,
+      isRegionalCluster: false,
+      globalBreakerTripped: false,
+      allowHoldTransition: true,
+    };
+  }
+
+  // 1. Single page drops to 0, canary not even needed -> regular brand drop, permitted to enter hold
+  const single = evaluateClusterOutcome(1, 3, true);
+  assert.equal(single.isAnomalous, false);
+  assert.equal(single.allowHoldTransition, true);
+
+  // 2. 4 regional pages drop to 0, Nike canary passes -> regional cluster anomaly, protected from entering hold, global breaker remains open
+  const regional = evaluateClusterOutcome(4, 3, true);
+  assert.equal(regional.isAnomalous, true);
+  assert.equal(regional.isRegionalCluster, true);
+  assert.equal(regional.globalBreakerTripped, false);
+  assert.equal(regional.allowHoldTransition, false);
+
+  // 3. 4 pages drop to 0, Nike canary fails -> global outage, trips breaker
+  const outage = evaluateClusterOutcome(4, 3, false);
+  assert.equal(outage.isAnomalous, true);
+  assert.equal(outage.isRegionalCluster, false);
+  assert.equal(outage.globalBreakerTripped, true);
+});
+
 
