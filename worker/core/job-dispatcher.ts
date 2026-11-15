@@ -163,8 +163,15 @@ export async function dispatchQueueJob(ctx: JobDispatchContext): Promise<JobDisp
 
     console.log(`[Product Scrape Job] 🛒 Extracting product landing page: ${targetProduct.url}`);
     const { processProductExtraction } = await import("../../lib/product-ingest");
+    const { scrapeUrlWithLocalPlaywright } = await import("../../lib/local-browser-scraper");
+
     const res = await processProductExtraction(targetProduct.id, targetProduct.url, {
       workspaceId: targetProduct.workspaceId || queueJob.workspaceId || null,
+      pageId: targetProduct.pageId || null,
+      browserScraperFallback: async (url: string) => {
+        console.log(`[Product Scrape Job] 🛡️ Triggering local Playwright browser fallback for: ${url}...`);
+        return scrapeUrlWithLocalPlaywright(url, 25000);
+      },
     });
 
     const finishDate = new Date();

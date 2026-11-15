@@ -1,10 +1,11 @@
 import { task, logger } from "@trigger.dev/sdk";
 import { db } from "../../db";
-import { scrapedProducts, trackedPages, brandDomains, ads } from "../../db/schema";
+import { scrapedProducts, trackedPages, brandDomains, ads, queue } from "../../db/schema";
 import { eq, or, sql } from "drizzle-orm";
 import { normalizeProductUrl, isCategoryUrl } from "../../lib/firecrawl";
 import { getCleanDomain, isValidPageId } from "../../lib/utils";
 import { processProductExtraction } from "../../lib/product-ingest";
+import { isGeoBlockedOrForbiddenError } from "../../lib/product-validator";
 
 export interface ExtractProductPayload {
   url: string;
@@ -35,30 +36,63 @@ export const extractProductTask = task({
   maxDuration: 120, // 2 minutes ceiling for slow landing pages
   onFailure: async ({ payload, error }: any) => {
     const errMessage = (error as any)?.message || String(error) || "trigger_task_failed";
-    logger.error(`[extract-product] onFailure hook triggered: ${errMessage}`, { payload });
+    const isGeo403 = isGeoBlockedOrForbiddenError(errMessage);
+    logger.error(`[extract-product] onFailure hook triggered: ${errMessage}`, { payload, isGeo403 });
     try {
       const url = payload?.url;
       const productId = payload?.productId;
+      const effectiveStatus = isGeo403 ? "pending" : "failed";
+      const effectiveReason = isGeo403
+        ? `[Geo 403 Forbidden] Trigger.dev task blocked (${errMessage}) - Queued for local worker residential fallback`
+        : errMessage;
+
       if (productId) {
         await db
           .update(scrapedProducts)
           .set({
-            scrapeStatus: "failed",
-            failureReason: errMessage,
+            scrapeStatus: effectiveStatus,
+            failureReason: effectiveReason,
             updatedAt: new Date(),
           })
           .where(eq(scrapedProducts.id, productId));
+
+        if (isGeo403) {
+          await db
+            .insert(queue)
+            .values({
+              jobType: "product_scrape",
+              status: "pending",
+              priority: 9,
+              failureReason: `product:${productId}`,
+              workspaceId: payload?.workspaceId || null,
+            })
+            .onConflictDoNothing();
+        }
       } else if (url) {
         const normalized = normalizeProductUrl(url);
         if (normalized) {
-          await db
+          const [updated] = await db
             .update(scrapedProducts)
             .set({
-              scrapeStatus: "failed",
-              failureReason: errMessage,
+              scrapeStatus: effectiveStatus,
+              failureReason: effectiveReason,
               updatedAt: new Date(),
             })
-            .where(eq(scrapedProducts.url, normalized));
+            .where(eq(scrapedProducts.url, normalized))
+            .returning({ id: scrapedProducts.id, workspaceId: scrapedProducts.workspaceId });
+
+          if (isGeo403 && updated?.id) {
+            await db
+              .insert(queue)
+              .values({
+                jobType: "product_scrape",
+                status: "pending",
+                priority: 9,
+                failureReason: `product:${updated.id}`,
+                workspaceId: updated.workspaceId || payload?.workspaceId || null,
+              })
+              .onConflictDoNothing();
+          }
         }
       }
     } catch (dbErr: any) {
@@ -222,6 +256,21 @@ export const extractProductTask = task({
     });
 
     logger.info(`[extract-product] Finished extraction for ${targetProductId}: ${result.status}`, { result });
+
+    if (result.status === "pending" && result.error?.includes("[Geo 403 Forbidden]")) {
+      logger.warn(`[extract-product] Product ${targetProductId} encountered Geo 403. Handed off to local worker fallback.`, {
+        productId: targetProductId,
+        url: normalizedUrl,
+        error: result.error,
+      });
+      return {
+        success: true,
+        status: "handed_off_to_local_worker",
+        productId: targetProductId,
+        error: result.error,
+      };
+    }
+
     return {
       success: result.success,
       status: result.status,

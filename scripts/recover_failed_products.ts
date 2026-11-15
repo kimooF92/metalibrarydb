@@ -23,7 +23,10 @@ async function main() {
     const item = failed[i];
     try {
       console.log(`[Recovering ${i + 1}/${failed.length}] ${item.url}`);
-      const res = await extractProductFromUrl(item.url);
+      const { scrapeUrlWithLocalPlaywright } = await import("../lib/local-browser-scraper");
+      const res = await extractProductFromUrl(item.url, {
+        browserScraperFallback: async (u: string) => scrapeUrlWithLocalPlaywright(u, 25000),
+      });
 
       if (res.success && res.data) {
         const rawHtml = res.raw?.html || "";

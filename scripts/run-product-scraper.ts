@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
 import { db, client } from "../db";
-import { scrapedProducts, ads, brandDomains } from "../db/schema";
+import { scrapedProducts, ads, brandDomains, queue } from "../db/schema";
 import { eq, or, and, isNull, inArray, sql, desc } from "drizzle-orm";
 import { extractProductFromUrl } from "../lib/firecrawl";
 import {
@@ -16,7 +16,7 @@ import { getCleanDomain } from "../lib/utils";
 import { normalizeProductUrl } from "../lib/firecrawl";
 import { trackedPages, adObservations } from "../db/schema";
 import { enhanceProductWithJev } from "../lib/product-enhancer";
-import { validateAndGatekeepProduct, resolveEffectiveScrapeStatus } from "../lib/product-validator";
+import { validateAndGatekeepProduct, resolveEffectiveScrapeStatus, isGeoBlockedOrForbiddenError } from "../lib/product-validator";
 import { isPriceString } from "../lib/html-scraper";
 
 interface RunOptions {
@@ -204,6 +204,44 @@ async function runProductScraperBatch() {
       console.log(`Image:    ${res.data.main_image_url || "No image"}`);
     } else {
       console.error(`\n❌ [${elapsed}ms] Extraction failed: ${res.error || "Unknown"}`);
+      const isGeo403 = isGeoBlockedOrForbiddenError(res.error);
+      if (isGeo403) {
+        const fallbackReason = `[Geo 403 Forbidden] ${res.error || "Blocked by cloud geo/firewall"} - Queued for local worker residential fallback`;
+        console.warn(`🛡️ [Single URL Mode] Geo 403 detected. Enqueuing product for local worker residential fallback...`);
+        const [saved] = await db
+          .insert(scrapedProducts)
+          .values({
+            url: targetUrl,
+            domain: getCleanDomain(targetUrl),
+            scrapeStatus: "pending",
+            failureReason: fallbackReason,
+            lastScrapedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: scrapedProducts.url,
+            set: {
+              scrapeStatus: "pending",
+              failureReason: fallbackReason,
+              lastScrapedAt: new Date(),
+              updatedAt: new Date(),
+            },
+          })
+          .returning({ id: scrapedProducts.id, workspaceId: scrapedProducts.workspaceId });
+
+        if (saved?.id) {
+          await db
+            .insert(queue)
+            .values({
+              jobType: "product_scrape",
+              status: "pending",
+              priority: 9,
+              failureReason: `product:${saved.id}`,
+              workspaceId: saved.workspaceId || null,
+            })
+            .onConflictDoNothing();
+          console.log(`🛡️ Enqueued product ${saved.id} into local worker queue.`);
+        }
+      }
     }
 
     await client.end();
@@ -605,19 +643,46 @@ async function runProductScraperBatch() {
       } else {
         failedCount++;
         console.warn(`  ❌ [${elapsed}ms] Extraction failed: ${res.error || "Unknown"}`);
-        await db
+        const isGeo403 = isGeoBlockedOrForbiddenError(res.error);
+        const effectiveStatus = isGeo403 ? "pending" : "failed";
+        const effectiveReason = isGeo403
+          ? `[Geo 403 Forbidden] ${res.error || "Blocked by cloud geo/firewall"} - Queued for local worker residential fallback`
+          : res.error || "Scrape returned empty product details";
+
+        const now = new Date();
+        const updateTarget = item.id.startsWith("temp_")
+          ? eq(scrapedProducts.url, item.url)
+          : eq(scrapedProducts.id, item.id);
+
+        const [updated] = await db
           .update(scrapedProducts)
           .set({
-            scrapeStatus: "failed",
-            failureReason: res.error || "Scrape returned empty product details",
-            lastScrapedAt: new Date(),
-            updatedAt: new Date(),
+            scrapeStatus: effectiveStatus,
+            failureReason: effectiveReason,
+            lastScrapedAt: now,
+            updatedAt: now,
           })
-          .where(
-            item.id.startsWith("temp_")
-              ? eq(scrapedProducts.url, item.url)
-              : eq(scrapedProducts.id, item.id)
-          );
+          .where(updateTarget)
+          .returning({ id: scrapedProducts.id, workspaceId: scrapedProducts.workspaceId });
+
+        const targetId = updated?.id || (!item.id.startsWith("temp_") ? item.id : null);
+        if (isGeo403 && targetId) {
+          try {
+            await db
+              .insert(queue)
+              .values({
+                jobType: "product_scrape",
+                status: "pending",
+                priority: 9,
+                failureReason: `product:${targetId}`,
+                workspaceId: item.workspaceId || updated?.workspaceId || null,
+              })
+              .onConflictDoNothing();
+            console.log(`  🛡️ [Geo 403 Fallback] Enqueued product ${targetId} for local residential worker pickup.`);
+          } catch (qErr: any) {
+            console.warn("  Notice: queue fallback insertion warning:", qErr?.message);
+          }
+        }
       }
     } catch (err: any) {
       failedCount++;

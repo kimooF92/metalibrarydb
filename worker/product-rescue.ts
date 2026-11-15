@@ -54,10 +54,15 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
           isNull(scrapedProducts.mainImageUrl),
           // 3. Differentiated rescue window:
           // - Brand new pending items: eligible immediately
+          // - 403 / Forbidden / Geo-blocked / Local-worker flagged items: eligible immediately (zero 12h lockout)
           // - Transient failures (timeouts, 502, 503, 429 rate limit): retry after 1 hour
           // - Other non-permanent errors: retry after 12 hours
           sql`(
             ${scrapedProducts.lastScrapedAt} IS NULL
+            OR COALESCE(${scrapedProducts.failureReason}, '') ILIKE '%403%'
+            OR COALESCE(${scrapedProducts.failureReason}, '') ILIKE '%forbidden%'
+            OR COALESCE(${scrapedProducts.failureReason}, '') ILIKE '%geo%'
+            OR COALESCE(${scrapedProducts.failureReason}, '') ILIKE '%local worker%'
             OR (
               (
                 COALESCE(${scrapedProducts.failureReason}, '') ILIKE '%timeout%'
@@ -84,8 +89,17 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
           sql`LOWER(${scrapedProducts.url}) NOT LIKE '%/categories%'`
         )
       )
-      // 5. Fair rotation: items never rescued locally first, then oldest attempts
-      .orderBy(sql`${scrapedProducts.lastScrapedAt} ASC NULLS FIRST`)
+      // 5. Fair rotation: 403 geo-blocked and local worker requests first, then oldest attempts
+      .orderBy(
+        sql`CASE
+          WHEN COALESCE(${scrapedProducts.failureReason}, '') ILIKE '%403%'
+            OR COALESCE(${scrapedProducts.failureReason}, '') ILIKE '%forbidden%'
+            OR COALESCE(${scrapedProducts.failureReason}, '') ILIKE '%geo%'
+            OR COALESCE(${scrapedProducts.failureReason}, '') ILIKE '%local worker%' THEN 0
+          ELSE 1
+        END ASC`,
+        sql`${scrapedProducts.lastScrapedAt} ASC NULLS FIRST`
+      )
       .limit(limit);
 
     if (failedItems.length === 0) {
@@ -293,6 +307,18 @@ export async function rescueFailedProductsBatch(limit = 3, force = false): Promi
 
         rescuedCount++;
         console.log(`[Local Rescue] ✅ Successfully rescued: "${extracted.title || "Product"}" ➔ ${extracted.current_price || "Image Extracted"}`);
+
+        // Mark any pending queue jobs for this product as completed
+        await db
+          .update(queue)
+          .set({ status: "completed", finishedAt: new Date() })
+          .where(
+            and(
+              eq(queue.jobType, "product_scrape"),
+              eq(queue.status, "pending"),
+              eq(queue.failureReason, `product:${item.id}`)
+            )
+          );
       } else {
         // Both Cloud and Local failed to extract details / image -> flag as [Impossible to scrape] so it's never rechecked!
         console.warn(`[Local Rescue] ⚠️ Could not rescue ${targetUrl}: ${extractionResult?.error || "Unknown"}`);

@@ -195,3 +195,16 @@ export function resolveEffectiveScrapeStatus(
   }
   return { status: "success", reason: null };
 }
+
+/**
+ * Detects whether an extraction failure was caused by HTTP 403 Forbidden, Cloudflare challenge,
+ * bot detection, or datacenter IP geo-blocking.
+ * Used to route products strictly to the local residential worker fallback.
+ */
+export function isGeoBlockedOrForbiddenError(errorMsg?: string | null): boolean {
+  if (!errorMsg || typeof errorMsg !== "string") return false;
+  return /(?:403\b|forbidden|cf-challenge|cloudflare|attention\s*required|just\s*a\s*moment|access\s*denied|geo[-_\s]?block|blocked\s*by\s*(?:client|target|cloudflare)|bot\s*detected)/i.test(
+    errorMsg
+  );
+}
+

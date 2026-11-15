@@ -84,22 +84,24 @@ export async function scrapeUrlWithLocalPlaywright(
       }
     }
 
-    // Check for Cloudflare Waiting Room / Challenge
-    const initialContent = await page.content();
+    // Check for Cloudflare Waiting Room / Challenge / 403 interstitial
+    let html = await page.content();
     if (
-      initialContent.includes("cf-challenge") ||
-      initialContent.includes("Checking your browser") ||
-      initialContent.includes("Attention Required! | Cloudflare") ||
-      initialContent.includes("Just a moment...")
+      html.includes("cf-challenge") ||
+      html.includes("Checking your browser") ||
+      html.includes("Attention Required! | Cloudflare") ||
+      html.includes("Just a moment...") ||
+      (html.includes("403 Forbidden") && html.length < 5000)
     ) {
-      console.log("[Local Browser Fallback] 🛡️ Cloudflare challenge detected! Waiting 5s for residential IP resolution...");
-      await page.waitForTimeout(5000);
+      console.log("[Local Browser Fallback] 🛡️ Cloudflare/Geo challenge detected! Waiting 6s for residential IP resolution...");
+      await page.waitForTimeout(6000);
+      html = await page.content();
     } else {
       // Allow dynamic SPA / price hydration
       await page.waitForTimeout(2000);
+      html = await page.content();
     }
 
-    const html = await page.content();
     const finalUrl = page.url();
     const innerText = await page.evaluate(() => document.body?.innerText || "").catch(() => "");
 

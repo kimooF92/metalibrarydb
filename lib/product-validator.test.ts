@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateAndGatekeepProduct } from "./product-validator";
+import { validateAndGatekeepProduct, isGeoBlockedOrForbiddenError } from "./product-validator";
 
 test("validateAndGatekeepProduct rejects obvious junk pages at Layer 1 ($0 tokens)", async () => {
   const policyCheck = await validateAndGatekeepProduct({
@@ -103,3 +103,29 @@ test("validateAndGatekeepProduct strictly rejects category and collection listin
   assert.equal(catCheck2.status, "ignored");
   assert.match(catCheck2.reason || "", /Category \/ collection listing URL excluded/i);
 });
+
+test("isGeoBlockedOrForbiddenError correctly identifies 403, Cloudflare, and geo-blocks", () => {
+  // Should match 403 / Forbidden
+  assert.equal(isGeoBlockedOrForbiddenError("Landing page returned HTTP 403: Forbidden"), true);
+  assert.equal(isGeoBlockedOrForbiddenError("HTTP 403 Forbidden"), true);
+  assert.equal(isGeoBlockedOrForbiddenError("403 Client Error: Forbidden"), true);
+  assert.equal(isGeoBlockedOrForbiddenError("Error: 403 forbidden by server"), true);
+
+  // Should match Cloudflare / WAF challenges
+  assert.equal(isGeoBlockedOrForbiddenError("Just a moment... cf-challenge"), true);
+  assert.equal(isGeoBlockedOrForbiddenError("Attention Required! | Cloudflare"), true);
+  assert.equal(isGeoBlockedOrForbiddenError("Blocked by Cloudflare bot protection"), true);
+
+  // Should match geo-blocks
+  assert.equal(isGeoBlockedOrForbiddenError("Access denied: geo-block active"), true);
+  assert.equal(isGeoBlockedOrForbiddenError("Geo blocked by target store"), true);
+
+  // Should NOT match dead links or general 404s/timeouts
+  assert.equal(isGeoBlockedOrForbiddenError("[Dead link] HTTP 404 Not Found"), false);
+  assert.equal(isGeoBlockedOrForbiddenError("Request timed out after 10000ms"), false);
+  assert.equal(isGeoBlockedOrForbiddenError("ECONNREFUSED"), false);
+  assert.equal(isGeoBlockedOrForbiddenError(null), false);
+  assert.equal(isGeoBlockedOrForbiddenError(undefined), false);
+  assert.equal(isGeoBlockedOrForbiddenError(""), false);
+});
+

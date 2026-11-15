@@ -3,6 +3,7 @@ import { ads, scrapedProducts, trackedPages, brandDomains, adObservations, works
 import { eq, sql, and, or, isNull, inArray } from "drizzle-orm";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 import { normalizeProductUrl, extractProductFromUrl, isCategoryUrl } from "@/lib/firecrawl";
+import type { ExtractedProductData } from "@/types";
 import { generateUrlSearchVariants } from "@/lib/product-url-matcher";
 import { getCleanDomain, isValidPageId } from "@/lib/utils";
 import {
@@ -14,7 +15,7 @@ import {
 } from "@/lib/network-extractor";
 import { formatPrice, formatDelivery } from "@/lib/format-price";
 import { classifyProductWithJev } from "@/lib/typesafe-jev";
-import { validateAndGatekeepProduct, resolveEffectiveScrapeStatus } from "@/lib/product-validator";
+import { validateAndGatekeepProduct, resolveEffectiveScrapeStatus, isGeoBlockedOrForbiddenError } from "@/lib/product-validator";
 import { classifyProductOffline } from "@/lib/product-classifier";
 import { detectExtractionDoubt, resolvePriceDoubtWithJev } from "@/lib/doubt-detector";
 import { enhanceProductWithJev } from "@/lib/product-enhancer";
@@ -484,6 +485,12 @@ export async function processProductExtraction(
     workspaceId?: string | null;
     adCopy?: string | null;
     pageId?: string | null;
+    browserScraperFallback?: (url: string) => Promise<{
+      success: boolean;
+      data?: ExtractedProductData;
+      rawHtml?: string;
+      engine?: string;
+    }>;
   }
 ): Promise<{ success: boolean; status: string; error?: string }> {
   try {
@@ -538,10 +545,63 @@ export async function processProductExtraction(
     const extractionResult = await extractProductFromUrl(normalizedUrl, {
       defaultCurrency: fallbackCurrency,
       defaultCurrencySymbol: fallbackCurrencySymbol,
+      browserScraperFallback: options?.browserScraperFallback,
     });
 
     if (!extractionResult.success || !extractionResult.data) {
       const isDead = extractionResult.error?.includes("[Dead link]") || extractionResult.error?.includes("404");
+      const isGeo403 = isGeoBlockedOrForbiddenError(extractionResult.error);
+
+      if (isGeo403) {
+        const fallbackReason = `[Geo 403 Forbidden] ${extractionResult.error || "Blocked by cloud geo/firewall"} - Queued for local worker residential fallback`;
+        console.warn(
+          `[Auto-Scraper] 🛡️ Geo 403 / Forbidden detected for product ${productId} (${normalizedUrl}). Routing strictly to local worker fallback...`
+        );
+
+        await db
+          .update(scrapedProducts)
+          .set({
+            rawExtract: null,
+            scrapeStatus: "pending",
+            failureReason: fallbackReason,
+            lastScrapedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(scrapedProducts.id, productId));
+
+        // Enqueue high-priority fallback task for local worker (priority 9)
+        try {
+          let targetTrackedPageUuid: string | null = null;
+          if (isValidPageId(options?.pageId)) {
+            const pageRec = await db.query.trackedPages.findFirst({
+              where: eq(trackedPages.pageId, String(options!.pageId)),
+              columns: { id: true },
+            });
+            if (pageRec) targetTrackedPageUuid = pageRec.id;
+          }
+
+          await db
+            .insert(queue)
+            .values({
+              trackedPageId: targetTrackedPageUuid,
+              jobType: "product_scrape",
+              status: "pending",
+              priority: 9,
+              failureReason: `product:${productId}`,
+              workspaceId: options?.workspaceId || null,
+            })
+            .onConflictDoNothing();
+        } catch (queueErr) {
+          console.warn("[Auto-Scraper] Failed to insert 403 fallback into queue:", queueErr);
+        }
+
+        return {
+          success: false,
+          status: "pending",
+          error: fallbackReason,
+        };
+      }
+
       await db
         .update(scrapedProducts)
         .set({
