@@ -19,7 +19,12 @@ import { classifyProductOffline } from "@/lib/product-classifier";
 import { detectExtractionDoubt, resolvePriceDoubtWithJev } from "@/lib/doubt-detector";
 import { enhanceProductWithJev } from "@/lib/product-enhancer";
 import { isQStashConfigured, enqueueProductScrape } from "@/lib/qstash";
+import { tasks } from "@trigger.dev/sdk";
 import { broadcastCatalogInflow } from "@/lib/realtime-scan";
+
+export function isTriggerDevConfigured(): boolean {
+  return Boolean(process.env.TRIGGER_SECRET_KEY);
+}
 
 // In-flight URL scrape deduplication map to prevent redundant concurrent Firecrawl requests
 const inFlightScrapes = new Map<string, Promise<any>>();
@@ -64,10 +69,10 @@ function queueBackgroundScrape(task: () => Promise<void>) {
 
 /**
  * Awaits until all queued background product scrapes complete or until the timeout is reached.
- * When QStash is active, scrapes are durably managed in the cloud without stalling serverless requests.
+ * When Trigger.dev, runner batching, or QStash is active, scrapes are durably managed in the cloud without stalling serverless requests.
  */
 export async function waitForScrapeQueueDrain(timeoutMs: number = 45000): Promise<{ drained: number; remaining: number }> {
-  if (isQStashConfigured()) {
+  if (isTriggerDevConfigured() || process.env.DISABLE_CLOUD_SCRAPER === "true" || isQStashConfigured()) {
     return { drained: totalDrainedCount, remaining: 0 };
   }
 
@@ -409,7 +414,26 @@ export async function linkAndAutoScrapeProduct({
     }
 
     // 3. Queue asynchronous background scraping (Non-blocking)
-    if (isQStashConfigured()) {
+    if (process.env.DISABLE_CLOUD_SCRAPER === "true") {
+      // Runner batch mode (e.g. GitHub Actions Step 1): Keep status as 'pending' for Step 2 follow-up
+      return { productId: targetProductId, isNew: true };
+    }
+
+    if (isTriggerDevConfigured()) {
+      // Offload to Trigger.dev medium-1x task in the cloud (~50ms non-blocking dispatch)
+      tasks
+        .trigger("extract-product", {
+          url: normalizedUrl,
+          productId: targetProductId,
+          pageId: cleanPageId,
+          adId,
+          adCopy,
+          workspaceId: resolvedWorkspaceId,
+        })
+        .catch((err) => {
+          console.warn("[Product Ingest] Trigger.dev enqueue notice:", err?.message || err);
+        });
+    } else if (isQStashConfigured()) {
       // Offload to QStash serverless queue with max parallelism = 2 and automatic retries
       enqueueProductScrape({
         url: normalizedUrl,

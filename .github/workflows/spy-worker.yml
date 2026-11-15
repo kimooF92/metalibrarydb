@@ -7,9 +7,9 @@ on:
   workflow_dispatch: # Allows manual trigger from GitHub UI anytime with optional inputs
     inputs:
       max_pages:
-        description: 'Maximum Pages to Scan (default: 25)'
+        description: 'Maximum Pages to Scan (default: 35)'
         required: false
-        default: '25'
+        default: '35'
       force_all:
         description: 'Force all active pages regardless of +1 diff (true/false)'
         required: false
@@ -31,7 +31,7 @@ concurrency:
 jobs:
   run-apify-spy-worker:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
 
     steps:
       - name: Checkout Code
@@ -84,7 +84,8 @@ jobs:
           B2_REGION: ${{ secrets.B2_REGION }}
           B2_DOWNLOAD_URL: ${{ secrets.B2_DOWNLOAD_URL }}
           # Run parameters
-          SPY_MAX_PAGES_PER_RUN: ${{ inputs.max_pages || '25' }}
+          DISABLE_CLOUD_SCRAPER: "true"
+          SPY_MAX_PAGES_PER_RUN: ${{ inputs.max_pages || '35' }}
           SPY_FORCE_ALL: ${{ inputs.force_all || 'false' }}
         run: |
           if [ -n "${{ inputs.page_id }}" ]; then
@@ -105,9 +106,9 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
-          SCRAPE_LIMIT: 100
+          SCRAPE_LIMIT: 150
           SCRAPE_STATUS: 'pending'
         run: |
           echo "Processing any pending extracted product pages..."
-          npx tsx scripts/run-product-scraper.ts --limit 100 --status pending || true
+          npx tsx scripts/run-product-scraper.ts --limit 150 --status pending || true
 

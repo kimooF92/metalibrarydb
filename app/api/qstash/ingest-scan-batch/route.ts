@@ -5,6 +5,8 @@ import { ads, adObservations, creativeScans, trackedPages, scanHistory } from "@
 import { eq, and, sql, inArray, desc } from "drizzle-orm";
 import { BatchIngestPayloadSchema, type RawAdItem } from "@/lib/qstash-types";
 import { enqueueProductScrape } from "@/lib/qstash";
+import { tasks } from "@trigger.dev/sdk";
+import { isTriggerDevConfigured } from "@/lib/product-ingest";
 import { reconcileArchivedAds } from "@/lib/ad-reconciliation";
 import { deleteCached, deleteByPrefix } from "@/lib/cache-service";
 import { checkAndRecordBreakout } from "@/lib/breakout-detector";
@@ -240,11 +242,23 @@ export async function handleBatchIngest(req: Request | NextRequest) {
         if (ad.linkUrl && ad.ctaText && /shop|order|buy|get offer/i.test(ad.ctaText)) {
           // Avoid exhausting scraping API quota if the product is already matched ($0 API cost)
           if (!urlMatcher.getProductId(ad.linkUrl)) {
-            enqueueProductScrape({
-              url: ad.linkUrl,
-              pageId,
-              workspaceId: pageRecord.workspaceId,
-            }).catch(() => { });
+            if (process.env.DISABLE_CLOUD_SCRAPER === "true") {
+              // Runner batch mode (e.g. GitHub Actions): let follow-up runner step handle it
+            } else if (isTriggerDevConfigured()) {
+              tasks
+                .trigger("extract-product", {
+                  url: ad.linkUrl,
+                  pageId,
+                  workspaceId: pageRecord.workspaceId,
+                })
+                .catch(() => { });
+            } else {
+              enqueueProductScrape({
+                url: ad.linkUrl,
+                pageId,
+                workspaceId: pageRecord.workspaceId,
+              }).catch(() => { });
+            }
           }
         }
       }
