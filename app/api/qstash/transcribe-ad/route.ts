@@ -87,8 +87,8 @@ export async function handleTranscribeTask(req: Request | NextRequest) {
         hook_text: data.hook_text,
         duration_seconds: data.duration_seconds,
       };
-      await setCached(`cache:transcript:${adId}`, normalizedCache, 7 * 86400).catch(() => {});
-      await forceReleaseLock(lockKey).catch(() => {});
+      await setCached(`cache:transcript:${adId}`, normalizedCache, 7 * 86400).catch(() => { });
+      await forceReleaseLock(lockKey).catch(() => { });
 
       return NextResponse.json({ success: true, status: data.status });
     } else {
@@ -99,7 +99,7 @@ export async function handleTranscribeTask(req: Request | NextRequest) {
 
       if (isTransient && retryCount < 2) {
         console.warn(`[QStash Transcribe Task] Transient InstaBox error (${result.error}), attempt ${retryCount + 1}. Keeping processing state for QStash retry.`);
-        await forceReleaseLock(lockKey).catch(() => {});
+        await forceReleaseLock(lockKey).catch(() => { });
         return NextResponse.json({ error: result.error, willRetry: true }, { status: result.statusCode || 502 });
       }
 
@@ -119,7 +119,7 @@ export async function handleTranscribeTask(req: Request | NextRequest) {
           )
         );
 
-      await forceReleaseLock(lockKey).catch(() => {});
+      await forceReleaseLock(lockKey).catch(() => { });
       return NextResponse.json({ error: result.error }, { status: result.statusCode || 500 });
     }
   } catch (error: any) {

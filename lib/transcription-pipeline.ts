@@ -200,7 +200,7 @@ export async function executeTranscriptionOnInstaBox(
         const backoff = initialBackoffMs * attempt;
         console.warn(`[InstaBox Client] Cold-start HTTP ${res.status} on attempt ${attempt}/${maxRetries}. MicroVM waking up. Retrying in ${backoff}ms...`);
         // Lightweight probe to help wake the microVM in background
-        fetch(`${instaboxUrl}/health`, { signal: AbortSignal.timeout(3000) }).catch(() => {});
+        fetch(`${instaboxUrl}/health`, { signal: AbortSignal.timeout(3000) }).catch(() => { });
         await sleep(backoff);
         continue;
       }
@@ -223,7 +223,7 @@ export async function executeTranscriptionOnInstaBox(
       if (isNetworkError && attempt < maxRetries) {
         const backoff = initialBackoffMs * attempt;
         console.warn(`[InstaBox Client] Network error on attempt ${attempt}/${maxRetries} (${errMsg}). Retrying in ${backoff}ms...`);
-        fetch(`${instaboxUrl}/health`, { signal: AbortSignal.timeout(3000) }).catch(() => {});
+        fetch(`${instaboxUrl}/health`, { signal: AbortSignal.timeout(3000) }).catch(() => { });
         await sleep(backoff);
         continue;
       }

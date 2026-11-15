@@ -322,8 +322,8 @@ export function AdTranscriptViewer({
   const confidencePercent = data?.languageConfidence
     ? Math.round(data.languageConfidence * 100)
     : (data as any)?.language_confidence
-    ? Math.round((data as any).language_confidence * 100)
-    : null;
+      ? Math.round((data as any).language_confidence * 100)
+      : null;
 
   const totalWords = useMemo(() => {
     if (!fullText) return 0;

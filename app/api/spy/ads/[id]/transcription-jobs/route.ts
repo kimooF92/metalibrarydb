@@ -70,7 +70,7 @@ export async function GET(
 
   // If completed, cache in Redis for 7 days
   if (record.status === "completed" && record.fullText) {
-    await setCached(cacheKey, record, 7 * 86400).catch(() => {});
+    await setCached(cacheKey, record, 7 * 86400).catch(() => { });
   }
 
   return NextResponse.json({
@@ -251,8 +251,8 @@ export async function POST(
         });
 
       const responsePayload = updatedRecord || d;
-      await setCached(`cache:transcript:${adId}`, responsePayload, 7 * 86400).catch(() => {});
-      await forceReleaseLock(lockKey).catch(() => {});
+      await setCached(`cache:transcript:${adId}`, responsePayload, 7 * 86400).catch(() => { });
+      await forceReleaseLock(lockKey).catch(() => { });
 
       return NextResponse.json({
         jobId,
@@ -270,7 +270,7 @@ export async function POST(
         })
         .where(eq(adTranscripts.id, jobId));
 
-      await forceReleaseLock(lockKey).catch(() => {});
+      await forceReleaseLock(lockKey).catch(() => { });
 
       return NextResponse.json(
         { jobId, status: "failed", error: res.error },
@@ -288,7 +288,7 @@ export async function POST(
       })
       .where(eq(adTranscripts.id, jobId));
 
-    await forceReleaseLock(lockKey).catch(() => {});
+    await forceReleaseLock(lockKey).catch(() => { });
 
     return NextResponse.json(
       { jobId, status: "failed", error: err.message || "Transcription failed" },
