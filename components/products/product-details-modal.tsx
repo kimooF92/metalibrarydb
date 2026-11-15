@@ -690,6 +690,6 @@ export function ProductDetailsModal({
           </>
         )}
       </div>
-</div>
-);
+    </div>
+  );
 }
