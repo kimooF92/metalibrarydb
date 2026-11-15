@@ -25,7 +25,8 @@ import { ModalSourcingSection } from "./modal/modal-sourcing-section";
 import { ModalNetworkIntelligence } from "./modal/modal-network-intelligence";
 import { ModalAdGallery } from "./modal/modal-ad-gallery";
 import { ModalEditForm, ModalEditFormHandle } from "./modal/modal-edit-form";
-import { ProductCreativeModal } from "./modal/product-creative-modal";
+import { ProductCreativeView } from "./modal/product-creative-modal";
+import { cn } from "@/lib/utils";
 import { isGenuineVideoUrl, isFbCdnUrlExpired } from "@/lib/fb-cdn";
 import { requestProductAdVerification, applyVerifiedCountsToProduct } from "@/lib/product-verify-client";
 
@@ -438,7 +439,7 @@ export function ProductDetailsModal({
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200"
     >
       {/* Floating Desktop Side Navigation Chevrons */}
-      {hasPrev && (
+      {!lightboxAd && hasPrev && (
         <button
           type="button"
           onClick={onNavigatePrev}
@@ -448,7 +449,7 @@ export function ProductDetailsModal({
           <ChevronLeft className="w-5 h-5" />
         </button>
       )}
-      {hasNext && (
+      {!lightboxAd && hasNext && (
         <button
           type="button"
           onClick={onNavigateNext}
@@ -460,11 +461,29 @@ export function ProductDetailsModal({
       )}
 
       <div
-        className="relative w-full max-w-4xl max-h-[90vh] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col"
+        className={cn(
+          "relative w-full max-h-[92vh] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col transition-all duration-200",
+          lightboxAd ? "max-w-6xl" : "max-w-4xl"
+        )}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header Component */}
-        <ModalHeader
+        {lightboxAd ? (
+          <ProductCreativeView
+            ad={lightboxAd}
+            ads={activeLightboxAdsList.length > 0 ? activeLightboxAdsList : linkedAds}
+            currentIndex={activeLightboxIndex}
+            onNavigateIndex={handleNavigateLightboxAdIndex}
+            onBack={() => setLightboxAd(null)}
+            onClose={onClose}
+            product={currentProduct}
+            network={network}
+            onRefreshMedia={handleRefreshLightboxAd}
+            isRefreshingMedia={isRefreshingLightboxAd}
+          />
+        ) : (
+          <>
+            {/* Header Component */}
+            <ModalHeader
           product={currentProduct}
           linkedAds={linkedAds}
           supplierUrls={supplierUrls}
@@ -700,23 +719,9 @@ export function ProductDetailsModal({
             </>
           )}
         </div>
-      </div>
-
-      {/* Creative Preview Modal mounted at root */}
-      {lightboxAd && (
-        <ProductCreativeModal
-          isOpen={Boolean(lightboxAd)}
-          onClose={() => setLightboxAd(null)}
-          ad={lightboxAd}
-          ads={activeLightboxAdsList.length > 0 ? activeLightboxAdsList : linkedAds}
-          currentIndex={activeLightboxIndex}
-          onNavigateIndex={handleNavigateLightboxAdIndex}
-          product={currentProduct}
-          network={network}
-          onRefreshMedia={handleRefreshLightboxAd}
-          isRefreshingMedia={isRefreshingLightboxAd}
-        />
-      )}
-    </div>
-  );
+      </>
+    )}
+  </div>
+</div>
+);
 }
