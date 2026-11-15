@@ -124,10 +124,14 @@ export const BrandDeepDiveHeader = memo(function BrandDeepDiveHeader({
               {brand.holdStatus === "on_hold" && (
                 <span
                   className="inline-flex items-center gap-1 text-[11px] font-extrabold px-2.5 py-0.5 rounded-md border bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700 shadow-2xs"
-                  title="Brand account is on pause / hold (under grace period recheck)"
+                  title={
+                    (brand.currentResults ?? 0) === 0
+                      ? "Brand account is on pause / hold (under grace period recheck)"
+                      : "Ad volume drop under review (under grace period recheck)"
+                  }
                 >
                   <span>⏸️</span>
-                  <span>On Hold / Paused</span>
+                  <span>{(brand.currentResults ?? 0) === 0 ? "On Hold / Paused" : "Volume Drop Under Review"}</span>
                 </span>
               )}
               {brand.holdStatus === "inactive" && (

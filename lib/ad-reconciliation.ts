@@ -199,15 +199,20 @@ export async function reconcileArchivedAds(
       }
     } else {
       // Stateful Cliff-Drop Confirmation Guard
-      // If active ads drop by >70% (observedCount < 0.3 * previousActiveCount) and previousActiveCount >= 10:
+      // If active ads drop by >70% (observedCount < 0.3 * expectedBaseline) and expectedBaseline >= 10:
       // Require consecutive confirmation before archiving to protect against temporary crawler cutoffs/Meta glitches.
-      const isCliffDrop = !options.isVerifiedZeroState && previousActiveCount >= 10 && observedCount < previousActiveCount * 0.3;
+      // When trackedPage.currentResults is available and > 0, use Math.min(previousActiveCount, trackedPage.currentResults) as the baseline.
+      // E.g. If currentResults is 52 and observedCount is 52, it is a complete scrape matching Meta live count, NOT a crawler cutoff from unarchived DB rows.
+      const expectedBaseline = (trackedPage?.currentResults && trackedPage.currentResults > 0)
+        ? Math.min(previousActiveCount, trackedPage.currentResults)
+        : previousActiveCount;
+      const isCliffDrop = !options.isVerifiedZeroState && expectedBaseline >= 10 && observedCount < expectedBaseline * 0.3;
 
       if (isCliffDrop) {
         const currentConsecutive = trackedPage?.consecutiveZeroScans ?? 0;
         if (currentConsecutive < 2) {
           console.warn(
-            `[Ad Reconciliation] ⚠️ Suspicious cliff drop for ${trackedPage?.displayName || trackedPageId}: ${previousActiveCount} active ads -> ${observedCount} observed. Placing on hold (${currentConsecutive + 1}/2) to confirm before archiving.`
+            `[Ad Reconciliation] ⚠️ Suspicious cliff drop for ${trackedPage?.displayName || trackedPageId}: ${previousActiveCount} active ads (expected ~${expectedBaseline}) -> ${observedCount} observed. Placing on hold (${currentConsecutive + 1}/2) to confirm before archiving.`
           );
           await database
             .update(trackedPages)
@@ -215,7 +220,7 @@ export async function reconcileArchivedAds(
               holdStatus: "on_hold",
               consecutiveZeroScans: currentConsecutive + 1,
               holdStartedAt: trackedPage?.holdStartedAt || now,
-              lastKnownValidResults: previousActiveCount,
+              lastKnownValidResults: expectedBaseline,
               updatedAt: now,
             })
             .where(eq(trackedPages.id, trackedPageId));
@@ -242,6 +247,7 @@ export async function reconcileArchivedAds(
           .set({
             holdStatus: "active",
             consecutiveZeroScans: 0,
+            lastKnownValidResults: null,
             holdStartedAt: null,
             updatedAt: now,
           })

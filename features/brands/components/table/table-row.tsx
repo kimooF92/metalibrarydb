@@ -304,9 +304,13 @@ export function TableRow({
             ) : isOnHold && p.lastKnownValidResults ? (
               <span
                 className="text-[11px] font-mono text-amber-500 font-bold"
-                title={`Account hold — was ${p.lastKnownValidResults} ads. Under grace period (${p.consecutiveZeroScans ?? 1}/3 scans).`}
+                title={
+                  (p.currentResults ?? 0) === 0
+                    ? `Account hold — was ${p.lastKnownValidResults} ads. Under grace period (${p.consecutiveZeroScans ?? 1}/3 scans).`
+                    : `Ad volume drop under review — was ${p.lastKnownValidResults} ads. Under grace period (${p.consecutiveZeroScans ?? 1}/2 scans).`
+                }
               >
-                0
+                {(p.currentResults ?? 0) === 0 ? 0 : p.currentResults}
                 <span className="text-[9px] font-normal text-amber-500/80 ml-0.5">
                   (was {p.lastKnownValidResults})
                 </span>
@@ -444,10 +448,14 @@ export function TableRow({
           ) : isOnHold ? (
             <span
               className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 shrink-0"
-              title={`Account hold detected — was ${p.lastKnownValidResults ?? "?"} ads. Grace period verification scan ${p.consecutiveZeroScans ?? 1}/3.`}
+              title={
+                (p.currentResults ?? 0) === 0
+                  ? `Account hold detected — was ${p.lastKnownValidResults ?? "?"} ads. Grace period verification scan ${p.consecutiveZeroScans ?? 1}/3.`
+                  : `Ad volume drop under review — was ${p.lastKnownValidResults ?? "?"} ads. Grace period verification scan ${p.consecutiveZeroScans ?? 1}/2.`
+              }
             >
               <Pause className="w-2.5 h-2.5 text-amber-500 shrink-0" />
-              <span>On Hold ({p.consecutiveZeroScans ?? 1}/3)</span>
+              <span>On Hold ({p.consecutiveZeroScans ?? 1}/{(p.currentResults ?? 0) === 0 ? 3 : 2})</span>
             </span>
           ) : p.holdStatus === "inactive" ? (
             <span

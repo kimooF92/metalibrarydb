@@ -13,6 +13,7 @@ function createFakeDb(options: {
   holdStatus?: string | null;
   consecutiveZeroScans?: number | null;
   activeRowsCount?: number;
+  currentResults?: number | null;
   lastCreativeScan?: Date | null;
 } = {}) {
   const activeRows = options.officialPage === false
@@ -39,7 +40,7 @@ function createFakeDb(options: {
           searchType: options.officialPage === false ? "domain" : "page",
           pageId: options.officialPage === false ? null : "page-1",
           displayName: "Test Page",
-          currentResults: options.activeRowsCount ?? 2,
+          currentResults: options.currentResults !== undefined ? options.currentResults : (options.activeRowsCount ?? 2),
           holdStatus: options.holdStatus ?? "active",
           consecutiveZeroScans: options.consecutiveZeroScans ?? 0,
           holdStartedAt: null,
@@ -391,4 +392,32 @@ test("reconcileArchivedAds ignores stale out-of-order scans", async () => {
   assert.equal(result.archivedCount, 0);
   assert.equal(updates.length, 0);
 });
+
+test("reconcileArchivedAds does not trigger cliff drop when observed count matches live currentResults", async () => {
+  // Brand has 185 unarchived ads accumulated in DB, but live Meta count is 52 ads
+  // Scraper extracts 52 ads. This is a complete scrape, NOT a cliff drop.
+  const { fakeDb, updates } = createFakeDb({
+    officialPage: true,
+    activeRowsCount: 185,
+    currentResults: 52,
+    holdStatus: "active",
+    consecutiveZeroScans: 0,
+  });
+
+  const observed = new Set(Array.from({ length: 52 }, (_, i) => `archive-${i + 1}`));
+  const result = await reconcileArchivedAds(
+    "tracked-page-uuid",
+    "scan-live",
+    observed,
+    new Date("2026-11-15T00:00:00.000Z"),
+    { isFullScan: true },
+    fakeDb
+  );
+
+  // 133 dead ads should be archived immediately without triggering cliff-drop hold
+  assert.equal(result.archivedCount, 133);
+  assert.equal(updates.some((u) => u.holdStatus === "on_hold"), false);
+  assert.equal(updates.some((u) => u.isArchived === true), true);
+});
+
 
