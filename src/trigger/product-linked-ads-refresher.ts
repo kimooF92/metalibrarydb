@@ -151,7 +151,7 @@ export async function recheckProductLinkedAds(
   const now = new Date();
 
   try {
-    browser = await chromium.launch({
+    const launchOptions: any = {
       headless: isHeadless,
       args: [
         "--no-sandbox",
@@ -167,7 +167,14 @@ export async function recheckProductLinkedAds(
         "--disable-backgrounding-occluded-windows",
         "--disable-renderer-backgrounding",
       ],
-    });
+    };
+    if (process.env.CHROME_CHANNEL) {
+      launchOptions.channel = process.env.CHROME_CHANNEL;
+    } else if (process.platform === "win32") {
+      launchOptions.channel = "chrome";
+    }
+
+    browser = await chromium.launch(launchOptions);
 
     context = await browser.newContext({
       viewport: { width: 1366, height: 768 },
@@ -213,11 +220,33 @@ export async function recheckProductLinkedAds(
 
         await page.goto(adArchiveUrl, {
           waitUntil: "domcontentloaded",
-          timeout: parseInt(process.env.PAGE_TIMEOUT || "22000", 10),
+          timeout: parseInt(process.env.PAGE_TIMEOUT || "30000", 10),
         });
 
-        // Wait for Meta hydration
-        await page.waitForTimeout(2500);
+        // Wait for Meta hydration / secondary navigation
+        try {
+          await page.waitForFunction(
+            () => {
+              const text = document.body ? document.body.innerText || "" : "";
+              return (
+                text.includes("Lien vers la publicité") ||
+                text.includes("Cette publicité provient") ||
+                text.includes("This ad has multiple versions") ||
+                text.includes("Link to ad") ||
+                text.includes("Library ID") ||
+                text.includes("ID dans la bibliothèque") ||
+                text.includes("0 results") ||
+                text.includes("aucun résultat") ||
+                text.includes("security check") ||
+                text.includes("confirm it's you")
+              );
+            },
+            { timeout: 15000 }
+          );
+        } catch {
+          await page.waitForTimeout(5000);
+        }
+        await page.waitForTimeout(2000);
 
         // Evaluate DOM for status and media
         const evaluation = await page.evaluate((targetId) => {
@@ -228,45 +257,67 @@ export async function recheckProductLinkedAds(
             return { isRateLimited: true, isNotFound: false, isActive: false, isInactive: false, cardImages: [], videoPoster: null, videoSrc: null, hasVideoElement: false };
           }
 
-          // Check Not Found / Expired in overall body text
+          // Check Not Found / Expired in overall body text (only when no modal is open)
           const zeroAdRegex =
             /no\s+ads?\s+match|no\s+results?\s+found|no\s+active\s+ads|ad\s+isn['’]?t\s+in\s+the\s+ad\s+library|ad\s+is\s+not\s+in\s+the\s+ad\s+library|aucun\s+résultat|sin\s+resultados|keine\s+ergebnisse|this\s+ad\s+has\s+expired|ad\s+not\s+found|ce\s+contenu\s+n'est\s+pas\s+disponible|ne\s+figure\s+pas\s+dans\s+la\s+bibliothèque|الإعلان\s+غير\s+موجود|\b0\s+results\b|~\s?0\s+results/i;
 
-          if (zeroAdRegex.test(bodyText)) {
+          if (zeroAdRegex.test(bodyText) && !bodyText.includes("Lien vers la publicité") && !bodyText.includes("Cette publicité provient")) {
             return { isRateLimited: false, isNotFound: true, isActive: false, isInactive: true, cardImages: [], videoPoster: null, videoSrc: null, hasVideoElement: false };
           }
 
-          // Find ad card container strictly containing targetId in visible text
-          const idRegex = new RegExp(`(?:Library ID|ID dans la bibliothèque|Identifiant|Identificador|معرّف المكتبة|ID)\\s*[:\\s]\\s*${targetId}\\b`, "i");
-
+          let targetCard: HTMLElement | null = null;
           const allDivs = Array.from(document.querySelectorAll("div"));
-          const candidateDivs = allDivs.filter((div) => {
-            // innerText excludes <script>, <style>, <noscript>
-            const visibleText = div.innerText || "";
-            return idRegex.test(visibleText) || visibleText.includes(targetId);
+
+          // 1. PRIORITY: Modal Dialog (Meta opens a dialog when loading ?id=...)
+          const modalContainers = allDivs.filter((d) => {
+            const text = d.innerText || "";
+            return (
+              (text.includes("Lien vers la publicité") ||
+                text.includes("Cette publicité provient d’une URL") ||
+                text.includes("This ad has multiple versions") ||
+                text.includes("Link to ad")) &&
+              (text.includes(targetId) ||
+                text.includes("ID dans la bibliothèque") ||
+                text.includes("Library ID"))
+            );
           });
 
-          if (candidateDivs.length === 0) {
-            // Target archive ID is not rendered in visible DOM (ad expired or removed, or page redirected to brand library)
-            return { isRateLimited: false, isNotFound: true, isActive: false, isInactive: true, cardImages: [], videoPoster: null, videoSrc: null, hasVideoElement: false };
+          if (modalContainers.length > 0) {
+            modalContainers.sort((a, b) => (b.innerText || "").length - (a.innerText || "").length);
+            targetCard = modalContainers[0];
           }
 
-          candidateDivs.sort((a, b) => (a.innerText || "").length - (b.innerText || "").length);
-
-          let targetCard: HTMLDivElement | null = null;
-          for (const candidate of candidateDivs) {
-            const cText = candidate.innerText || "";
-            if (cText.length > 12000) continue;
-            const hasCardLabels = /Sponsored|Sponsorisé|Started running|Lancé le|Active|Inactive|Inactif|Actif|نشط|غير نشط|See ad details/i.test(cText);
-            const hasMedia = candidate.querySelector('img[src*="fbcdn"], video') !== null;
-            if (hasCardLabels || hasMedia) {
-              targetCard = candidate as HTMLDivElement;
-              break;
-            }
-          }
-
+          // 2. FALLBACK: Ad card container strictly containing targetId in visible text
           if (!targetCard) {
-            targetCard = (candidateDivs.find((d) => (d.innerText || "").length >= 80) || candidateDivs[0]) as HTMLDivElement;
+            const idRegex = new RegExp(`(?:Library ID|ID dans la bibliothèque|Identifiant|Identificador|معرّف المكتبة|ID)\\s*[:\\s]\\s*${targetId}\\b`, "i");
+
+            const candidateDivs = allDivs.filter((div) => {
+              // innerText excludes <script>, <style>, <noscript>
+              const visibleText = div.innerText || "";
+              return idRegex.test(visibleText) || visibleText.includes(targetId);
+            });
+
+            if (candidateDivs.length === 0) {
+              // Target archive ID is not rendered in visible DOM (ad expired or removed, or page redirected to brand library)
+              return { isRateLimited: false, isNotFound: true, isActive: false, isInactive: true, cardImages: [], videoPoster: null, videoSrc: null, hasVideoElement: false };
+            }
+
+            candidateDivs.sort((a, b) => (a.innerText || "").length - (b.innerText || "").length);
+
+            for (const candidate of candidateDivs) {
+              const cText = candidate.innerText || "";
+              if (cText.length > 12000) continue;
+              const hasCardLabels = /Sponsored|Sponsorisé|Started running|Lancé le|Active|Inactive|Inactif|Actif|نشط|غير نشط|See ad details/i.test(cText);
+              const hasMedia = candidate.querySelector('img[src*="fbcdn"], video') !== null;
+              if (hasCardLabels || hasMedia) {
+                targetCard = candidate as HTMLDivElement;
+                break;
+              }
+            }
+
+            if (!targetCard) {
+              targetCard = (candidateDivs.find((d) => (d.innerText || "").length >= 80) || candidateDivs[0]) as HTMLDivElement;
+            }
           }
 
           if (!targetCard) {
