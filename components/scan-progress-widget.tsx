@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Zap,
   CheckCircle2,
@@ -26,18 +26,131 @@ interface ScanProgressWidgetProps {
   onScanFinished?: () => void;
 }
 
+const DISMISSED_STORAGE_KEY = "meta_brand_scan_progress_dismissed";
+const MINIMIZED_STORAGE_KEY = "meta_brand_scan_progress_minimized";
+const DISMISSED_EXPIRY_MS = 60 * 60 * 1000; // 1 hour expiry protection
+
+function getDismissedState(): { ids: Set<string>; dismissedAt: number } {
+  if (typeof window === "undefined") return { ids: new Set(), dismissedAt: 0 };
+  try {
+    const raw = localStorage.getItem(DISMISSED_STORAGE_KEY);
+    if (!raw) return { ids: new Set(), dismissedAt: 0 };
+    const parsed = JSON.parse(raw);
+    if (Date.now() - (parsed.dismissedAt || 0) > DISMISSED_EXPIRY_MS) {
+      localStorage.removeItem(DISMISSED_STORAGE_KEY);
+      return { ids: new Set(), dismissedAt: 0 };
+    }
+    return {
+      ids: new Set(Array.isArray(parsed.ids) ? parsed.ids : []),
+      dismissedAt: Number(parsed.dismissedAt) || 0,
+    };
+  } catch {
+    return { ids: new Set(), dismissedAt: 0 };
+  }
+}
+
+function saveDismissedIds(newIds: string[]) {
+  if (typeof window === "undefined") return;
+  try {
+    const state = getDismissedState();
+    newIds.forEach((id) => {
+      if (id) state.ids.add(id);
+    });
+    localStorage.setItem(
+      DISMISSED_STORAGE_KEY,
+      JSON.stringify({
+        ids: Array.from(state.ids),
+        dismissedAt: Date.now(),
+      })
+    );
+  } catch {}
+}
+
+function clearDismissedIds() {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(DISMISSED_STORAGE_KEY);
+  } catch {}
+}
+
 export function ScanProgressWidget({
   scanningPageIds,
   onScanFinished,
 }: ScanProgressWidgetProps) {
   const [stepsMap, setStepsMap] = useState<Record<string, ScanProgressStep>>({});
-  const [isMinimized, setIsMinimized] = useState(false);
-  const [isDismissed, setIsDismissed] = useState(false);
+  const [isMinimized, setIsMinimized] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return localStorage.getItem(MINIMIZED_STORAGE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const [isDismissed, setIsDismissed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    const { ids: dismissedIds } = getDismissedState();
+    if (scanningPageIds.length > 0 && scanningPageIds.every((id) => dismissedIds.has(id))) {
+      return true;
+    }
+    return false;
+  });
+
   const completedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const onScanFinishedRef = useRef(onScanFinished);
+  onScanFinishedRef.current = onScanFinished;
+
+  const handleToggleMinimize = (minimized: boolean) => {
+    setIsMinimized(minimized);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(MINIMIZED_STORAGE_KEY, String(minimized));
+      } catch {}
+    }
+  };
+
+  const handleDismiss = () => {
+    setIsDismissed(true);
+
+    const idsToDismiss = Array.from(
+      new Set([
+        ...scanningPageIds,
+        ...Object.keys(stepsMap),
+        ...Object.values(stepsMap).map((s) => s.pageId),
+      ])
+    ).filter(Boolean);
+
+    saveDismissedIds(idsToDismiss);
+
+    if (completedTimeoutRef.current) {
+      clearTimeout(completedTimeoutRef.current);
+      completedTimeoutRef.current = null;
+    }
+
+    // If all scans in stepsMap are already finished, clean up immediately
+    const allDone =
+      Object.keys(stepsMap).length > 0 &&
+      Object.values(stepsMap).every((s) => s.step === "completed" || s.step === "failed");
+    if (allDone) {
+      setStepsMap({});
+      onScanFinishedRef.current?.();
+    }
+  };
+
+  const scanningIdsKey = useMemo(() => {
+    return [...scanningPageIds].sort().join(",");
+  }, [scanningPageIds]);
 
   // Poll Upstash Redis progress endpoint when active pages exist
   useEffect(() => {
     if (scanningPageIds.length === 0) {
+      // If user had dismissed it, clean up silently without popping open
+      if (isDismissed) {
+        setStepsMap({});
+        clearDismissedIds();
+        return;
+      }
+
       // Check if all existing steps are completed/failed
       const allDone =
         Object.keys(stepsMap).length > 0 &&
@@ -46,9 +159,11 @@ export function ScanProgressWidget({
       if (allDone && !completedTimeoutRef.current) {
         completedTimeoutRef.current = setTimeout(() => {
           setStepsMap({});
-          setIsDismissed(false);
-          onScanFinished?.();
+          clearDismissedIds();
+          onScanFinishedRef.current?.();
         }, 5000);
+      } else if (Object.keys(stepsMap).length === 0) {
+        clearDismissedIds();
       }
       return;
     }
@@ -58,9 +173,18 @@ export function ScanProgressWidget({
       completedTimeoutRef.current = null;
     }
 
-    setIsDismissed(false);
+    // Check if there is ANY new active scan that hasn't been dismissed
+    const { ids: dismissedIds } = getDismissedState();
+    const hasNewScan = scanningPageIds.some((id) => !dismissedIds.has(id));
+
+    if (hasNewScan) {
+      setIsDismissed(false);
+    }
 
     const fetchProgress = async () => {
+      // If widget is currently dismissed and no new scan appeared, skip poll to save quota
+      if (isDismissed && !hasNewScan) return;
+
       try {
         const query = `pageIds=${encodeURIComponent(scanningPageIds.join(","))}`;
         const res = await fetch(`/api/scan-progress?${query}`);
@@ -79,7 +203,7 @@ export function ScanProgressWidget({
     };
 
     fetchProgress();
-    // Throttled 3.5s polling loop pauses when tab is in background to protect API & Upstash quota
+    // Throttled 3.5s polling loop pauses when tab is in background or widget is dismissed
     const interval = setInterval(() => {
       if (!document.hidden) fetchProgress();
     }, 3500);
@@ -93,7 +217,7 @@ export function ScanProgressWidget({
       clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [scanningPageIds, onScanFinished]);
+  }, [scanningIdsKey, isDismissed]);
 
   // Real-time instant updates via Supabase Broadcast messages
   useEffect(() => {
@@ -117,6 +241,12 @@ export function ScanProgressWidget({
               timestamp: step.timestamp,
             },
           }));
+
+          // If a new active scan arrives that was not dismissed, un-dismiss
+          const { ids: dismissed } = getDismissedState();
+          if (!dismissed.has(step.pageId) && step.step !== "completed" && step.step !== "failed") {
+            setIsDismissed(false);
+          }
         })
         .subscribe();
     } catch {}
@@ -132,7 +262,12 @@ export function ScanProgressWidget({
   }, []);
 
   const activeEntries = Object.values(stepsMap);
-  if (activeEntries.length === 0 || isDismissed) return null;
+  const { ids: dismissedIds } = getDismissedState();
+  const allEntriesDismissed =
+    activeEntries.length > 0 &&
+    activeEntries.every((s) => dismissedIds.has(s.pageId));
+
+  if (activeEntries.length === 0 || isDismissed || allEntriesDismissed) return null;
 
   // Primary active step to display
   const primaryStep =
@@ -177,14 +312,14 @@ export function ScanProgressWidget({
 
           <div className="flex items-center gap-1">
             <button
-              onClick={() => setIsMinimized(false)}
+              onClick={() => handleToggleMinimize(false)}
               className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800/60 transition-colors cursor-pointer"
               title="Expand Details"
             >
               <ChevronUp className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setIsDismissed(true)}
+              onClick={handleDismiss}
               className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800/60 transition-colors cursor-pointer"
               title="Dismiss"
             >
@@ -213,14 +348,14 @@ export function ScanProgressWidget({
 
             <div className="flex items-center gap-1">
               <button
-                onClick={() => setIsMinimized(true)}
+                onClick={() => handleToggleMinimize(true)}
                 className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                 title="Minimize"
               >
                 <ChevronDown className="w-4 h-4" />
               </button>
               <button
-                onClick={() => setIsDismissed(true)}
+                onClick={handleDismiss}
                 className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                 title="Dismiss"
               >

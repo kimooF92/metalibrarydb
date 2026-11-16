@@ -74,17 +74,21 @@ function DashboardContent() {
     [pages]
   );
 
+  const handleScanFinished = useCallback(() => {
+    fetchStats(true, true);
+    setHasPendingReSort(true);
+  }, [fetchStats, setHasPendingReSort]);
+
   return (
     <div className="h-full flex flex-col space-y-4 overflow-y-auto md:overflow-hidden min-w-0">
       {toast && (
         <div
-          className={`fixed top-20 right-6 z-50 flex items-center space-x-3 px-4 py-3 rounded-xl shadow-2xl border text-xs font-semibold animate-in slide-in-from-top-5 duration-200 ${
-            toast.type === "success"
+          className={`fixed top-20 right-6 z-50 flex items-center space-x-3 px-4 py-3 rounded-xl shadow-2xl border text-xs font-semibold animate-in slide-in-from-top-5 duration-200 ${toast.type === "success"
               ? "bg-emerald-50 dark:bg-emerald-950/95 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/40"
               : toast.type === "error"
-              ? "bg-rose-50 dark:bg-rose-950/95 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-500/40"
-              : "bg-indigo-50 dark:bg-indigo-950/95 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-500/40"
-          }`}
+                ? "bg-rose-50 dark:bg-rose-950/95 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-500/40"
+                : "bg-indigo-50 dark:bg-indigo-950/95 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-500/40"
+            }`}
         >
           <span>{toast.message}</span>
         </div>
@@ -140,10 +144,7 @@ function DashboardContent() {
 
       <ScanProgressWidget
         scanningPageIds={scanningPageIds}
-        onScanFinished={() => {
-          fetchStats(true, true);
-          setHasPendingReSort(true);
-        }}
+        onScanFinished={handleScanFinished}
       />
     </div>
   );

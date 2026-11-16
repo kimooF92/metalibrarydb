@@ -230,6 +230,10 @@ function DashboardOverviewContent() {
     };
   }, [activeWorkspace?.id]);
 
+  const handleScanFinished = useCallback(() => {
+    loadOverview(true);
+  }, [loadOverview]);
+
   const scanningIds = data?.activeScanningPageIds || [];
 
   return (
@@ -451,9 +455,7 @@ function DashboardOverviewContent() {
       {/* Feature: Live Scraper Progress Floating Bar */}
       <ScanProgressWidget
         scanningPageIds={scanningIds}
-        onScanFinished={() => {
-          loadOverview(true);
-        }}
+        onScanFinished={handleScanFinished}
       />
     </div>
   );
