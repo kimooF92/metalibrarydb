@@ -5,11 +5,16 @@ export const SESSION_DURATION_SECONDS = 30 * 24 * 60 * 60; // 30 days
  * Returns the configured auth secret used to sign session cookies.
  */
 export function getAuthSecret(): string {
-  return (
-    process.env.AUTH_SECRET ||
-    process.env.DATABASE_URL ||
-    "meta-ad-tracker-fallback-secret-2026-production"
-  );
+  const secret = process.env.AUTH_SECRET || process.env.DATABASE_URL;
+  if (!secret || secret.trim() === "") {
+    if (process.env.NODE_ENV === "test") {
+      return "test-env-auth-secret-for-unit-testing-only-123456789";
+    }
+    throw new Error(
+      "[Security Error] AUTH_SECRET or DATABASE_URL must be configured in environment variables to sign session tokens securely."
+    );
+  }
+  return secret.trim();
 }
 
 export type UserRole = "admin" | "staff";

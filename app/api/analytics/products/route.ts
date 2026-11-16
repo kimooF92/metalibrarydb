@@ -103,11 +103,11 @@ export async function GET(req: NextRequest) {
         tier: sql<string>`
           CASE 
             WHEN ${priceExpr} <= 0 THEN 'Unknown / Unpriced'
-            WHEN ${priceExpr} < 30 THEN ${sql.raw(`'Under 30 ${currSym} (Micro/Impulse)'`)}
-            WHEN ${priceExpr} >= 30 AND ${priceExpr} < 60 THEN ${sql.raw(`'30 - 60 ${currSym} (Sweet Spot)'`)}
-            WHEN ${priceExpr} >= 60 AND ${priceExpr} < 100 THEN ${sql.raw(`'60 - 100 ${currSym} (Mid-Ticket)'`)}
-            WHEN ${priceExpr} >= 100 AND ${priceExpr} < 200 THEN ${sql.raw(`'100 - 200 ${currSym} (High-Ticket)'`)}
-            ELSE ${sql.raw(`'200+ ${currSym} (Premium / Luxury)'`)}
+            WHEN ${priceExpr} < 30 THEN ${`Under 30 ${currSym} (Micro/Impulse)`}
+            WHEN ${priceExpr} >= 30 AND ${priceExpr} < 60 THEN ${`30 - 60 ${currSym} (Sweet Spot)`}
+            WHEN ${priceExpr} >= 60 AND ${priceExpr} < 100 THEN ${`60 - 100 ${currSym} (Mid-Ticket)`}
+            WHEN ${priceExpr} >= 100 AND ${priceExpr} < 200 THEN ${`100 - 200 ${currSym} (High-Ticket)`}
+            ELSE ${`200+ ${currSym} (Premium / Luxury)`}
           END
         `,
         tierKey: sql<string>`

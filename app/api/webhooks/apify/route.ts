@@ -4,6 +4,7 @@ import { creativeScans } from "@/db/schema";
 import { fetchApifyDatasetItems } from "@/lib/apify";
 import { ingestApifyDatasetItems } from "@/lib/apify-ingest";
 import { eq } from "drizzle-orm";
+import { timingSafeEqual } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,14 @@ export async function POST(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const creativeScanId = searchParams.get("creativeScanId");
+
+    // Verify webhook authentication token
+    const incomingToken = searchParams.get("token") || req.headers.get("x-api-secret") || "";
+    const expectedToken = process.env.API_SECRET || process.env.APP_PASSWORD;
+
+    if (expectedToken && !timingSafeEqual(incomingToken, expectedToken)) {
+      return NextResponse.json({ error: "Unauthorized webhook caller" }, { status: 401 });
+    }
 
     const body = await req.json();
     const eventType = body?.eventType || body?.event;

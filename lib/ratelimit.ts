@@ -157,6 +157,11 @@ export function getClientIp(req: Request | NextRequest): string {
     return realIp.trim();
   }
 
+  const vercelIp = req.headers.get("x-vercel-ip");
+  if (vercelIp && vercelIp.trim()) {
+    return vercelIp.trim();
+  }
+
   const cfConnectingIp = req.headers.get("cf-connecting-ip");
   if (cfConnectingIp && cfConnectingIp.trim()) {
     return cfConnectingIp.trim();

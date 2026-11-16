@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
         .where(
           and(
             eq(scrapedProducts.workspaceId, targetWsId),
-            sql`elem = ANY(ARRAY[${sql.raw(validPhones.map((p) => `'${p}'`).join(","))}]::text[])`
+            sql`elem = ANY(ARRAY[${sql.join(validPhones.map((p) => sql`${p}`), sql`, `)}]::text[])`
           )
         )
         .groupBy(sql`elem`);
@@ -92,19 +92,19 @@ export async function GET(req: NextRequest) {
 
     if (validPixels.length > 0) {
       matchingProductConditions.push(
-        sql`${scrapedProducts.metaPixelIds} && ${sql.raw(`ARRAY[${validPixels.map((p) => `'${p}'`).join(",")}]::text[]`)}`
+        sql`${scrapedProducts.metaPixelIds} && ARRAY[${sql.join(validPixels.map((p) => sql`${p}`), sql`, `)}]::text[]`
       );
     }
 
     if (validWhatsApps.length > 0) {
       matchingProductConditions.push(
-        sql`${scrapedProducts.whatsappNumbers} && ${sql.raw(`ARRAY[${validWhatsApps.map((p) => `'${p}'`).join(",")}]::text[]`)}`
+        sql`${scrapedProducts.whatsappNumbers} && ARRAY[${sql.join(validWhatsApps.map((p) => sql`${p}`), sql`, `)}]::text[]`
       );
     }
 
     if (clusterablePhones.length > 0) {
       matchingProductConditions.push(
-        sql`${scrapedProducts.phoneNumbers} && ${sql.raw(`ARRAY[${clusterablePhones.map((p) => `'${p}'`).join(",")}]::text[]`)}`
+        sql`${scrapedProducts.phoneNumbers} && ARRAY[${sql.join(clusterablePhones.map((p) => sql`${p}`), sql`, `)}]::text[]`
       );
     }
 

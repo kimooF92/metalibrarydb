@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { trackedPages, activityNotifications } from "@/db/schema";
 import { sql } from "drizzle-orm";
+import { timingSafeEqual } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -27,11 +28,14 @@ async function handleCronTrigger(req: NextRequest) {
     // 1. Extract GitHub PAT and Authorization tokens
     const authHeader = req.headers.get("authorization");
     const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7).trim() : null;
+    const apiSecretHeader = req.headers.get("x-api-secret");
     const isGithubTokenInHeader = bearerToken && (bearerToken.startsWith("ghp_") || bearerToken.startsWith("github_pat_"));
 
     const cronSecret = process.env.CRON_SECRET || process.env.API_SECRET || process.env.APP_PASSWORD;
-    const isVercelCron = req.headers.get("x-vercel-cron") === "1";
-    const isAuthorizedSecret = cronSecret && (bearerToken === cronSecret || req.headers.get("x-api-secret") === cronSecret);
+    const isAuthorizedSecret =
+      Boolean(cronSecret) &&
+      ((bearerToken && timingSafeEqual(bearerToken, cronSecret!)) ||
+        (apiSecretHeader && timingSafeEqual(apiSecretHeader, cronSecret!)));
 
     // Verify QStash signature if triggered by Upstash QStash Cron
     let isQStashVerified = false;
@@ -59,9 +63,12 @@ async function handleCronTrigger(req: NextRequest) {
       }
     }
 
-    // Allow if: Vercel Cron, matches CRON_SECRET, provides a GitHub PAT token, verified QStash signature, or no CRON_SECRET is configured
-    if (cronSecret && !isVercelCron && !isAuthorizedSecret && !isGithubTokenInHeader && !isQStashVerified) {
-      return NextResponse.json({ error: "Unauthorized cron request" }, { status: 401 });
+    // Allow if: matches CRON_SECRET, verified QStash signature, provides a valid GitHub PAT token, or dev bypass
+    const isDevBypass = process.env.NODE_ENV === "development" && !cronSecret;
+    const isAuthorized = isDevBypass || Boolean(isAuthorizedSecret || isQStashVerified || isGithubTokenInHeader);
+
+    if (!isAuthorized) {
+      return NextResponse.json({ error: "Unauthorized cron request: missing valid CRON_SECRET or signature" }, { status: 401 });
     }
 
     const { searchParams } = new URL(req.url);

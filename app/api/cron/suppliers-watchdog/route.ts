@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { suppliers } from "@/db/schema";
 import { eq, and, sql, asc } from "drizzle-orm";
 import { scanSupplierNow } from "@/lib/supplier-scraper";
+import { timingSafeEqual } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // 60s max execution limit on Vercel Serverless (Hobby plan compliance)
@@ -26,8 +27,10 @@ async function handleCron(req: NextRequest) {
     const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7).trim() : null;
     const apiSecretHeader = req.headers.get("x-api-secret");
     const cronSecret = process.env.CRON_SECRET || process.env.API_SECRET || process.env.APP_PASSWORD;
-    const isVercelCron = req.headers.get("x-vercel-cron") === "1";
-    const isAuthorizedSecret = cronSecret && (bearerToken === cronSecret || apiSecretHeader === cronSecret);
+    const isAuthorizedSecret =
+      Boolean(cronSecret) &&
+      ((bearerToken && timingSafeEqual(bearerToken, cronSecret!)) ||
+        (apiSecretHeader && timingSafeEqual(apiSecretHeader, cronSecret!)));
 
     // Verify QStash signature if triggered by Upstash QStash Cron
     let isQStashVerified = false;
@@ -55,10 +58,11 @@ async function handleCron(req: NextRequest) {
       }
     }
 
-    const isAuthorized = !cronSecret || isVercelCron || isAuthorizedSecret || isQStashVerified;
+    const isDevBypass = process.env.NODE_ENV === "development" && !cronSecret;
+    const isAuthorized = isDevBypass || Boolean(isAuthorizedSecret || isQStashVerified);
 
     if (!isAuthorized) {
-      return NextResponse.json({ error: "Unauthorized cron request" }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized cron request: missing valid CRON_SECRET or signature" }, { status: 401 });
     }
 
     // 1. Fetch active suppliers (prioritizing those never checked or least recently checked)

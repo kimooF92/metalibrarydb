@@ -4,14 +4,20 @@ let clientInstance: SupabaseClient | null = null;
 
 export function getSupabase(): SupabaseClient {
   if (!clientInstance) {
+    const isServer = typeof window === "undefined";
     const supabaseUrl =
       process.env.NEXT_PUBLIC_SUPABASE_URL ||
       process.env.SUPABASE_URL ||
       "https://placeholder.supabase.co";
-    const supabaseKey =
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-      process.env.SUPABASE_KEY ||
-      "placeholder";
+
+    // On server, prioritize service role key for storage uploads and background tasks
+    // On client (browser), strictly use public anon key
+    const supabaseKey = isServer
+      ? process.env.SUPABASE_SERVICE_ROLE_KEY ||
+        process.env.SUPABASE_KEY ||
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+        "placeholder"
+      : process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder";
 
     clientInstance = createClient(supabaseUrl, supabaseKey);
   }

@@ -52,7 +52,7 @@ const STAFF_BLOCKED_API_PREFIXES = [
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
-  // 1. Skip static assets, Next.js system routes, public media paths, cron and QStash webhook endpoints (handled internally)
+  // 1. Skip static assets, Next.js system routes, public media paths, cron, webhooks and QStash endpoints (handled internally)
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/static") ||
@@ -60,6 +60,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/api/spy/image-proxy") ||
     pathname.startsWith("/api/cron/") ||
     pathname.startsWith("/api/qstash/") ||
+    pathname.startsWith("/api/webhooks/") ||
     PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith("/api/auth/"))
   ) {
     return NextResponse.next();

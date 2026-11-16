@@ -487,13 +487,16 @@ export async function startApifyDeltaScan(params: {
     "scrapePageAds.sortBy": "most_recent",
   };
 
+  const webhookSecret = process.env.API_SECRET || process.env.APP_PASSWORD;
+  const tokenParam = webhookSecret ? `&token=${encodeURIComponent(webhookSecret)}` : "";
+
   const webhooks = params.webhookBaseUrl
     ? [
         {
           eventTypes: ["ACTOR.RUN.SUCCEEDED", "ACTOR.RUN.FAILED", "ACTOR.RUN.ABORTED"],
           requestUrl: `${params.webhookBaseUrl}/api/webhooks/apify?creativeScanId=${encodeURIComponent(
             params.creativeScanId
-          )}`,
+          )}${tokenParam}`,
         },
       ]
     : undefined;
