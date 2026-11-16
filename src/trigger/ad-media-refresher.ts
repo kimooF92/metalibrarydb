@@ -3,6 +3,13 @@ import { db } from "../../db";
 import { ads, adObservations } from "../../db/schema";
 import { eq } from "drizzle-orm";
 import { deleteByPrefix } from "../../lib/cache-service";
+import {
+  consolidateRefreshedMedia,
+  isZeroAdResultText,
+  isRateLimitedText,
+  isInactiveCardText,
+  isActiveCardText,
+} from "../../lib/ad-media-utils";
 
 export interface RefreshAdMediaOptions {
   adId?: string;
@@ -48,6 +55,7 @@ export async function refreshSingleAdMedia(
       pageId: ads.pageId,
       pageName: ads.pageName,
       isArchived: ads.isArchived,
+      archivedAt: ads.archivedAt,
       lastSeenAt: ads.lastSeenAt,
     })
     .from(ads)
@@ -163,60 +171,94 @@ export async function refreshSingleAdMedia(
       const bodyText = document.body ? document.body.innerText || document.body.textContent || "" : "";
 
       // Check Rate Limit / CAPTCHA
-      if (/confirm it'?s you|security check|enter the code below|unusual activity|prouvez que vous êtes un humain/i.test(bodyText)) {
-        return { isRateLimited: true, isNotFound: false, isActive: false, isInactive: false, cardImages: [], videoPoster: null, videoSrc: null };
+      if (/confirm it'?s you|security check|enter the code below|unusual activity|prouvez que vous êtes un humain|rate limit exceeded|too many requests|temporarily blocked/i.test(bodyText)) {
+        return { isRateLimited: true, isNotFound: false, isActive: false, isInactive: false, cardImages: [], videoPoster: null, videoSrc: null, hasVideoElement: false };
       }
 
       // Check Not Found / Expired
       const zeroAdRegex =
-        /no\s+ads?\s+match|no\s+results?\s+found|no\s+active\s+ads|ad\s+isn['’]?t\s+in\s+the\s+ad\s+library|ad\s+is\s+not\s+in\s+the\s+ad\s+library|aucun\s+résultat|sin\s+resultados|keine\s+ergebnisse|this\s+ad\s+has\s+expired|ad\s+not\s+found|ce\s+contenu\s+n'est\s+pas\s+disponible/i;
+        /no\s+ads?\s+match|no\s+results?\s+found|no\s+active\s+ads|ad\s+isn['’]?t\s+in\s+the\s+ad\s+library|ad\s+is\s+not\s+in\s+the\s+ad\s+library|aucun\s+résultat|sin\s+resultados|keine\s+ergebnisse|there\s+are\s+no\s+ads|0\s+matching\s+ads|0\s+ads\s+match|aucun\s+résultat\s+ne\s+correspond|ningún\s+anuncio\s+coincide|keine\s+anzeigen\s+stimmen|this\s+ad\s+has\s+expired|ad\s+not\s+found|ce\s+contenu\s+n'est\s+pas\s+disponible|ne\s+figure\s+pas\s+dans\s+la\s+bibliothèque|الإعلان\s+غير\s+موجود|\b0\s+results\b|~\s?0\s+results/i;
 
-      if (zeroAdRegex.test(bodyText) || /\b0\s+results\b/i.test(bodyText)) {
-        return { isRateLimited: false, isNotFound: true, isActive: false, isInactive: true, cardImages: [], videoPoster: null, videoSrc: null };
+      if (zeroAdRegex.test(bodyText)) {
+        return { isRateLimited: false, isNotFound: true, isActive: false, isInactive: true, cardImages: [], videoPoster: null, videoSrc: null, hasVideoElement: false };
       }
 
-      // Find ad card container
+      // Find ad card container strictly containing targetId
       const allDivs = Array.from(document.querySelectorAll("div"));
       const candidateDivs = allDivs.filter((div) => {
         const text = div.textContent || "";
         return text.includes(targetId);
       });
 
+      if (candidateDivs.length === 0) {
+        // Target archive ID is not rendered anywhere in the DOM (ad expired or removed)
+        return { isRateLimited: false, isNotFound: true, isActive: false, isInactive: true, cardImages: [], videoPoster: null, videoSrc: null, hasVideoElement: false };
+      }
+
+      // Sort candidate divs by textContent length ASC to find the closest wrapper
+      candidateDivs.sort((a, b) => (a.textContent || "").length - (b.textContent || "").length);
+
       let targetCard: HTMLDivElement | null = null;
       for (const candidate of candidateDivs) {
         const cText = candidate.textContent || "";
         if (cText.length > 12000) continue;
-        const hasCardLabels = /Sponsored|Sponsorisé|Started running|Lancé le|Active|Inactive|Inactif|Actif|نشط|غير نشط/i.test(cText);
-        const hasMedia = candidate.querySelector('img[src*="fbcdn"], video') !== null;
+        const hasCardLabels = /Sponsored|Sponsorisé|Started running|Lancé le|Active|Inactive|Inactif|Actif|نشط|غير نشط|See ad details/i.test(cText);
+        const hasMedia = candidate.querySelector('img[src*="fbcdn"], img[src*="scontent"], video') !== null;
         if (hasCardLabels || hasMedia) {
           targetCard = candidate as HTMLDivElement;
           break;
         }
       }
 
-      if (!targetCard && candidateDivs.length > 0) {
+      if (!targetCard) {
         targetCard = (candidateDivs.find((d) => (d.textContent || "").length >= 80) || candidateDivs[0]) as HTMLDivElement;
       }
 
-      const cardScope = targetCard || document.body;
-      const cardText = cardScope.innerText || cardScope.textContent || "";
+      if (!targetCard) {
+        // Strictly prevent falling back to document.body!
+        return { isRateLimited: false, isNotFound: true, isActive: false, isInactive: true, cardImages: [], videoPoster: null, videoSrc: null, hasVideoElement: false };
+      }
+
+      const cardText = targetCard.innerText || targetCard.textContent || "";
 
       const isInactive = /Inactive|Inactif|Inactivo|Inaktiv|غير نشط/i.test(cardText);
-      const isActive = !isInactive && /Active|Actif|Activo|Aktiv|نشط|Started running|Lancé le/i.test(cardText);
+      const isActive = !isInactive && /Active|Actif|Activo|Aktiv|نشط|Started running|Lancé le|En cours|Diffusé/i.test(cardText);
 
-      // Extract creative images (filter out avatars like /t39.30808-1/ and tiny icons)
-      const allImgs = Array.from(cardScope.querySelectorAll('img[src*="fbcdn.net"], img[src*="scontent"]')) as HTMLImageElement[];
-      const cardImages = allImgs
-        .map((img) => img.src)
-        .filter((src) => {
-          if (!src || src.includes("rsrc.php")) return false;
-          // Filter out profile avatar thumbnails
-          if (src.includes("/t39.30808-1/") || src.includes("s148x148") || src.includes("s50x50")) return false;
-          return true;
-        });
+      // Extract creative images strictly from targetCard
+      const allImgs = Array.from(targetCard.querySelectorAll('img[src*="fbcdn.net"], img[src*="scontent"], img[src*="cdninstagram"]')) as HTMLImageElement[];
+      const cardImages: string[] = [];
 
-      // Extract video element info
-      const videoEl = cardScope.querySelector("video") as HTMLVideoElement | null;
+      for (const img of allImgs) {
+        const src = img.currentSrc || img.src || "";
+        if (!src || src.includes("rsrc.php") || src.startsWith("data:")) continue;
+        // Filter out profile avatar thumbnails and icons
+        if (/\/t39\.30808-1\/|s148x148|s50x50|s60x60|s100x100|_s\d+x\d+|_p\d+x\d+|\/profile\/|\/avatar\/|emoji/i.test(src)) continue;
+        const isHeaderImg = !!img.closest('a[href*="facebook.com/"]') && !img.closest('div[class*="creative"]');
+        if (isHeaderImg) continue;
+        if (!cardImages.includes(src)) {
+          cardImages.push(src);
+        }
+      }
+
+      // Check background-image elements within targetCard
+      const bgEls = Array.from(targetCard.querySelectorAll<HTMLElement>('div[style*="background-image"], span[style*="background-image"]'));
+      for (const el of bgEls) {
+        const style = el.getAttribute("style") || "";
+        const bgMatch = style.match(/url\(["']?(https?:\/\/[^"')]+)["']?\)/i);
+        if (bgMatch && bgMatch[1]) {
+          const bgUrl = bgMatch[1];
+          if ((bgUrl.includes("scontent") || bgUrl.includes("fbcdn") || bgUrl.includes("cdninstagram")) &&
+              !/\/t39\.30808-1\/|s148x148|s50x50|_s\d+x\d+|_p\d+x\d+|\/profile\/|\/avatar\//i.test(bgUrl)) {
+            if (!cardImages.includes(bgUrl)) {
+              cardImages.push(bgUrl);
+            }
+          }
+        }
+      }
+
+      // Extract video element info strictly from targetCard
+      const videoEl = targetCard.querySelector("video") as HTMLVideoElement | null;
+      const hasVideoElement = Boolean(videoEl);
       const videoPoster = videoEl ? videoEl.getAttribute("poster") : null;
       const videoSrc = videoEl && videoEl.src && videoEl.src.startsWith("http") && !videoEl.src.startsWith("blob:") ? videoEl.src : null;
 
@@ -228,6 +270,7 @@ export async function refreshSingleAdMedia(
         cardImages,
         videoPoster,
         videoSrc,
+        hasVideoElement,
       };
     }, archiveId);
 
@@ -240,56 +283,75 @@ export async function refreshSingleAdMedia(
       };
     }
 
-    const isAdActive = evaluation.isActive && !evaluation.isInactive && !evaluation.isNotFound;
+    if (evaluation.isNotFound) {
+      const now = new Date();
+      await db
+        .update(adObservations)
+        .set({
+          isActive: false,
+          observedAt: now,
+        })
+        .where(eq(adObservations.adId, adRecord.id));
 
-    // 5. Consolidate media URLs
-    let discoveredVideoUrl: string | null = evaluation.videoSrc || null;
-    if (!discoveredVideoUrl && interceptedVideos.length > 0) {
-      // Pick the most recent video MP4 stream
-      discoveredVideoUrl = interceptedVideos[interceptedVideos.length - 1];
+      await db
+        .update(ads)
+        .set({
+          isArchived: true,
+          archivedAt: adRecord.archivedAt || now,
+          updatedAt: now,
+        })
+        .where(eq(ads.id, adRecord.id));
+
+      deleteByPrefix("cache:spy_ads:").catch(() => {});
+
+      return {
+        success: true,
+        adId: adRecord.id,
+        adArchiveId: archiveId,
+        isActive: false,
+        isArchived: true,
+        mediaUrls: adRecord.mediaUrls || [],
+        thumbnailUrl: adRecord.thumbnailUrl,
+        refreshedVideoUrl: null,
+        refreshedThumbnailUrl: null,
+        message: "Meta confirms ad has ended or is no longer available in the Ad Library.",
+      };
     }
 
-    let discoveredThumbnailUrl: string | null = evaluation.videoPoster || null;
-    if (!discoveredThumbnailUrl && evaluation.cardImages.length > 0) {
-      discoveredThumbnailUrl = evaluation.cardImages[0];
-    } else if (!discoveredThumbnailUrl && interceptedImages.length > 0) {
-      discoveredThumbnailUrl = interceptedImages.find((u) => u.includes("600x600") || u.includes("1080x1080")) || interceptedImages[0];
-    }
+    const isAdActive = evaluation.isActive && !evaluation.isInactive;
 
-    const discoveredImages = evaluation.cardImages.length > 0 ? evaluation.cardImages : interceptedImages.slice(0, 5);
+    // 5. Consolidate media URLs safely using deterministic utility
+    const consolidated = consolidateRefreshedMedia({
+      existingMediaUrls: adRecord.mediaUrls,
+      existingThumbnailUrl: adRecord.thumbnailUrl,
+      cardImages: evaluation.cardImages,
+      videoSrc: evaluation.videoSrc,
+      videoPoster: evaluation.videoPoster,
+      hasVideoElement: evaluation.hasVideoElement,
+      interceptedVideos,
+      isNotFound: false,
+    });
 
-    // 6. Direct media URLs (B2 storage disabled to conserve storage quota)
-    const finalVideoUrl = discoveredVideoUrl;
-    const finalThumbnailUrl = discoveredThumbnailUrl;
+    const now = new Date();
 
-    // 7. Update Database: adObservations and ads table
+    // 6. Update Database: adObservations and ads table
     await db
       .update(adObservations)
       .set({
         isActive: isAdActive,
-        observedAt: new Date(),
+        observedAt: now,
       })
       .where(eq(adObservations.adId, adRecord.id));
-
-    const updatedMediaUrls = finalVideoUrl
-      ? [finalVideoUrl, ...(adRecord.mediaUrls?.filter((u) => u !== finalVideoUrl) || [])]
-      : discoveredImages.length > 0
-      ? discoveredImages
-      : adRecord.mediaUrls || [];
 
     await db
       .update(ads)
       .set({
-        mediaUrls: updatedMediaUrls,
-        thumbnailUrl: finalThumbnailUrl || adRecord.thumbnailUrl,
-        updatedAt: new Date(),
-        ...(isAdActive
-          ? {
-              isArchived: false,
-              archivedAt: null,
-              lastSeenAt: new Date(),
-            }
-          : {}),
+        mediaUrls: consolidated.updatedMediaUrls,
+        thumbnailUrl: consolidated.updatedThumbnailUrl,
+        updatedAt: now,
+        isArchived: !isAdActive,
+        archivedAt: isAdActive ? null : (adRecord.archivedAt || now),
+        lastSeenAt: isAdActive ? now : adRecord.lastSeenAt,
       })
       .where(eq(ads.id, adRecord.id));
 
@@ -301,11 +363,11 @@ export async function refreshSingleAdMedia(
       adId: adRecord.id,
       adArchiveId: archiveId,
       isActive: isAdActive,
-      isArchived: isAdActive ? false : Boolean(adRecord.isArchived),
-      mediaUrls: updatedMediaUrls,
-      thumbnailUrl: finalThumbnailUrl || adRecord.thumbnailUrl,
-      refreshedVideoUrl: finalVideoUrl,
-      refreshedThumbnailUrl: finalThumbnailUrl,
+      isArchived: !isAdActive,
+      mediaUrls: consolidated.updatedMediaUrls,
+      thumbnailUrl: consolidated.updatedThumbnailUrl,
+      refreshedVideoUrl: consolidated.discoveredVideoUrl,
+      refreshedThumbnailUrl: consolidated.discoveredThumbnailUrl,
       message: isAdActive
         ? "Media refreshed and ad is actively running on Meta."
         : "Media refreshed. Meta confirms ad has ended (inactive).",

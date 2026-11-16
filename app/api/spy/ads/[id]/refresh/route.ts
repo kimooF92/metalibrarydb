@@ -148,7 +148,7 @@ export async function POST(
 
     const isAdActive = refreshResult.isActive ?? true;
 
-    // 3. Auto-unarchive if Meta confirms active
+    // 3. Auto-unarchive if Meta confirms active, or auto-archive if Meta confirms inactive
     if (isAdActive && adRecord.isArchived) {
       await db
         .update(ads)
@@ -156,6 +156,15 @@ export async function POST(
           isArchived: false,
           archivedAt: null,
           lastSeenAt: new Date(),
+        })
+        .where(eq(ads.id, id));
+    } else if (!isAdActive && !adRecord.isArchived) {
+      await db
+        .update(ads)
+        .set({
+          isArchived: true,
+          archivedAt: adRecord.archivedAt || new Date(),
+          updatedAt: new Date(),
         })
         .where(eq(ads.id, id));
     }
