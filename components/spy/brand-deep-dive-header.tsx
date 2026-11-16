@@ -1,6 +1,6 @@
 "use client";
 
-import React, { memo } from "react";
+import React, { memo, useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 import { formatRelativeTime } from "@/lib/utils";
 import {
@@ -11,7 +11,17 @@ import {
   Clock,
   Sparkles,
   Globe,
+  MoreVertical,
+  Copy,
+  Check,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 export interface BrandDeepDiveHeaderProps {
   brand: {
@@ -90,10 +100,21 @@ export const BrandDeepDiveHeader = memo(function BrandDeepDiveHeader({
   onOpenManageDomainModal,
   onBack,
 }: BrandDeepDiveHeaderProps) {
+  const [hasCopiedId, setHasCopiedId] = useState(false);
+
+  const handleCopyPageId = () => {
+    if (!brand.pageId) return;
+    navigator.clipboard.writeText(brand.pageId);
+    setHasCopiedId(true);
+    setTimeout(() => setHasCopiedId(false), 2000);
+  };
+
+  const isBackgroundJobRunning = isCheckingStatus || isRefreshingMedia;
+
   return (
     <div className="flex flex-col gap-4">
       {/* Top Banner Row: Identity & Primary Actions */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-slate-950/50 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-950/50 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
         <div className="flex items-start gap-3.5 min-w-0">
           {onBack && (
             <button
@@ -191,7 +212,16 @@ export const BrandDeepDiveHeader = memo(function BrandDeepDiveHeader({
               </span>
 
               <span className="text-slate-300 dark:text-slate-700">•</span>
-              <span className="font-mono text-[11px]">ID: {brand.pageId}</span>
+              <a
+                href={brand.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-mono text-[11px] text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline transition-colors cursor-pointer"
+                title="Open brand on Meta Ad Library in new tab"
+              >
+                <span>ID: {brand.pageId}</span>
+                <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+              </a>
               {brand.country && (
                 <>
                   <span className="text-slate-300 dark:text-slate-700">•</span>
@@ -203,7 +233,7 @@ export const BrandDeepDiveHeader = memo(function BrandDeepDiveHeader({
         </div>
 
         {/* Action Button Group */}
-        <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+        <div className="flex items-center gap-2 shrink-0">
           {/* Watchlist Star Icon Toggle */}
           <button
             type="button"
@@ -219,52 +249,129 @@ export const BrandDeepDiveHeader = memo(function BrandDeepDiveHeader({
             <Star className={`w-4 h-4 ${isWatchlisted ? "fill-amber-500 dark:fill-amber-400" : ""}`} />
           </button>
 
-          {/* Meta Ad Library External Link */}
-          <a
-            href={brand.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all cursor-pointer"
-            title="Open Meta Ad Library in new tab"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            <span>Meta Library</span>
-          </a>
-
-          {/* Live Count Check Button */}
-          <button
-            type="button"
-            onClick={onCheckAdLibraryNow}
-            disabled={isCheckingStatus}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all cursor-pointer disabled:opacity-60"
-            title="Verify active ad count live via Trigger.dev"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isCheckingStatus ? "animate-spin text-indigo-500" : ""}`} />
-            <span>{isCheckingStatus ? "Scanning..." : "Check Count"}</span>
-          </button>
-
-          {/* Refresh Brand Media */}
-          <button
-            type="button"
-            onClick={onBulkRefreshMedia}
-            disabled={isRefreshingMedia}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer disabled:opacity-60"
-            title="Scrape and refresh media files via cloud worker"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingMedia ? "animate-spin text-indigo-500" : ""}`} />
-            <span>{isRefreshingMedia ? "Refreshing..." : "Refresh Media"}</span>
-          </button>
-
-          {/* Export LLM Intelligence Dossier */}
+          {/* Primary Action: Export LLM Intelligence Dossier */}
           <button
             type="button"
             onClick={onOpenDossierModal}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm shadow-indigo-600/25 transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm shadow-indigo-600/25 transition-all cursor-pointer shrink-0"
             title="Export structured LLM intelligence prompt"
           >
             <Sparkles className="w-3.5 h-3.5" />
             <span>Export Dossier</span>
           </button>
+
+          {/* Secondary Actions: 3-dots Dropdown Menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="relative p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 data-popup-open:bg-slate-100 dark:data-popup-open:bg-slate-800 data-popup-open:text-slate-900 dark:data-popup-open:text-white transition-all cursor-pointer outline-none shrink-0"
+              title={isBackgroundJobRunning ? "Sync running..." : "More actions"}
+              aria-label="More brand options"
+            >
+              {isBackgroundJobRunning ? (
+                <RefreshCw className="w-4 h-4 animate-spin text-indigo-500" />
+              ) : (
+                <MoreVertical className="w-4 h-4" />
+              )}
+              {isBackgroundJobRunning && (
+                <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500" />
+                </span>
+              )}
+            </DropdownMenuTrigger>
+
+            <DropdownMenuContent
+              align="end"
+              side="bottom"
+              sideOffset={6}
+              className="w-56 p-1.5 divide-y-0 text-left"
+            >
+              <div className="py-0.5 space-y-0.5">
+                {/* Meta Ad Library External Link */}
+                <DropdownMenuItem
+                  onClick={() => window.open(brand.url, "_blank", "noopener,noreferrer")}
+                  className="flex items-center gap-2.5 px-3 py-2 text-xs rounded-lg text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <ExternalLink className="w-4 h-4 text-slate-400 shrink-0" />
+                  <div className="flex flex-col text-left">
+                    <span className="font-semibold text-slate-800 dark:text-slate-100">Meta Ad Library</span>
+                    <span className="text-[10px] text-slate-400">View live on Meta</span>
+                  </div>
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator className="my-1 bg-slate-100 dark:bg-slate-800" />
+
+                {/* Live Count Check Button */}
+                <DropdownMenuItem
+                  onClick={onCheckAdLibraryNow}
+                  disabled={isCheckingStatus}
+                  className="flex items-center gap-2.5 px-3 py-2 text-xs rounded-lg text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 text-indigo-500 shrink-0 ${isCheckingStatus ? "animate-spin" : ""}`} />
+                  <div className="flex flex-col text-left">
+                    <span className="font-semibold text-slate-800 dark:text-slate-100">
+                      {isCheckingStatus ? "Checking Live..." : "Check Count"}
+                    </span>
+                    <span className="text-[10px] text-slate-400">Verify active ad count</span>
+                  </div>
+                </DropdownMenuItem>
+
+                {/* Refresh Brand Media */}
+                <DropdownMenuItem
+                  onClick={onBulkRefreshMedia}
+                  disabled={isRefreshingMedia}
+                  className="flex items-center gap-2.5 px-3 py-2 text-xs rounded-lg text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 text-purple-500 shrink-0 ${isRefreshingMedia ? "animate-spin" : ""}`} />
+                  <div className="flex flex-col text-left">
+                    <span className="font-semibold text-slate-800 dark:text-slate-100">
+                      {isRefreshingMedia ? "Refreshing Media..." : "Refresh Media"}
+                    </span>
+                    <span className="text-[10px] text-slate-400">Scrape creative assets</span>
+                  </div>
+                </DropdownMenuItem>
+
+                {/* Manage Sister Pages / Domain Portfolio */}
+                {brandDomain && (
+                  <>
+                    <DropdownMenuSeparator className="my-1 bg-slate-100 dark:bg-slate-800" />
+                    <DropdownMenuItem
+                      onClick={onOpenManageDomainModal}
+                      className="flex items-center gap-2.5 px-3 py-2 text-xs rounded-lg text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    >
+                      <Globe className="w-4 h-4 text-cyan-500 shrink-0" />
+                      <div className="flex flex-col text-left">
+                        <span className="font-semibold text-slate-800 dark:text-slate-100">Sister Pages</span>
+                        <span className="text-[10px] text-slate-400">Manage domain portfolio</span>
+                      </div>
+                    </DropdownMenuItem>
+                  </>
+                )}
+
+                <DropdownMenuSeparator className="my-1 bg-slate-100 dark:bg-slate-800" />
+
+                {/* Copy Brand ID */}
+                <DropdownMenuItem
+                  onClick={handleCopyPageId}
+                  className="flex items-center gap-2.5 px-3 py-2 text-xs rounded-lg text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  {hasCopiedId ? (
+                    <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                  ) : (
+                    <Copy className="w-4 h-4 text-slate-400 shrink-0" />
+                  )}
+                  <div className="flex flex-col text-left">
+                    <span className="font-semibold text-slate-800 dark:text-slate-100">
+                      {hasCopiedId ? "Copied ID!" : "Copy Page ID"}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono truncate max-w-[150px]">
+                      {brand.pageId}
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
