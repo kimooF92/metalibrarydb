@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { tasks, runs } from "@trigger.dev/sdk";
 import { isFbCdnUrlExpired } from "@/lib/fb-cdn";
+import { refreshSingleAdMedia } from "@/src/trigger/ad-media-refresher";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // 60s max on platforms supporting it
@@ -103,8 +104,17 @@ export async function POST(
 
     let refreshResult: RefreshAdMediaResult | null = null;
 
-    // 2. PRIMARY & ONLY ENGINE: Trigger.dev Cloud Task (Zero Apify credits, runs Playwright in Docker)
-    if (process.env.TRIGGER_SECRET_KEY) {
+    // 2. Refresh Engine:
+    // If running in development or USE_LOCAL_REFRESH="true", run Playwright engine directly.
+    // In production, dispatch Trigger.dev cloud task and fallback to direct execution if needed.
+    if (process.env.NODE_ENV === "development" || process.env.USE_LOCAL_REFRESH === "true" || !process.env.TRIGGER_SECRET_KEY) {
+      console.log(`[Ad Refresh] Running local refreshSingleAdMedia engine for ad: ${adRecord.adArchiveId}...`);
+      refreshResult = await refreshSingleAdMedia({
+        adId: id,
+        adArchiveId: adRecord.adArchiveId,
+        force: forceRefresh,
+      });
+    } else {
       try {
         console.log(`[Ad Refresh] Dispatching Trigger.dev task 'refresh-ad-media' for ad: ${adRecord.adArchiveId}...`);
         const handle = await tasks.trigger("refresh-ad-media", {
@@ -134,8 +144,6 @@ export async function POST(
       } catch (triggerErr: any) {
         console.error(`[Ad Refresh] Trigger.dev task execution issue: ${triggerErr?.message}`);
       }
-    } else {
-      console.warn("[Ad Refresh] TRIGGER_SECRET_KEY not set; Trigger.dev cannot run.");
     }
 
     if (!refreshResult || !refreshResult.success) {

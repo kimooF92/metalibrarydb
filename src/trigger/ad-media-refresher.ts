@@ -183,24 +183,27 @@ export async function refreshSingleAdMedia(
         return { isRateLimited: false, isNotFound: true, isActive: false, isInactive: true, cardImages: [], videoPoster: null, videoSrc: null, hasVideoElement: false };
       }
 
-      // Find ad card container strictly containing targetId
+      // Find ad card container strictly containing targetId in visible text
+      const idRegex = new RegExp(`(?:Library ID|ID dans la bibliothèque|Identifiant|Identificador|معرّف المكتبة|ID)\\s*[:\\s]\\s*${targetId}\\b`, "i");
+
       const allDivs = Array.from(document.querySelectorAll("div"));
       const candidateDivs = allDivs.filter((div) => {
-        const text = div.textContent || "";
-        return text.includes(targetId);
+        // innerText excludes <script>, <style>, <noscript>
+        const visibleText = div.innerText || "";
+        return idRegex.test(visibleText) || visibleText.includes(targetId);
       });
 
       if (candidateDivs.length === 0) {
-        // Target archive ID is not rendered anywhere in the DOM (ad expired or removed)
+        // Target archive ID is not rendered in visible DOM (ad expired or removed, or page redirected to brand library)
         return { isRateLimited: false, isNotFound: true, isActive: false, isInactive: true, cardImages: [], videoPoster: null, videoSrc: null, hasVideoElement: false };
       }
 
-      // Sort candidate divs by textContent length ASC to find the closest wrapper
-      candidateDivs.sort((a, b) => (a.textContent || "").length - (b.textContent || "").length);
+      // Sort candidate divs by innerText length ASC to find the closest wrapper
+      candidateDivs.sort((a, b) => (a.innerText || "").length - (b.innerText || "").length);
 
       let targetCard: HTMLDivElement | null = null;
       for (const candidate of candidateDivs) {
-        const cText = candidate.textContent || "";
+        const cText = candidate.innerText || "";
         if (cText.length > 12000) continue;
         const hasCardLabels = /Sponsored|Sponsorisé|Started running|Lancé le|Active|Inactive|Inactif|Actif|نشط|غير نشط|See ad details/i.test(cText);
         const hasMedia = candidate.querySelector('img[src*="fbcdn"], img[src*="scontent"], video') !== null;
@@ -211,7 +214,7 @@ export async function refreshSingleAdMedia(
       }
 
       if (!targetCard) {
-        targetCard = (candidateDivs.find((d) => (d.textContent || "").length >= 80) || candidateDivs[0]) as HTMLDivElement;
+        targetCard = (candidateDivs.find((d) => (d.innerText || "").length >= 80) || candidateDivs[0]) as HTMLDivElement;
       }
 
       if (!targetCard) {
