@@ -490,11 +490,12 @@ export async function startApifyDeltaScan(params: {
   const webhookSecret = process.env.API_SECRET || process.env.APP_PASSWORD;
   const tokenParam = webhookSecret ? `&token=${encodeURIComponent(webhookSecret)}` : "";
 
-  const webhooks = params.webhookBaseUrl
+  const cleanBaseUrl = params.webhookBaseUrl?.trim();
+  const webhooks = cleanBaseUrl
     ? [
         {
           eventTypes: ["ACTOR.RUN.SUCCEEDED", "ACTOR.RUN.FAILED", "ACTOR.RUN.ABORTED"],
-          requestUrl: `${params.webhookBaseUrl}/api/webhooks/apify?creativeScanId=${encodeURIComponent(
+          requestUrl: `${cleanBaseUrl}/api/webhooks/apify?creativeScanId=${encodeURIComponent(
             params.creativeScanId
           )}${tokenParam}`,
         },
@@ -502,6 +503,23 @@ export async function startApifyDeltaScan(params: {
     : undefined;
 
   let lastError: string | null = null;
+
+  // Pre-seed exhausted tokens using account balance info so depleted / fractional-cent keys are skipped
+  try {
+    const balance = await getApifyAccountBalance();
+    if (balance?.keys) {
+      for (const k of balance.keys) {
+        const rawToken = tokens[k.index - 1];
+        if (!rawToken) continue;
+        // Any key with <= $0.05 cannot satisfy the scraper actor's minimum 10-result rule
+        if (k.isExhausted || (typeof k.remainingUsd === "number" && k.remainingUsd <= 0.05)) {
+          exhaustedTokens.add(rawToken);
+        }
+      }
+    }
+  } catch (balErr) {
+    console.warn("[Apify] Could not pre-fetch balance status:", balErr);
+  }
 
   // Filter out tokens already marked exhausted in this process run, falling back to all tokens if all were flagged
   const nonExhausted = tokens.filter((t) => !exhaustedTokens.has(t));
@@ -566,6 +584,27 @@ export async function startApifyDeltaScan(params: {
 
       const json = await res.json();
       const runData = json.data;
+
+      // Defensive Guard: Check if Apify capped maxItems below the actor's minimum requirement (10 items)
+      // This happens when an account has only a tiny fraction of a cent remaining (e.g. $0.0065).
+      const maxChargedResults = runData?.options?.maxItems;
+      if (typeof maxChargedResults === "number" && maxChargedResults < 10) {
+        console.warn(
+          `⚠️ [Apify Failover] Token #${tokenNum} capped at ${maxChargedResults} items (< 10 required by actor). Aborting run ${runData.id} and failing over...`
+        );
+        // Abort unviable run immediately to prevent credit burn or container startup error
+        fetch(`${APIFY_BASE_URL}/actor-runs/${runData.id}/abort?token=${token}`, {
+          method: "POST",
+        }).catch(() => {});
+
+        exhaustedTokens.add(token);
+        lastError = `Token #${tokenNum} has insufficient balance (capped at ${maxChargedResults} items, min 10 required)`;
+        if (idx + 1 < candidateTokens.length) {
+          const nextTokenNum = tokens.indexOf(candidateTokens[idx + 1]) + 1;
+          console.warn(`⚠️ [Apify Failover] Failing over to Token #${nextTokenNum}...`);
+        }
+        continue;
+      }
 
       console.log(`✅ [Apify Success] Actor run initiated using Token #${tokenNum}! Run ID: ${runData.id}`);
 
@@ -639,6 +678,21 @@ export async function scrapeSingleAdViaApify(adArchiveId: string): Promise<any |
     "scrapePageAds.sortBy": "most_recent",
   };
 
+  try {
+    const balance = await getApifyAccountBalance();
+    if (balance?.keys) {
+      for (const k of balance.keys) {
+        const rawToken = tokens[k.index - 1];
+        if (!rawToken) continue;
+        if (k.isExhausted || (typeof k.remainingUsd === "number" && k.remainingUsd <= 0.05)) {
+          exhaustedTokens.add(rawToken);
+        }
+      }
+    }
+  } catch (balErr) {
+    console.warn("[Apify Single Ad] Could not pre-fetch balance status:", balErr);
+  }
+
   const nonExhausted = tokens.filter((t) => !exhaustedTokens.has(t));
   const candidateTokens = nonExhausted.length > 0 ? nonExhausted : tokens;
 
@@ -672,6 +726,19 @@ export async function scrapeSingleAdViaApify(adArchiveId: string): Promise<any |
 
       const json = await res.json();
       const runData = json.data;
+
+      const maxChargedResults = runData?.options?.maxItems;
+      if (typeof maxChargedResults === "number" && maxChargedResults < 10) {
+        console.warn(
+          `⚠️ [Apify Single Ad] Token #${tokenNum} capped at ${maxChargedResults} items (< 10 required). Aborting run ${runData.id}...`
+        );
+        fetch(`${APIFY_BASE_URL}/actor-runs/${runData.id}/abort?token=${token}`, {
+          method: "POST",
+        }).catch(() => {});
+        exhaustedTokens.add(token);
+        continue;
+      }
+
       if (runData?.defaultDatasetId) {
         const items = await fetchApifyDatasetItems(runData.defaultDatasetId);
         if (items && items.length > 0) {

@@ -162,9 +162,10 @@ async function executeApifyDeltaScan(pageId: string, difference: number) {
 
     newScanId = newScan.id;
 
-    const baseUrl =
+    const baseUrl = (
       process.env.NEXT_PUBLIC_APP_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
+    ).trim();
 
     const runRes = await startApifyDeltaScan({
       pageUrl: page.url,
@@ -194,14 +195,18 @@ async function executeApifyDeltaScan(pageId: string, difference: number) {
       );
 
       const { pollApifyRunUntilDone } = await import("../../lib/apify-sync");
-      await pollApifyRunUntilDone(newScan.id, runRes.id, runRes.defaultDatasetId);
+      const scanSuccess = await pollApifyRunUntilDone(newScan.id, runRes.id, runRes.defaultDatasetId);
+      if (!scanSuccess) {
+        throw new Error("Apify Delta Cloud run or dataset ingestion failed");
+      }
     } else {
       throw new Error("No Apify Run ID returned from startApifyDeltaScan");
     }
   } catch (err: any) {
     console.error(`[Apify Auto-Trigger] Failed to auto-launch Apify scan for "${page.displayName || pageId}". Enqueuing local Playwright fallback:`, err?.message || err);
 
-    if (newScanId) {
+    // Only set generic launch failure if the scan record wasn't already updated with a specific reason by pollApifyRunUntilDone
+    if (newScanId && err?.message !== "Apify Delta Cloud run or dataset ingestion failed") {
       const isRateLimited = err?.message?.toLowerCase().includes("rate") || err?.message?.toLowerCase().includes("limit") || err?.message?.toLowerCase().includes("429");
       await db
         .update(creativeScans)
