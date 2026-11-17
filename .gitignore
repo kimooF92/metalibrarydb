@@ -85,10 +85,12 @@ Worker-GUI.vbs
 scripts/worker-gui.ps1
 
 # Documentation Rules
+# Keep architectural specifications private
+ARCHITECTURE.md
+
 # Whitelist root public documentation
 !README.md
 !AGENTS.md
-!ARCHITECTURE.md
 !CLAUDE.md
 !docs/**
 
