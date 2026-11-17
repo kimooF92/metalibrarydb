@@ -1,6 +1,6 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
+# Dependencies
 /node_modules
 /.pnp
 .pnp.*
@@ -10,66 +10,88 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
+# Testing & Coverage
 /coverage
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+.testsprite/
 
-# next.js
+# Next.js & Build Output
 /.next/
 /out/
-
-# production
 /build
+*.tsbuildinfo
+next-env.d.ts
 
-# misc
+# Misc & OS Files
 .DS_Store
+Thumbs.db
+Desktop.ini
 *.pem
+
+# Environment Variables & Secrets (CRITICAL for public repo)
+.env*
+!.env.example
+
+# Local Data, Dumps & Caches
 scratch/
 .data/
 backups/
 *.dump
+*.sqlite
+*.db
+*.tar.gz
+*.zip
 
-# debug
+# Data Files & Spreadsheets (prevent competitor/lead data leaks)
+*.xlsx
+*.xls
+*.csv
+
+# Network Traces & Logs
+*.har
+debug.log
+logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
+# Cloud & Task Runners
 .vercel
-# trigger.dev
 .trigger
-# files
-*.md
-*.har
 
+# Python & UV Caches
+.uv-cache/
+.codex-review-uv-cache/
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+# Playwright Profiles (contains cookies and local browser state)
+.playwright_profile*/
 
-
-# local runner scripts
-# *.bat
-
-# BMAD-generated files
+# AI Agent Artifacts & Temporary Review Files
 /_bmad/
 /.agents/
-_bmad-output/implementation-artifacts/sprint-status.yaml
+_bmad-output/
 .mcp.json
 .gemini/
-debug.log
 skills-lock.json
 
-# playwright
-.playwright_profile*/
-/test-results/
-/playwright-report/
-/blob-report/
-/playwright/.cache/
-logs/
+# Local Windows Helper Scripts
 config.bat
-.env.local
-.gemini/settings.json
+Worker-GUI.bat
+Worker-GUI.vbs
+scripts/worker-gui.ps1
+
+# Documentation Rules
+# Whitelist root public documentation
+!README.md
+!AGENTS.md
+!ARCHITECTURE.md
+!CLAUDE.md
+!docs/**
+
+# Ignore internal sprint planning drafts and research archives
+docs/planning/
+docs/archive/
