@@ -401,16 +401,10 @@ export function NotificationItem({
   return (
     <div
       onClick={handleClick}
-      className={`relative p-3 flex items-start gap-3 transition-all cursor-pointer group active:scale-[0.99] border-l-2 ${
+      className={`relative p-3.5 flex items-start gap-3 transition-colors cursor-pointer group active:scale-[0.99] ${
         n.isRead
-          ? "border-transparent bg-transparent hover:bg-slate-100/70 dark:hover:bg-slate-800/40 opacity-75 hover:opacity-100"
-          : parsed.category === "product"
-          ? "border-emerald-500 bg-emerald-500/[0.04] dark:bg-emerald-500/[0.07] hover:bg-emerald-500/[0.1]"
-          : parsed.category === "scaling"
-          ? "border-amber-500 bg-amber-500/[0.04] dark:bg-amber-500/[0.07] hover:bg-amber-500/[0.1]"
-          : parsed.category === "error"
-          ? "border-rose-500 bg-rose-500/[0.05] dark:bg-rose-500/[0.08] hover:bg-rose-500/[0.12]"
-          : "border-indigo-500 bg-indigo-500/[0.03] dark:bg-indigo-500/[0.06] hover:bg-indigo-500/[0.1]"
+          ? "bg-transparent hover:bg-slate-100/70 dark:hover:bg-slate-800/40 opacity-75 hover:opacity-100"
+          : "bg-slate-50/60 dark:bg-slate-800/25 hover:bg-slate-100/80 dark:hover:bg-slate-800/60"
       }`}
     >
       {/* Brand Avatar: Official Logo with Monogram Fallback */}
