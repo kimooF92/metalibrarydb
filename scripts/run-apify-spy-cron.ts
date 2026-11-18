@@ -3,7 +3,7 @@ dotenv.config({ path: ".env.local" });
 
 import { db } from "../db";
 import { trackedPages, creativeScans, scanHistory, appSettings, workspaces } from "../db/schema";
-import { eq, sql, desc, asc, or } from "drizzle-orm";
+import { eq, sql, desc, asc, or, and, gt, lte, isNull } from "drizzle-orm";
 import {
   getApifyTokens,
   startApifyDeltaScan,
@@ -11,6 +11,7 @@ import {
   getApifyAccountBalance,
   ensureMostRecentSortingUrl,
 } from "../lib/apify";
+import { evaluateScanAction } from "../lib/apify-scan-policy";
 import { getApifyRunStatus } from "../lib/apify-sync";
 import { ingestApifyDatasetItems } from "../lib/apify-ingest";
 import { waitForScrapeQueueDrain } from "../lib/product-ingest";
@@ -22,6 +23,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 interface CronOptions {
   maxPages: number;
   forceAll: boolean;
+  dryRun: boolean;
   pageId?: string;
   workspace?: string;
   includePaused?: boolean;
@@ -33,6 +35,7 @@ function parseCliArgs(): CronOptions {
   const options: CronOptions = {
     maxPages: parseInt(process.env.SPY_MAX_PAGES_PER_RUN || "25", 10),
     forceAll: process.env.SPY_FORCE_ALL === "true",
+    dryRun: process.env.SPY_DRY_RUN === "true",
     includePaused: process.env.SPY_INCLUDE_PAUSED === "true",
     workspace: process.env.SPY_WORKSPACE || undefined,
     maxWaitPerRunSeconds: parseInt(process.env.APIFY_RUN_TIMEOUT_SECONDS || "300", 10), // 5 min default
@@ -45,6 +48,8 @@ function parseCliArgs(): CronOptions {
       i++;
     } else if (arg === "--force-all") {
       options.forceAll = true;
+    } else if (arg === "--dry-run") {
+      options.dryRun = true;
     } else if (arg === "--include-paused") {
       options.includePaused = true;
     } else if (arg === "--page-id" && args[i + 1]) {
@@ -63,6 +68,7 @@ Usage:
 Options:
   --max-pages <N>       Maximum eligible pages to scan in this run (default: 25)
   --force-all           Force-scan all pages with active ads (bypasses +1 diff requirement)
+  --dry-run             Evaluate policy and print scan plans without executing Apify runs
   --include-paused      Include pages where auto-creative scan is paused (default: false)
   --page-id <ID>        Target a specific tracked page ID
   --workspace <SLUG/ID> Target a specific workspace (e.g. "morocco" or workspace UUID)
@@ -198,9 +204,9 @@ async function main() {
       where: isUuid
         ? eq(workspaces.id, options.workspace)
         : or(
-            eq(workspaces.slug, options.workspace.toLowerCase()),
-            eq(workspaces.countryCode, options.workspace.toUpperCase())
-          ),
+          eq(workspaces.slug, options.workspace.toLowerCase()),
+          eq(workspaces.countryCode, options.workspace.toUpperCase())
+        ),
     });
     if (ws) {
       targetWorkspaceId = ws.id;
@@ -210,13 +216,30 @@ async function main() {
     }
   }
 
-  // Query Tracked Pages and evaluate difference eligibility
+  // Query Tracked Pages: Pre-filter in SQL to protect DB egress & connection limits
+  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const whereConditions: any[] = [];
+
+  if (options.pageId) {
+    whereConditions.push(eq(trackedPages.id, options.pageId));
+  } else {
+    if (targetWorkspaceId) {
+      whereConditions.push(eq(trackedPages.workspaceId, targetWorkspaceId));
+    }
+    if (!options.forceAll) {
+      // Strictly Tier 3 only (> 30 ads) AND 24h cooldown enforced at SQL level
+      whereConditions.push(gt(trackedPages.currentResults, 30));
+      whereConditions.push(
+        or(
+          isNull(trackedPages.lastCreativeScan),
+          lte(trackedPages.lastCreativeScan, twentyFourHoursAgo)
+        )
+      );
+    }
+  }
+
   let candidatePages = await db.query.trackedPages.findMany({
-    where: options.pageId
-      ? eq(trackedPages.id, options.pageId)
-      : targetWorkspaceId
-      ? eq(trackedPages.workspaceId, targetWorkspaceId)
-      : undefined,
+    where: whereConditions.length > 0 ? and(...whereConditions) : undefined,
     orderBy: [asc(trackedPages.createdAt)],
   });
 
@@ -259,67 +282,43 @@ async function main() {
       continue;
     }
 
-    // Strict guard: Small pages (< 20 active ads) MUST be scanned by local worker (not Apify)
-    if (!options.forceAll && !options.pageId && (page.currentResults || 0) < 20) {
-      continue;
-    }
+    // In automated batch mode, evaluate via centralized Apify Scan Policy Engine
+    const decision = await evaluateScanAction(page.id, page);
 
-    const isFirstTime = !page.lastCreativeScan;
-
-    // Rule 1: Brand new page (never scanned before) with active ads (>= 20 ads for Apify)
-    if (isFirstTime) {
-      if ((page.currentResults || 0) >= 1 || isPageTarget) {
-        const delta = Math.max(15, Math.min(100, page.currentResults || 30));
-        eligiblePlans.push({
-          page,
-          reason: `Initial catalog scan (never scanned, active ads: ${page.currentResults ?? "N/A"})`,
-          delta,
-          isFullScan: true,
-        });
-      }
-      continue;
-    }
-
-    // Rule 2: Recurring Full Catalog Scan on Ad Expansion (diff >= 1 on 20+ ad pages)
-    // When a brand launches new ads, a full scan captures new creatives AND purges any dead ads via reconciliation.
-    // Negative diffs (diff < 0) are ignored to save Apify credits.
-    const latestHistory = await db.query.scanHistory.findFirst({
-      where: eq(scanHistory.trackedPageId, page.id),
-      orderBy: [desc(scanHistory.checkedAt)],
-    });
-
-    const diff = latestHistory?.difference || 0;
-    const isCloudEligible = (page.currentResults || 0) >= 20 && diff >= 1;
-
-    // Micro-pages (< 20 ads) or pages without ad increases (diff <= 0) are skipped by Apify
-    if (!isCloudEligible && diff < autoSpyThreshold) {
+    if (decision.action === "SKIP") {
       skippedNoDiffCount++;
       continue;
     }
 
-    const checkedAt = latestHistory?.checkedAt ? new Date(latestHistory.checkedAt) : new Date();
-
-    // Check if we ALREADY scanned this difference
-    if (page.lastCreativeScan && page.lastCreativeScan >= checkedAt) {
-      skippedUpToDateCount++;
+    // Apify is reserved strictly for Tier 3 (31+ ads). Tier 1 (1-8) & Tier 2 (9-30) are handled by free local/GH workers
+    if (decision.tier !== "tier3_apify" && !options.pageId && !options.forceAll) {
+      console.log(`[Skip] "${page.displayName || page.id}": ${decision.currentResults} ads belongs to ${decision.tier} (reserved for free workers).`);
       continue;
     }
 
-    // ELIGIBLE: New ads detected (+diff >= 1) on 20+ ad page!
-    // Trigger Full Catalog Scan to capture new ads AND reconcile/archive turned-off ads.
-    const lastScanTimeStr = page.lastCreativeScan ? page.lastCreativeScan.toLocaleTimeString() : "Never";
-    const fullScanCount = Math.max(page.currentResults || 30, 20);
     eligiblePlans.push({
       page,
-      reason: `+${diff} new ad(s) detected (Full Catalog Sync: ~${fullScanCount} ads, Last spy scan: ${lastScanTimeStr})`,
-      delta: fullScanCount,
-      isFullScan: true, // Triggers reconcileArchivedAds to clean up dead ads
+      reason: decision.reason,
+      delta: decision.limit,
+      isFullScan: decision.isFullScan,
     });
   }
 
   if (eligiblePlans.length === 0) {
-    console.log("\n✨ No pages have newly detected ad increases (+1 diff). Everything is up to date!");
-    console.log(`(Checked ${candidatePages.length} pages | ${skippedUpToDateCount} already synced | ${skippedNoDiffCount} had 0 diff)`);
+    console.log("\n✨ No pages require Apify creative scanning under the 3-day history policy. Everything is up to date!");
+    console.log(`(Checked ${candidatePages.length} pages | ${skippedNoDiffCount} skipped/cooldown)`);
+    process.exit(0);
+  }
+
+  // --- DRY RUN INSPECTION MODE ---
+  if (options.dryRun) {
+    console.log(`\n🔍 [DRY RUN ACTIVE] Evaluated ${eligiblePlans.length} eligible Apify scan plans:`);
+    for (let i = 0; i < eligiblePlans.length; i++) {
+      const plan = eligiblePlans[i];
+      const pageName = plan.page.displayName || plan.page.pageId || plan.page.id;
+      console.log(`  [${i + 1}] "${pageName}" (Ads: ${plan.page.currentResults}): ${plan.reason} | Limit: ${plan.delta} ads | FullScan: ${plan.isFullScan}`);
+    }
+    console.log(`\n✅ Dry run complete. No Apify runs or credit expenditures occurred.`);
     process.exit(0);
   }
 
@@ -388,7 +387,7 @@ async function main() {
   for (let i = 0; i < selectedPlans.length; i++) {
     const { page, delta, isFullScan } = selectedPlans[i];
     const pageName = page.displayName || page.pageId || page.id;
-    
+
     // Ensure URL has Most Recent sorting: &sort_data[mode]=relevancy_monthly_grouped&sort_data[direction]=desc
     const sortedUrl = ensureMostRecentSortingUrl(page.url);
 

@@ -189,14 +189,25 @@ export async function enqueueOrEscalateJob(
  * Atomically claim the next pending queue job using PostgreSQL FOR UPDATE SKIP LOCKED
  */
 export async function claimNextPendingJob() {
-  const isCountOnly =
-    process.env.COUNT_ONLY === "true" ||
-    process.env.CI === "true" ||
-    process.env.GITHUB_ACTIONS === "true";
+  const isCountOnlyEnv = process.env.COUNT_ONLY === "true";
+  const isCi = process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
   const isCreativeOnly = process.env.CREATIVE_ONLY === "true";
 
-  const jobTypeFilter = isCountOnly
+  // Tier 1 Routing Rule:
+  // In GitHub Actions (CI), allow claiming count jobs AND micro-catalog creative jobs (<= 8 ads, 0 scrolls).
+  // Mid/Large catalogs (>= 9 ads) are left for the residential local worker or cloud Apify.
+  const jobTypeFilter = isCountOnlyEnv
     ? sql`AND job_type IN ('count', 'discovery_count')`
+    : isCi
+    ? sql`AND (
+        job_type IN ('count', 'discovery_count')
+        OR (
+          job_type = 'creative'
+          AND tracked_page_id IN (
+            SELECT id FROM tracked_pages WHERE COALESCE(current_results, 0) <= 8
+          )
+        )
+      )`
     : isCreativeOnly
     ? sql`AND job_type = 'creative'`
     : sql``;

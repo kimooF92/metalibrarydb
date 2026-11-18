@@ -7,6 +7,7 @@ import { enqueueOrEscalateJob } from "../repositories/queue-repo";
 interface ApifyDeltaTask {
   pageId: string;
   difference: number;
+  isFullScan?: boolean;
 }
 
 const apifyDeltaQueue: ApifyDeltaTask[] = [];
@@ -63,7 +64,7 @@ async function processNextApifyDelta() {
   const nextTask = apifyDeltaQueue.shift();
   if (nextTask) {
     try {
-      await executeApifyDeltaScan(nextTask.pageId, nextTask.difference);
+      await executeApifyDeltaScan(nextTask.pageId, nextTask.difference, nextTask.isFullScan);
     } catch (err) {
       console.error("[Apify Auto-Trigger Queue] Task error:", err);
     } finally {
@@ -83,7 +84,7 @@ async function processNextApifyDelta() {
 /**
  * Executes a single Apify Delta Cloud scan with fail-fast database updates and synchronous completion wait.
  */
-async function executeApifyDeltaScan(pageId: string, difference: number) {
+async function executeApifyDeltaScan(pageId: string, difference: number, isFullScan?: boolean) {
   const page = await db.query.trackedPages.findFirst({
     where: eq(trackedPages.id, pageId),
   });
@@ -98,10 +99,10 @@ async function executeApifyDeltaScan(pageId: string, difference: number) {
     return;
   }
 
-  // Strict guard: Apify must NEVER scan micro-pages (< 20 ads)
-  if ((page.currentResults || 0) < 20) {
+  // Strict guard: Apify must NEVER scan micro/mid-sized pages (<= 30 ads)
+  if ((page.currentResults || 0) <= 30) {
     console.log(
-      `[Apify Auto-Trigger] 🛑 Skipping "${page.displayName || pageId}": micro-page (${page.currentResults ?? 0} ads < 20). Micro-pages are scanned locally.`
+      `[Apify Auto-Trigger] 🛑 Skipping "${page.displayName || pageId}": page (${page.currentResults ?? 0} ads <= 30). Pages <= 30 ads are scanned by free local/GH workers.`
     );
     return;
   }
@@ -119,6 +120,25 @@ async function executeApifyDeltaScan(pageId: string, difference: number) {
         `[Apify Cooldown] Skipping "${page.displayName || pageId}": creative scan performed within 24h cooldown.`
       );
     }
+    return;
+  }
+
+  // Check 12-hour failure circuit breaker
+  const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
+  const recentFailedScan = await db.query.creativeScans.findFirst({
+    where: (cs, { and, eq, gt }) =>
+      and(
+        eq(cs.trackedPageId, pageId),
+        eq(cs.status, "failed"),
+        gt(cs.finishedAt, twelveHoursAgo)
+      ),
+    columns: { id: true, failureReason: true, finishedAt: true },
+  });
+
+  if (recentFailedScan) {
+    console.log(
+      `[Apify Auto-Trigger] ⏸️ Skipping "${page.displayName || pageId}": 12h failure cooldown active (${recentFailedScan.failureReason || "failed"}).`
+    );
     return;
   }
 
@@ -142,7 +162,9 @@ async function executeApifyDeltaScan(pageId: string, difference: number) {
 
   try {
     const { startApifyDeltaScan, calculateDeltaLimit } = await import("../../lib/apify");
-    const maxResults = calculateDeltaLimit(difference);
+    const maxResults = isFullScan
+      ? Math.max(10, Math.min(100, (page.currentResults || difference) + 5))
+      : calculateDeltaLimit(difference);
 
     const [newScan] = await db
       .insert(creativeScans)
@@ -155,8 +177,9 @@ async function executeApifyDeltaScan(pageId: string, difference: number) {
           autoTriggered: true,
           delta: difference,
           maxResults,
+          isFullScan: Boolean(isFullScan),
         }),
-        outcomeDetails: `Auto-triggered Apify Delta Cloud run for +${difference} new ad(s) (Limit: ${maxResults})`,
+        outcomeDetails: `Auto-triggered Apify ${isFullScan ? "Full" : "Delta"} Cloud run for +${difference} new ad(s) (Limit: ${maxResults})`,
       })
       .returning();
 
@@ -172,6 +195,7 @@ async function executeApifyDeltaScan(pageId: string, difference: number) {
       delta: difference,
       creativeScanId: newScan.id,
       webhookBaseUrl: baseUrl,
+      isFullScan: Boolean(isFullScan),
     });
 
     if (runRes?.id) {
@@ -232,17 +256,21 @@ async function executeApifyDeltaScan(pageId: string, difference: number) {
 }
 
 /**
- * Enqueues an Apify Delta Cloud scan when a positive ad count difference is detected.
- * Uses formula: Limit = Delta + max(3, ceil(Delta * 0.2)) and respects 24h cooldown per page.
+ * Enqueues an Apify Delta/Reconcile Cloud scan when triggered by the policy engine.
+ * Respects 24h per-brand cooldown and 12h failure circuit breaker.
  */
-export async function tryAutoTriggerApifyDeltaScan(pageId: string, difference: number) {
-  if (difference < 1) return;
+export async function tryAutoTriggerApifyDeltaScan(
+  pageId: string,
+  difference: number,
+  isFullScan?: boolean
+) {
+  if (difference < 1 && !isFullScan) return;
 
   // Deduplicate in-queue tasks for the same page
   if (apifyDeltaQueue.some((t) => t.pageId === pageId)) {
     return;
   }
 
-  apifyDeltaQueue.push({ pageId, difference });
+  apifyDeltaQueue.push({ pageId, difference, isFullScan });
   processNextApifyDelta();
 }

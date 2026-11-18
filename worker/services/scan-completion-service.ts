@@ -469,15 +469,8 @@ export async function markJobCompleted(
     );
   } catch {}
 
-  // 5. Intelligent Creative Routing
-  const hasPreviousScan = Boolean(trackedPage?.lastCreativeScan);
-  // For a brand-new page with no previous creative scan OR a brand relaunching from inactive, all positive results count as new ads to extract
-  const effectiveDifference = (isRelaunching || (!hasPreviousScan && (displayDifference === null || displayDifference < 1) && (results || 0) >= 1))
-    ? (results || 0)
-    : (displayDifference ?? 0);
-
-  // Guard with effectiveDifference and ensure holdStatus !== "on_hold"
-  if (status === "success" && !isOnHold && !isDropToZero && effectiveDifference >= 1) {
+  // 5. Intelligent Creative Routing using Centralized 3-Day History Policy
+  if (status === "success" && !isOnHold && !isDropToZero && (results || 0) >= 1) {
     try {
       if (trackedPage?.autoCreativeScan === false) {
         console.log(
@@ -486,77 +479,71 @@ export async function markJobCompleted(
         return { difference: displayDifference, results, brandName };
       }
 
-      const isCloudEligible = (results || 0) >= 20;
+      const { evaluateScanAction } = await import("../../lib/apify-scan-policy");
+      const decision = await evaluateScanAction(pageId);
 
-      if (!isCloudEligible) {
-        const isWatchlisted = Boolean(trackedPage?.isWatchlisted);
-        // MICRO-PAGE (< 20 active ads): Always enqueue for local free Playwright worker.
-        // Require meaningful delta: first-time scan (>= 1), relaunch (>= 1), watchlisted (>= 1), or subsequent jump (>= 2)
-        const isMeaningfulDelta =
-          isRelaunching ||
-          !hasPreviousScan ||
-          isWatchlisted ||
-          effectiveDifference >= 2;
-
-        if (isMeaningfulDelta) {
-          const existingJob = await db.query.queue.findFirst({
-            where: (q, { and, eq, inArray }) =>
-              and(
-                eq(q.trackedPageId, pageId),
-                eq(q.jobType, "creative"),
-                inArray(q.status, ["pending", "running"])
-              ),
-          });
-
-          if (!existingJob) {
-            const [scanRecord] = await db
-              .insert(creativeScans)
-              .values({
-                trackedPageId: pageId,
-                status: "pending",
-                configSnapshot: JSON.stringify({
-                  runner: "playwright",
-                  autoTriggered: true,
-                  delta: displayDifference,
-                  totalResults: results,
-                  isRelaunch: isRelaunching,
-                }),
-                outcomeDetails: isRelaunching
-                  ? `🚀 Queued urgent Playwright creative scan for relaunched brand (${results} active ad(s))`
-                  : `Queued for local Playwright creative scan (+${displayDifference} new ads, total ${results} < 20)`,
-              })
-              .returning();
-
-            await db.insert(queue).values({
-              trackedPageId: pageId,
-              jobType: "creative",
-              creativeScanId: scanRecord.id,
-              status: "pending",
-              priority: isRelaunching ? 1 : 5, // Priority 1 (urgent) for relaunches
-            });
-
-            await db
-              .update(trackedPages)
-              .set({ status: "pending", updatedAt: now })
-              .where(eq(trackedPages.id, pageId));
-
-            console.log(
-              `[Local Creative Queue] 🟢 Enqueued "${brandName}" for ${isRelaunching ? "URGENT relaunch" : "free local Playwright"} scan (+${displayDifference} ads, total: ${results} < 20).`
-            );
-          }
-        } else {
-          console.log(
-            `[Local Creative Queue] ℹ️ Skipping auto-queue for "${brandName}": delta (+${displayDifference} < 2 on a ${results}-ad page) is below threshold.`
-          );
-        }
-      } else {
-        // GROWING & MEGA-BRAND (>= 20 ads): Trigger Apify Cloud runner for cloud-eligible catalogs
+      if (decision.action === "SKIP") {
         console.log(
-          `[Apify Auto-Trigger] 🚀 Cloud-eligible catalog (${results} active ads >= 20) detected for "${brandName}". Triggering Apify Cloud scan...`
+          `[Creative Routing] ℹ️ Skipping creative scan for "${brandName}": ${decision.reason}.`
         );
-        tryAutoTriggerApifyDeltaScan(pageId, effectiveDifference).catch((err) => {
+      } else if (decision.tier === "tier3_apify") {
+        // TIER 3 (31+ ads): Trigger Apify Cloud runner under 3-day history policy rules
+        console.log(
+          `[Apify Auto-Trigger] 🚀 Cloud-eligible catalog (${results} active ads > 30) for "${brandName}". Action: ${decision.action} (${decision.reason}, Limit: ${decision.limit}, Full: ${decision.isFullScan}).`
+        );
+        tryAutoTriggerApifyDeltaScan(pageId, decision.limit, decision.isFullScan).catch((err) => {
           console.error("[Apify Auto-Trigger] Error launching background delta scan:", err);
         });
+      } else {
+        // TIER 1 (<= 8 ads) & TIER 2 (9-30 ads): Free Local / GitHub Actions workers
+        const isWatchlisted = Boolean(trackedPage?.isWatchlisted);
+        const existingJob = await db.query.queue.findFirst({
+          where: (q, { and, eq, inArray }) =>
+            and(
+              eq(q.trackedPageId, pageId),
+              eq(q.jobType, "creative"),
+              inArray(q.status, ["pending", "running"])
+            ),
+        });
+
+        if (!existingJob) {
+          const [scanRecord] = await db
+            .insert(creativeScans)
+            .values({
+              trackedPageId: pageId,
+              status: "pending",
+              configSnapshot: JSON.stringify({
+                runner: "playwright",
+                autoTriggered: true,
+                tier: decision.tier,
+                delta: decision.limit,
+                totalResults: results,
+                isFullScan: decision.isFullScan,
+                isRelaunch: isRelaunching,
+              }),
+              outcomeDetails: isRelaunching
+                ? `🚀 Queued urgent Playwright creative scan for relaunched brand (${results} active ad(s))`
+                : `Queued for ${decision.tier === "tier1_gh" ? "GitHub Actions" : "local Playwright"} creative scan (${decision.reason})`,
+            })
+            .returning();
+
+          await db.insert(queue).values({
+            trackedPageId: pageId,
+            jobType: "creative",
+            creativeScanId: scanRecord.id,
+            status: "pending",
+            priority: isRelaunching ? 1 : isWatchlisted ? 7 : (decision.tier === "tier1_gh" ? 6 : 5),
+          });
+
+          await db
+            .update(trackedPages)
+            .set({ status: "pending", updatedAt: now })
+            .where(eq(trackedPages.id, pageId));
+
+          console.log(
+            `[Creative Queue] 🟢 Enqueued "${brandName}" for ${decision.tier} scan (${decision.reason}).`
+          );
+        }
       }
     } catch (routeErr) {
       console.error("[Creative Routing] Error routing new ads:", routeErr);
