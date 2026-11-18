@@ -17,12 +17,16 @@ function createRedisClient(): Redis | null {
     url && token && !url.includes("[YOUR-") && !token.includes("[YOUR-")
   );
 
+  // Balanced timeout (default 3500ms, configurable via UPSTASH_REDIS_TIMEOUT_MS):
+  // Provides ample headroom for TLS handshakes, parallel batch operations (SCAN/DEL),
+  // and distributed lock evaluations while preventing Next.js API routes from stalling indefinitely.
+  const timeoutMs = Number(process.env.UPSTASH_REDIS_TIMEOUT_MS) || 3500;
+
   return isConfigured
     ? new Redis({
         url: url!,
         token: token!,
-        // Fail-fast timeout (1500ms): prevents network jitter from stalling Next.js SSR/API routes
-        signal: () => AbortSignal.timeout(1500),
+        signal: () => AbortSignal.timeout(timeoutMs),
         retry: {
           retries: 1,
         },
