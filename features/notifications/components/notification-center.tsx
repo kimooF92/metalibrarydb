@@ -89,8 +89,8 @@ export function NotificationCenter({
         <div
           className={`absolute z-50 mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 ${
             layout === "sidebar"
-              ? "left-0 bottom-full mb-2 w-80 sm:w-96"
-              : "right-0 top-full w-80 sm:w-96"
+              ? "left-0 bottom-full mb-2 w-80 sm:w-[420px]"
+              : "right-0 top-full w-80 sm:w-[420px]"
           }`}
           style={{ maxHeight: "calc(100vh - 120px)" }}
         >
@@ -153,11 +153,23 @@ export function NotificationCenter({
                 <div className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto mb-2">
                   <Inbox className="w-5 h-5" />
                 </div>
-                <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                  No notifications yet
+                <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  {activeTab === "products"
+                    ? "No product additions yet"
+                    : activeTab === "scaling"
+                    ? "No scaling surges detected"
+                    : activeTab === "alerts"
+                    ? "All systems operational"
+                    : "All caught up"}
                 </p>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  Scan updates, competitor spikes, and system alerts appear here.
+                <p className="text-[11px] text-slate-400 mt-1 max-w-xs mx-auto">
+                  {activeTab === "products"
+                    ? "Newly detected store product pages and extractions will be reported here."
+                    : activeTab === "scaling"
+                    ? "Brands scaling rapid ad volumes, surges, and breakouts will appear here."
+                    : activeTab === "alerts"
+                    ? "No scrape errors, stopped ads, or conflicts detected."
+                    : "New products, scaling brands, and actionable alerts will appear here."}
                 </p>
               </div>
             ) : (

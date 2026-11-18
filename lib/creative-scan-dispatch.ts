@@ -131,16 +131,6 @@ export async function dispatchCreativeScanForBrand(
       .where(eq(trackedPages.id, page.id));
 
     try {
-      const { createNotification } = await import("@/lib/notifications");
-      await createNotification({
-        type: "ad_spy",
-        title: "Ad Fetch Started",
-        message: `Fetching new ads for "${brandDisplayName}"...`,
-        severity: "info",
-        trackedPageId: page.id,
-        actionUrl: `/spy?trackedPageId=${page.id}`,
-      }).catch(() => {});
-
       const { startApifyDeltaScan } = await import("@/lib/apify");
       const { pollApifyRunUntilDone } = await import("@/lib/apify-sync");
 
@@ -171,7 +161,7 @@ export async function dispatchCreativeScanForBrand(
       return {
         success: true,
         status: "apify_launched",
-        message: `Launched ⚡ Apify Cloud creative scan for "${brandDisplayName}".`,
+        message: `Launched Apify Cloud creative scan for "${brandDisplayName}".`,
         creativeScanId: newScan.id,
         runId: runRes?.id,
         runner: "apify",
@@ -203,10 +193,11 @@ export async function dispatchCreativeScanForBrand(
         const { createNotification } = await import("@/lib/notifications");
         await createNotification({
           type: "system_alert",
-          title: `Ad Fetch Failed: ${brandDisplayName}`,
+          title: `${brandDisplayName}: Ad Fetch Failed`,
           message: "Could not start ad download. Will retry shortly.",
           severity: "error",
           trackedPageId: page.id,
+          metadata: { brandName: brandDisplayName, category: "error", error: apifyErr?.message },
         }).catch(() => {});
       } catch {}
 

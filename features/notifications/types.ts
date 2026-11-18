@@ -19,9 +19,16 @@ export interface ActivityNotification {
   metadata?: Record<string, any> | null;
   isRead: boolean;
   createdAt: string;
+  brandLogoUrl?: string | null;
 }
 
-export type NotificationTab = "all" | "breakout_alert" | "activity";
+export type NotificationTab =
+  | "all"
+  | "products"
+  | "scaling"
+  | "alerts"
+  | "breakout_alert"
+  | "activity";
 
 export interface NotificationCenterProps {
   layout?: "sidebar" | "navbar" | "collapsed";

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { activityNotifications } from "@/db/schema";
+import { activityNotifications, trackedPages } from "@/db/schema";
 import { desc, eq, ne, and, inArray, sql, lt, or } from "drizzle-orm";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 import { getCached, setCached, deleteCached } from "@/lib/cache-service";
@@ -15,6 +15,13 @@ export async function GET(req: NextRequest) {
     const cursor = searchParams.get("cursor");
 
     const activeWorkspace = await getActiveWorkspace(req);
+
+    // Base noise-filter: Suppress routine "added ads" chatter, internal cron heartbeats, and transient fetch notifications
+    const noiseFilterConditions = [
+      sql`${activityNotifications.title} NOT LIKE 'New Ads Added:%'`,
+      sql`${activityNotifications.title} NOT LIKE '%Cron Trigger:%'`,
+      sql`${activityNotifications.title} NOT LIKE 'Ad Fetch Started%'`,
+    ];
 
     // Fast-path for secondary navbar polling (cached 15s to eliminate duplicate mobile/desktop hits)
     if (summaryOnly) {
@@ -31,7 +38,13 @@ export async function GET(req: NextRequest) {
       const [unreadCountResult] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(activityNotifications)
-        .where(and(eq(activityNotifications.isRead, false), eq(activityNotifications.workspaceId, activeWorkspace.id)));
+        .where(
+          and(
+            eq(activityNotifications.isRead, false),
+            eq(activityNotifications.workspaceId, activeWorkspace.id),
+            ...noiseFilterConditions
+          )
+        );
 
       const unreadCount = unreadCountResult?.count || 0;
       await setCached(cacheKey, { unreadCount }, 15);
@@ -45,10 +58,51 @@ export async function GET(req: NextRequest) {
 
     const conditions = [
       eq(activityNotifications.workspaceId, activeWorkspace.id),
+      ...noiseFilterConditions,
     ];
     if (type && type !== "all") {
-      if (type === "activity") {
+      if (type === "products") {
+        // High-value product updates: new products detected, extractions, updates
+        conditions.push(
+          or(
+            sql`(${activityNotifications.metadata}->>'newProductsCount')::int > 0`,
+            sql`${activityNotifications.metadata}->>'event' IN ('product_added', 'product_re_extracted')`,
+            sql`(${activityNotifications.metadata}->>'category') = 'product'`,
+            sql`${activityNotifications.title} ILIKE '%Product%'`
+          )!
+        );
+      } else if (type === "scaling") {
+        // High-signal scaling events: surges, mega brands scaling, breakouts, relaunches
+        conditions.push(
+          or(
+            eq(activityNotifications.type, "breakout_alert"),
+            sql`(${activityNotifications.metadata}->>'isSurge')::boolean = true`,
+            sql`(${activityNotifications.metadata}->>'isMegaBrand')::boolean = true`,
+            sql`(${activityNotifications.metadata}->>'category') = 'scaling'`,
+            sql`${activityNotifications.title} ILIKE '%Scaling%'`,
+            sql`${activityNotifications.title} ILIKE '%Surge%'`,
+            sql`${activityNotifications.title} ILIKE '%Resumed%'`,
+            sql`${activityNotifications.title} ILIKE '%Breakout%'`
+          )!
+        );
+      } else if (type === "alerts") {
+        // Actionable issues & status shifts: errors, extraction failures, dark/stopped ads, multi-page conflicts
+        conditions.push(
+          or(
+            inArray(activityNotifications.severity, ["error", "warning"]),
+            eq(activityNotifications.type, "multi_page_detected"),
+            sql`(${activityNotifications.metadata}->>'wentDark')::boolean = true`,
+            sql`(${activityNotifications.metadata}->>'isOnHold')::boolean = true`,
+            sql`(${activityNotifications.metadata}->>'category') IN ('error', 'alert')`,
+            sql`${activityNotifications.title} ILIKE '%Failed%'`,
+            sql`${activityNotifications.title} ILIKE '%Inactive%'`,
+            sql`${activityNotifications.title} ILIKE '%Stopped%'`
+          )!
+        );
+      } else if (type === "activity") {
         conditions.push(ne(activityNotifications.type, "breakout_alert"));
+      } else if (type === "breakout_alert") {
+        conditions.push(eq(activityNotifications.type, "breakout_alert"));
       } else if (type.includes(",")) {
         const types = type.split(",").map((t) => t.trim()).filter(Boolean);
         conditions.push(inArray(activityNotifications.type, types));
@@ -104,7 +158,43 @@ export async function GET(req: NextRequest) {
     });
 
     const hasMore = rows.length > limit;
-    const notifications = hasMore ? rows.slice(0, limit) : rows;
+    const notificationsRaw = hasMore ? rows.slice(0, limit) : rows;
+
+    // Batch resolve official brand logos for tracked pages (lean projection: id & profilePicUrl only)
+    const trackedPageIds = Array.from(
+      new Set(notificationsRaw.map((n) => n.trackedPageId).filter(Boolean) as string[])
+    );
+
+    const logoMap = new Map<string, string | null>();
+    if (trackedPageIds.length > 0) {
+      try {
+        const pages = await db
+          .select({
+            id: trackedPages.id,
+            profilePicUrl: trackedPages.profilePicUrl,
+          })
+          .from(trackedPages)
+          .where(inArray(trackedPages.id, trackedPageIds));
+
+        for (const p of pages) {
+          if (p.profilePicUrl) {
+            logoMap.set(p.id, p.profilePicUrl);
+          }
+        }
+      } catch (err) {
+        // Non-fatal logo enrichment fallback
+      }
+    }
+
+    const notifications = notificationsRaw.map((n) => ({
+      ...n,
+      brandLogoUrl:
+        (n.trackedPageId && logoMap.get(n.trackedPageId)) ||
+        (n.metadata as any)?.brandLogoUrl ||
+        (n.metadata as any)?.profilePicUrl ||
+        null,
+    }));
+
     const lastItem = notifications[notifications.length - 1];
     const toIso = (d: any) => (d instanceof Date ? d.toISOString() : new Date(d).toISOString());
     const nextCursor = hasMore && lastItem ? `${toIso(lastItem.createdAt)}|${lastItem.id}` : null;
@@ -115,7 +205,13 @@ export async function GET(req: NextRequest) {
       const [unreadCountResult] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(activityNotifications)
-        .where(and(eq(activityNotifications.isRead, false), eq(activityNotifications.workspaceId, activeWorkspace.id)));
+        .where(
+          and(
+            eq(activityNotifications.isRead, false),
+            eq(activityNotifications.workspaceId, activeWorkspace.id),
+            ...noiseFilterConditions
+          )
+        );
 
       unreadCount = unreadCountResult?.count || 0;
     }

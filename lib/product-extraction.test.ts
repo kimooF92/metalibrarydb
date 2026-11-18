@@ -44,7 +44,7 @@ test("builds success and failure notification payloads", () => {
     title: product.title,
     url: product.url,
   });
-  assert.equal(success.title, "Product Added: Example Product (store.example/product)");
+  assert.equal(success.title, "store.example: Product Added");
   assert.equal(success.severity, "success");
   assert.equal(success.actionUrl, `/products?id=${product.id}`);
 
@@ -54,7 +54,7 @@ test("builds success and failure notification payloads", () => {
     domain: product.domain,
     error: "Page blocked",
   });
-  assert.match(failure.title, /^Product Extraction Failed: store\.example$/);
+  assert.equal(failure.title, "store.example: Extraction Failed");
   assert.equal(failure.severity, "error");
   assert.match(failure.message, /Page blocked/);
 
@@ -65,7 +65,8 @@ test("builds success and failure notification payloads", () => {
     title: product.title,
     url: product.url,
   });
-  assert.equal(refresh.title, "Product Re-extracted: Example Product (store.example/product)");
+  assert.equal(refresh.title, "store.example: Product Updated");
+  assert.equal(refresh.severity, "success");
   assert.equal(refresh.metadata.event, "product_re_extracted");
 });
 

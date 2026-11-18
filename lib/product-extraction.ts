@@ -25,34 +25,38 @@ export function buildProductExtractionNotification(input: {
   error?: string | null;
   wasExistingProduct?: boolean;
 }) {
+  const brandName = compactNotificationText(input.domain || (input.url ? input.url.replace(/^https?:\/\/(www\.)?/, "").split("/")[0] : "Product"), 40);
   const label = compactNotificationText(input.title || input.domain || input.url, 80);
-  const source = compactNotificationText(input.domain || input.url, 120);
-  const eventSource = compactNotificationText(input.url.replace(/^https?:\/\//, ""), 48);
   const actionUrl = input.productId ? `/products?id=${input.productId}` : "/products";
 
   if (input.success) {
     const wasExisting = Boolean(input.wasExistingProduct);
     return {
       type: "system_alert" as const,
-      title: `${wasExisting ? "Product Re-extracted" : "Product Added"}: ${label} (${eventSource})`,
-      message: `${label} was ${wasExisting ? "updated from its landing page" : "added from its landing page"}.`,
+      title: `${brandName}: ${wasExisting ? "Product Updated" : "Product Added"}`,
+      message: `"${label}" was ${wasExisting ? "updated with newest images and pricing" : "added to catalog"}.`,
       severity: "success" as const,
       actionUrl,
       metadata: {
+        category: "product",
+        brandName,
         event: wasExisting ? "product_re_extracted" : "product_added",
         productId: input.productId || null,
         url: input.url,
+        productTitle: input.title || label,
       },
     };
   }
 
   return {
     type: "system_alert" as const,
-    title: `Product Extraction Failed: ${source}`,
-    message: `Could not extract product content from ${source}. ${compactNotificationText(input.error || "Both page extractors failed.", 180)}`,
+    title: `${brandName}: Extraction Failed`,
+    message: `Could not extract product details from ${brandName}. ${compactNotificationText(input.error || "Both page extractors failed.", 160)}`,
     severity: "error" as const,
     actionUrl,
     metadata: {
+      category: "error",
+      brandName,
       event: "product_extraction_failed",
       productId: input.productId || null,
       url: input.url,

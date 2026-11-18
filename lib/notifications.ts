@@ -136,12 +136,12 @@ export async function logCountScanNotification(params: {
   if (status !== "success") {
     return createNotification({
       type: "count_scan",
-      title: `Count Check Incomplete: ${brandName}`,
+      title: `${brandName}: Verification Incomplete`,
       message: `Could not verify active ads. Will retry shortly.`,
       severity: "warning",
       trackedPageId,
       actionUrl: `/?search=${encodeURIComponent(brandName)}`,
-      metadata: { currentResults, difference, status, brandName, pageId },
+      metadata: { category: "error", currentResults, difference, status, brandName, pageId },
     });
   }
 
@@ -155,12 +155,12 @@ export async function logCountScanNotification(params: {
     }
     return createNotification({
       type: "count_scan",
-      title: `All Ads Stopped: ${brandName}`,
+      title: `${brandName}: All Ads Stopped`,
       message: `All ${Math.abs(diffNum)} ads were turned off (0 active).`,
       severity: "warning",
       trackedPageId,
       actionUrl: brandPath,
-      metadata: { currentResults: 0, difference: diffNum, brandName, pageId, wentDark: true },
+      metadata: { category: "alert", currentResults: 0, difference: diffNum, brandName, pageId, wentDark: true },
     });
   }
 
@@ -168,12 +168,12 @@ export async function logCountScanNotification(params: {
   if (isMegaBrand && diffNum > 0) {
     return createNotification({
       type: "count_scan",
-      title: `Large Brand Scaling: ${brandName}`,
-      message: `${currentResults} active ads running (+${diffNum} new today).`,
+      title: `${brandName}: Scaling (${currentResults} Active Ads)`,
+      message: `Running ${currentResults} active ads (+${diffNum} new today).`,
       severity: "success",
       trackedPageId,
       actionUrl: brandPath,
-      metadata: { currentResults, difference: diffNum, brandName, pageId, isMegaBrand: true, isSurge: diffNum >= 5, highPriority: true },
+      metadata: { category: "scaling", currentResults, difference: diffNum, brandName, pageId, isMegaBrand: true, isSurge: diffNum >= 5, highPriority: true },
     });
   }
 
@@ -181,12 +181,12 @@ export async function logCountScanNotification(params: {
   if (diffNum >= 5) {
     return createNotification({
       type: "count_scan",
-      title: `Scaling Up: ${brandName} (+${diffNum} Ads)`,
+      title: `${brandName}: Scaling Surge (+${diffNum} Ads)`,
       message: `Running ${currentResults ?? 0} active ads (+${diffNum} new today).`,
       severity: "success",
       trackedPageId,
       actionUrl: brandPath,
-      metadata: { currentResults, difference: diffNum, brandName, pageId, isSurge: true, highPriority: true },
+      metadata: { category: "scaling", currentResults, difference: diffNum, brandName, pageId, isSurge: true, highPriority: true },
     });
   }
 
@@ -203,12 +203,12 @@ export async function logHoldDetectedNotification(params: {
 }) {
   return createNotification({
     type: "count_scan",
-    title: `Ads Inactive: ${params.brandName}`,
+    title: `${params.brandName}: Ads Inactive`,
     message: `No active ads detected. Monitoring for a restart.`,
     severity: "warning",
     trackedPageId: params.trackedPageId,
     actionUrl: getBrandActionUrl(params.pageId, params.brandName, params.trackedPageId),
-    metadata: { prevResults: params.prevResults, isOnHold: true },
+    metadata: { category: "alert", prevResults: params.prevResults, isOnHold: true, brandName: params.brandName, pageId: params.pageId },
   });
 }
 
@@ -222,18 +222,19 @@ export async function logHoldLiftedNotification(params: {
   const isRelaunch = params.isRelaunch ?? false;
   return createNotification({
     type: "count_scan",
-    title: `Ads Resumed: ${params.brandName}`,
+    title: `${params.brandName}: Ads Resumed`,
     message: `Back on air with ${params.recoveredResults} active ads.`,
     severity: "success",
     trackedPageId: params.trackedPageId,
     actionUrl: getBrandActionUrl(params.pageId, params.brandName, params.trackedPageId),
-    metadata: { recoveredResults: params.recoveredResults, isOnHold: false, isRelaunch },
+    metadata: { category: "scaling", recoveredResults: params.recoveredResults, isOnHold: false, isRelaunch, brandName: params.brandName, pageId: params.pageId },
   });
 }
 
 /**
  * Convenience helper to log Ad Spy creative scans.
- * Only logs when actual new creatives are ingested or ads archived.
+ * HIGH-SIGNAL ONLY: Only notifies when new product pages are added or detected.
+ * Standard routine "New Ads Added" notifications are suppressed to keep notifications informative and actionable.
  */
 export async function logAdSpyNotification(params: {
   trackedPageId: string;
@@ -244,51 +245,36 @@ export async function logAdSpyNotification(params: {
   newProductsCount?: number;
   pageId?: string | null;
 }) {
-  const { trackedPageId, brandName, extractedCount, isFullScan, archivedCount, newProductsCount = 0, pageId } = params;
+  const { trackedPageId, brandName, extractedCount, isFullScan, newProductsCount = 0, pageId } = params;
 
-  // Don't log spammy 0-item notifications for delta scans where no new ads or products were found
-  if (extractedCount === 0 && !isFullScan && (!archivedCount || archivedCount === 0) && newProductsCount === 0) {
+  // Only notify if new product pages were detected
+  if (newProductsCount <= 0) {
     return null;
   }
 
   const brandPath = getBrandActionUrl(pageId, brandName, trackedPageId);
+  const productWord = newProductsCount === 1 ? "Product" : "Products";
+  const title = `${brandName}: +${newProductsCount} New ${productWord}`;
+  const message = `${brandName} added ${newProductsCount} new product page${newProductsCount === 1 ? "" : "s"}${
+    extractedCount > 0 ? ` (${extractedCount} active ads indexed)` : ""
+  }.`;
 
-  if (extractedCount > 0 || newProductsCount > 0) {
-    let title = `New Ads Added: ${brandName} (+${extractedCount})`;
-    let message = `${extractedCount} new ads ready to view.`;
-
-    if (newProductsCount > 0 && extractedCount > 0) {
-      title = `New Ads & Products: ${brandName}`;
-      message = `${extractedCount} new ads and ${newProductsCount} product page${newProductsCount === 1 ? "" : "s"} added.`;
-    } else if (newProductsCount > 0) {
-      title = `New Products Added: ${brandName}`;
-      message = `${newProductsCount} new product page${newProductsCount === 1 ? "" : "s"} added.`;
-    }
-
-    return createNotification({
-      type: "ad_spy",
-      title,
-      message,
-      severity: "success",
-      trackedPageId,
-      actionUrl: brandPath,
-      metadata: { extractedCount, isFullScan, newProductsCount, brandName, pageId },
-    });
-  }
-
-  if (archivedCount && archivedCount > 0) {
-    return createNotification({
-      type: "ad_spy",
-      title: `Ads Inactive: ${brandName} (${archivedCount})`,
-      message: `${archivedCount} ads ended and moved to archive.`,
-      severity: "info",
-      trackedPageId,
-      actionUrl: brandPath,
-      metadata: { archivedCount, brandName, pageId },
-    });
-  }
-
-  return null;
+  return createNotification({
+    type: "ad_spy",
+    title,
+    message,
+    severity: "success",
+    trackedPageId,
+    actionUrl: brandPath,
+    metadata: {
+      category: "product",
+      brandName,
+      pageId,
+      newProductsCount,
+      extractedCount,
+      isFullScan,
+    },
+  });
 }
 
 export interface BatchSummaryMover {
@@ -577,7 +563,7 @@ export async function logBreakoutNotification(params: {
     productId,
   } = params;
 
-  const title = `Breakout Winner: ${brandName}`;
+  const title = `${brandName}: Breakout Winner`;
   const productText = productTitle ? `"${productTitle}"` : "Ad";
   const message = `${productText} scaled to ${currentDuplication} active ads (Winner score: ${winnerScore}/100).`;
 
@@ -592,6 +578,7 @@ export async function logBreakoutNotification(params: {
     adArchiveId,
     actionUrl: fallbackAction,
     metadata: {
+      category: "scaling",
       adId,
       adArchiveId,
       productId,

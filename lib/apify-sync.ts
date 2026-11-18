@@ -185,13 +185,25 @@ export async function syncApifyRuns(): Promise<{ syncedCount: number; checkedCou
           .where(eq(creativeScans.id, scan.id));
         await resetTrackedPageFromScan(scan.id);
 
+        let brandName = "Tracked Brand";
+        if (scan.trackedPageId) {
+          try {
+            const page = await db.query.trackedPages.findFirst({
+              where: eq(trackedPages.id, scan.trackedPageId),
+              columns: { displayName: true },
+            });
+            if (page?.displayName) brandName = page.displayName;
+          } catch {}
+        }
+
         const { createNotification } = await import("@/lib/notifications");
         await createNotification({
           type: "system_alert",
-          title: "Ad Fetch Incomplete",
+          title: `${brandName}: Ad Fetch Failed`,
           message: "Could not download newest ads. Will retry automatically.",
           severity: "error",
           trackedPageId: scan.trackedPageId,
+          metadata: { brandName, category: "error", error: `Apify run status: ${status}` },
         });
 
         syncedCount++;
@@ -286,14 +298,26 @@ export function pollApifyRunUntilDone(
             .where(eq(creativeScans.id, creativeScanId));
           await resetTrackedPageFromScan(creativeScanId);
 
+          let brandName = "Tracked Brand";
+          if (actualTrackedPageId) {
+            try {
+              const page = await db.query.trackedPages.findFirst({
+                where: eq(trackedPages.id, actualTrackedPageId),
+                columns: { displayName: true },
+              });
+              if (page?.displayName) brandName = page.displayName;
+            } catch {}
+          }
+
           const { createNotification } = await import("@/lib/notifications");
           await createNotification({
             type: "system_alert",
-            title: "Ad Fetch Incomplete",
+            title: `${brandName}: Ad Fetch Failed`,
             message: "Could not download newest ads. Will retry automatically.",
             severity: "error",
             trackedPageId: actualTrackedPageId,
             actionUrl: actualTrackedPageId ? `/spy?trackedPageId=${actualTrackedPageId}` : "/spy",
+            metadata: { brandName, category: "error", error: `Apify run status: ${status}` },
           });
           resolve(false);
           return;
@@ -318,14 +342,26 @@ export function pollApifyRunUntilDone(
             .where(eq(creativeScans.id, creativeScanId));
           await resetTrackedPageFromScan(creativeScanId);
 
+          let brandName = "Tracked Brand";
+          if (actualTrackedPageId) {
+            try {
+              const page = await db.query.trackedPages.findFirst({
+                where: eq(trackedPages.id, actualTrackedPageId),
+                columns: { displayName: true },
+              });
+              if (page?.displayName) brandName = page.displayName;
+            } catch {}
+          }
+
           const { createNotification } = await import("@/lib/notifications");
           await createNotification({
             type: "system_alert",
-            title: "Ad Fetch Taking Longer",
+            title: `${brandName}: Ad Fetch Delayed`,
             message: "Ad download is still processing and will finalize shortly.",
             severity: "warning",
             trackedPageId: actualTrackedPageId,
             actionUrl: actualTrackedPageId ? `/spy?trackedPageId=${actualTrackedPageId}` : "/spy",
+            metadata: { brandName, category: "alert" },
           });
           resolve(false);
         }

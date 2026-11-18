@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ActivityNotification } from "../types";
@@ -7,8 +8,6 @@ import { stripEmojis } from "@/lib/utils";
 import {
   ExternalLink,
   TrendingUp,
-  Eye,
-  CheckCircle2,
   AlertTriangle,
   AlertCircle,
   Sparkles,
@@ -22,6 +21,7 @@ import {
   ChevronRight,
   Truck,
   Info,
+  PauseCircle,
 } from "lucide-react";
 
 function isValidImageUrl(u?: string | null): boolean {
@@ -57,160 +57,299 @@ function formatRelativeTime(dateStr: string) {
   return `${Math.floor(diffSec / 86400)}d ago`;
 }
 
-function getNotificationIcon(n: ActivityNotification) {
-  const type = n.type;
-  const isWentDark = n.metadata?.wentDark === true;
-  const isMegaBrand =
-    n.metadata?.isMegaBrand === true ||
-    (typeof n.metadata?.currentResults === "number" && n.metadata.currentResults >= 50);
-  const isSurge = n.metadata?.isSurge === true;
-  const isDiscovery = n.metadata?.runnerType === "discovery";
-  const isProductReextracted =
-    n.metadata?.event === "product_re_extracted" ||
-    n.title.toLowerCase().startsWith("product re-extracted");
+interface ParsedNotification {
+  brandName: string;
+  initials: string;
+  badgeLabel: string;
+  badgeClass: string;
+  avatarBg: string;
+  IconComponent: React.ComponentType<{ className?: string }>;
+  headline: string;
+  bodyText: string;
+  category: "product" | "scaling" | "error" | "alert" | "summary" | "drop";
+}
+
+function parseNotification(n: ActivityNotification): ParsedNotification {
+  const meta = n.metadata || {};
+  const rawTitle = stripEmojis(n.title).trim();
+  const rawMessage = stripEmojis(n.message).trim();
+
+  // Event detections
   const isProductAdded =
-    n.metadata?.event === "product_added" ||
-    n.title.toLowerCase().startsWith("product added");
-  const isProductExtractionFailed =
-    n.metadata?.event === "product_extraction_failed" ||
-    n.title.toLowerCase().startsWith("product extraction failed");
+    meta.category === "product" ||
+    meta.event === "product_added" ||
+    (typeof meta.newProductsCount === "number" && meta.newProductsCount > 0) ||
+    rawTitle.toLowerCase().includes("product added") ||
+    rawTitle.toLowerCase().includes("new products added");
 
-  if (isProductReextracted) {
-    return (
-      <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0 shadow-sm">
-        <RefreshCw className="w-4 h-4" />
-      </div>
-    );
+  const isProductUpdated =
+    meta.event === "product_re_extracted" ||
+    rawTitle.toLowerCase().includes("product re-extracted") ||
+    rawTitle.toLowerCase().includes("product updated");
+
+  const isProductError =
+    meta.event === "product_extraction_failed" ||
+    rawTitle.toLowerCase().includes("product extraction failed");
+
+  const isBreakout = n.type === "breakout_alert" || meta.isBreakout === true;
+  const isMegaBrand =
+    meta.isMegaBrand === true ||
+    (typeof meta.currentResults === "number" && meta.currentResults >= 50) ||
+    rawTitle.toLowerCase().includes("large brand scaling");
+  const isSurge =
+    meta.isSurge === true ||
+    (typeof meta.difference === "number" && meta.difference >= 5) ||
+    rawTitle.toLowerCase().includes("scaling up") ||
+    rawTitle.toLowerCase().includes("scaling surge");
+
+  const isWentDark =
+    meta.wentDark === true ||
+    rawTitle.toLowerCase().includes("all ads stopped") ||
+    rawTitle.toLowerCase().includes("went dark");
+  const isPaused =
+    meta.isOnHold === true ||
+    rawTitle.toLowerCase().includes("ads inactive");
+  const isResumed =
+    meta.isRelaunch === true ||
+    rawTitle.toLowerCase().includes("ads resumed");
+  const isConflict = n.type === "multi_page_detected";
+  const isSupplierDrop = n.type === "supplier_album_drop";
+  const isSummary = n.type === "batch_summary";
+  const isError =
+    n.severity === "error" ||
+    isProductError ||
+    rawTitle.toLowerCase().includes("failed") ||
+    rawTitle.toLowerCase().includes("incomplete");
+
+  // Resolve Brand Name prominently
+  let brandName = "";
+
+  if (meta.brandName && typeof meta.brandName === "string" && meta.brandName.trim()) {
+    brandName = meta.brandName.trim();
+  } else if (meta.supplierName && typeof meta.supplierName === "string" && meta.supplierName.trim()) {
+    brandName = meta.supplierName.trim();
+  } else if (meta.domainName && typeof meta.domainName === "string" && meta.domainName.trim()) {
+    brandName = meta.domainName.trim();
+  } else if (isSummary) {
+    brandName = meta.runnerType === "discovery" ? "Brand Discovery" : "Catalog Sync";
+  } else {
+    // Parse from title by stripping standard prefixes
+    const colonParts = rawTitle.split(":");
+    if (colonParts.length >= 2) {
+      const prefix = colonParts[0].trim().toLowerCase();
+      const after = colonParts.slice(1).join(":").trim();
+      const knownActionPrefixes = [
+        "scaling up", "large brand scaling", "new ads added", "new ads & products",
+        "new products added", "ads inactive", "ads resumed", "all ads stopped",
+        "breakout winner", "product extraction failed", "product re-extracted",
+        "product added", "count check incomplete", "brand linked", "multiple pages found",
+        "brands grouped", "ad fetch failed", "ad fetch incomplete", "ad fetch delayed",
+        "verification incomplete",
+      ];
+      if (knownActionPrefixes.some((p) => prefix.startsWith(p))) {
+        brandName = after;
+      } else {
+        brandName = colonParts[0].trim();
+      }
+    } else {
+      brandName = rawTitle;
+    }
   }
 
-  if (isProductAdded) {
-    return (
-      <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0 shadow-sm">
-        <ShoppingBag className="w-4 h-4" />
-      </div>
-    );
+  // Clean brand name: remove (+10 Ads), URLs protocol prefixes
+  brandName = brandName
+    .replace(/\(\+?[0-9]+\s*(ads?)?\)/gi, "")
+    .replace(/\(\s*\)/g, "")
+    .replace(/^https?:\/\//i, "")
+    .replace(/^www\./i, "")
+    .trim();
+
+  if (!brandName) brandName = "Tracked Brand";
+
+  // Derive 2-letter Initials for Brand Chip
+  const cleanTokens = brandName.split(/[\s.\-_]+/).filter(Boolean);
+  let initials = "BR";
+  if (cleanTokens.length >= 2) {
+    initials = (cleanTokens[0][0] + cleanTokens[1][0]).toUpperCase();
+  } else if (cleanTokens.length === 1 && cleanTokens[0].length >= 2) {
+    initials = cleanTokens[0].slice(0, 2).toUpperCase();
+  } else if (cleanTokens.length === 1) {
+    initials = cleanTokens[0][0].toUpperCase();
   }
 
-  if (isProductExtractionFailed) {
-    return (
-      <div className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0 shadow-sm">
-        <AlertCircle className="w-4 h-4" />
-      </div>
-    );
+  // Determine Category, Badge, and Theme Colors
+  if (isProductAdded || isProductUpdated) {
+    const count = meta.newProductsCount || 1;
+    const badgeLabel = isProductUpdated
+      ? "Updated"
+      : `+${count} Product${count === 1 ? "" : "s"}`;
+
+    return {
+      brandName,
+      initials,
+      badgeLabel,
+      badgeClass: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+      avatarBg: "bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-emerald-500/20",
+      IconComponent: isProductUpdated ? RefreshCw : ShoppingBag,
+      headline: brandName,
+      bodyText: rawMessage,
+      category: "product",
+    };
   }
 
-  if (type === "supplier_album_drop") {
-    return (
-      <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 flex items-center justify-center shrink-0 shadow-sm">
-        <Truck className="w-4 h-4" />
-      </div>
-    );
+  if (isBreakout) {
+    return {
+      brandName,
+      initials,
+      badgeLabel: "Breakout",
+      badgeClass: "bg-gradient-to-r from-pink-500/20 via-rose-500/20 to-amber-500/20 text-rose-600 dark:text-rose-400 border-rose-500/30 font-black",
+      avatarBg: "bg-gradient-to-br from-rose-500 via-pink-600 to-amber-500 text-white shadow-rose-500/25",
+      IconComponent: Rocket,
+      headline: brandName,
+      bodyText: rawMessage,
+      category: "scaling",
+    };
   }
 
-  if (type === "breakout_alert") {
-    return (
-      <div className="w-8 h-8 rounded-lg bg-rose-500/15 text-rose-500 border border-rose-500/20 flex items-center justify-center shrink-0 shadow-sm">
-        <Rocket className="w-4 h-4 text-rose-500" />
-      </div>
-    );
+  if (isMegaBrand) {
+    return {
+      brandName,
+      initials,
+      badgeLabel: "Mega 50+",
+      badgeClass: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30 font-black",
+      avatarBg: "bg-gradient-to-br from-purple-500 to-indigo-600 text-white shadow-purple-500/20",
+      IconComponent: Crown,
+      headline: brandName,
+      bodyText: rawMessage,
+      category: "scaling",
+    };
+  }
+
+  if (isSurge) {
+    const diff = meta.difference ? ` (+${meta.difference})` : "";
+    return {
+      brandName,
+      initials,
+      badgeLabel: `Surge${diff}`,
+      badgeClass: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 font-black",
+      avatarBg: "bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-amber-500/20",
+      IconComponent: Flame,
+      headline: brandName,
+      bodyText: rawMessage,
+      category: "scaling",
+    };
+  }
+
+  if (isResumed) {
+    return {
+      brandName,
+      initials,
+      badgeLabel: "Resumed",
+      badgeClass: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30 font-bold",
+      avatarBg: "bg-gradient-to-br from-blue-500 to-cyan-600 text-white shadow-blue-500/20",
+      IconComponent: TrendingUp,
+      headline: brandName,
+      bodyText: rawMessage,
+      category: "scaling",
+    };
   }
 
   if (isWentDark) {
-    return (
-      <div className="w-8 h-8 rounded-lg bg-rose-500/15 text-rose-500 border border-rose-500/30 flex items-center justify-center shrink-0 shadow-sm animate-pulse">
-        <Moon className="w-4 h-4" />
-      </div>
-    );
+    return {
+      brandName,
+      initials,
+      badgeLabel: "Ads Stopped",
+      badgeClass: "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30 font-bold",
+      avatarBg: "bg-gradient-to-br from-slate-700 to-rose-700 text-white shadow-rose-500/20",
+      IconComponent: Moon,
+      headline: brandName,
+      bodyText: rawMessage,
+      category: "alert",
+    };
   }
-  if (isMegaBrand) {
-    return (
-      <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/35 flex items-center justify-center shrink-0 shadow-sm">
-        <Crown className="w-4 h-4" />
-      </div>
-    );
+
+  if (isPaused) {
+    return {
+      brandName,
+      initials,
+      badgeLabel: "Inactive",
+      badgeClass: "bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/30 font-medium",
+      avatarBg: "bg-gradient-to-br from-slate-600 to-stone-700 text-white",
+      IconComponent: PauseCircle,
+      headline: brandName,
+      bodyText: rawMessage,
+      category: "alert",
+    };
   }
-  if (isSurge) {
-    return (
-      <div className="w-8 h-8 rounded-lg bg-amber-500/15 text-amber-500 border border-amber-500/30 flex items-center justify-center shrink-0 shadow-sm">
-        <Flame className="w-4 h-4" />
-      </div>
-    );
+
+  if (isError || isProductError) {
+    return {
+      brandName,
+      initials,
+      badgeLabel: "Error",
+      badgeClass: "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30 font-bold",
+      avatarBg: "bg-gradient-to-br from-rose-600 to-red-700 text-white shadow-rose-500/20",
+      IconComponent: AlertCircle,
+      headline: brandName,
+      bodyText: rawMessage,
+      category: "error",
+    };
   }
-  if (isDiscovery) {
-    return (
-      <div className="w-8 h-8 rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/25 flex items-center justify-center shrink-0 shadow-sm">
-        <Globe className="w-4 h-4" />
-      </div>
-    );
+
+  if (isConflict) {
+    return {
+      brandName,
+      initials,
+      badgeLabel: "Conflict",
+      badgeClass: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 font-bold",
+      avatarBg: "bg-gradient-to-br from-amber-500 to-yellow-600 text-white shadow-amber-500/20",
+      IconComponent: AlertTriangle,
+      headline: brandName,
+      bodyText: rawMessage,
+      category: "alert",
+    };
   }
-  if (type === "batch_summary") {
-    return (
-      <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 flex items-center justify-center shrink-0 shadow-sm">
-        <Sparkles className="w-4 h-4" />
-      </div>
-    );
+
+  if (isSupplierDrop) {
+    return {
+      brandName,
+      initials,
+      badgeLabel: "Drop",
+      badgeClass: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 font-bold",
+      avatarBg: "bg-gradient-to-br from-indigo-500 to-blue-600 text-white shadow-indigo-500/20",
+      IconComponent: Truck,
+      headline: brandName,
+      bodyText: rawMessage,
+      category: "drop",
+    };
   }
-  if (type === "count_scan") {
-    return (
-      <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 flex items-center justify-center shrink-0">
-        <TrendingUp className="w-4 h-4" />
-      </div>
-    );
+
+  if (isSummary) {
+    return {
+      brandName,
+      initials,
+      badgeLabel: "Summary",
+      badgeClass: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border-cyan-500/30 font-bold",
+      avatarBg: "bg-gradient-to-br from-cyan-600 to-blue-600 text-white shadow-cyan-500/20",
+      IconComponent: Sparkles,
+      headline: brandName,
+      bodyText: rawMessage,
+      category: "summary",
+    };
   }
-  if (type === "ad_spy") {
-    return (
-      <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center justify-center shrink-0">
-        <Eye className="w-4 h-4" />
-      </div>
-    );
-  }
-  if (type === "page_merged") {
-    return (
-      <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center justify-center shrink-0">
-        <CheckCircle2 className="w-4 h-4" />
-      </div>
-    );
-  }
-  if (type === "multi_page_detected") {
-    return (
-      <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center shrink-0">
-        <AlertTriangle className="w-4 h-4" />
-      </div>
-    );
-  }
-  if (type === "domain_portfolio_linked") {
-    return (
-      <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
-        <Globe className="w-4 h-4" />
-      </div>
-    );
-  }
-  if (n.severity === "success") {
-    return (
-      <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0 shadow-sm">
-        <CheckCircle2 className="w-4 h-4" />
-      </div>
-    );
-  }
-  if (n.severity === "warning") {
-    return (
-      <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center shrink-0 shadow-sm">
-        <AlertTriangle className="w-4 h-4" />
-      </div>
-    );
-  }
-  if (n.severity === "info") {
-    return (
-      <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 flex items-center justify-center shrink-0 shadow-sm">
-        <Info className="w-4 h-4" />
-      </div>
-    );
-  }
-  return (
-    <div className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0 shadow-sm">
-      <AlertCircle className="w-4 h-4" />
-    </div>
-  );
+
+  // Fallback
+  return {
+    brandName,
+    initials,
+    badgeLabel: n.severity === "warning" ? "Notice" : "Activity",
+    badgeClass: "bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/25",
+    avatarBg: "bg-gradient-to-br from-indigo-500 to-slate-700 text-white",
+    IconComponent: Info,
+    headline: brandName,
+    bodyText: rawMessage,
+    category: "alert",
+  };
 }
 
 interface NotificationItemProps {
@@ -227,28 +366,15 @@ export function NotificationItem({
   onOpenResolveModal,
 }: NotificationItemProps) {
   const router = useRouter();
+  const parsed = parseNotification(n);
+
+  const [imgError, setImgError] = useState(false);
+  const logoUrl = n.brandLogoUrl || (n.metadata as any)?.brandLogoUrl || (n.metadata as any)?.profilePicUrl;
+  const hasValidLogo = !imgError && isValidImageUrl(logoUrl);
 
   const movers = (n.metadata?.movers as any[]) || [];
   const topBrands = (n.metadata?.topBrands as any[]) || [];
-  const isBreakout = n.type === "breakout_alert";
-  const isSupplierDrop = n.type === "supplier_album_drop";
   const dropPreviewImages = (n.metadata?.previewImages as string[]) || [];
-  const isWentDark = n.metadata?.wentDark === true;
-  const isMegaBrand =
-    n.metadata?.isMegaBrand === true ||
-    (typeof n.metadata?.currentResults === "number" && n.metadata.currentResults >= 50);
-  const isSurge = n.metadata?.isSurge === true;
-  const isQueued = n.metadata?.queuedForLocalScan === true;
-  const newProductsCount = (n.metadata?.newProductsCount as number) || 0;
-  const isProductReextracted =
-    n.metadata?.event === "product_re_extracted" ||
-    n.title.toLowerCase().startsWith("product re-extracted");
-  const isProductAdded =
-    n.metadata?.event === "product_added" ||
-    n.title.toLowerCase().startsWith("product added");
-  const isProductExtractionFailed =
-    n.metadata?.event === "product_extraction_failed" ||
-    n.title.toLowerCase().startsWith("product extraction failed");
 
   const handleClick = () => {
     if (!n.isRead) onMarkRead(n.id);
@@ -270,116 +396,99 @@ export function NotificationItem({
     }
   };
 
+  const Icon = parsed.IconComponent;
+
   return (
     <div
       onClick={handleClick}
-      className={`relative py-2.5 px-3.5 flex items-start space-x-3 transition-all cursor-pointer group active:scale-[0.99] ${
+      className={`relative p-3 flex items-start gap-3 transition-all cursor-pointer group active:scale-[0.99] border-l-2 ${
         n.isRead
-          ? "bg-transparent hover:bg-slate-100/70 dark:hover:bg-slate-800/50 opacity-75 hover:opacity-100"
-          : isSupplierDrop
-          ? "bg-indigo-500/[0.04] dark:bg-indigo-500/[0.07] hover:bg-indigo-500/[0.1] dark:hover:bg-indigo-500/[0.14]"
-          : isBreakout
-          ? "bg-gradient-to-r from-rose-500/[0.08] via-pink-500/[0.06] to-amber-500/[0.08] hover:from-rose-500/[0.14] hover:to-amber-500/[0.14]"
-          : isWentDark
-          ? "bg-rose-500/[0.06] dark:bg-rose-500/[0.1] hover:bg-rose-500/[0.12]"
-          : isMegaBrand
-          ? "bg-purple-500/[0.08] dark:bg-purple-500/[0.14] hover:bg-purple-500/[0.15]"
-          : isSurge
-          ? "bg-amber-500/[0.06] dark:bg-amber-500/[0.1] hover:bg-amber-500/[0.12]"
-          : isQueued
-          ? "bg-emerald-500/[0.05] dark:bg-emerald-500/[0.08] hover:bg-emerald-500/[0.12]"
-          : isProductReextracted || isProductAdded
-          ? "bg-emerald-500/[0.04] dark:bg-emerald-500/[0.07] hover:bg-emerald-500/[0.1] dark:hover:bg-emerald-500/[0.14]"
-          : isProductExtractionFailed
-          ? "bg-rose-500/[0.05] dark:bg-rose-500/[0.08] hover:bg-rose-500/[0.12]"
-          : "bg-indigo-500/[0.04] dark:bg-indigo-500/[0.07] hover:bg-indigo-500/[0.1] dark:hover:bg-indigo-500/[0.15]"
+          ? "border-transparent bg-transparent hover:bg-slate-100/70 dark:hover:bg-slate-800/40 opacity-75 hover:opacity-100"
+          : parsed.category === "product"
+          ? "border-emerald-500 bg-emerald-500/[0.04] dark:bg-emerald-500/[0.07] hover:bg-emerald-500/[0.1]"
+          : parsed.category === "scaling"
+          ? "border-amber-500 bg-amber-500/[0.04] dark:bg-amber-500/[0.07] hover:bg-amber-500/[0.1]"
+          : parsed.category === "error"
+          ? "border-rose-500 bg-rose-500/[0.05] dark:bg-rose-500/[0.08] hover:bg-rose-500/[0.12]"
+          : "border-indigo-500 bg-indigo-500/[0.03] dark:bg-indigo-500/[0.06] hover:bg-indigo-500/[0.1]"
       }`}
     >
-      {getNotificationIcon(n)}
+      {/* Brand Avatar: Official Logo with Monogram Fallback */}
+      {hasValidLogo ? (
+        <img
+          src={logoUrl!}
+          alt={parsed.brandName}
+          referrerPolicy="no-referrer"
+          loading="lazy"
+          onError={() => setImgError(true)}
+          className="w-9 h-9 rounded-xl object-cover shrink-0 border border-slate-200 dark:border-slate-800 shadow-2xs select-none"
+        />
+      ) : (
+        <div
+          className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 font-bold text-xs shadow-xs tracking-wider border border-white/20 select-none ${parsed.avatarBg}`}
+        >
+          <span className="leading-none">{parsed.initials}</span>
+        </div>
+      )}
 
+      {/* Main Content Column */}
       <div className="flex-1 min-w-0 space-y-1">
+        {/* Brand Name Header & Badge Row */}
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 truncate">
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
             <h4
-              className={`text-xs font-bold truncate transition-colors ${
+              className={`text-xs font-bold truncate transition-colors leading-tight ${
                 n.isRead
                   ? "text-slate-700 dark:text-slate-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
                   : "text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
               }`}
+              title={parsed.headline}
               dir="auto"
             >
-              <bdi>{stripEmojis(n.title)}</bdi>
+              <bdi>{parsed.headline}</bdi>
             </h4>
-            {isProductReextracted && (
-              <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 shrink-0 border border-emerald-500/30 inline-flex items-center gap-1">
-                <RefreshCw className="w-2.5 h-2.5 shrink-0" />
-                <span>UPDATED</span>
-              </span>
-            )}
-            {isProductAdded && (
-              <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 shrink-0 border border-emerald-500/30 inline-flex items-center gap-1">
-                <ShoppingBag className="w-2.5 h-2.5 shrink-0" />
-                <span>NEW</span>
-              </span>
-            )}
-            {isProductExtractionFailed && (
-              <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-rose-500/20 text-rose-600 dark:text-rose-400 shrink-0 border border-rose-500/30 inline-flex items-center gap-1">
-                <AlertCircle className="w-2.5 h-2.5 shrink-0" />
-                <span>FAILED</span>
-              </span>
-            )}
-            {isSupplierDrop && (
-              <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 shrink-0 border border-indigo-500/30 inline-flex items-center gap-1">
-                <Truck className="w-2.5 h-2.5 shrink-0" />
-                <span>DROP</span>
-              </span>
-            )}
-            {isBreakout && (
-              <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-gradient-to-r from-pink-500 to-rose-600 text-white shrink-0 shadow-xs shadow-rose-500/20">
-                BREAKOUT
-              </span>
-            )}
-            {newProductsCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 shrink-0 border border-indigo-500/30 inline-flex items-center gap-1">
-                <ShoppingBag className="w-2.5 h-2.5 shrink-0" />
-                <span>
-                  +{newProductsCount} {newProductsCount === 1 ? "Product" : "Products"}
-                </span>
-              </span>
-            )}
-            {isWentDark && (
-              <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-rose-500/20 text-rose-600 dark:text-rose-400 shrink-0">
-                DARK
-              </span>
-            )}
-            {isMegaBrand && (
-              <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-purple-500/20 text-purple-600 dark:text-purple-400 shrink-0 border border-purple-500/30 inline-flex items-center gap-1">
-                <Crown className="w-2.5 h-2.5 shrink-0" />
-                <span>MEGA 50+</span>
-              </span>
-            )}
-            {isSurge && !isMegaBrand && (
-              <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
-                SURGE
-              </span>
-            )}
-            {isQueued && (
-              <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 shrink-0">
-                QUEUED ($0)
-              </span>
-            )}
+
+            {/* Event Tag / Badge */}
+            <span
+              className={`px-1.5 py-0.5 rounded-md text-[9.5px] shrink-0 border inline-flex items-center gap-1 leading-none shadow-2xs ${parsed.badgeClass}`}
+            >
+              <Icon className="w-2.5 h-2.5 shrink-0" />
+              <span>{parsed.badgeLabel}</span>
+            </span>
           </div>
-          <span className="text-[10px] text-slate-400 shrink-0 group-hover:text-slate-500 dark:group-hover:text-slate-300 transition-colors">
+
+          {/* Timestamp */}
+          <span className="text-[10px] text-slate-400 shrink-0 font-medium whitespace-nowrap">
             {formatRelativeTime(n.createdAt)}
           </span>
         </div>
 
-        <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug break-words" dir="auto">
-          <bdi>{stripEmojis(n.message)}</bdi>
+        {/* Structured Context Description */}
+        <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug break-words" dir="auto">
+          <bdi>{parsed.bodyText}</bdi>
         </p>
 
+        {/* Breakout Velocity Indicators */}
+        {n.type === "breakout_alert" && n.metadata && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+              {n.metadata.prevDuplication ?? 1} -&gt; {n.metadata.currentDuplication} Copies
+            </span>
+            {n.metadata.winnerScore && (
+              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                Score {n.metadata.winnerScore}/100
+              </span>
+            )}
+            {typeof n.metadata.daysRunning === "number" && (
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                • {n.metadata.daysRunning === 0 ? "Launched today" : `Active for ${n.metadata.daysRunning}d`}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Supplier Drop Preview Thumbnails */}
-        {isSupplierDrop && dropPreviewImages.filter(isValidImageUrl).length > 0 && (
+        {n.type === "supplier_album_drop" && dropPreviewImages.filter(isValidImageUrl).length > 0 && (
           <div className="flex items-center gap-1.5 pt-1">
             {dropPreviewImages
               .filter(isValidImageUrl)
@@ -388,7 +497,7 @@ export function NotificationItem({
                 <img
                   key={idx}
                   src={imgUrl}
-                  alt="Product thumbnail"
+                  alt="Product preview"
                   referrerPolicy="no-referrer"
                   className="w-9 h-9 object-cover rounded-md border border-slate-200 dark:border-slate-800 shrink-0"
                   loading="lazy"
@@ -400,44 +509,9 @@ export function NotificationItem({
           </div>
         )}
 
-        {/* Direct Post Link for Supplier Drop */}
-        {isSupplierDrop && n.metadata?.postUrl && (
-          <div className="pt-0.5">
-            <a
-              href={n.metadata.postUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
-            >
-              <span>Open Facebook Post</span>
-              <ExternalLink className="w-2.5 h-2.5" />
-            </a>
-          </div>
-        )}
-
-        {/* Breakout Velocity Indicators */}
-        {isBreakout && n.metadata && (
-          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-            <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
-              {n.metadata.prevDuplication ?? 1} ➔ {n.metadata.currentDuplication} Copies
-            </span>
-            {n.metadata.winnerScore && (
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                Score {n.metadata.winnerScore}/100
-              </span>
-            )}
-            {typeof n.metadata.daysRunning === "number" && (
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                • Launched {n.metadata.daysRunning === 0 ? "today" : `${n.metadata.daysRunning}d ago`}
-              </span>
-            )}
-          </div>
-        )}
-
         {/* Movers Pills for Batch Count Summaries */}
         {n.type === "batch_summary" && movers.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 pt-0.5">
+          <div className="flex flex-wrap gap-1.5 pt-1">
             {movers.slice(0, 4).map((m, idx) => {
               const isUuidStr = (s?: string | null) =>
                 Boolean(
@@ -460,7 +534,7 @@ export function NotificationItem({
                   }}
                   className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/60 text-[10px] font-semibold text-slate-700 dark:text-slate-200 hover:border-indigo-500/40 dark:hover:border-indigo-500/40 transition-colors"
                 >
-                  <span>{m.name}</span>
+                  <span className="font-bold">{m.name}</span>
                   <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">
                     +{m.extractedCount || m.diff || 1}
                   </span>
@@ -474,16 +548,16 @@ export function NotificationItem({
               );
             })}
             {movers.length > 4 && (
-              <span className="text-[10px] text-slate-400 self-center">
+              <span className="text-[10px] text-slate-400 self-center font-medium">
                 +{movers.length - 4} more
               </span>
             )}
           </div>
         )}
 
-        {/* Top Discovered Brands for Discovery Summaries */}
+        {/* Top Discovered Brands */}
         {n.type === "batch_summary" && topBrands.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 pt-0.5">
+          <div className="flex flex-wrap gap-1.5 pt-1">
             {topBrands.slice(0, 3).map((b, idx) => (
               <Link
                 key={idx}
@@ -503,18 +577,18 @@ export function NotificationItem({
           </div>
         )}
 
-        {/* Multi-page conflict hint */}
+        {/* Multi-page conflict hint button */}
         {n.type === "multi_page_detected" && n.trackedPageId && (
-          <div className="pt-0.5">
-            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold border border-amber-500/20">
-              <span>Select Page</span>
+          <div className="pt-1">
+            <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold border border-amber-500/20 hover:bg-amber-500/20 transition-colors">
+              <span>Disambiguate Page</span>
               <ExternalLink className="w-2.5 h-2.5" />
             </span>
           </div>
         )}
       </div>
 
-      {/* Right indicator column: unread dot button and subtle hover chevron */}
+      {/* Right Indicator: Unread Dot Button & Hover Arrow */}
       <div className="flex items-center self-center shrink-0 pl-1">
         {!n.isRead && (
           <button
@@ -535,4 +609,3 @@ export function NotificationItem({
     </div>
   );
 }
-

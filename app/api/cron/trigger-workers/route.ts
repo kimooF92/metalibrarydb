@@ -142,15 +142,6 @@ async function handleCronTrigger(req: NextRequest) {
       opportunities: "manual_on_demand_only",
     };
 
-    // 5. Record Activity Notification for Audit Trail
-    await db.insert(activityNotifications).values({
-      type: "system_alert",
-      title: `⏰ Cron Trigger: ${target.toUpperCase()}`,
-      message: `External cron triggered GitHub Actions: ${JSON.stringify(results.githubActionsDispatched)}${Object.keys(aiRefreshStatus).length > 0 ? ` | AI Refresh: ${JSON.stringify(aiRefreshStatus)}` : ""}`,
-      severity: "info",
-      actionUrl: "/analytics",
-    });
-
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
