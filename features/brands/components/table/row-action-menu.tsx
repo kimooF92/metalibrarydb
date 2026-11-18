@@ -11,6 +11,7 @@ import {
   Trash2,
   Globe,
   AlertTriangle,
+  XCircle,
 } from "lucide-react";
 import {
   DropdownMenuContent,
@@ -24,6 +25,7 @@ export interface RowActionMenuProps {
   onHistory: (page: TrackedPage) => void;
   onNote: (page: TrackedPage) => void;
   onRetry: (pageId: string) => void;
+  onCancelPending?: (pageId: string) => void;
   onMove: (page: TrackedPage) => void;
   onDelete: (page: TrackedPage) => void;
   onManageDomain?: (domainOrId: string) => void;
@@ -45,6 +47,7 @@ export function RowActionMenu({
   onHistory,
   onNote,
   onRetry,
+  onCancelPending,
   onMove,
   onDelete,
   onManageDomain,
@@ -138,6 +141,20 @@ export function RowActionMenu({
           >
             <RotateCcw className={`w-3.5 h-3.5 shrink-0 ${retrying ? "animate-spin" : ""}`} />
             <span>Retry Scan</span>
+          </DropdownMenuItem>
+        )}
+
+        {/* Cancel if pending */}
+        {targetPage.status === "pending" && onCancelPending && (
+          <DropdownMenuItem
+            onClick={() => {
+              onClose?.();
+              onCancelPending(targetPage.id);
+            }}
+            className="text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 data-highlighted:bg-amber-500/10 data-highlighted:text-amber-600 dark:data-highlighted:text-amber-400"
+          >
+            <XCircle className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+            <span>Cancel Pending</span>
           </DropdownMenuItem>
         )}
 

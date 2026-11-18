@@ -27,6 +27,7 @@
     "categorize:products": "npx tsx scripts/backfill-product-categories.ts",
     "reset-limits": "npx tsx scripts/reset-limits.ts",
     "clean-scans": "npx tsx scripts/clean-orphaned-scans.ts",
+    "cancel:pending": "npx tsx scripts/cancel-pending-scans.ts",
     "backfill:domains": "npx tsx scripts/backfill-sister-pages.ts --dry-run",
     "backfill:domains:live": "npx tsx scripts/backfill-sister-pages.ts --live",
     "verify:favorites": "npx tsx scripts/verify-favorite-ads.ts",

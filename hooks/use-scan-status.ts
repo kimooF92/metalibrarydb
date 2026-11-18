@@ -33,6 +33,7 @@ export function useScanStatus() {
   const [secondsRemaining, setSecondsRemaining] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [isTriggering, setIsTriggering] = useState<boolean>(false);
+  const [isCancelling, setIsCancelling] = useState<boolean>(false);
 
   const targetScanTimeRef = useRef<number | null>(null);
 
@@ -162,6 +163,31 @@ export function useScanStatus() {
 
   const formattedCountdown = formatCountdown(secondsRemaining);
 
+  // 5. Cancel Pending Scans Action
+  const cancelPendingScans = useCallback(
+    async (ids?: string[]) => {
+      setIsCancelling(true);
+      try {
+        const res = await fetch("/api/queue/cancel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(ids && ids.length > 0 ? { ids } : { all: true }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          await fetchStatus();
+          return { success: true, count: data.cancelledCount };
+        }
+        return { success: false, error: data.error || "Failed to cancel pending scans" };
+      } catch (err: any) {
+        return { success: false, error: err?.message || "Network error" };
+      } finally {
+        setIsCancelling(false);
+      }
+    },
+    [fetchStatus]
+  );
+
   return {
     scheduleStatus,
     activeScan,
@@ -170,7 +196,9 @@ export function useScanStatus() {
     formattedCountdown,
     loading,
     isTriggering,
+    isCancelling,
     triggerScanNow,
+    cancelPendingScans,
     refreshStatus: fetchStatus,
   };
 }

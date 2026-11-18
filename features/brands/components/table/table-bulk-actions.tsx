@@ -1,11 +1,14 @@
 "use client";
 
-import { RefreshCw, Sparkles, FolderSync, Trash2 } from "lucide-react";
+import { RefreshCw, Sparkles, FolderSync, Trash2, XCircle } from "lucide-react";
 
 interface TableBulkActionsProps {
   selectedCount: number;
+  pendingSelectedCount?: number;
   isBulkRefreshing: boolean;
+  isBulkCancelling?: boolean;
   onBulkRefresh: () => void;
+  onBulkCancelPending?: () => void;
   onExtractAdSpy: () => void;
   onMoveToWorkspace: () => void;
   onBulkDelete?: () => void;
@@ -14,8 +17,11 @@ interface TableBulkActionsProps {
 
 export function TableBulkActions({
   selectedCount,
+  pendingSelectedCount = 0,
   isBulkRefreshing,
+  isBulkCancelling = false,
   onBulkRefresh,
+  onBulkCancelPending,
   onExtractAdSpy,
   onMoveToWorkspace,
   onBulkDelete,
@@ -47,6 +53,17 @@ export function TableBulkActions({
           />
           <span>{isBulkRefreshing ? "Refreshing..." : `Refresh (${selectedCount})`}</span>
         </button>
+
+        {onBulkCancelPending && pendingSelectedCount > 0 && (
+          <button
+            onClick={onBulkCancelPending}
+            disabled={isBulkCancelling}
+            className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-75 text-white font-semibold shadow-md shadow-amber-600/30 transition-all cursor-pointer active:scale-95"
+          >
+            <XCircle className="w-3.5 h-3.5" />
+            <span>{isBulkCancelling ? "Cancelling..." : `Cancel Pending (${pendingSelectedCount})`}</span>
+          </button>
+        )}
 
         <button
           onClick={onExtractAdSpy}

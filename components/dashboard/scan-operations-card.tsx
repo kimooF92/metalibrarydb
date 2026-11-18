@@ -8,6 +8,7 @@ import {
   Play,
   Timer,
   Loader2,
+  XCircle,
 } from "lucide-react";
 import { useScanStatus } from "@/hooks/use-scan-status";
 import { useToast } from "@/components/toast-context";
@@ -50,7 +51,9 @@ export function ScanOperationsCard({
     formattedCountdown,
     secondsRemaining,
     isTriggering,
+    isCancelling,
     triggerScanNow,
+    cancelPendingScans,
     refreshStatus,
   } = useScanStatus();
 
@@ -93,6 +96,24 @@ export function ScanOperationsCard({
       showToast({
         title: "Scan Trigger Failed",
         message: res.error || "Could not enqueue scan batch.",
+        type: "error",
+      });
+    }
+  };
+
+  const handleCancelQueue = async () => {
+    const res = await cancelPendingScans();
+    if (res.success) {
+      showToast({
+        title: "🚫 Queue Cancelled",
+        message: `${res.count ?? 0} pending scan(s) cancelled and restored.`,
+        type: "success",
+      });
+      onRefresh?.();
+    } else {
+      showToast({
+        title: "Cancel Failed",
+        message: res.error || "Could not cancel pending scans.",
         type: "error",
       });
     }
@@ -163,20 +184,39 @@ export function ScanOperationsCard({
           </div>
         </div>
 
-        {/* Trigger Scan Now CTA */}
-        <button
-          onClick={handleTriggerNow}
-          disabled={isTriggering || isActivelyScanning}
-          title="Enqueue eligible competitor pages now and run scraper"
-          className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-200 dark:disabled:bg-slate-800 text-white disabled:text-slate-400 text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:cursor-not-allowed shrink-0"
-        >
-          {isTriggering ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <Play className="w-3.5 h-3.5 fill-current" />
+        {/* Action CTAs */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {pending > 0 && (
+            <button
+              onClick={handleCancelQueue}
+              disabled={isCancelling}
+              title="Cancel all pending queued scans"
+              className="px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:cursor-not-allowed"
+            >
+              {isCancelling ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <XCircle className="w-3.5 h-3.5" />
+              )}
+              <span>Cancel Queue ({pending})</span>
+            </button>
           )}
-          <span>{isTriggering ? "Starting..." : "Scan Now"}</span>
-        </button>
+
+          {/* Trigger Scan Now CTA */}
+          <button
+            onClick={handleTriggerNow}
+            disabled={isTriggering || isActivelyScanning}
+            title="Enqueue eligible competitor pages now and run scraper"
+            className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-200 dark:disabled:bg-slate-800 text-white disabled:text-slate-400 text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:cursor-not-allowed"
+          >
+            {isTriggering ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Play className="w-3.5 h-3.5 fill-current" />
+            )}
+            <span>{isTriggering ? "Starting..." : "Scan Now"}</span>
+          </button>
+        </div>
       </div>
 
       {/* 3. Live Scan Progression Visualizer (Rendered when actively scanning or recently completed) */}

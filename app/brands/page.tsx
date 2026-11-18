@@ -108,6 +108,7 @@ function DashboardContent() {
         stats={stats}
         onRefresh={actions.handleRefresh}
         onRetry={actions.handleRetry}
+        onCancelPending={actions.handleCancelPending}
         onDelete={actions.handleDelete}
         onBulkDelete={actions.handleBulkDelete}
         search={filters.search}

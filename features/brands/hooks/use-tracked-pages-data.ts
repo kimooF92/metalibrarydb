@@ -221,6 +221,43 @@ export function useTrackedPagesData({
     }
   };
 
+  const handleCancelPending = async (ids?: string[]) => {
+    try {
+      // Optimistically restore status to "success" (or unclear) for targeted pending pages
+      setPages((prev) =>
+        prev.map((p) => {
+          if (!ids || ids.includes(p.id)) {
+            if (p.status === "pending") {
+              return {
+                ...p,
+                status: p.currentResults !== null || p.lastSuccessAt !== null ? "success" : "unclear",
+              };
+            }
+          }
+          return p;
+        })
+      );
+
+      const res = await fetch("/api/queue/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(ids && ids.length > 0 ? { ids } : { all: true }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showToast("info", data.message || "Pending scans cancelled.");
+        fetchStats(true);
+      } else {
+        showToast("error", "Failed to cancel pending scans.");
+        loadData(false, true);
+      }
+    } catch (err) {
+      console.error("Cancel pending action failed", err);
+      showToast("error", "Network error while cancelling pending scans.");
+      loadData(false, true);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     try {
       const res = await fetch(`/api/page/${id}`, { method: "DELETE" });
@@ -265,6 +302,7 @@ export function useTrackedPagesData({
     actions: {
       handleRefresh,
       handleRetry,
+      handleCancelPending,
       handleDelete,
       handleBulkDelete,
     },

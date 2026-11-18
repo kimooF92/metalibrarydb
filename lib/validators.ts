@@ -46,3 +46,8 @@ export const refreshSchema = z.object({
 export const retrySchema = z.object({
   ids: z.array(z.string().uuid()).optional(),
 });
+
+export const cancelPendingSchema = z.object({
+  ids: z.array(z.string()).optional(),
+  all: z.boolean().optional(),
+});

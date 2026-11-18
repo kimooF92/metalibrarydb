@@ -30,6 +30,7 @@ import {
   RefreshCw,
   MoreVertical,
   X,
+  XCircle,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { RowActionMenu } from "@/features/brands/components/table/row-action-menu";
@@ -62,6 +63,7 @@ export interface TableRowProps {
     onHistory?: (page: TrackedPage) => void;
     onNote?: (page: TrackedPage) => void;
     onRetry?: (pageId: string) => void;
+    onCancelPending?: (pageId: string) => void;
     onMove?: (page: TrackedPage) => void;
     onDelete?: (page: TrackedPage) => void;
     isRetrying?: (pageId: string) => boolean;
@@ -597,32 +599,44 @@ export function TableRow({
       {/* Actions */}
       <td className="px-2.5 md:px-3.5 xl:px-4 py-2.5 text-right whitespace-nowrap">
         <div className="flex items-center justify-end gap-1">
-          {/* 1. Refresh Button */}
-          {(() => {
-            const isRefreshingRow = isRefreshing || p.status === "scanning";
-            return (
-              <button
-                type="button"
-                onClick={() => actions.onRefresh(p.id)}
-                disabled={isRefreshingRow}
-                className={`group/refresh p-1 rounded-md transition-all duration-200 cursor-pointer active:scale-90 ${
-                  isRefreshingRow
-                    ? "text-indigo-600 dark:text-indigo-400 bg-indigo-500/15"
-                    : "text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-500/10"
-                }`}
-                title={isRefreshingRow ? "Refreshing scan..." : "Refresh scan"}
-                aria-label={`Refresh scan for ${p.displayName || "tracked page"}`}
-              >
-                <RefreshCw
-                  className={`w-3.5 h-3.5 transition-transform duration-300 ease-out ${
+          {/* 1. Refresh Button (or 1-Click Cancel Button when pending) */}
+          {p.status === "pending" && actions.onCancelPending ? (
+            <button
+              type="button"
+              onClick={() => actions.onCancelPending?.(p.id)}
+              className="group/cancel p-1 rounded-md text-amber-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 transition-all duration-200 cursor-pointer active:scale-90"
+              title="Cancel pending scan"
+              aria-label={`Cancel pending scan for ${p.displayName || "tracked page"}`}
+            >
+              <XCircle className="w-3.5 h-3.5" />
+            </button>
+          ) : (
+            (() => {
+              const isRefreshingRow = isRefreshing || p.status === "scanning";
+              return (
+                <button
+                  type="button"
+                  onClick={() => actions.onRefresh(p.id)}
+                  disabled={isRefreshingRow}
+                  className={`group/refresh p-1 rounded-md transition-all duration-200 cursor-pointer active:scale-90 ${
                     isRefreshingRow
-                      ? "animate-spin text-indigo-600 dark:text-indigo-400"
-                      : "group-hover/refresh:rotate-90 group-hover/refresh:text-indigo-600 dark:group-hover/refresh:text-indigo-400"
+                      ? "text-indigo-600 dark:text-indigo-400 bg-indigo-500/15"
+                      : "text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-500/10"
                   }`}
-                />
-              </button>
-            );
-          })()}
+                  title={isRefreshingRow ? "Refreshing scan..." : "Refresh scan"}
+                  aria-label={`Refresh scan for ${p.displayName || "tracked page"}`}
+                >
+                  <RefreshCw
+                    className={`w-3.5 h-3.5 transition-transform duration-300 ease-out ${
+                      isRefreshingRow
+                        ? "animate-spin text-indigo-600 dark:text-indigo-400"
+                        : "group-hover/refresh:rotate-90 group-hover/refresh:text-indigo-600 dark:group-hover/refresh:text-indigo-400"
+                    }`}
+                  />
+                </button>
+              );
+            })()
+          )}
 
           {/* 2. Scan Button (Ad Spy Actions) */}
           <button
@@ -656,6 +670,7 @@ export function TableRow({
               onHistory={actions.onHistory ?? (() => {})}
               onNote={actions.onNote ?? (() => {})}
               onRetry={actions.onRetry ?? (() => {})}
+              onCancelPending={actions.onCancelPending}
               onMove={actions.onMove ?? (() => {})}
               onDelete={actions.onDelete ?? (() => {})}
               onManageDomain={actions.onManageDomain}

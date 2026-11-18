@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { TrackedPage, DashboardStats, SearchTabCounts } from "@/types";
 import { useToast } from "@/components/toast-context";
 import { TableToolbar } from "@/features/brands/components/table/table-toolbar";
@@ -21,6 +21,7 @@ export interface PagesTableProps {
   loading: boolean;
   onRefresh: (ids: string[]) => Promise<void> | void;
   onRetry: (ids?: string[]) => Promise<void> | void;
+  onCancelPending?: (ids?: string[]) => Promise<void> | void;
   onDelete: (id: string) => void;
   search: string;
   onSearchChange: (value: string) => void;
@@ -55,6 +56,7 @@ export function PagesTable({
   loading,
   onRefresh,
   onRetry,
+  onCancelPending,
   onDelete,
   onBulkDelete,
   search,
@@ -91,6 +93,7 @@ export function PagesTable({
   const [refreshingPageIds, setRefreshingPageIds] = useState<Set<string>>(new Set());
   const [retryingPageIds, setRetryingPageIds] = useState<Set<string>>(new Set());
   const [isBulkRefreshing, setIsBulkRefreshing] = useState(false);
+  const [isBulkCancelling, setIsBulkCancelling] = useState(false);
   const [isRetryingAll, setIsRetryingAll] = useState(false);
 
   const handleRowRefresh = async (pageId: string) => {
@@ -150,6 +153,11 @@ export function PagesTable({
         return next;
       });
     }
+  };
+
+  const handleRowCancelPending = async (pageId: string) => {
+    if (!onCancelPending) return;
+    await Promise.resolve(onCancelPending([pageId]));
   };
 
   const handleToolbarRetry = async () => {
@@ -386,6 +394,24 @@ export function PagesTable({
     );
   };
 
+  const pendingSelectedCount = useMemo(() => {
+    return pages.filter((p) => selectedIds.includes(p.id) && p.status === "pending").length;
+  }, [pages, selectedIds]);
+
+  const handleBulkCancelPending = async () => {
+    if (isBulkCancelling || selectedIds.length === 0 || !onCancelPending) return;
+    setIsBulkCancelling(true);
+    const pendingIds = pages
+      .filter((p) => selectedIds.includes(p.id) && p.status === "pending")
+      .map((p) => p.id);
+    try {
+      await Promise.resolve(onCancelPending(pendingIds));
+      setSelectedIds([]);
+    } finally {
+      setIsBulkCancelling(false);
+    }
+  };
+
   const [notePopoverPage, setNotePopoverPage] = useState<TrackedPage | null>(null);
   const [notePopoverAnchor, setNotePopoverAnchor] = useState<HTMLElement | null>(null);
   const [notePopoverAlign, setNotePopoverAlign] = useState<"start" | "end">("start");
@@ -483,8 +509,11 @@ export function PagesTable({
       {/* Bulk Action Bar */}
       <TableBulkActions
         selectedCount={selectedIds.length}
+        pendingSelectedCount={pendingSelectedCount}
         isBulkRefreshing={isBulkRefreshing}
+        isBulkCancelling={isBulkCancelling}
         onBulkRefresh={handleBulkRefresh}
+        onBulkCancelPending={onCancelPending ? handleBulkCancelPending : undefined}
         onExtractAdSpy={() => {
           const targetPages = pages.filter((p) => selectedIds.includes(p.id));
           setRunnerModalPages(targetPages);
@@ -583,6 +612,7 @@ export function PagesTable({
                       onHistory: openHistory,
                       onNote: openNotePopoverFromMenu,
                       onRetry: handleRowRetry,
+                      onCancelPending: onCancelPending ? handleRowCancelPending : undefined,
                       onMove: (page) => {
                         setMoveModalPage(page);
                         setMoveModalPages(null);
