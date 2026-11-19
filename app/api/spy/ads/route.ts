@@ -180,7 +180,7 @@ export async function GET(req: NextRequest) {
       conditions.push(eq(trackedPages.isWatchlisted, true));
     }
 
-    if (productId) {
+    if (productId && isUuid(productId)) {
       // 1. Resolve product destination URL to self-heal any unlinked ads on-the-fly
       try {
         const [prod] = await db

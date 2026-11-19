@@ -8,7 +8,7 @@ import {
   PHANTOM_PHONE_BLACKLIST,
   isPlaceholderOrDummyPhone,
 } from "@/lib/network-extractor";
-import { isValidPageId } from "@/lib/utils";
+import { isValidPageId, isUuid } from "@/lib/utils";
 import { PRODUCT_NETWORK_PROJECTION } from "@/lib/product-projections";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 
@@ -20,9 +20,9 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const productId = searchParams.get("productId");
 
-    if (!productId) {
+    if (!productId || !isUuid(productId)) {
       return NextResponse.json(
-        { success: false, error: "productId parameter is required." },
+        { success: false, error: "Valid productId parameter is required." },
         { status: 400 }
       );
     }

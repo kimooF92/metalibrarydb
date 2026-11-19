@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { scrapedProducts, ads } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
+import { isUuid } from "@/lib/utils";
 import { tasks, runs } from "@trigger.dev/sdk";
 import type { RecheckProductLinkedAdsResult } from "@/src/trigger/product-linked-ads-refresher";
 
@@ -19,8 +20,8 @@ export async function POST(
   try {
     const { id } = await context.params;
 
-    if (!id) {
-      return NextResponse.json({ error: "Product ID is required" }, { status: 400 });
+    if (!id || !isUuid(id)) {
+      return NextResponse.json({ error: "Valid Product UUID is required" }, { status: 400 });
     }
 
     // Lean product lookup (Mandatory Rule 1: No blind SELECT *)

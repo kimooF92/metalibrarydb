@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ads, scrapedProducts } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { isUuid } from "@/lib/utils";
 
 function extractAdArchiveId(input?: string | null): string | null {
   if (!input || typeof input !== "string") return null;
@@ -28,8 +29,8 @@ export async function POST(
 ) {
   try {
     const { id: productId } = await params;
-    if (!productId) {
-      return NextResponse.json({ error: "Product ID is required" }, { status: 400 });
+    if (!productId || !isUuid(productId)) {
+      return NextResponse.json({ error: "Valid Product UUID is required" }, { status: 400 });
     }
 
     const body = await req.json();

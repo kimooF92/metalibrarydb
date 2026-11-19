@@ -4,6 +4,7 @@ import { scrapedProducts, queue, trackedPages } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { validateApiSecret } from "@/lib/api-guard";
 import { deleteByPrefix } from "@/lib/cache-service";
+import { isUuid } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +18,8 @@ export async function POST(
   try {
     const { id } = await context.params;
 
-    if (!id) {
-      return NextResponse.json({ error: "Product ID is required" }, { status: 400 });
+    if (!id || !isUuid(id)) {
+      return NextResponse.json({ error: "Valid Product UUID is required" }, { status: 400 });
     }
 
     const product = await db.query.scrapedProducts.findFirst({

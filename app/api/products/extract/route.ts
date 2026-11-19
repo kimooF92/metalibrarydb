@@ -9,7 +9,7 @@ import { validateApiSecret } from "@/lib/api-guard";
 import { normalizeProductUrl, extractProductFromUrl } from "@/lib/firecrawl";
 import { generateUrlSearchVariants } from "@/lib/product-url-matcher";
 import { isPriceString } from "@/lib/html-scraper";
-import { getCleanDomain, isValidPageId } from "@/lib/utils";
+import { getCleanDomain, isValidPageId, isUuid } from "@/lib/utils";
 import { getActiveWorkspace } from "@/lib/workspace-server";
 import { trackedPages, brandDomains } from "@/db/schema";
 import {
@@ -105,9 +105,9 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Check for existing product in DB (Deduplication)
-    // Priority: 1) explicit productId if provided by product card / row, 2) normalized URL, 3) raw trimmed URL
+    // Priority: 1) explicit productId if provided and is a valid UUID, 2) normalized URL, 3) raw trimmed URL
     let existingProduct = null;
-    if (productId && typeof productId === "string") {
+    if (productId && typeof productId === "string" && isUuid(productId)) {
       const existingById = await db
         .select(PRODUCT_EXTRACTION_LOOKUP_PROJECTION)
         .from(scrapedProducts)

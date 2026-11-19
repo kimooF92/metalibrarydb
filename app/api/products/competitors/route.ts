@@ -7,6 +7,7 @@ import { findCompetitorMatches } from "@/lib/product-matcher";
 import { PRODUCT_MATCH_PROJECTION } from "@/lib/product-projections";
 import { ScrapedProduct } from "@/types";
 import { getActiveWorkspace } from "@/lib/workspace-server";
+import { isUuid } from "@/lib/utils";
 
 interface CachedBenchmark {
   data: any;
@@ -25,9 +26,9 @@ export async function GET(req: NextRequest) {
     const productId = searchParams.get("productId");
     const forceRefresh = searchParams.get("refresh") === "true";
 
-    if (!productId) {
+    if (!productId || !isUuid(productId)) {
       return NextResponse.json(
-        { success: false, error: "productId query parameter is required." },
+        { success: false, error: "Valid productId parameter is required." },
         { status: 400 }
       );
     }

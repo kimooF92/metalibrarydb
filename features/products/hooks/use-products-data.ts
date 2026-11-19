@@ -389,7 +389,7 @@ export function useProductsData(filters: UseProductsDataParams) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            productId: prod.id,
+            productId: prod.id && !prod.id.startsWith("unscraped_") ? prod.id : undefined,
             url: prod.url,
             pageId: prod.pageId,
             forceRefresh: true,

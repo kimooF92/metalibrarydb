@@ -217,6 +217,18 @@ export function isValidPageId(pageId?: string | null): boolean {
   return Boolean(clean && /^\d{5,25}$/.test(clean) && clean !== "0");
 }
 
+export const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Validates whether a given string is a valid canonical RFC 4122 UUID.
+ */
+export function isUuid(value?: string | null): boolean {
+  if (!value || typeof value !== "string") return false;
+  return UUID_REGEX.test(value.trim());
+}
+
+export const isValidUuid = isUuid;
+
 
 /**
  * Formats a date or ISO string into a concise human-readable relative time string

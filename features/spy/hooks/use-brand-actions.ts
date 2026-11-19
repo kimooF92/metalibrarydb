@@ -255,7 +255,7 @@ export function useBrandActions({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          productId: prod.id,
+          productId: prod.id && !prod.id.startsWith("unscraped_") ? prod.id : undefined,
           url: prod.url,
           pageId: brand?.pageId || prod.pageId,
           forceRefresh: true,
