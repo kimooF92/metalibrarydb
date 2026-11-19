@@ -536,6 +536,33 @@ export async function scanAdCreatives(
       }
     }
 
+    // Always resolve canonical Page Name if still missing
+    if (!resolvedPageName) {
+      if (resolvedPageId && canonicalPageIdsFromFilter.has(resolvedPageId)) {
+        resolvedPageName = canonicalPageIdsFromFilter.get(resolvedPageId) || null;
+      } else if (canonicalPageIdsFromFilter.size === 1) {
+        resolvedPageName = Array.from(canonicalPageIdsFromFilter.values())[0] || null;
+      }
+
+      if (!resolvedPageName) {
+        for (const ad of collectedAds.values()) {
+          if (ad.pageName && ad.pageName.trim() && (!resolvedPageId || ad.pageId === resolvedPageId || ad.pageId === "0")) {
+            resolvedPageName = ad.pageName.trim();
+            break;
+          }
+        }
+      }
+
+      if (!resolvedPageName) {
+        for (const ad of collectedAds.values()) {
+          if (ad.pageName && ad.pageName.trim()) {
+            resolvedPageName = ad.pageName.trim();
+            break;
+          }
+        }
+      }
+    }
+
     const expectedCount =
       totalTargetAds !== null && totalTargetAds > 0
         ? totalTargetAds
@@ -622,14 +649,51 @@ export async function scanAdCreatives(
         trackedPageRecord.profilePicUrl.includes("fbcdn.net") ||
         trackedPageRecord.profilePicUrl.includes("facebook.com"));
 
+    const currentDisplayName = trackedPageRecord?.displayName?.trim() || "";
+    const isPlaceholderDisplayName =
+      !currentDisplayName ||
+      currentDisplayName.startsWith("http") ||
+      /^\d+$/.test(currentDisplayName) ||
+      /^page\s+\d+$/i.test(currentDisplayName) ||
+      Boolean(resolvedPageId && currentDisplayName === resolvedPageId);
+
+    const isResolvedNameMeaningful =
+      Boolean(resolvedPageName) &&
+      !resolvedPageName!.startsWith("http") &&
+      !/^\d+$/.test(resolvedPageName!.trim()) &&
+      !/^page\s+\d+$/i.test(resolvedPageName!.trim());
+
     const pageUpdates: any = {
       status: "success",
       lastCreativeScan: now,
       lastSuccessAt: now,
       ...(totalTargetAds !== null && totalTargetAds > 0 ? { currentResults: totalTargetAds } : {}),
       ...(shouldUpdateProfilePic ? { profilePicUrl: resolvedProfilePicUrl } : {}),
+      ...(isResolvedNameMeaningful && isPlaceholderDisplayName ? { displayName: resolvedPageName } : {}),
       updatedAt: now,
     };
+
+    if (pageUpdates.displayName && trackedPageRecord?.brandDomainId) {
+      try {
+        await db
+          .update(brandDomains)
+          .set({ displayName: pageUpdates.displayName, updatedAt: now })
+          .where(
+            and(
+              eq(brandDomains.id, trackedPageRecord.brandDomainId),
+              or(
+                isNull(brandDomains.displayName),
+                eq(brandDomains.displayName, ""),
+                eq(brandDomains.displayName, brandDomains.domain),
+                sql`${brandDomains.displayName} ~ '^\\d+$'`,
+                sql`${brandDomains.displayName} ILIKE 'page %'`
+              )
+            )
+          );
+      } catch (bdErr) {
+        console.warn("[Spy Scanner] Non-fatal error updating brandDomain displayName:", bdErr);
+      }
+    }
 
     if (shouldUpdateProfilePic && trackedPageRecord?.brandDomainId) {
       try {
@@ -696,7 +760,8 @@ export async function scanAdCreatives(
       if (targetDomain) {
         try {
           const { getOrCreateBrandDomain, linkPageToDomain } = await import("../../lib/domain-portfolio");
-          const bDomain = await getOrCreateBrandDomain(targetDomain, trackedPageRecord?.displayName, trackedPageRecord?.workspaceId);
+          const effectiveDisplayName = pageUpdates.displayName || trackedPageRecord?.displayName;
+          const bDomain = await getOrCreateBrandDomain(targetDomain, effectiveDisplayName, trackedPageRecord?.workspaceId);
 
           if (trackedPageRecord?.searchType !== "page") {
             pageUpdates.pageRole = "satellite";
@@ -763,7 +828,7 @@ export async function scanAdCreatives(
         pageUpdates.pageId = resolvedPageId;
         pageUpdates.searchType = "page";
         pageUpdates.url = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&view_all_page_id=${resolvedPageId}&search_type=page&media_type=all`;
-        if (resolvedPageName && (!trackedPageRecord?.displayName || trackedPageRecord.displayName.startsWith("http"))) {
+        if (isResolvedNameMeaningful && isPlaceholderDisplayName) {
           pageUpdates.displayName = resolvedPageName;
         }
       }

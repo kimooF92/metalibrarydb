@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifySignatureAppRouter } from "@upstash/qstash/nextjs";
 import { db } from "@/db";
 import { ads, adObservations, creativeScans, trackedPages, scanHistory } from "@/db/schema";
-import { eq, and, sql, inArray, desc } from "drizzle-orm";
+import { eq, and, sql, inArray, desc, isNull, or } from "drizzle-orm";
 import { BatchIngestPayloadSchema, type RawAdItem } from "@/lib/qstash-types";
 import { enqueueProductScrape } from "@/lib/qstash";
 import { tasks } from "@trigger.dev/sdk";
@@ -46,6 +46,7 @@ export async function handleBatchIngest(req: Request | NextRequest) {
         pageId: trackedPages.pageId,
         workspaceId: trackedPages.workspaceId,
         displayName: trackedPages.displayName,
+        brandDomainId: trackedPages.brandDomainId,
       })
       .from(trackedPages)
       .where(eq(trackedPages.id, trackedPageId))
@@ -326,6 +327,29 @@ export async function handleBatchIngest(req: Request | NextRequest) {
       updatedAt: new Date(),
     };
 
+    const currentDisplayName = pageRecord.displayName?.trim() || "";
+    const isPlaceholderDisplayName =
+      !currentDisplayName ||
+      currentDisplayName.startsWith("http") ||
+      /^\d+$/.test(currentDisplayName) ||
+      /^page\s+\d+$/i.test(currentDisplayName) ||
+      Boolean(pageRecord.pageId && currentDisplayName === pageRecord.pageId);
+
+    const candidatePageName =
+      parseResult.data.pageName?.trim() ||
+      uniqueAds.find(
+        (a) =>
+          a.pageName &&
+          a.pageName.trim() &&
+          !a.pageName.startsWith("http") &&
+          !/^\d+$/.test(a.pageName.trim()) &&
+          !/^page\s+\d+$/i.test(a.pageName.trim())
+      )?.pageName?.trim();
+
+    if (candidatePageName && isPlaceholderDisplayName) {
+      trackedPageUpdates.displayName = candidatePageName;
+    }
+
     if (typeof metaReportedCount === "number" && metaReportedCount >= 0) {
       trackedPageUpdates.currentResults = metaReportedCount;
       trackedPageUpdates.lastChecked = nowTimestamp;
@@ -335,6 +359,29 @@ export async function handleBatchIngest(req: Request | NextRequest) {
       .update(trackedPages)
       .set(trackedPageUpdates)
       .where(eq(trackedPages.id, trackedPageId));
+
+    if (trackedPageUpdates.displayName && pageRecord.brandDomainId) {
+      try {
+        const { brandDomains } = await import("@/db/schema");
+        await db
+          .update(brandDomains)
+          .set({ displayName: trackedPageUpdates.displayName, updatedAt: new Date() })
+          .where(
+            and(
+              eq(brandDomains.id, pageRecord.brandDomainId),
+              or(
+                isNull(brandDomains.displayName),
+                eq(brandDomains.displayName, ""),
+                eq(brandDomains.displayName, brandDomains.domain),
+                sql`${brandDomains.displayName} ~ '^\\d+$'`,
+                sql`${brandDomains.displayName} ILIKE 'page %'`
+              )
+            )
+          );
+      } catch (bdErr) {
+        console.warn("[QStash Batch Ingest] Non-fatal error updating brandDomain displayName:", bdErr);
+      }
+    }
 
     if (typeof metaReportedCount === "number" && metaReportedCount >= 0) {
       try {

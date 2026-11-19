@@ -174,3 +174,48 @@ test("isCategoryUrl detects category, collection, and catalog listing URLs", () 
   assert.equal(isCategoryUrl(""), false);
 });
 
+test("punycode and emoji URLs clean correctly to canonical domains", async () => {
+  const { cleanDomainName, sanitizeUrlHost, resolveDestinationUrl, getCleanDomain } = await import("./utils");
+
+  // 1. cleanDomainName handles punycode and emojis
+  assert.equal(cleanDomainName("http://xn--marhabe-mt94f.com"), "marhabe.com");
+  assert.equal(cleanDomainName("http://👈marhabe.com"), "marhabe.com");
+  assert.equal(cleanDomainName("xn--marhabe-mt94f.com"), "marhabe.com");
+  assert.equal(cleanDomainName("👈marhabe.com"), "marhabe.com");
+  assert.equal(cleanDomainName("👉marhabe.com"), "marhabe.com");
+  assert.equal(cleanDomainName("xn--marhabe-ut94f.com"), "marhabe.com");
+
+  // 2. sanitizeUrlHost normalizes full URLs
+  assert.equal(sanitizeUrlHost("http://xn--marhabe-mt94f.com"), "http://marhabe.com");
+  assert.equal(sanitizeUrlHost("http://👈marhabe.com"), "http://marhabe.com");
+  assert.equal(sanitizeUrlHost("https://xn--marhabe-mt94f.com/products/sac?ref=1"), "https://marhabe.com/products/sac?ref=1");
+  assert.equal(sanitizeUrlHost("https://👈marhabe.com/products/sac?ref=1"), "https://marhabe.com/products/sac?ref=1");
+
+  // 3. resolveTrackableDomain and extractStoreDomain
+  assert.equal(resolveTrackableDomain("http://xn--marhabe-mt94f.com"), "marhabe.com");
+  assert.equal(resolveTrackableDomain("http://👈marhabe.com"), "marhabe.com");
+  assert.equal(resolveTrackableDomain("👈marhabe.com"), "marhabe.com");
+  assert.equal(resolveTrackableDomain("xn--marhabe-mt94f.com"), "marhabe.com");
+  assert.equal(extractStoreDomain("http://xn--marhabe-mt94f.com"), "marhabe.com");
+  assert.equal(extractStoreDomain("http://👈marhabe.com"), "marhabe.com");
+  assert.equal(extractStoreDomain("👈marhabe.com"), "marhabe.com");
+
+  // 4. resolveDestinationUrl and getCleanDomain
+  assert.equal(resolveDestinationUrl("http://xn--marhabe-mt94f.com"), "http://marhabe.com");
+  assert.equal(resolveDestinationUrl("http://👈marhabe.com"), "http://marhabe.com");
+  assert.equal(getCleanDomain("http://xn--marhabe-mt94f.com"), "marhabe.com");
+  assert.equal(getCleanDomain("http://👈marhabe.com"), "marhabe.com");
+
+  // 5. parseTrackableUrl
+  const parsedPuny = parseTrackableUrl("http://xn--marhabe-mt94f.com");
+  assert.equal(parsedPuny?.targetDomain, "marhabe.com");
+  assert.equal(parsedPuny?.normalizedUrl, "https://marhabe.com");
+
+  const parsedEmoji = parseTrackableUrl("http://👈marhabe.com");
+  assert.equal(parsedEmoji?.targetDomain, "marhabe.com");
+  assert.equal(parsedEmoji?.normalizedUrl, "https://marhabe.com");
+
+  const parsedProduct = parseTrackableUrl("https://xn--marhabe-mt94f.com/products/robe-ete?utm_source=fb");
+  assert.equal(parsedProduct?.targetDomain, "marhabe.com");
+  assert.equal(parsedProduct?.productUrl, "https://marhabe.com/products/robe-ete");
+});

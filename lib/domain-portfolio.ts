@@ -45,8 +45,22 @@ export async function getOrCreateBrandDomain(
   if (existing) {
     // Optionally update display name or workspaceId if missing
     const updates: Record<string, any> = {};
-    if (displayName && (existing.displayName === existing.domain || existing.displayName.startsWith("http"))) {
-      updates.displayName = displayName.trim();
+    const isExistingPlaceholder =
+      !existing.displayName ||
+      existing.displayName === existing.domain ||
+      existing.displayName.startsWith("http") ||
+      /^\d+$/.test(existing.displayName.trim()) ||
+      /^page\s+\d+$/i.test(existing.displayName.trim());
+
+    const isCandidateMeaningful =
+      Boolean(displayName) &&
+      !displayName!.startsWith("http") &&
+      !displayName!.includes("/") &&
+      !/^\d+$/.test(displayName!.trim()) &&
+      !/^page\s+\d+$/i.test(displayName!.trim());
+
+    if (isCandidateMeaningful && isExistingPlaceholder) {
+      updates.displayName = displayName!.trim();
     }
     if (!existing.workspaceId && workspaceId) {
       updates.workspaceId = workspaceId;
@@ -62,10 +76,16 @@ export async function getOrCreateBrandDomain(
     return existing;
   }
 
-  const cleanDisplayName =
-    displayName && !displayName.startsWith("http") && !displayName.includes("/")
-      ? displayName.trim()
-      : cleanDomain;
+  const isCandidateMeaningful =
+    Boolean(displayName) &&
+    !displayName!.startsWith("http") &&
+    !displayName!.includes("/") &&
+    !/^\d+$/.test(displayName!.trim()) &&
+    !/^page\s+\d+$/i.test(displayName!.trim());
+
+  const cleanDisplayName = isCandidateMeaningful
+    ? displayName!.trim()
+    : cleanDomain;
 
   const [created] = await db
     .insert(brandDomains)

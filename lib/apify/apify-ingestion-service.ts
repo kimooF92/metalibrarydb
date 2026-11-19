@@ -561,11 +561,26 @@ export async function ingestApifyDatasetItems(
   }
 
   // Update tracked page metadata (status, timestamps, candidate counts)
+  const currentDisplayName = pageRecord?.displayName?.trim() || "";
+  const isPlaceholderDisplayName =
+    !currentDisplayName ||
+    currentDisplayName.startsWith("http") ||
+    /^\d+$/.test(currentDisplayName) ||
+    /^page\s+\d+$/i.test(currentDisplayName) ||
+    Boolean(pageRecord?.pageId && currentDisplayName === pageRecord.pageId);
+
+  const isDetectedNameMeaningful =
+    Boolean(detectedPageName) &&
+    !detectedPageName!.startsWith("http") &&
+    !/^\d+$/.test(detectedPageName!.trim()) &&
+    !/^page\s+\d+$/i.test(detectedPageName!.trim());
+
+  if (isDetectedNameMeaningful && isPlaceholderDisplayName) {
+    pageUpdates.displayName = detectedPageName;
+  }
+
   if (pageRecord && (!pageRecord.pageId || pageRecord.pageId === "0") && detectedPageId && isNumericString(detectedPageId)) {
     pageUpdates.pageId = detectedPageId;
-    if (detectedPageName && (!pageRecord.displayName || pageRecord.displayName.startsWith("http"))) {
-      pageUpdates.displayName = detectedPageName;
-    }
 
     // Backfill any ads in this scan that had page_id = '0'
     try {
@@ -588,7 +603,28 @@ export async function ingestApifyDatasetItems(
   if (resolvedStoreDomain && pageRecord) {
     try {
       const { getOrCreateBrandDomain, linkPageToDomain } = await import("@/lib/domain-portfolio");
-      const bDomain = await getOrCreateBrandDomain(resolvedStoreDomain, pageRecord.displayName, pageRecord.workspaceId);
+      const effectiveDisplayName = pageUpdates.displayName || pageRecord.displayName;
+      const bDomain = await getOrCreateBrandDomain(resolvedStoreDomain, effectiveDisplayName, pageRecord.workspaceId);
+
+      if (pageUpdates.displayName && pageRecord.brandDomainId) {
+        try {
+          await db
+            .update(brandDomains)
+            .set({ displayName: pageUpdates.displayName, updatedAt: new Date() })
+            .where(
+              and(
+                eq(brandDomains.id, pageRecord.brandDomainId),
+                or(
+                  isNull(brandDomains.displayName),
+                  eq(brandDomains.displayName, ""),
+                  eq(brandDomains.displayName, brandDomains.domain),
+                  sql`${brandDomains.displayName} ~ '^\\d+$'`,
+                  sql`${brandDomains.displayName} ILIKE 'page %'`
+                )
+              )
+            );
+        } catch {}
+      }
 
       if (!pageRecord.brandDomainId || !pageRecord.canonicalDomain) {
         pageUpdates.brandDomainId = bDomain.id;

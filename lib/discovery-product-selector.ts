@@ -1,3 +1,4 @@
+import { cleanDomainName, sanitizeUrlHost } from "./utils";
 /**
  * lib/discovery-product-selector.ts
  *
@@ -49,12 +50,13 @@ export function canonicalizeStoreUrl(rawUrl: string): string | null {
     const trimmed = rawUrl.trim();
     if (!trimmed) return null;
 
-    const url = new URL(trimmed.startsWith("http") ? trimmed : `https://${trimmed}`);
+    const sanitized = sanitizeUrlHost(trimmed) || trimmed;
+    const url = new URL(sanitized.startsWith("http") ? sanitized : `https://${sanitized}`);
     if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    url.hostname = cleanDomainName(url.hostname).toLowerCase();
     if (!url.hostname.includes(".")) return null;
 
     // Lowercase host, strip hash
-    url.hostname = url.hostname.toLowerCase();
     url.hash = "";
 
     // Strip common tracking and attribution parameters
