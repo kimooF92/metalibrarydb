@@ -2,6 +2,7 @@ import { db } from "../../db";
 import { trackedPages, creativeScans } from "../../db/schema";
 import { eq } from "drizzle-orm";
 import { enqueueOrEscalateJob } from "../repositories/queue-repo";
+import { MAX_REALISTIC_SINGLE_BATCH_DELTA } from "../../lib/apify-scan-policy";
 
 // In-memory sequential queue for Apify delta triggers to prevent slot starvation / 429 errors
 interface ApifyDeltaTask {
@@ -142,12 +143,12 @@ async function executeApifyDeltaScan(pageId: string, difference: number, isFullS
     return;
   }
 
-  // Check if a creative scan is already pending/running
+  // Check if a creative scan is already pending/running/ingesting
   const existingJob = await db.query.creativeScans.findFirst({
     where: (cs, { and, eq, inArray }) =>
       and(
         eq(cs.trackedPageId, pageId),
-        inArray(cs.status, ["pending", "running"])
+        inArray(cs.status, ["pending", "running", "ingesting"])
       ),
   });
 
@@ -265,6 +266,14 @@ export async function tryAutoTriggerApifyDeltaScan(
   isFullScan?: boolean
 ) {
   if (difference < 1 && !isFullScan) return;
+
+  // Second-layer anomaly guard: never auto-trigger Apify for unrealistic 50+ ad single-batch jumps
+  if (!isFullScan && difference >= MAX_REALISTIC_SINGLE_BATCH_DELTA) {
+    console.warn(
+      `[Apify Auto-Trigger] 🛑 Anomaly suppressed for ${pageId}: +${difference} delta >= ${MAX_REALISTIC_SINGLE_BATCH_DELTA}. Single-batch jumps of 50+ ads are scanner anomalies.`
+    );
+    return;
+  }
 
   // Deduplicate in-queue tasks for the same page
   if (apifyDeltaQueue.some((t) => t.pageId === pageId)) {

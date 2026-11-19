@@ -12,7 +12,9 @@
 
 import { db } from "../db";
 import { trackedPages, scanHistory, creativeScans } from "../db/schema";
-import { eq, and, gt, desc, sql } from "drizzle-orm";
+import { eq, and, gt, desc, sql, inArray } from "drizzle-orm";
+
+export const MAX_REALISTIC_SINGLE_BATCH_DELTA = 50;
 
 export type ScanAction =
   | "DELTA_SCAN"        // Pattern 1: Genuine New Product Launch / Scaling
@@ -172,6 +174,16 @@ export function evaluateScanRules(input: PolicyEvaluationInput): ScanDecision {
 
   const netDelta = s0 - historicalPeak;
 
+  // --- Guard: Scanner Count Anomaly Filter (50+ Ads) ---
+  // Brands never legitimately launch 50+ ads in a single batch.
+  // Any jump of >= 50 ads is a Meta Ad Library reporting glitch or search mismatch.
+  if (netDelta >= MAX_REALISTIC_SINGLE_BATCH_DELTA) {
+    return skip(
+      `Scanner anomaly: count jump (+${netDelta} ads >= ${MAX_REALISTIC_SINGLE_BATCH_DELTA} in single cycle) is unrealistic for a single batch. Suppressed.`,
+      historicalPeak
+    );
+  }
+
   // --- Pattern 1: Genuine New Product Launch / Scaling (Today > Peak_3d) ---
   if (s0 > historicalPeak) {
     const deltaLimit = Math.max(10, netDelta + 5);
@@ -292,9 +304,39 @@ export async function evaluateScanAction(
   }
 
   const now = new Date();
+  const sixtyMinsAgo = new Date(now.getTime() - 60 * 60 * 1000);
   const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+  const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-  // 1. Fetch latest failed scan (for 12h circuit breaker)
+  // 1. Fetch active in-flight scan (pending, running, or ingesting within last 60m)
+  // Prevents dual-trigger collisions between background worker and batch cron
+  const activeScan = await db.query.creativeScans.findFirst({
+    where: and(
+      eq(creativeScans.trackedPageId, page.id),
+      inArray(creativeScans.status, ["pending", "running", "ingesting"]),
+      gt(creativeScans.createdAt, sixtyMinsAgo)
+    ),
+    columns: { id: true, status: true },
+  });
+
+  if (activeScan) {
+    return {
+      action: "SKIP",
+      reason: `Creative scan already in progress (${activeScan.status})`,
+      limit: 0,
+      isFullScan: false,
+      tier: resolveTier(page.currentResults ?? 0),
+      pageId: page.id,
+      displayName: page.displayName || page.id,
+      targetUrl: page.url || null,
+      currentResults: page.currentResults ?? 0,
+      historicalPeak: page.currentResults ?? 0,
+      netDelta: 0,
+      history: [],
+    };
+  }
+
+  // 2. Fetch latest failed scan (for 12h circuit breaker)
   const recentFailedScan = await db.query.creativeScans.findFirst({
     where: and(
       eq(creativeScans.trackedPageId, page.id),
@@ -305,7 +347,7 @@ export async function evaluateScanAction(
     orderBy: [desc(creativeScans.finishedAt)],
   });
 
-  // 2. Fetch last successful full reconciliation scan (for peak recovery anchor)
+  // 3. Fetch last successful full reconciliation scan (for peak recovery anchor)
   const lastFullReconcile = await db.query.creativeScans.findFirst({
     where: and(
       eq(creativeScans.trackedPageId, page.id),
@@ -316,7 +358,29 @@ export async function evaluateScanAction(
     orderBy: [desc(creativeScans.finishedAt)],
   });
 
-  // 3. Fetch 6-scan rolling window (lean projection)
+  // 4. Fetch latest completed scan (database-backed 24h cooldown anchor)
+  // Ensures cooldown is honored even if trackedPages.lastCreativeScan update lagged
+  const latestCompletedScan = await db.query.creativeScans.findFirst({
+    where: and(
+      eq(creativeScans.trackedPageId, page.id),
+      eq(creativeScans.status, "completed"),
+      gt(creativeScans.finishedAt, twentyFourHoursAgo)
+    ),
+    columns: { finishedAt: true },
+    orderBy: [desc(creativeScans.finishedAt)],
+  });
+
+  const completedAtDate = latestCompletedScan?.finishedAt
+    ? new Date(latestCompletedScan.finishedAt)
+    : null;
+
+  const effectiveLastCreativeScan = completedAtDate
+    ? (page.lastCreativeScan && new Date(page.lastCreativeScan) > completedAtDate
+        ? new Date(page.lastCreativeScan)
+        : completedAtDate)
+    : (page.lastCreativeScan ? new Date(page.lastCreativeScan) : null);
+
+  // 5. Fetch 6-scan rolling window (lean projection)
   const rawHistory = await db.query.scanHistory.findMany({
     where: and(
       eq(scanHistory.trackedPageId, page.id),
@@ -339,7 +403,7 @@ export async function evaluateScanAction(
     displayName: page.displayName,
     url: page.url,
     currentResults: page.currentResults ?? null,
-    lastCreativeScan: page.lastCreativeScan,
+    lastCreativeScan: effectiveLastCreativeScan,
     autoCreativeScan: page.autoCreativeScan,
     holdStatus: page.holdStatus,
     historyChronological,

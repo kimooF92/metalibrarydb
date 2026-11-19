@@ -262,3 +262,77 @@ test("Brand New Page Bootstrap: First time scan gets BOOTSTRAP_FULL", () => {
   assert.equal(decision.limit, 55); // 45 + 10
   assert.equal(decision.tier, "tier3_apify");
 });
+
+test("Scanner Anomaly Filter: Single-batch jump >= 50 ads is suppressed with SKIP", () => {
+  const now = new Date("2026-11-18T12:00:00Z");
+  const lastScan = new Date("2026-11-16T12:00:00Z");
+
+  // Historical peak 30, today count suddenly jumps to 85 (+55 ad spike)
+  const decision = evaluateScanRules({
+    pageId: "test-anomaly-page",
+    url: "https://www.facebook.com/ads/library/?view_all_page_id=777",
+    currentResults: 85,
+    lastCreativeScan: lastScan,
+    autoCreativeScan: true,
+    holdStatus: "active",
+    historyChronological: [
+      { results: 30 },
+      { results: 30 },
+      { results: 30 },
+      { results: 30 },
+      { results: 30 },
+      { results: 85 },
+    ],
+    now,
+  });
+
+  assert.equal(decision.action, "SKIP");
+  assert.match(decision.reason, /Scanner anomaly: count jump/);
+  assert.match(decision.reason, /\+55 ads >= 50/);
+});
+
+test("Scanner Boundary Check: Legitimate scaling jump of +49 ads still triggers DELTA_SCAN", () => {
+  const now = new Date("2026-11-18T12:00:00Z");
+  const lastScan = new Date("2026-11-16T12:00:00Z");
+
+  // Historical peak 30, today count jumps to 79 (+49 ad spike, right below 50 limit)
+  const decision = evaluateScanRules({
+    pageId: "test-boundary-page",
+    url: "https://www.facebook.com/ads/library/?view_all_page_id=888",
+    currentResults: 79,
+    lastCreativeScan: lastScan,
+    autoCreativeScan: true,
+    holdStatus: "active",
+    historyChronological: [
+      { results: 30 },
+      { results: 30 },
+      { results: 30 },
+      { results: 30 },
+      { results: 30 },
+      { results: 79 },
+    ],
+    now,
+  });
+
+  assert.equal(decision.action, "DELTA_SCAN");
+  assert.equal(decision.netDelta, 49);
+});
+
+test("Bootstrap Invariant: Brand-new page onboarding with 60 ads still triggers BOOTSTRAP_FULL", () => {
+  const now = new Date("2026-11-18T12:00:00Z");
+
+  const decision = evaluateScanRules({
+    pageId: "test-new-high-ad-page",
+    url: "https://www.facebook.com/ads/library/?view_all_page_id=999",
+    currentResults: 60,
+    lastCreativeScan: null, // First time onboarding
+    autoCreativeScan: true,
+    holdStatus: "active",
+    historyChronological: [{ results: 60 }],
+    now,
+  });
+
+  assert.equal(decision.action, "BOOTSTRAP_FULL");
+  assert.equal(decision.isFullScan, true);
+  assert.equal(decision.limit, 70); // 60 + 10
+});

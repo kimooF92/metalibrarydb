@@ -3,7 +3,7 @@ dotenv.config({ path: ".env.local" });
 
 import { db } from "../db";
 import { trackedPages, creativeScans, scanHistory, appSettings, workspaces } from "../db/schema";
-import { eq, sql, desc, asc, or, and, gt, lte, isNull } from "drizzle-orm";
+import { eq, sql, desc, asc, or, and, gt, lte, isNull, inArray } from "drizzle-orm";
 import {
   getApifyTokens,
   startApifyDeltaScan,
@@ -183,9 +183,9 @@ async function main() {
     console.log(`💳 Active Token Balance: $${balanceInfo.remainingUsd.toFixed(2)} remaining / $${balanceInfo.maxMonthlyUsageUsd.toFixed(2)} limit (${balanceInfo.usagePercent.toFixed(1)}% used)`);
   }
 
-  // 2. Fetch Active Scans to prevent concurrency collision
+  // 2. Fetch Active Scans to prevent concurrency collision (pending, running, or ingesting)
   const activeScans = await db.query.creativeScans.findMany({
-    where: eq(creativeScans.status, "running"),
+    where: inArray(creativeScans.status, ["pending", "running", "ingesting"]),
     columns: { trackedPageId: true, createdAt: true },
   });
   // Exclude scans older than 30 mins (stuck/orphaned)
