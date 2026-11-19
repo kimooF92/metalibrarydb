@@ -1,4 +1,4 @@
-import { isValidPageId, resolveDestinationUrl } from "./utils";
+import { cleanDomainName, isValidPageId, resolveDestinationUrl, sanitizeUrlHost } from "./utils";
 
 /**
  * Normalizes a URL for deduplication:
@@ -14,6 +14,10 @@ export function normalizeProductUrl(rawUrl: string | null | undefined): string |
     // Strip carriage returns, tabs, and line breaks from copy-pasting
     const sanitizedUrl = unwrapped.trim().replace(/[\r\n\t]+/g, "");
     const parsed = new URL(sanitizedUrl);
+    const cleanHost = cleanDomainName(parsed.hostname);
+    if (cleanHost && cleanHost !== parsed.hostname) {
+      parsed.hostname = cleanHost;
+    }
 
     // Comprehensive list of advertising, analytics, and affiliate tracking query parameters
     const trackingParams = [
@@ -100,7 +104,7 @@ export function normalizeProductUrl(rawUrl: string | null | undefined): string |
     parsed.hash = "";
 
     // Normalize protocol & hostname to lowercase
-    let cleaned = `${parsed.protocol.toLowerCase()}//${parsed.host.toLowerCase()}${parsed.pathname}`;
+    let cleaned = `${parsed.protocol.toLowerCase()}//${cleanDomainName(parsed.host.toLowerCase())}${parsed.pathname}`;
 
     // Remove trailing slash if path is longer than 1 character
     if (cleaned.length > 1 && cleaned.endsWith("/")) {
@@ -295,15 +299,16 @@ const MULTI_PART_TLDS = new Set([
  * - For custom domains (e.g. store.nike.com, shop.brand.com.tn), strips store prefixes down to apex domain.
  */
 export function resolveTrackableDomain(hostname: string): string {
-  let raw = hostname.trim().toLowerCase();
+  if (!hostname || typeof hostname !== "string") return "";
+  let raw = cleanDomainName(hostname.trim().toLowerCase());
   try {
     if (raw.startsWith("http://") || raw.startsWith("https://")) {
-      raw = new URL(raw).hostname.toLowerCase();
+      raw = cleanDomainName(new URL(raw).hostname.toLowerCase());
     }
   } catch {
-    raw = raw.replace(/^https?:\/\//i, "").split("/")[0].split("?")[0].split(":")[0];
+    raw = cleanDomainName(raw.replace(/^https?:\/\//i, "").split("/")[0].split("?")[0].split(":")[0]);
   }
-  const cleanHost = raw.replace(/^\.+|\.+$/g, "");
+  const cleanHost = cleanDomainName(raw).replace(/^\.+|\.+$/g, "");
   if (!cleanHost) return "";
 
   // 1. Multi-tenant SaaS platform preservation
@@ -371,7 +376,7 @@ export function extractStoreDomain(rawInput: string | null | undefined): string 
       const parsed = new URL(trimmed.startsWith("http") ? trimmed : `https://${trimmed}`);
       const q = parsed.searchParams.get("q")?.trim();
       if (q) {
-        const decoded = decodeURIComponent(q).replace(/^"|"$/g, "").trim();
+        const decoded = cleanDomainName(decodeURIComponent(q).replace(/^"|"$/g, "").trim());
         if (decoded && decoded.includes(".") && !isSocialDomain(decoded)) {
           const dom = resolveTrackableDomain(decoded);
           if (dom && dom.includes(".") && !isSocialDomain(dom)) return dom;
@@ -586,7 +591,7 @@ export function parseTrackableUrl(rawInput: string): ParsedTrackableUrl | null {
       const q = parsed.searchParams.get("q")?.trim();
       const pageId = parsed.searchParams.get("view_all_page_id")?.trim();
       if (q) {
-        targetDomain = decodeURIComponent(q).replace(/^"|"$/g, "");
+        targetDomain = cleanDomainName(decodeURIComponent(q).replace(/^"|"$/g, ""));
       } else if (pageId) {
         targetDomain = pageId;
       }
@@ -602,7 +607,8 @@ export function parseTrackableUrl(rawInput: string): ParsedTrackableUrl | null {
   }
 
   // 2. Parse general website or product link
-  const urlToParse = trimmed.match(/^https?:\/\//i) ? trimmed : `https://${trimmed}`;
+  const sanitizedInput = sanitizeUrlHost(trimmed) || trimmed;
+  const urlToParse = sanitizedInput.match(/^https?:\/\//i) ? sanitizedInput : `https://${sanitizedInput}`;
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(urlToParse);
@@ -610,7 +616,7 @@ export function parseTrackableUrl(rawInput: string): ParsedTrackableUrl | null {
     return null;
   }
 
-  const hostname = parsedUrl.hostname.toLowerCase();
+  const hostname = cleanDomainName(parsedUrl.hostname.toLowerCase());
   if (!hostname || !hostname.includes(".")) return null;
 
   // 3. Reject pure social media profile links
