@@ -487,13 +487,19 @@ export async function markJobCompleted(
           `[Creative Routing] ℹ️ Skipping creative scan for "${brandName}": ${decision.reason}.`
         );
       } else if (decision.tier === "tier3_apify") {
-        // TIER 3 (31+ ads): Trigger Apify Cloud runner under 3-day history policy rules
-        console.log(
-          `[Apify Auto-Trigger] 🚀 Cloud-eligible catalog (${results} active ads > 30) for "${brandName}". Action: ${decision.action} (${decision.reason}, Limit: ${decision.limit}, Full: ${decision.isFullScan}).`
-        );
-        tryAutoTriggerApifyDeltaScan(pageId, decision.limit, decision.isFullScan).catch((err) => {
-          console.error("[Apify Auto-Trigger] Error launching background delta scan:", err);
-        });
+        if (decision.action === "FULL_RECONCILE" || decision.action === "MAINTENANCE_FULL") {
+          console.log(
+            `[Creative Routing] ℹ️ Deferred descaling full reconciliation for "${brandName}" (${decision.reason}) to scheduled weekly batch cron.`
+          );
+        } else {
+          // TIER 3 (31+ ads): Trigger Apify Cloud runner under 3-day history policy rules for scaling / new product launches
+          console.log(
+            `[Apify Auto-Trigger] 🚀 Cloud-eligible catalog (${results} active ads > 30) for "${brandName}". Action: ${decision.action} (${decision.reason}, Limit: ${decision.limit}, Full: ${decision.isFullScan}).`
+          );
+          tryAutoTriggerApifyDeltaScan(pageId, decision.limit, decision.isFullScan).catch((err) => {
+            console.error("[Apify Auto-Trigger] Error launching background delta scan:", err);
+          });
+        }
       } else {
         // TIER 1 (<= 8 ads) & TIER 2 (9-30 ads): Free Local / GitHub Actions workers
         const isWatchlisted = Boolean(trackedPage?.isWatchlisted);

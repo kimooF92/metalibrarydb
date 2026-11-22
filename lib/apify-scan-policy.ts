@@ -15,6 +15,8 @@ import { trackedPages, scanHistory, creativeScans } from "../db/schema";
 import { eq, and, gt, desc, sql, inArray } from "drizzle-orm";
 
 export const MAX_REALISTIC_SINGLE_BATCH_DELTA = 50;
+export const MIN_REALISTIC_DELTA_THRESHOLD = 2; // +1 ad fluctuation is suppressed as normal jitter
+export const DESCALING_RECONCILE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (168 hours)
 
 export type ScanAction =
   | "DELTA_SCAN"        // Pattern 1: Genuine New Product Launch / Scaling
@@ -186,6 +188,15 @@ export function evaluateScanRules(input: PolicyEvaluationInput): ScanDecision {
 
   // --- Pattern 1: Genuine New Product Launch / Scaling (Today > Peak_3d) ---
   if (s0 > historicalPeak) {
+    // Noise Gate: Single-ad (+1) fluctuations are normal Meta review/caching jitter.
+    // Real product launches add at least 2+ ads.
+    if (netDelta < MIN_REALISTIC_DELTA_THRESHOLD) {
+      return skip(
+        `Single-ad fluctuation (+${netDelta} ad <= ${MIN_REALISTIC_DELTA_THRESHOLD - 1}) within normal jitter noise gate`,
+        historicalPeak
+      );
+    }
+
     const deltaLimit = Math.max(10, netDelta + 5);
     return {
       action: "DELTA_SCAN",
@@ -207,10 +218,19 @@ export function evaluateScanRules(input: PolicyEvaluationInput): ScanDecision {
   // Requires:
   // 1. Drop of >= 5 ads below 3-day peak
   // 2. Sustained across checks: |s0 - s1| <= 2 (jitter tolerance)
+  // 3. Strict 7-Day Cooldown: At most one full reconciliation scan per brand every 7 days (168 hours)
   const isSignificantDrop = s0 <= historicalPeak - 5;
   const isSustainedDrop = Math.abs(s0 - s1) <= 2;
 
   if (isSignificantDrop && isSustainedDrop) {
+    const sevenDaysAgo = new Date(nowMs - DESCALING_RECONCILE_COOLDOWN_MS);
+    if (input.lastReconcileFinishedAt && input.lastReconcileFinishedAt > sevenDaysAgo) {
+      return skip(
+        `7-day descaling reconciliation cooldown active (last reconciled within 7 days)`,
+        historicalPeak
+      );
+    }
+
     const dropAmount = historicalPeak - s0;
     const reconcileLimit = s0 + 5;
     return {

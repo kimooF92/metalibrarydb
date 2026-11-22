@@ -13,13 +13,13 @@ test("resolveTier categorizes workload tiers correctly", () => {
   assert.equal(resolveTier(85), "tier3_apify");
 });
 
-test("Pattern 1: Genuine New Product Launch (s0 > Peak_3d) triggers DELTA_SCAN only", () => {
+test("Pattern 1: Single-ad (+1) fluctuation is suppressed by noise gate", () => {
   const now = new Date("2026-11-18T12:00:00Z");
   const lastScan = new Date("2026-11-16T12:00:00Z"); // 48h ago
 
   // History: [30, 30, 30, 30, 30] and today count = 31 (+1 test ad above 30)
   const decision = evaluateScanRules({
-    pageId: "test-page-1",
+    pageId: "test-page-noise-gate",
     url: "https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&view_all_page_id=123",
     currentResults: 31,
     lastCreativeScan: lastScan,
@@ -36,33 +36,64 @@ test("Pattern 1: Genuine New Product Launch (s0 > Peak_3d) triggers DELTA_SCAN o
     now,
   });
 
-  assert.equal(decision.action, "DELTA_SCAN");
+  assert.equal(decision.action, "SKIP");
   assert.equal(decision.isFullScan, false);
-  assert.equal(decision.tier, "tier3_apify");
-  assert.equal(decision.limit, 10); // max(10, 1 + 5)
-  assert.equal(decision.netDelta, 1);
+  assert.match(decision.reason, /noise gate/);
   assert.equal(decision.historicalPeak, 30);
 });
 
-test("Pattern 2: Confirmed Descaling triggers FULL_RECONCILE with s0 + 5 limit", () => {
+test("Pattern 1: Genuine New Product Launch (>= +2 ads above Peak_3d) triggers DELTA_SCAN only", () => {
+  const now = new Date("2026-11-18T12:00:00Z");
+  const lastScan = new Date("2026-11-16T12:00:00Z"); // 48h ago
+
+  // History: [30, 30, 30, 30, 30] and today count = 33 (+3 ads above 30)
+  const decision = evaluateScanRules({
+    pageId: "test-page-1",
+    url: "https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&view_all_page_id=123",
+    currentResults: 33,
+    lastCreativeScan: lastScan,
+    autoCreativeScan: true,
+    holdStatus: "active",
+    historyChronological: [
+      { results: 30 },
+      { results: 30 },
+      { results: 30 },
+      { results: 30 },
+      { results: 30 },
+      { results: 33 },
+    ],
+    now,
+  });
+
+  assert.equal(decision.action, "DELTA_SCAN");
+  assert.equal(decision.isFullScan, false);
+  assert.equal(decision.tier, "tier3_apify");
+  assert.equal(decision.limit, 10); // max(10, 3 + 5)
+  assert.equal(decision.netDelta, 3);
+  assert.equal(decision.historicalPeak, 30);
+});
+
+test("Pattern 2: Confirmed Descaling triggers FULL_RECONCILE when 7-day cooldown expired", () => {
   const now = new Date("2026-11-18T12:00:00Z");
   const lastScan = new Date("2026-11-16T12:00:00Z");
+  const lastReconcile = new Date("2026-11-10T12:00:00Z"); // 8 days ago (expired)
 
-  // History: [35, 35, 35, 35, 20, 20] (dropped from 35 to 20 and sustained)
+  // History: [35, 35, 35, 35, 20, 20] (scans after Nov 10, dropped from 35 to 20 and sustained)
   const decision = evaluateScanRules({
     pageId: "test-page-2",
     url: "https://www.facebook.com/ads/library/?view_all_page_id=456",
     currentResults: 20,
     lastCreativeScan: lastScan,
+    lastReconcileFinishedAt: lastReconcile,
     autoCreativeScan: true,
     holdStatus: "active",
     historyChronological: [
-      { results: 35 },
-      { results: 35 },
-      { results: 35 },
-      { results: 35 },
-      { results: 20 },
-      { results: 20 },
+      { results: 35, checkedAt: new Date("2026-11-16T00:00:00Z") },
+      { results: 35, checkedAt: new Date("2026-11-16T12:00:00Z") },
+      { results: 35, checkedAt: new Date("2026-11-17T00:00:00Z") },
+      { results: 35, checkedAt: new Date("2026-11-17T12:00:00Z") },
+      { results: 20, checkedAt: new Date("2026-11-18T00:00:00Z") },
+      { results: 20, checkedAt: new Date("2026-11-18T12:00:00Z") },
     ],
     now,
   });
@@ -71,6 +102,35 @@ test("Pattern 2: Confirmed Descaling triggers FULL_RECONCILE with s0 + 5 limit",
   assert.equal(decision.isFullScan, true);
   assert.equal(decision.limit, 25); // 20 + 5
   assert.equal(decision.historicalPeak, 35);
+});
+
+test("Pattern 2: Confirmed Descaling SKIPS when 7-day cooldown is active", () => {
+  const now = new Date("2026-11-18T12:00:00Z");
+  const lastScan = new Date("2026-11-16T12:00:00Z");
+  const lastReconcile = new Date("2026-11-15T12:00:00Z"); // 3 days ago (active cooldown!)
+
+  const decision = evaluateScanRules({
+    pageId: "test-page-reconcile-cooldown",
+    url: "https://www.facebook.com/ads/library/?view_all_page_id=456",
+    currentResults: 20,
+    lastCreativeScan: lastScan,
+    lastReconcileFinishedAt: lastReconcile,
+    autoCreativeScan: true,
+    holdStatus: "active",
+    historyChronological: [
+      { results: 35, checkedAt: new Date("2026-11-16T00:00:00Z") },
+      { results: 35, checkedAt: new Date("2026-11-16T12:00:00Z") },
+      { results: 35, checkedAt: new Date("2026-11-17T00:00:00Z") },
+      { results: 35, checkedAt: new Date("2026-11-17T12:00:00Z") },
+      { results: 20, checkedAt: new Date("2026-11-18T00:00:00Z") },
+      { results: 20, checkedAt: new Date("2026-11-18T12:00:00Z") },
+    ],
+    now,
+  });
+
+  assert.equal(decision.action, "SKIP");
+  assert.equal(decision.isFullScan, false);
+  assert.match(decision.reason, /7-day descaling reconciliation cooldown active/);
 });
 
 test("Pattern 2: Jitter tolerance |s0 - s1| <= 2 still confirms descaling", () => {
