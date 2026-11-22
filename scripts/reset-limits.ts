@@ -18,6 +18,11 @@ async function resetLimits() {
         dayWindowStart: now,
         consecutiveFailures: 0,
         backoffUntil: null,
+        circuitBreakerTripped: false,
+        circuitBreakerReason: null,
+        circuitBreakerUntil: null,
+        consecutiveZeroPages: 0,
+        updatedAt: now,
       })
       .where(eq(workerState.id, 1));
     console.log("✅ Hourly/Daily limits reset successfully! You can restart scanning now.");

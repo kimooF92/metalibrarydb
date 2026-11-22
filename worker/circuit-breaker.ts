@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { scanHistory, trackedPages, queue } from "../db/schema";
-import { sql, and, gte, eq, inArray, or, lt } from "drizzle-orm";
+import { sql, and, gte, gt, eq, inArray, or, lt } from "drizzle-orm";
 import { updateWorkerState, getWorkerState } from "./repositories/worker-state-repo";
 import { Page } from "playwright";
 import { scanMetaAdPage } from "./scanner";
@@ -85,8 +85,17 @@ export async function checkZeroAdAnomaly(
   // If the result is a real positive count, the scraper is clearly functional for this page.
   if (currentResults !== null && currentResults > 0) {
     const state = await getWorkerState();
-    if ((state.consecutiveZeroPages || 0) > 0) {
-      await updateWorkerState({ consecutiveZeroPages: 0 });
+    if (state.circuitBreakerTripped || (state.consecutiveZeroPages || 0) > 0) {
+      console.log(
+        `[Circuit Breaker] 🟢 Real positive ad count (${currentResults} ads) scanned! Auto-clearing any active circuit breaker / zero counter.`
+      );
+      await updateWorkerState({
+        circuitBreakerTripped: false,
+        circuitBreakerReason: null,
+        circuitBreakerUntil: null,
+        consecutiveZeroPages: 0,
+        backoffUntil: null,
+      });
     }
     return { isAnomalous: false };
   }
@@ -136,6 +145,41 @@ export async function checkZeroAdAnomaly(
   const count = distinctZeroPageIds.size;
 
   if (count >= config.threshold) {
+    // 1. Positive Scan Reality Check:
+    // If other distinct pages were successfully scanned with positive ad counts in the rolling window,
+    // Meta Ad Library is provably operational across the worker fleet.
+    const recentPositiveScans = await db
+      .select({
+        trackedPageId: scanHistory.trackedPageId,
+      })
+      .from(scanHistory)
+      .innerJoin(trackedPages, eq(scanHistory.trackedPageId, trackedPages.id))
+      .where(
+        and(
+          gte(scanHistory.checkedAt, windowStart),
+          gt(scanHistory.results, 0),
+          eq(scanHistory.status, "success"),
+          sql`(${trackedPages.url} NOT LIKE '%test-wf-%' AND (${trackedPages.pageId} IS NULL OR ${trackedPages.pageId} NOT LIKE 'test-wf-%'))`
+        )
+      )
+      .limit(20);
+
+    const distinctPositivePageIds = new Set<string>();
+    for (const s of recentPositiveScans) {
+      if (s.trackedPageId) {
+        distinctPositivePageIds.add(s.trackedPageId);
+      }
+    }
+
+    const minPositiveProof = Math.min(3, config.threshold);
+    if (distinctPositivePageIds.size >= minPositiveProof) {
+      console.log(
+        `[Circuit Breaker] 🟢 Fleet health confirmed: ${distinctPositivePageIds.size} distinct pages actively returned ads in rolling window. ${count} zero counts are natural brand churn, NOT an Ad Library outage.`
+      );
+      await updateWorkerState({ consecutiveZeroPages: count });
+      return { isAnomalous: false, distinctPagesCount: count };
+    }
+
     // Before declaring an Ad Library outage, run a sanity check on a mega-advertiser (e.g. Nike Global)
     // If the canary returns active ads, Meta Ad Library is operational — these 0-counts are natural brand pauses/churn!
     if (browserPage) {

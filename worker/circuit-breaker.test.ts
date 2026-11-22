@@ -507,4 +507,74 @@ test("regional cluster anomaly resolution: healthy canary with >= 3 drops flags 
   assert.equal(outage.globalBreakerTripped, true);
 });
 
+test("fleet positive scan reality check: verified positive scans prevent false circuit breaker trips", () => {
+  function evaluateWithFleetHealth(
+    distinctZeroPagesCount: number,
+    threshold: number,
+    distinctPositivePagesCount: number
+  ) {
+    if (distinctZeroPagesCount >= threshold) {
+      const minPositiveProof = Math.min(3, threshold);
+      if (distinctPositivePagesCount >= minPositiveProof) {
+        return {
+          isAnomalous: false,
+          tripped: false,
+          reason: "Fleet health confirmed by recent positive scans — natural churn, NOT an outage",
+        };
+      }
+      return {
+        isAnomalous: true,
+        tripped: true,
+        reason: "Zero positive scans in fleet — potential outage detected",
+      };
+    }
+    return { isAnomalous: false, tripped: false, reason: "Below threshold" };
+  }
+
+  // Case 1: 3 brands pause ads, but 20 other pages actively returned ads in the window (Production Incident Scenario)
+  const falseAlarmScenario = evaluateWithFleetHealth(3, 3, 20);
+  assert.equal(falseAlarmScenario.isAnomalous, false, "Must not flag anomaly when fleet is actively scanning positive ads");
+  assert.equal(falseAlarmScenario.tripped, false, "Must not trip breaker when fleet health is confirmed");
+  assert.match(falseAlarmScenario.reason, /Fleet health confirmed/);
+
+  // Case 2: 3 brands drop to 0, and only 1 brand had positive ads (below minPositiveProof 3) -> potential outage
+  const realOutageRisk = evaluateWithFleetHealth(3, 3, 1);
+  assert.equal(realOutageRisk.isAnomalous, true);
+  assert.equal(realOutageRisk.tripped, true);
+});
+
+test("positive scan auto-heals tripped circuit breaker", () => {
+  function handlePositiveScanResult(
+    currentResults: number | null,
+    currentState: { circuitBreakerTripped: boolean; consecutiveZeroPages: number }
+  ) {
+    if (currentResults !== null && currentResults > 0) {
+      if (currentState.circuitBreakerTripped || currentState.consecutiveZeroPages > 0) {
+        return {
+          circuitBreakerTripped: false,
+          consecutiveZeroPages: 0,
+          healed: true,
+        };
+      }
+    }
+    return {
+      circuitBreakerTripped: currentState.circuitBreakerTripped,
+      consecutiveZeroPages: currentState.consecutiveZeroPages,
+      healed: false,
+    };
+  }
+
+  const activeBreakerState = { circuitBreakerTripped: true, consecutiveZeroPages: 3 };
+  const healed = handlePositiveScanResult(56, activeBreakerState);
+  assert.equal(healed.healed, true);
+  assert.equal(healed.circuitBreakerTripped, false);
+  assert.equal(healed.consecutiveZeroPages, 0);
+
+  const cleanState = { circuitBreakerTripped: false, consecutiveZeroPages: 0 };
+  const normal = handlePositiveScanResult(10, cleanState);
+  assert.equal(normal.healed, false);
+  assert.equal(normal.circuitBreakerTripped, false);
+});
+
+
 

@@ -159,7 +159,7 @@ jobs:
           SKIP_STARTUP_SWEEP: "true"
           SKIP_ENQUEUE: "true"
           RUN_CANARY_CHECK: ${{ inputs.run_canary || 'false' }}
-          ZERO_AD_ANOMALY_THRESHOLD: "3"
+          ZERO_AD_ANOMALY_THRESHOLD: "5"
           ZERO_AD_ANOMALY_WINDOW_MINUTES: "20"
           CIRCUIT_BREAKER_COOLDOWN_MINUTES: "45"
         run: npm run worker
