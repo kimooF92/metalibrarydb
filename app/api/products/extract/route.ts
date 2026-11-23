@@ -24,7 +24,7 @@ import { PRODUCT_EXTRACTION_LOOKUP_PROJECTION } from "@/lib/product-projections"
 import { buildProductExtractionNotification } from "@/lib/product-extraction";
 import { enhanceProductWithJev } from "@/lib/product-enhancer";
 import { validateAndGatekeepProduct, resolveEffectiveScrapeStatus } from "@/lib/product-validator";
-import { deleteByPrefix, deleteCached } from "@/lib/cache-service";
+import { deleteByPrefix, deleteCached, invalidateWorkspaceEntities } from "@/lib/cache-service";
 import {
   scraperRateLimiter,
   checkRateLimit,
@@ -409,11 +409,8 @@ export async function POST(req: NextRequest) {
           new Set([pageId, resolvedDomain].filter(Boolean).map((k) => k!.toLowerCase()))
         );
         await Promise.allSettled([
-          deleteByPrefix(`cache:products:${resolvedWorkspaceId}:`),
-          deleteByPrefix(`cache:fresh_winners_v2:${resolvedWorkspaceId}:`),
-          deleteByPrefix(`cache:spy_ads:${resolvedWorkspaceId}:`),
+          invalidateWorkspaceEntities(resolvedWorkspaceId, ["products", "spy_ads"]),
           ...brandKeys.map((k) => deleteByPrefix(`cache:brand:${resolvedWorkspaceId}:${k}:`)),
-          deleteCached(`cache:stats:${resolvedWorkspaceId}`),
         ]);
       }
     }

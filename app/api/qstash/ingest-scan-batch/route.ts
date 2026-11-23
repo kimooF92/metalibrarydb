@@ -8,7 +8,7 @@ import { enqueueProductScrape } from "@/lib/qstash";
 import { tasks } from "@trigger.dev/sdk";
 import { isTriggerDevConfigured } from "@/lib/product-ingest";
 import { reconcileArchivedAds } from "@/lib/ad-reconciliation";
-import { deleteCached, deleteByPrefix } from "@/lib/cache-service";
+import { deleteCached, deleteByPrefix, invalidateWorkspaceEntities } from "@/lib/cache-service";
 import { checkAndRecordBreakout } from "@/lib/breakout-detector";
 import { timingSafeEqual } from "@/lib/auth";
 import { batchFindProductIdsByUrls } from "@/lib/product-url-matcher";
@@ -423,14 +423,11 @@ export async function handleBatchIngest(req: Request | NextRequest) {
     if (pageRecord.workspaceId) {
       const wsId = pageRecord.workspaceId;
       const targetPageId = pageRecord.pageId || pageId;
-      deleteCached(`cache:stats:${wsId}`).catch(() => { });
-      deleteByPrefix(`cache:spy_ads:${wsId}:`).catch(() => { });
-      deleteByPrefix(`cache:dashboard:overview:${wsId}:`).catch(() => { });
+      invalidateWorkspaceEntities(wsId).catch(() => { });
       if (targetPageId) {
         deleteByPrefix(`cache:brand:${wsId}:${targetPageId}:`).catch(() => { });
       }
       deleteByPrefix(`cache:brand:${wsId}:${trackedPageId}:`).catch(() => { });
-      deleteByPrefix(`cache:products:${wsId}:`).catch(() => { });
     }
 
     return NextResponse.json({

@@ -39,6 +39,7 @@ import {
   getCached,
   setCached,
   buildCanonicalFilterHash,
+  getEntityCacheVersion,
 } from "@/lib/cache-service";
 
 export const ALLOWED_PRODUCT_FILTERS = [
@@ -85,10 +86,11 @@ export const PRODUCTS_REDIS_CACHE_TTL = 180; // 3 minutes Upstash Redis cache (p
 export function buildCanonicalProductCacheKey(
   searchParams: URLSearchParams,
   workspaceId: string,
-  role: string
+  role: string,
+  cacheVersion: number = 1
 ): string {
   const filterHash = buildCanonicalFilterHash(searchParams, ALLOWED_PRODUCT_FILTERS);
-  return `cache:products:${workspaceId}:${role}:${filterHash}`;
+  return `cache:products:${workspaceId}:v${cacheVersion}:${role}:${filterHash}`;
 }
 
 export interface FetchProductsOptions {
@@ -229,13 +231,13 @@ export function buildProductProjections(
     supplierCount: sql<number>`COALESCE(array_length(${scrapedProducts.supplierUrls}, 1), 0)`.mapWith(Number),
     ...(includeDetails
       ? {
-          galleryImages: scrapedProducts.galleryImages,
-          allOffers: scrapedProducts.allOffers,
-          phoneNumbers: scrapedProducts.phoneNumbers,
-          whatsappNumbers: scrapedProducts.whatsappNumbers,
-          metaPixelIds: scrapedProducts.metaPixelIds,
-          supplierUrls: scrapedProducts.supplierUrls,
-        }
+        galleryImages: scrapedProducts.galleryImages,
+        allOffers: scrapedProducts.allOffers,
+        phoneNumbers: scrapedProducts.phoneNumbers,
+        whatsappNumbers: scrapedProducts.whatsappNumbers,
+        metaPixelIds: scrapedProducts.metaPixelIds,
+        supplierUrls: scrapedProducts.supplierUrls,
+      }
       : {}),
   };
 }
@@ -295,7 +297,8 @@ export async function fetchProducts(
 
   const forceRefresh =
     searchParams.get("_t") !== null || searchParams.get("refresh") === "true";
-  const cacheKey = buildCanonicalProductCacheKey(searchParams, workspaceId, role);
+  const cacheVersion = await getEntityCacheVersion(workspaceId, "products");
+  const cacheKey = buildCanonicalProductCacheKey(searchParams, workspaceId, role, cacheVersion);
 
   if (!forceRefresh && !includeDetails) {
     const cached = await getCached<ProductsQueryResult>(cacheKey);
@@ -898,8 +901,8 @@ export async function fetchProducts(
       typeof m?.brandCurrentResults === "number"
         ? m.brandCurrentResults
         : typeof pageInfo?.currentResults === "number"
-        ? pageInfo.currentResults
-        : null;
+          ? pageInfo.currentResults
+          : null;
 
     const obs = obsMetricsMap.get(p.id);
     const maxDuplications = Math.max(obs?.maxDuplications || 1, 1);
@@ -909,11 +912,11 @@ export async function fetchProducts(
 
     const isBreakout = Boolean(
       brandHoldStatus !== "on_hold" &&
-        brandHoldStatus !== "inactive" &&
-        (m?.activeAdsCount || 0) > 0 &&
-        daysRunning >= 7 &&
-        daysRunning <= 30 &&
-        (effectiveSurge >= 3 || (maxDuplications >= 3 && recentNewAds >= 2))
+      brandHoldStatus !== "inactive" &&
+      (m?.activeAdsCount || 0) > 0 &&
+      daysRunning >= 7 &&
+      daysRunning <= 30 &&
+      (effectiveSurge >= 3 || (maxDuplications >= 3 && recentNewAds >= 2))
     );
 
     let breakoutScore: number | undefined;
@@ -1015,7 +1018,7 @@ export async function fetchProducts(
   };
 
   if (!forceRefresh && !includeDetails) {
-    await setCached(cacheKey, responsePayload, PRODUCTS_REDIS_CACHE_TTL).catch(() => {});
+    await setCached(cacheKey, responsePayload, PRODUCTS_REDIS_CACHE_TTL).catch(() => { });
   }
 
   return responsePayload;

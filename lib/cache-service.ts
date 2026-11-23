@@ -9,7 +9,7 @@ interface MemoryEntry {
 // In-Memory L1 Cache (Coalesces rapid requests within the same Node/Serverless process)
 const memoryCache = new Map<string, MemoryEntry>();
 const MAX_MEMORY_ENTRIES = 500;
-const L1_MAX_TTL_MS = 10 * 1000; // 10 seconds max L1 retention
+const L1_MAX_TTL_MS = 30 * 1000; // 30 seconds max L1 retention (reduces Redis L2 roundtrips while preserving fresh updates)
 const MAX_PAYLOAD_BYTES = 400 * 1024; // 400 KB limit for BOTH L1 and L2 cache
 
 /**
@@ -221,7 +221,7 @@ export async function setCached<T>(
       console.warn(`[Cache Warning] Payload exceeds 400 KB (${key}). Evicting both L1 and L2 cache.`);
       memoryCache.delete(key);
       if (redis) {
-        await redis.del(key).catch(() => {});
+        await redis.del(key).catch(() => { });
       }
       return;
     }
@@ -362,7 +362,7 @@ export async function bumpEntityCacheVersion(
     if (newV === 1) {
       newV = await redis.incr(versionKey);
     }
-    await redis.expire(versionKey, 7 * 86400).catch(() => {});
+    await redis.expire(versionKey, 7 * 86400).catch(() => { });
     ensureMemoryCapacity();
     memoryCache.set(versionKey, { value: newV, expiresAt: Date.now() + 30_000 });
     return newV;
@@ -370,6 +370,26 @@ export async function bumpEntityCacheVersion(
     console.warn(`[Upstash Version Warning] bumpEntityCacheVersion("${versionKey}") failed:`, err?.message || err);
     return 1;
   }
+}
+
+/**
+ * Invalidate workspace entities using O(1) generational versioning,
+ * eliminating multi-iteration SCAN commands across Upstash Redis.
+ * Protects against timeout errors and Upstash free-tier quota exhaustion.
+ */
+export async function invalidateWorkspaceEntities(
+  workspaceId?: string | null,
+  entities: string[] = ["pages", "products", "spy_ads", "dashboard:overview"]
+): Promise<void> {
+  if (!workspaceId) return;
+
+  // Clear single stats summary cache directly (1 DEL command)
+  deleteCached(`cache:stats:${workspaceId}`).catch(() => { });
+
+  // Atomically bump generational version for all requested entities (1 INCR per entity)
+  await Promise.allSettled(
+    entities.map((entity) => bumpEntityCacheVersion(workspaceId, entity))
+  );
 }
 
 // Lua Script: Atomic Compare-and-Delete for safe lock release

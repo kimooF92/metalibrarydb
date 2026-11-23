@@ -18,7 +18,7 @@ import {
 } from "../db";
 import { recordSuccessfulScan } from "../throttle";
 import { handleFailure, handleSuccess } from "../backoff";
-import { deleteCached, deleteByPrefix } from "../../lib/cache-service";
+import { deleteCached, deleteByPrefix, invalidateWorkspaceEntities } from "../../lib/cache-service";
 import { broadcastScanStep } from "../../lib/realtime-scan";
 
 export interface JobDispatchContext {
@@ -261,7 +261,7 @@ export async function dispatchQueueJob(ctx: JobDispatchContext): Promise<JobDisp
         originalName: trackedPage.displayName || trackedPage.url,
         resolvedPageName: `Page ${singlePageId}`,
         resolvedPageId: singlePageId,
-      }).catch(() => {});
+      }).catch(() => { });
 
       if (mergeRes.mergedPageId) {
         await enqueueOrEscalateJob(mergeRes.mergedPageId, "creative", 10);
@@ -283,13 +283,13 @@ export async function dispatchQueueJob(ctx: JobDispatchContext): Promise<JobDisp
         .update(trackedPages)
         .set({ discoveredPagesCount: pageIdsFound.length })
         .where(eq(trackedPages.id, trackedPage.id))
-        .catch(() => {});
+        .catch(() => { });
       const { logMultiPageDetectedNotification } = await import("../../lib/notifications");
       await logMultiPageDetectedNotification({
         trackedPageId: trackedPage.id,
         domainName: trackedPage.displayName || trackedPage.url,
         candidatePages: pageIdsFound.map((pid) => ({ pageId: pid })),
-      }).catch(() => {});
+      }).catch(() => { });
     }
 
     if (outcome.status === "completed" || outcome.status === "partial") {
@@ -308,14 +308,9 @@ export async function dispatchQueueJob(ctx: JobDispatchContext): Promise<JobDisp
       if (trackedPage.workspaceId) {
         const canonicalKey = (trackedPage.pageId || trackedPage.id).toLowerCase();
         Promise.allSettled([
-          deleteCached(`cache:stats:${trackedPage.workspaceId}`),
-          deleteByPrefix(`cache:dashboard:overview:${trackedPage.workspaceId}:`),
-          deleteByPrefix(`cache:pages:${trackedPage.workspaceId}:`),
-          deleteByPrefix(`cache:products:${trackedPage.workspaceId}:`),
-          deleteByPrefix(`cache:fresh_winners:${trackedPage.workspaceId}:`),
-          deleteByPrefix(`cache:spy_ads:${trackedPage.workspaceId}:`),
+          invalidateWorkspaceEntities(trackedPage.workspaceId),
           deleteByPrefix(`cache:brand:${trackedPage.workspaceId}:${canonicalKey}:`),
-        ]).catch(() => {});
+        ]).catch(() => { });
       }
       return { success: true };
     } else {
@@ -348,7 +343,7 @@ export async function dispatchQueueJob(ctx: JobDispatchContext): Promise<JobDisp
         percent,
         batchIndex: ranJobs + 1,
         timestamp: Date.now(),
-      }).catch(() => {});
+      }).catch(() => { });
     };
 
     await onProgress("launching", "1. Connecting browser session...", 15);
@@ -385,7 +380,7 @@ export async function dispatchQueueJob(ctx: JobDispatchContext): Promise<JobDisp
         diff: res?.difference ?? null,
         batchIndex: ranJobs + 1,
         timestamp: Date.now(),
-      }).catch(() => {});
+      }).catch(() => { });
 
       if (res?.circuitBreakerTripped) {
         console.warn(
@@ -463,14 +458,9 @@ export async function dispatchQueueJob(ctx: JobDispatchContext): Promise<JobDisp
       if (trackedPage.workspaceId) {
         const canonicalKey = (trackedPage.pageId || trackedPage.id).toLowerCase();
         Promise.allSettled([
-          deleteCached(`cache:stats:${trackedPage.workspaceId}`),
-          deleteByPrefix(`cache:dashboard:overview:${trackedPage.workspaceId}:`),
-          deleteByPrefix(`cache:pages:${trackedPage.workspaceId}:`),
-          deleteByPrefix(`cache:products:${trackedPage.workspaceId}:`),
-          deleteByPrefix(`cache:fresh_winners:${trackedPage.workspaceId}:`),
-          deleteByPrefix(`cache:spy_ads:${trackedPage.workspaceId}:`),
+          invalidateWorkspaceEntities(trackedPage.workspaceId),
           deleteByPrefix(`cache:brand:${trackedPage.workspaceId}:${canonicalKey}:`),
-        ]).catch(() => {});
+        ]).catch(() => { });
       }
       return { success: true };
     } else {
@@ -490,7 +480,7 @@ export async function dispatchQueueJob(ctx: JobDispatchContext): Promise<JobDisp
         percent: 100,
         batchIndex: ranJobs + 1,
         timestamp: Date.now(),
-      }).catch(() => {});
+      }).catch(() => { });
 
       await handleFailure();
       return { success: false };

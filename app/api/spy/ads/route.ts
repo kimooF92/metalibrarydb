@@ -9,7 +9,7 @@ import { enrichAdsWithProductClusters } from "@/lib/product-clustering";
 import { enrichAdsWithCreativeClusters, getDeduplicatedCreativeHeroAds } from "@/lib/creative-clustering";
 import { PRIVATE_AUTH_VARY, PRIVATE_READ_CACHE_CONTROL } from "@/lib/http-cache";
 import { getActiveWorkspace } from "@/lib/workspace-server";
-import { getCached, setCached } from "@/lib/cache-service";
+import { getCached, setCached, getEntityCacheVersion, buildCanonicalFilterHash } from "@/lib/cache-service";
 import { batchFindProductsByUrls } from "@/lib/product-url-matcher";
 
 export const dynamic = "force-dynamic";
@@ -57,7 +57,9 @@ export async function GET(req: NextRequest) {
 
     // Hybrid Upstash Redis cache check to eliminate duplicate DB scans across all serverless instances
     const forceRefresh = searchParams.get("_t") !== null || searchParams.get("refresh") === "true";
-    const cacheKey = `cache:spy_ads:${activeWorkspace.id}:${req.nextUrl.searchParams.toString()}`;
+    const cacheVersion = await getEntityCacheVersion(activeWorkspace.id, "spy_ads");
+    const filterHash = buildCanonicalFilterHash(searchParams);
+    const cacheKey = `cache:spy_ads:${activeWorkspace.id}:v${cacheVersion}:${filterHash}`;
 
     if (!forceRefresh) {
       const cached = await getCached<any>(cacheKey);

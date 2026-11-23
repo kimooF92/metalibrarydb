@@ -3,6 +3,11 @@ import { getRedis } from "@/lib/redis";
 import { timingSafeEqual } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 
+export interface LimiterInterface {
+  limit: (identifier: string) => Promise<{ success: boolean; limit: number; remaining: number; reset: number }>;
+  resetUsedTokens?: (identifier: string) => Promise<void>;
+}
+
 export function createLimiter(
   tokens: number,
   window: `${number} ${"s" | "m" | "h" | "d"}`,
@@ -24,15 +29,84 @@ export function createLimiter(
   });
 }
 
+interface MemoryWindowEntry {
+  count: number;
+  resetAt: number;
+}
+
+/**
+ * High-performance, zero-Redis in-memory rate limiter with bounded memory footprint.
+ * Ideal for high-frequency assets (media/image proxies) to prevent Upstash Redis command exhaustion.
+ */
+export function createMemoryLimiter(maxRequests: number, windowMs: number): LimiterInterface {
+  const store = new Map<string, MemoryWindowEntry>();
+  const MAX_ENTRIES = 5000;
+
+  return {
+    async limit(identifier: string): Promise<{ success: boolean; limit: number; remaining: number; reset: number }> {
+      const now = Date.now();
+
+      // Ensure bounded memory footprint by pruning expired entries when capacity is reached
+      if (store.size >= MAX_ENTRIES) {
+        for (const [k, v] of store.entries()) {
+          if (v.resetAt <= now) store.delete(k);
+        }
+        // If still full, drop the oldest 10%
+        if (store.size >= MAX_ENTRIES) {
+          let dropped = 0;
+          for (const k of store.keys()) {
+            store.delete(k);
+            dropped++;
+            if (dropped > 500) break;
+          }
+        }
+      }
+
+      let entry = store.get(identifier);
+      if (!entry || entry.resetAt <= now) {
+        entry = { count: 1, resetAt: now + windowMs };
+        store.set(identifier, entry);
+        return {
+          success: true,
+          limit: maxRequests,
+          remaining: maxRequests - 1,
+          reset: entry.resetAt,
+        };
+      }
+
+      if (entry.count >= maxRequests) {
+        return {
+          success: false,
+          limit: maxRequests,
+          remaining: 0,
+          reset: entry.resetAt,
+        };
+      }
+
+      entry.count++;
+      return {
+        success: true,
+        limit: maxRequests,
+        remaining: maxRequests - entry.count,
+        reset: entry.resetAt,
+      };
+    },
+    async resetUsedTokens(identifier: string): Promise<void> {
+      store.delete(identifier);
+    },
+  };
+}
+
 /**
  * 1. Authentication brute-force protection (5 requests / 10 minutes per IP)
  */
 export const loginRateLimiter = createLimiter(5, "10 m", "rl:auth:login");
 
 /**
- * 2. Public media & image proxy abuse protection (60 requests / 1 minute per IP)
+ * 2. Public media & image proxy abuse protection (120 requests / 1 minute per IP)
+ * Uses high-speed in-memory rate limiting (0 Upstash Redis commands consumed).
  */
-export const mediaProxyRateLimiter = createLimiter(60, "1 m", "rl:media:proxy");
+export const mediaProxyRateLimiter = createMemoryLimiter(120, 60 * 1000);
 
 /**
  * 3. Paid scraping / Firecrawl extraction protection (30 requests / 1 minute per IP/user)
@@ -89,7 +163,7 @@ export function isTrustedInternalRequest(req: Request | NextRequest): boolean {
  * If Redis is offline, unconfigured, or times out, it gracefully allows the request.
  */
 export async function checkRateLimit(
-  limiter: Ratelimit | null,
+  limiter: Ratelimit | LimiterInterface | null,
   identifier: string
 ): Promise<RateLimitResult> {
   if (!limiter) {
@@ -131,12 +205,14 @@ export async function checkRateLimit(
  * Reset used tokens for an identifier (e.g., on successful login).
  */
 export async function resetRateLimit(
-  limiter: Ratelimit | null,
+  limiter: Ratelimit | LimiterInterface | null,
   identifier: string
 ): Promise<void> {
   if (!limiter) return;
   try {
-    await limiter.resetUsedTokens(identifier);
+    if (typeof limiter.resetUsedTokens === "function") {
+      await limiter.resetUsedTokens(identifier);
+    }
   } catch (error) {
     console.warn("[RateLimit] Failed to reset tokens:", error);
   }

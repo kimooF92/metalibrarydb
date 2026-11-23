@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { trackedPages, ads, scrapedProducts, adObservations, brandDomains } from "@/db/schema";
 import { eq, or, and, ne, desc, inArray, not, isNotNull, sql, ilike } from "drizzle-orm";
 import { validateAdminRole } from "@/lib/api-guard";
-import { deleteByPrefix, deleteCached, bumpEntityCacheVersion } from "@/lib/cache-service";
+import { deleteByPrefix, deleteCached, bumpEntityCacheVersion, invalidateWorkspaceEntities } from "@/lib/cache-service";
 
 export async function DELETE(
   request: Request,
@@ -247,12 +247,7 @@ export async function DELETE(
       );
 
       await Promise.allSettled([
-        bumpEntityCacheVersion(workspaceId, "pages"),
-        deleteByPrefix(`cache:pages:${workspaceId}:`),
-        deleteCached(`cache:stats:${workspaceId}`),
-        deleteByPrefix(`cache:products:${workspaceId}:`),
-        deleteByPrefix(`cache:spy_ads:${workspaceId}:`),
-        deleteByPrefix(`cache:fresh_winners:${workspaceId}:`),
+        invalidateWorkspaceEntities(workspaceId, ["pages", "products", "spy_ads", "dashboard:overview"]),
         deleteCached(`cache:spy_brands:${workspaceId}`),
         ...brandInvalidations,
       ]);

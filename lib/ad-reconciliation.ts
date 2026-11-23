@@ -7,6 +7,7 @@ import {
   releaseLock,
   deleteCached,
   deleteByPrefix,
+  invalidateWorkspaceEntities,
 } from "@/lib/cache-service";
 
 export interface ReconciliationOptions {
@@ -328,14 +329,11 @@ export async function reconcileArchivedAds(
       // Invalidate Brand & Product Caches in Redis
       if (trackedPage?.workspaceId) {
         const wsId = trackedPage.workspaceId;
-        deleteCached(`cache:stats:${wsId}`).catch(() => {});
-        deleteByPrefix(`cache:spy_ads:${wsId}:`).catch(() => {});
-        deleteByPrefix(`cache:dashboard:overview:${wsId}:`).catch(() => {});
+        invalidateWorkspaceEntities(wsId).catch(() => { });
         if (targetPageId) {
-          deleteByPrefix(`cache:brand:${wsId}:${targetPageId}:`).catch(() => {});
+          deleteByPrefix(`cache:brand:${wsId}:${targetPageId}:`).catch(() => { });
         }
-        deleteByPrefix(`cache:brand:${wsId}:${trackedPageId}:`).catch(() => {});
-        deleteByPrefix(`cache:products:${wsId}:`).catch(() => {});
+        deleteByPrefix(`cache:brand:${wsId}:${trackedPageId}:`).catch(() => { });
       }
     }
   } catch (error) {

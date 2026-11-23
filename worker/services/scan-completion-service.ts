@@ -314,7 +314,7 @@ export async function markJobCompleted(
 
       try {
         await enqueueOrEscalateJob(pageId, "count", 2);
-      } catch {}
+      } catch { }
     }
   } else if (isRecovering || isRelaunching) {
     // Account hold lifted OR inactive brand relaunched ads — compute display difference vs baseline BEFORE clearing
@@ -458,7 +458,7 @@ export async function markJobCompleted(
         isOnHold: isDropToZero || isZeroWhileOnHold,
         isAmbiguousZero,
       });
-    } catch {}
+    } catch { }
   }
 
   // 4c. Update & Persist Archetype Sweet-Spot Tag (Stable, Burst, Scaling, Breakout, etc.)
@@ -467,7 +467,7 @@ export async function markJobCompleted(
     updateAndPersistPageTag(pageId).catch((err) =>
       console.warn(`[Page Tagger] Non-blocking tag error for ${pageId}:`, err?.message || err)
     );
-  } catch {}
+  } catch { }
 
   // 5. Intelligent Creative Routing using Centralized 3-Day History Policy
   if (status === "success" && !isOnHold && !isDropToZero && (results || 0) >= 1) {
@@ -556,15 +556,13 @@ export async function markJobCompleted(
     }
   }
 
-  if (trackedPage?.workspaceId) {
+  const wsId = trackedPage?.workspaceId;
+  if (wsId) {
     import("../../lib/cache-service")
-      .then(({ deleteByPrefix, deleteCached }) => {
-        Promise.allSettled([
-          deleteByPrefix(`cache:dashboard:overview:${trackedPage.workspaceId}:`),
-          deleteCached(`cache:stats:${trackedPage.workspaceId}`),
-        ]).catch(() => {});
+      .then(({ invalidateWorkspaceEntities }) => {
+        invalidateWorkspaceEntities(wsId, ["dashboard:overview", "pages"]).catch(() => { });
       })
-      .catch(() => {});
+      .catch(() => { });
   }
 
   return { difference: displayDifference, results, brandName };

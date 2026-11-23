@@ -5,7 +5,7 @@ import { trackedPages, queue } from "../../db/schema";
 import { eq, and, or, inArray, sql } from "drizzle-orm";
 import { scanMetaAdPage } from "../../worker/scanner";
 import { markJobCompleted } from "../../worker/db";
-import { acquireLock, acquireLockDetailed, releaseLock, deleteCached, deleteByPrefix, setCached } from "../../lib/cache-service";
+import { acquireLock, acquireLockDetailed, releaseLock, deleteCached, deleteByPrefix, setCached, bumpEntityCacheVersion, invalidateWorkspaceEntities } from "../../lib/cache-service";
 import { broadcastScanStep } from "../../lib/realtime-scan";
 import { refreshSingleAdMedia, RefreshAdMediaOptions } from "./ad-media-refresher";
 import {
@@ -81,7 +81,7 @@ export const scanPageCountTask = task({
             updatedAt: now,
           })
           .where(eq(trackedPages.id, pageRecord.id))
-          .catch(() => {});
+          .catch(() => { });
 
         await db
           .update(queue)
@@ -91,10 +91,10 @@ export const scanPageCountTask = task({
             failureReason: errMessage,
           })
           .where(and(eq(queue.trackedPageId, pageRecord.id), inArray(queue.status, ["pending", "running"])))
-          .catch(() => {});
+          .catch(() => { });
 
         if (ctx?.run?.id) {
-          await releaseLock(`lock:scrape:${pageRecord.id}`, ctx.run.id).catch(() => {});
+          await releaseLock(`lock:scrape:${pageRecord.id}`, ctx.run.id).catch(() => { });
         }
         await broadcastScanStep({
           jobId: ctx?.run?.id || pageRecord.id,
@@ -105,11 +105,11 @@ export const scanPageCountTask = task({
           label: `Scan failed: ${errMessage}`,
           percent: 100,
           timestamp: Date.now(),
-        }).catch(() => {});
+        }).catch(() => { });
 
         if (pageRecord.workspaceId) {
-          await deleteCached(`cache:stats:${pageRecord.workspaceId}`).catch(() => {});
-          await deleteByPrefix(`cache:pages:${pageRecord.workspaceId}:`).catch(() => {});
+          await deleteCached(`cache:stats:${pageRecord.workspaceId}`).catch(() => { });
+          await bumpEntityCacheVersion(pageRecord.workspaceId, "pages").catch(() => { });
         }
       }
     } catch (cleanupErr: any) {
@@ -216,7 +216,7 @@ export const scanPageCountTask = task({
     // If this is a retry attempt (attempt > 1), release any dangling lock left by the previous crashed attempt of THIS run
     if (ctx && ctx.attempt && ctx.attempt.number > 1) {
       logger.info(`[scan-page-count] Attempt ${ctx.attempt.number}: clearing lock from previous attempt of this run`);
-      await releaseLock(lockKey, runToken).catch(() => {});
+      await releaseLock(lockKey, runToken).catch(() => { });
     }
 
     let lockToken: string | null = null;
@@ -316,7 +316,7 @@ export const scanPageCountTask = task({
             label,
             percent: pct,
             timestamp: Date.now(),
-          }).catch(() => {});
+          }).catch(() => { });
         },
         {
           previousCount: pageRecord.currentResults,
@@ -334,7 +334,7 @@ export const scanPageCountTask = task({
         label: "4. Saving snapshot & updating sparkline...",
         percent: 90,
         timestamp: Date.now(),
-      }).catch(() => {});
+      }).catch(() => { });
 
       // 4. Save results to database using existing state machine
       if (outcome.status === "success" || outcome.status === "unclear") {
@@ -360,7 +360,7 @@ export const scanPageCountTask = task({
           activeAds: outcome.results,
           percent: 100,
           timestamp: Date.now(),
-        }).catch(() => {});
+        }).catch(() => { });
       } else {
         // Mark as failed in trackedPages and queue
         const now = new Date();
@@ -391,20 +391,20 @@ export const scanPageCountTask = task({
           label: `Scan failed: ${outcome.failureReason || "unknown error"}`,
           percent: 100,
           timestamp: Date.now(),
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       // Explicitly dispose of browser resources immediately
       if (page && !page.isClosed()) {
-        await page.close().catch(() => {});
+        await page.close().catch(() => { });
         page = null;
       }
       if (context) {
-        await context.close().catch(() => {});
+        await context.close().catch(() => { });
         context = null;
       }
       if (browser) {
-        await browser.close().catch(() => {});
+        await browser.close().catch(() => { });
         browser = null;
       }
 
@@ -429,7 +429,7 @@ export const scanPageCountTask = task({
           updatedAt: now,
         })
         .where(eq(trackedPages.id, pageRecord.id))
-        .catch(() => {});
+        .catch(() => { });
 
       await db
         .update(queue)
@@ -439,33 +439,29 @@ export const scanPageCountTask = task({
           failureReason: taskErr?.message || "task_exception",
         })
         .where(and(eq(queue.trackedPageId, pageRecord.id), inArray(queue.status, ["pending", "running"])))
-        .catch(() => {});
+        .catch(() => { });
 
       throw taskErr;
     } finally {
       if (page && !page.isClosed()) {
-        await page.close().catch(() => {});
+        await page.close().catch(() => { });
       }
       if (context) {
-        await context.close().catch(() => {});
+        await context.close().catch(() => { });
       }
       if (browser) {
-        await browser.close().catch(() => {});
+        await browser.close().catch(() => { });
       }
       // Release distributed lock
       if (lockToken) {
-        await releaseLock(lockKey, lockToken).catch(() => {});
+        await releaseLock(lockKey, lockToken).catch(() => { });
       }
 
       // Invalidate Upstash cache for workspace so UI reflects fresh counts
       if (pageRecord.workspaceId) {
         const canonicalKey = (pageRecord.pageId || pageRecord.id).toLowerCase();
         await Promise.allSettled([
-          deleteCached(`cache:stats:${pageRecord.workspaceId}`),
-          deleteByPrefix(`cache:pages:${pageRecord.workspaceId}:`),
-          deleteByPrefix(`cache:products:${pageRecord.workspaceId}:`),
-          deleteByPrefix(`cache:fresh_winners:${pageRecord.workspaceId}:`),
-          deleteByPrefix(`cache:spy_ads:${pageRecord.workspaceId}:`),
+          invalidateWorkspaceEntities(pageRecord.workspaceId),
           deleteByPrefix(`cache:brand:${pageRecord.workspaceId}:${canonicalKey}:`),
         ]);
       }
@@ -634,7 +630,7 @@ export const dispatchGithubWorkerTask = task({
   },
 });
 
-export interface RefreshAdMediaPayload extends RefreshAdMediaOptions {}
+export interface RefreshAdMediaPayload extends RefreshAdMediaOptions { }
 
 /**
  * Task: refreshAdMediaTask
@@ -664,7 +660,7 @@ export const refreshAdMediaTask = task({
   },
 });
 
-export interface RecheckProductLinkedAdsPayload extends RecheckProductLinkedAdsOptions {}
+export interface RecheckProductLinkedAdsPayload extends RecheckProductLinkedAdsOptions { }
 
 /**
  * Task: recheckProductLinkedAdsTask

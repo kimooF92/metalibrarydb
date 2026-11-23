@@ -84,18 +84,21 @@ async function sendBroadcastEvent(event: string, payload: any): Promise<void> {
 
 /**
  * Broadcasts a live micro-step progress event over Supabase Realtime.
- * Also persists to Upstash Redis for instant cold-load hydration (zero DB WAL overhead).
+ * Selectively persists milestone states (started / completed / failed) to Upstash Redis
+ * for instant cold-load hydration while eliminating high-frequency intermediate write commands.
  */
 export async function broadcastScanStep(payload: ScanStepBroadcastPayload): Promise<void> {
-  // 1. Dual-write to Redis cache for instant hydration on page reloads (TTL: 120s)
+  // 1. Selective persistence to Redis: only record major milestones to conserve Upstash commands.
+  // All intermediate micro-steps (navigating, settling, extracting) stream directly over Supabase Realtime.
   try {
     if (payload.pageId) {
-      if (payload.step === "completed" || payload.step === "failed") {
-        // Keep completed/failed status briefly so UI can show success state, then expire
+      const isTerminal = payload.step === "completed" || payload.step === "failed";
+      const isStart = payload.step === "launching";
+
+      if (isTerminal) {
         await setCached(`scan_step:${payload.pageId}`, payload, 30);
-      } else {
+      } else if (isStart) {
         await setCached(`scan_step:${payload.pageId}`, payload, 120);
-        // Also track the active scan pointer
         await setCached(`active_scan_job`, payload, 120);
       }
     }
@@ -103,7 +106,7 @@ export async function broadcastScanStep(payload: ScanStepBroadcastPayload): Prom
     // Non-blocking cache warning
   }
 
-  // 2. Broadcast over Supabase Realtime channel
+  // 2. Broadcast over Supabase Realtime channel (zero database WAL, zero Redis commands)
   await sendBroadcastEvent(SCAN_STEP_EVENT, payload);
 }
 

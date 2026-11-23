@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { ads, scrapedProducts } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { deleteByPrefix, deleteCached } from "@/lib/cache-service";
+import { deleteByPrefix, invalidateWorkspaceEntities } from "@/lib/cache-service";
 
 /**
  * Extracts numeric Meta Page ID from a string, URL, or identifier
@@ -96,7 +96,7 @@ export async function updateProduct(
     try {
       const parsed = new URL(url.startsWith("http") ? url : `https://${url}`);
       updateData.domain = parsed.hostname.replace(/^www\./, "");
-    } catch {}
+    } catch { }
   }
 
   if (mainImageUrl !== undefined) {
@@ -140,12 +140,12 @@ export async function updateProduct(
   if (supplierUrls !== undefined) {
     updateData.supplierUrls = Array.isArray(supplierUrls)
       ? Array.from(
-          new Set(
-            supplierUrls
-              .filter((u: any) => typeof u === "string" && u.trim().length > 0)
-              .map((u: string) => u.trim())
-          )
+        new Set(
+          supplierUrls
+            .filter((u: any) => typeof u === "string" && u.trim().length > 0)
+            .map((u: string) => u.trim())
         )
+      )
       : [];
   }
 
@@ -178,9 +178,7 @@ export async function updateProduct(
   if (workspaceId) {
     const brandKey = (updatedProduct?.domain || "").toLowerCase();
     await Promise.allSettled([
-      deleteByPrefix(`cache:products:${workspaceId}:`),
-      deleteByPrefix(`cache:spy_ads:${workspaceId}:`),
-      deleteCached(`cache:stats:${workspaceId}`),
+      invalidateWorkspaceEntities(workspaceId, ["products", "spy_ads"]),
       brandKey ? deleteByPrefix(`cache:brand:${workspaceId}:${brandKey}:`) : Promise.resolve(),
     ]);
   }
@@ -218,9 +216,7 @@ export async function deleteProduct(id: string, workspaceId: string) {
   if (workspaceId) {
     const brandKey = (deletedProduct?.domain || "").toLowerCase();
     await Promise.allSettled([
-      deleteByPrefix(`cache:products:${workspaceId}:`),
-      deleteByPrefix(`cache:spy_ads:${workspaceId}:`),
-      deleteCached(`cache:stats:${workspaceId}`),
+      invalidateWorkspaceEntities(workspaceId, ["products", "spy_ads"]),
       brandKey ? deleteByPrefix(`cache:brand:${workspaceId}:${brandKey}:`) : Promise.resolve(),
     ]);
   }

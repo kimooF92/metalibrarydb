@@ -41,15 +41,27 @@ test("checkRateLimit fails open when limiter is null", async () => {
   assert.equal(res.retryAfterSeconds, 0);
 });
 
-test("rateLimitResponse formats HTTP 429 correctly", async () => {
-  const res = rateLimitResponse(45, "Custom rate limit message");
-  assert.equal(res.status, 429);
-  assert.equal(res.headers.get("Retry-After"), "45");
-  const data = await res.json();
-  assert.equal(data.success, false);
-  assert.equal(data.retryAfter, 45);
-  assert.equal(data.error, "Custom rate limit message");
+test("createMemoryLimiter enforces in-memory rate limiting without Redis", async () => {
+  const { createMemoryLimiter } = await import("./ratelimit");
+  const memLimiter = createMemoryLimiter(2, 5000);
+
+  const ip = "192.0.2.1";
+  const r1 = await checkRateLimit(memLimiter, ip);
+  assert.equal(r1.success, true);
+  assert.equal(r1.remaining, 1);
+
+  const r2 = await checkRateLimit(memLimiter, ip);
+  assert.equal(r2.success, true);
+  assert.equal(r2.remaining, 0);
+
+  const r3 = await checkRateLimit(memLimiter, ip);
+  assert.equal(r3.success, false);
+
+  await resetRateLimit(memLimiter, ip);
+  const r4 = await checkRateLimit(memLimiter, ip);
+  assert.equal(r4.success, true);
 });
+
 
 test("live rate limiting works with test limiter and reset", async () => {
   const testLimiter = createLimiter(2, "10 s", "rl:test:suite", "fixed");

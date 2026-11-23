@@ -11,7 +11,7 @@ import {
   activityNotifications,
 } from "@/db/schema";
 import { eq, and, sql, desc, asc, inArray, isNotNull, ne } from "drizzle-orm";
-import { getCached, setCached, deleteCached } from "@/lib/cache-service";
+import { getCached, setCached, deleteCached, getEntityCacheVersion } from "@/lib/cache-service";
 import { classifyScalingPattern } from "@/lib/scaling-classifier";
 import { resolveTimezone, getStartOfTodaySql } from "@/lib/timezone";
 
@@ -36,7 +36,8 @@ export async function fetchDashboardOverview(options: FetchDashboardOverviewOpti
     countryCode,
   });
 
-  const cacheKey = `cache:dashboard:overview:${workspaceId}:${userTz}`;
+  const cacheVersion = await getEntityCacheVersion(workspaceId, "dashboard:overview");
+  const cacheKey = `cache:dashboard:overview:${workspaceId}:v${cacheVersion}:${userTz}`;
   if (!forceRefresh) {
     const cached = await getCached<Record<string, unknown>>(cacheKey);
     if (cached) {
@@ -715,7 +716,7 @@ export async function fetchDashboardOverview(options: FetchDashboardOverviewOpti
         const rescuedIdSet = new Set(rescuedRows.map((r: any) => r.id));
         scanningCount = Math.max(0, scanningCount - rescuedCount);
         activeScanningIds = activeScanningIds.filter((id) => !rescuedIdSet.has(id));
-        deleteCached(`cache:stats:${workspaceId}`).catch(() => {});
+        deleteCached(`cache:stats:${workspaceId}`).catch(() => { });
       }
     } catch (rescueErr) {
       console.warn("[Dashboard Overview Service] Self-healing orphan rescue warning:", rescueErr);
@@ -737,10 +738,10 @@ export async function fetchDashboardOverview(options: FetchDashboardOverviewOpti
     successRate:
       (brandStatsRows[0]?.completedCount || 0) + (brandStatsRows[0]?.failedCount || 0) > 0
         ? Math.round(
-            ((brandStatsRows[0]?.completedCount || 0) /
-              ((brandStatsRows[0]?.completedCount || 0) + (brandStatsRows[0]?.failedCount || 0))) *
-              100
-          )
+          ((brandStatsRows[0]?.completedCount || 0) /
+            ((brandStatsRows[0]?.completedCount || 0) + (brandStatsRows[0]?.failedCount || 0))) *
+          100
+        )
         : 100,
     queuePending: queueMap.pending,
     queueRunning: queueMap.running,

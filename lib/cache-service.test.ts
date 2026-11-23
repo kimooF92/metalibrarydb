@@ -5,6 +5,7 @@ import {
   getManyCached,
   getEntityCacheVersion,
   bumpEntityCacheVersion,
+  invalidateWorkspaceEntities,
   setCached,
   deleteCached,
   deleteByPrefix,
@@ -376,8 +377,15 @@ test("Upstash Cache & Lock Service Suite", async (t) => {
       // 3. Next read reflects new version
       const readAfterBump = await getEntityCacheVersion(wsId, entity);
       assert.strictEqual(readAfterBump, bumpedVersion, "Version read after bump should match incremented value");
+
+      // 4. Test invalidateWorkspaceEntities
+      await invalidateWorkspaceEntities(wsId, ["pages", "products", "spy_ads"]);
+      const afterInvalidate = await getEntityCacheVersion(wsId, "pages");
+      assert.strictEqual(afterInvalidate, bumpedVersion + 1, "invalidateWorkspaceEntities must advance version");
     } finally {
       await deleteCached(`v:${entity}:${wsId}`);
+      await deleteCached(`v:products:${wsId}`);
+      await deleteCached(`v:spy_ads:${wsId}`);
     }
   });
 });
