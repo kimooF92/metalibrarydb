@@ -73,6 +73,11 @@ jobs:
           APIFY_API_TOKEN_3: ${{ secrets.APIFY_API_TOKEN_3 }}
           APIFY_API_TOKEN_4: ${{ secrets.APIFY_API_TOKEN_4 }}
           APIFY_API_TOKEN_5: ${{ secrets.APIFY_API_TOKEN_5 }}
+          APIFY_API_TOKEN_6: ${{ secrets.APIFY_API_TOKEN_6 }}
+          APIFY_API_TOKEN_7: ${{ secrets.APIFY_API_TOKEN_7 }}
+          APIFY_API_TOKEN_8: ${{ secrets.APIFY_API_TOKEN_8 }}
+          APIFY_API_TOKEN_9: ${{ secrets.APIFY_API_TOKEN_9 }}
+          APIFY_API_TOKEN_10: ${{ secrets.APIFY_API_TOKEN_10 }}
           APIFY_ACTOR_ID: ${{ secrets.APIFY_ACTOR_ID }}
           FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
           # Backblaze B2 Media Storage (optional)
