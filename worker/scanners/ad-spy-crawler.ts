@@ -1,4 +1,4 @@
-import { Page, Response } from "playwright";
+import { Page, Response, Route } from "playwright";
 import { db } from "../../db";
 import { ads, adObservations, trackedPages, scanHistory, brandDomains, scrapedProducts } from "../../db/schema";
 import { eq, sql, and, desc, ne, isNull, or } from "drizzle-orm";
@@ -11,16 +11,26 @@ import { linkAndAutoScrapeProduct } from "../../lib/product-ingest";
 import { selectBestProductCandidateUrl } from "../../lib/discovery-product-selector";
 import { processAdMedia } from "./media-pipeline";
 import { ExtractedAdData, SpyScanOutcome } from "./scanner-types";
+import {
+  initScanCheckpoint,
+  appendScanCheckpoint,
+  readScanCheckpoint,
+  cleanupScanCheckpoint,
+} from "./checkpoint-service";
 import { isQStashConfigured, dispatchBatchToQStash } from "../../lib/qstash";
 import type { BatchIngestPayload } from "../../lib/qstash-types";
 
 export type { ExtractedAdData, SpyScanOutcome };
 
 // Configurable constants
-const MAX_SCROLL_ATTEMPTS = parseInt(process.env.SPY_MAX_SCROLL_ATTEMPTS || "50", 10);
+const MAX_SCROLL_ATTEMPTS = parseInt(process.env.SPY_MAX_SCROLL_ATTEMPTS || "250", 10);
+const MAX_INGEST_CAP = parseInt(process.env.SPY_MAX_INGEST_CAP || "2000", 10);
+const CHECKPOINT_FLUSH_INTERVAL = 100;
+const INGEST_CHUNK_SIZE = 100;
 const NO_PROGRESS_CAP = parseInt(process.env.SPY_NO_PROGRESS_CAP || "6", 10);
 const SCROLL_WAIT_MS = parseInt(process.env.SPY_SCROLL_WAIT_MS || "3000", 10);
 const RESPONSE_TIMEOUT_MS = parseInt(process.env.PAGE_TIMEOUT || "30000", 10);
+const ABORTED_RESOURCE_TYPES = new Set(["image", "media", "font", "imageset"]);
 
 /**
  * Extract normalized ad attributes from Meta GraphQL payload node
@@ -143,10 +153,26 @@ export function parseAdGraphQLNode(node: any): ExtractedAdData | null {
   }
 }
 
+function upsertExtractedAd(
+  collectedMap: Map<string, ExtractedAdData>,
+  parsed: ExtractedAdData,
+  onNewAd?: (ad: ExtractedAdData) => void
+) {
+  const isNew = !collectedMap.has(parsed.adArchiveId);
+  collectedMap.set(parsed.adArchiveId, parsed);
+  if (isNew && onNewAd) {
+    onNewAd(parsed);
+  }
+}
+
 /**
  * Traverse JSON object recursively to find ad array nodes
  */
-function extractAdsFromJSON(obj: any, collectedMap: Map<string, ExtractedAdData>) {
+function extractAdsFromJSON(
+  obj: any,
+  collectedMap: Map<string, ExtractedAdData>,
+  onNewAd?: (ad: ExtractedAdData) => void
+) {
   if (!obj || typeof obj !== "object") return;
 
   // Pattern A: AdArchiveSearchResults / ad_archive_nodes / results
@@ -154,9 +180,9 @@ function extractAdsFromJSON(obj: any, collectedMap: Map<string, ExtractedAdData>
     for (const item of obj) {
       if (item && typeof item === "object" && (item.adArchiveID || item.ad_archive_id || item.snapshot)) {
         const parsed = parseAdGraphQLNode(item);
-        if (parsed) collectedMap.set(parsed.adArchiveId, parsed);
+        if (parsed) upsertExtractedAd(collectedMap, parsed, onNewAd);
       } else {
-        extractAdsFromJSON(item, collectedMap);
+        extractAdsFromJSON(item, collectedMap, onNewAd);
       }
     }
     return;
@@ -171,11 +197,11 @@ function extractAdsFromJSON(obj: any, collectedMap: Map<string, ExtractedAdData>
         if (targetNode && typeof targetNode === "object" && Array.isArray(targetNode.collated_results)) {
           for (const subItem of targetNode.collated_results) {
             const parsed = parseAdGraphQLNode(subItem);
-            if (parsed) collectedMap.set(parsed.adArchiveId, parsed);
+            if (parsed) upsertExtractedAd(collectedMap, parsed, onNewAd);
           }
         } else {
           const parsed = parseAdGraphQLNode(targetNode);
-          if (parsed) collectedMap.set(parsed.adArchiveId, parsed);
+          if (parsed) upsertExtractedAd(collectedMap, parsed, onNewAd);
         }
       }
     }
@@ -184,7 +210,168 @@ function extractAdsFromJSON(obj: any, collectedMap: Map<string, ExtractedAdData>
   // Recurse into object properties (allow full traversal)
   for (const key of Object.keys(obj)) {
     if (typeof obj[key] === "object") {
-      extractAdsFromJSON(obj[key], collectedMap);
+      extractAdsFromJSON(obj[key], collectedMap, onNewAd);
+    }
+  }
+}
+
+function serializeStartDate(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return isNaN(value.getTime()) ? null : value.toISOString();
+  }
+  const parsed = new Date(value);
+  return isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+/**
+ * Dispatches extracted ads to the ingestion endpoint. Uses a single QStash
+ * message for <=100 ads and sequential in-process `handleBatchIngest` chunks
+ * for larger crawls to preserve commit order and full-set reconciliation.
+ */
+async function dispatchIngestBatches(params: {
+  creativeScanId: string;
+  trackedPageId: string;
+  resolvedPageId: string | null;
+  resolvedPageName: string | null;
+  fallbackDisplayName: string | null;
+  extractedPageIds: string[];
+  metaReportedCount: number | null;
+  observedAtIso: string;
+  scanQuality: "complete" | "partial";
+  adsList: ExtractedAdData[];
+}): Promise<void> {
+  const {
+    creativeScanId,
+    trackedPageId,
+    resolvedPageId,
+    resolvedPageName,
+    fallbackDisplayName,
+    extractedPageIds,
+    metaReportedCount,
+    observedAtIso,
+    scanQuality,
+    adsList,
+  } = params;
+
+  const cappedAds = adsList.slice(0, MAX_INGEST_CAP);
+  const mappedAds = cappedAds.map((a) => ({
+    adArchiveId: a.adArchiveId,
+    pageId: a.pageId && !a.pageId.includes("-") ? a.pageId : resolvedPageId || extractedPageIds[0] || "0",
+    pageName: a.pageName || resolvedPageName || fallbackDisplayName || null,
+    startedRunningOn: serializeStartDate(a.startedRunningOn),
+    caption: a.caption || null,
+    title: a.title || null,
+    ctaText: a.ctaText || null,
+    linkUrl: a.linkUrl || null,
+    mediaType: (a.mediaType as any) || "unknown",
+    mediaUrls: a.mediaUrls || [],
+    thumbnailUrl: a.thumbnailUrl || null,
+    duplicationCount: a.duplicationCount || 1,
+    collationId: a.collationId || null,
+    isActive: a.isActive ?? true,
+  }));
+
+  const totalBatches = Math.max(1, Math.ceil(mappedAds.length / INGEST_CHUNK_SIZE));
+  const fallbackPageId = resolvedPageId || (extractedPageIds[0] ?? "0");
+  const fallbackPageName = resolvedPageName || fallbackDisplayName || null;
+
+  if (totalBatches === 1) {
+    const singlePayload: BatchIngestPayload = {
+      creativeScanId,
+      trackedPageId,
+      pageId: fallbackPageId,
+      pageName: fallbackPageName,
+      totalExtractedCount: mappedAds.length,
+      metaReportedCount,
+      ads: mappedAds,
+      observedAt: observedAtIso,
+      scanQuality,
+      batchIndex: 0,
+      totalBatches: 1,
+      isFinalBatch: true,
+    };
+
+    if (isQStashConfigured()) {
+      console.log(`[Spy Scanner] 🚀 Dispatching batch of ${singlePayload.ads.length} ads to QStash for decoupled ingestion...`);
+      const dispatchRes = await dispatchBatchToQStash(singlePayload);
+      if (dispatchRes.success) {
+        console.log(`[Spy Scanner] ✅ QStash batch message enqueued (Message ID: ${dispatchRes.messageId})`);
+        return;
+      }
+      console.warn(`[Spy Scanner] ⚠️ QStash dispatch error (${dispatchRes.error}); falling back to direct batch handler...`);
+    }
+
+    console.log(`[Spy Scanner] 🔄 Executing local batch ingestion handler...`);
+    const { handleBatchIngest } = await import("../../app/api/qstash/ingest-scan-batch/route");
+    const localReq = new Request("http://localhost:3000/api/qstash/ingest-scan-batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(singlePayload),
+    });
+    const res = await handleBatchIngest(localReq);
+    if (!res.ok) {
+      throw new Error(`Batch ingestion failed with HTTP ${res.status}`);
+    }
+    return;
+  }
+
+  console.log(
+    `[Spy Scanner] 📦 Multi-batch ingestion: processing ${mappedAds.length} ads sequentially in ${totalBatches} chunks of ${INGEST_CHUNK_SIZE}...`
+  );
+  const { handleBatchIngest } = await import("../../app/api/qstash/ingest-scan-batch/route");
+
+  for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+    const chunk = mappedAds.slice(
+      batchIndex * INGEST_CHUNK_SIZE,
+      (batchIndex + 1) * INGEST_CHUNK_SIZE
+    );
+    const isFinalBatch = batchIndex === totalBatches - 1;
+    const chunkPayload: BatchIngestPayload = {
+      creativeScanId,
+      trackedPageId,
+      pageId: fallbackPageId,
+      pageName: fallbackPageName,
+      totalExtractedCount: mappedAds.length,
+      metaReportedCount,
+      ads: chunk,
+      observedAt: observedAtIso,
+      scanQuality,
+      batchIndex,
+      totalBatches,
+      isFinalBatch,
+    };
+
+    let lastErr: Error | null = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const localReq = new Request("http://localhost:3000/api/qstash/ingest-scan-batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(chunkPayload),
+        });
+        const res = await handleBatchIngest(localReq);
+        if (res.ok) {
+          lastErr = null;
+          break;
+        }
+        const errBody = await res.text().catch(() => "");
+        const err = new Error(`Chunk ${batchIndex + 1}/${totalBatches} failed (HTTP ${res.status}): ${errBody}`);
+        if (res.status < 500) {
+          throw err;
+        }
+        lastErr = err;
+      } catch (err: any) {
+        lastErr = err instanceof Error ? err : new Error(String(err));
+      }
+
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+      }
+    }
+
+    if (lastErr) {
+      throw lastErr;
     }
   }
 }
@@ -204,9 +391,36 @@ export async function scanAdCreatives(
   });
   const collectedAds = new Map<string, ExtractedAdData>();
   const canonicalPageIdsFromFilter = new Map<string, string>(); // pageId -> displayName
+  const checkpointedIds = new Set<string>();
+  let pendingCheckpointBatch: ExtractedAdData[] = [];
   let hasCaptchaOrBlock = false;
   let isRateLimited = false;
   let graphqlResponseReceived = false;
+  let routeAttached = false;
+
+  initScanCheckpoint(creativeScanId);
+
+  const flushPendingCheckpoint = () => {
+    if (pendingCheckpointBatch.length === 0) return;
+    appendScanCheckpoint(creativeScanId, pendingCheckpointBatch);
+    pendingCheckpointBatch = [];
+  };
+
+  const onNewAdCaptured = (ad: ExtractedAdData) => {
+    if (checkpointedIds.has(ad.adArchiveId)) return;
+    checkpointedIds.add(ad.adArchiveId);
+    pendingCheckpointBatch.push(ad);
+    if (pendingCheckpointBatch.length >= CHECKPOINT_FLUSH_INTERVAL) {
+      flushPendingCheckpoint();
+    }
+  };
+
+  const mediaAbortHandler = (route: Route) => {
+    if (ABORTED_RESOURCE_TYPES.has(route.request().resourceType())) {
+      return route.abort();
+    }
+    return route.continue();
+  };
 
   // Derive normalized domain segments from the search query
   let queryDomainSegments: string[] = [];
@@ -249,7 +463,7 @@ export async function scanAdCreatives(
             return;
           }
         }
-        extractAdsFromJSON(jsonObj, collectedAds);
+        extractAdsFromJSON(jsonObj, collectedAds, onNewAdCaptured);
         graphqlResponseReceived = true;
 
         const extractFilterPages = (o: any) => {
@@ -327,6 +541,13 @@ export async function scanAdCreatives(
   page.on("response", handleResponse);
 
   try {
+    try {
+      await page.route("**/*", mediaAbortHandler);
+      routeAttached = true;
+    } catch {
+      // Non-fatal if page route registration fails
+    }
+
     console.log(`[Spy Scanner] Navigating to: ${targetUrl}`);
     const navStartTime = Date.now();
     await page.goto(targetUrl, {
@@ -389,11 +610,17 @@ export async function scanAdCreatives(
     let scrollAttempts = 0;
     let noProgressCount = 0;
     let lastCollectedCount = collectedAds.size;
-    const scrollCap = totalTargetAds !== null ? Math.min(MAX_SCROLL_ATTEMPTS, Math.max(5, Math.ceil(totalTargetAds / 12) + 3)) : MAX_SCROLL_ATTEMPTS;
+    const cappedTarget = totalTargetAds !== null ? Math.min(totalTargetAds, MAX_INGEST_CAP) : null;
+    const scrollCap = cappedTarget !== null ? Math.min(MAX_SCROLL_ATTEMPTS, Math.max(5, Math.ceil(cappedTarget / 12) + 5)) : MAX_SCROLL_ATTEMPTS;
 
-    console.log(`[Spy Scanner] Beginning scroll loop (max ${scrollCap} attempts, no progress limit: ${NO_PROGRESS_CAP})...`);
+    console.log(`[Spy Scanner] Beginning scroll loop (max ${scrollCap} attempts, ingest cap: ${MAX_INGEST_CAP}, no progress limit: ${NO_PROGRESS_CAP})...`);
 
     while (scrollAttempts < scrollCap && noProgressCount < NO_PROGRESS_CAP) {
+      if (collectedAds.size >= MAX_INGEST_CAP) {
+        console.log(`[Spy Scanner] Reached MAX_INGEST_CAP (${collectedAds.size}/${MAX_INGEST_CAP}). Stopping scroll.`);
+        break;
+      }
+
       scrollAttempts++;
 
       await page.evaluate(() => {
@@ -415,12 +642,18 @@ export async function scanAdCreatives(
         noProgressCount++;
       }
 
+      if (currentCount >= MAX_INGEST_CAP) {
+        console.log(`[Spy Scanner] Reached MAX_INGEST_CAP (${currentCount}/${MAX_INGEST_CAP}). Stopping scroll.`);
+        break;
+      }
+
       if (totalTargetAds !== null && currentCount >= totalTargetAds) {
         console.log(`[Spy Scanner] Reached target ad count (${currentCount}/${totalTargetAds}). Stopping scroll.`);
         break;
       }
     }
 
+    flushPendingCheckpoint();
     console.log(`[Spy Scanner] Scroll loop completed: ${collectedAds.size} ad creatives captured in ${scrollAttempts} scrolls.`);
 
     // 3. Fallback: If no GraphQL ads were captured, scrape from DOM elements
@@ -436,8 +669,9 @@ export async function scanAdCreatives(
       console.log("[Spy Scanner] No GraphQL ad payloads captured. Attempting DOM element extraction fallback...");
       const domAds = await extractAdsFromDOM(page, fallbackNumericPageId);
       for (const domAd of domAds) {
-        collectedAds.set(domAd.adArchiveId, domAd);
+        upsertExtractedAd(collectedAds, domAd, onNewAdCaptured);
       }
+      flushPendingCheckpoint();
       console.log(`[Spy Scanner] DOM extraction recovered ${domAds.length} ad(s).`);
     }
 
@@ -570,68 +804,33 @@ export async function scanAdCreatives(
           ? (trackedPageRecord as any).currentResults
           : null;
 
+    const capturedCount = Math.min(collectedAds.size, MAX_INGEST_CAP);
     let finalStatus: "completed" | "partial" = "partial";
     if (expectedCount !== null) {
-      // Authoritative complete ONLY if we captured >= 80% of expected active ads (capped at 100 max per scan)
-      const threshold = Math.min(expectedCount, 100) * 0.8;
-      finalStatus = collectedAds.size >= threshold ? "completed" : "partial";
+      // Authoritative complete ONLY if we captured >= 80% of expected active ads (bounded by MAX_INGEST_CAP)
+      const threshold = Math.min(expectedCount, MAX_INGEST_CAP) * 0.8;
+      finalStatus = capturedCount >= threshold ? "completed" : "partial";
     } else {
       // When no prior or DOM count was available:
       // A stall (noProgressCount >= NO_PROGRESS_CAP) on a small collection (< 15) is treated as partial
-      finalStatus = noProgressCount >= NO_PROGRESS_CAP && collectedAds.size >= 15 ? "completed" : "partial";
+      finalStatus = noProgressCount >= NO_PROGRESS_CAP && capturedCount >= 15 ? "completed" : "partial";
     }
 
-    // 5. Decoupled Page-Batch Ingestion via Upstash QStash
-    // Consolidates all 20-50 extracted ads into 1 atomic QStash message, preserving the 1k/day free tier quota.
-    const batchPayload: BatchIngestPayload = {
+    // 5. Decoupled Page-Batch Ingestion (1 atomic QStash message for <=100 ads; sequential chunked ingest for larger crawls)
+    await dispatchIngestBatches({
       creativeScanId,
       trackedPageId,
-      pageId: resolvedPageId || (extractedPageIds[0] ?? "0"),
-      pageName: resolvedPageName || trackedPageRecord?.displayName || null,
-      totalExtractedCount: collectedAds.size,
+      resolvedPageId,
+      resolvedPageName,
+      fallbackDisplayName: trackedPageRecord?.displayName || null,
+      extractedPageIds,
       metaReportedCount: totalTargetAds,
-      ads: Array.from(collectedAds.values()).slice(0, 100).map((a) => ({
-        adArchiveId: a.adArchiveId,
-        pageId: (a.pageId && !a.pageId.includes("-")) ? a.pageId : (resolvedPageId || extractedPageIds[0] || "0"),
-        pageName: a.pageName || resolvedPageName || trackedPageRecord?.displayName || null,
-        startedRunningOn: a.startedRunningOn ? a.startedRunningOn.toISOString() : null,
-        caption: a.caption || null,
-        title: a.title || null,
-        ctaText: a.ctaText || null,
-        linkUrl: a.linkUrl || null,
-        mediaType: (a.mediaType as any) || "unknown",
-        mediaUrls: a.mediaUrls || [],
-        thumbnailUrl: a.thumbnailUrl || null,
-        duplicationCount: a.duplicationCount || 1,
-        collationId: a.collationId || null,
-        isActive: a.isActive ?? true,
-      })),
-      observedAt: now.toISOString(),
+      observedAtIso: now.toISOString(),
       scanQuality: finalStatus === "completed" ? "complete" : "partial",
-    };
+      adsList: Array.from(collectedAds.values()),
+    });
 
-    let batchDispatched = false;
-    if (isQStashConfigured()) {
-      console.log(`[Spy Scanner] 🚀 Dispatching batch of ${batchPayload.ads.length} ads to QStash for decoupled ingestion...`);
-      const dispatchRes = await dispatchBatchToQStash(batchPayload);
-      if (dispatchRes.success) {
-        batchDispatched = true;
-        console.log(`[Spy Scanner] ✅ QStash batch message enqueued (Message ID: ${dispatchRes.messageId})`);
-      } else {
-        console.warn(`[Spy Scanner] ⚠️ QStash dispatch error (${dispatchRes.error}); falling back to direct batch handler...`);
-      }
-    }
-
-    if (!batchDispatched) {
-      console.log(`[Spy Scanner] 🔄 Executing local batch ingestion handler...`);
-      const { handleBatchIngest } = await import("../../app/api/qstash/ingest-scan-batch/route");
-      const localReq = new Request("http://localhost:3000/api/qstash/ingest-scan-batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(batchPayload),
-      });
-      await handleBatchIngest(localReq);
-    }
+    cleanupScanCheckpoint(creativeScanId);
 
     let resolvedProfilePicUrl: string | null = null;
     for (const ad of collectedAds.values()) {
@@ -835,14 +1034,18 @@ export async function scanAdCreatives(
 
       if (collectedAds.size > 0 && resolvedPageId) {
         try {
-          await db.execute(sql`
-            UPDATE ads
-            SET page_id = ${resolvedPageId},
-                page_name = COALESCE(NULLIF(${resolvedPageName || null}, ''), page_name),
-                updated_at = NOW()
-            WHERE (page_id = '0' OR page_id IS NULL OR page_id = '')
-              AND ad_archive_id IN (${sql.join(Array.from(collectedAds.keys()).map((id) => sql`${id}`), sql`, `)})
-          `);
+          const allArchiveIds = Array.from(collectedAds.keys()).slice(0, MAX_INGEST_CAP);
+          for (let i = 0; i < allArchiveIds.length; i += 500) {
+            const idSlice = allArchiveIds.slice(i, i + 500);
+            await db.execute(sql`
+              UPDATE ads
+              SET page_id = ${resolvedPageId},
+                  page_name = COALESCE(NULLIF(${resolvedPageName || null}, ''), page_name),
+                  updated_at = NOW()
+              WHERE (page_id = '0' OR page_id IS NULL OR page_id = '')
+                AND ad_archive_id IN (${sql.join(idSlice.map((id) => sql`${id}`), sql`, `)})
+            `);
+          }
         } catch (adErr) {
           console.warn("[Spy Scanner] Non-fatal error backfilling ads with resolvedPageId:", adErr);
         }
@@ -887,10 +1090,10 @@ export async function scanAdCreatives(
 
     return {
       status: finalStatus,
-      extractedCount: collectedAds.size,
+      extractedCount: capturedCount,
       newProductsCount: 0,
       extractedPageIds,
-      outcomeDetails: `Successfully extracted and dispatched ${collectedAds.size} ad creatives (decoupled page-batch ingestion).`,
+      outcomeDetails: `Successfully extracted and dispatched ${capturedCount} ad creatives (decoupled page-batch ingestion).`,
     };
   } catch (err: any) {
     const isTimeout =
@@ -898,14 +1101,107 @@ export async function scanAdCreatives(
       /timeout|timed\s*out/i.test(err?.message || "");
     const failureReason = isTimeout ? "timeout" : "parse_error";
 
+    // Attempt partial checkpoint recovery so deep crawls are not lost on tab crash/timeout
+    flushPendingCheckpoint();
+    const { ads: diskAds, skippedCorruptLines } = readScanCheckpoint(creativeScanId);
+    if (skippedCorruptLines > 0) {
+      console.warn(`[Spy Scanner] ⚠️ Skipped ${skippedCorruptLines} corrupt checkpoint line(s) during recovery.`);
+    }
+
+    const mergedRecovered = new Map<string, ExtractedAdData>();
+    for (const ad of diskAds) {
+      mergedRecovered.set(ad.adArchiveId, ad);
+    }
+    for (const [id, ad] of collectedAds.entries()) {
+      mergedRecovered.set(id, ad);
+    }
+
+    const recoveredList = Array.from(mergedRecovered.values()).slice(0, MAX_INGEST_CAP);
+    if (recoveredList.length > 0) {
+      console.warn(
+        `[Spy Scanner] 🛡️ Recovering ${recoveredList.length} checkpointed ad(s) after error (${err?.message || failureReason})...`
+      );
+      try {
+        if (!page.isClosed()) {
+          await page.close().catch(() => {});
+        }
+
+        const recoveredPageIdsSet = new Set<string>();
+        for (const pId of canonicalPageIdsFromFilter.keys()) {
+          recoveredPageIdsSet.add(pId);
+        }
+        for (const ad of recoveredList) {
+          if (ad.pageId && ad.pageId !== "0" && ad.pageId.trim() !== "") {
+            recoveredPageIdsSet.add(ad.pageId.trim());
+          }
+        }
+        const recoveredPageIds = Array.from(recoveredPageIdsSet);
+
+        let recoveredResolvedPageId =
+          pageRecord?.pageId && /^\d{6,25}$/.test(pageRecord.pageId.trim())
+            ? pageRecord.pageId.trim()
+            : null;
+        let recoveredResolvedPageName: string | null = null;
+
+        if (!recoveredResolvedPageId) {
+          for (const [pId, pName] of canonicalPageIdsFromFilter.entries()) {
+            if (/^\d{6,25}$/.test(pId.trim())) {
+              recoveredResolvedPageId = pId.trim();
+              recoveredResolvedPageName = pName;
+              break;
+            }
+          }
+        }
+        if (!recoveredResolvedPageId) {
+          for (const ad of recoveredList) {
+            if (ad.pageId && /^\d{6,25}$/.test(ad.pageId.trim())) {
+              recoveredResolvedPageId = ad.pageId.trim();
+              recoveredResolvedPageName = ad.pageName;
+              break;
+            }
+          }
+        }
+
+        await dispatchIngestBatches({
+          creativeScanId,
+          trackedPageId,
+          resolvedPageId: recoveredResolvedPageId,
+          resolvedPageName: recoveredResolvedPageName,
+          fallbackDisplayName: pageRecord?.displayName || null,
+          extractedPageIds: recoveredPageIds,
+          metaReportedCount: null,
+          observedAtIso: new Date().toISOString(),
+          scanQuality: "partial",
+          adsList: recoveredList,
+        });
+
+        cleanupScanCheckpoint(creativeScanId);
+        return {
+          status: "partial",
+          extractedCount: recoveredList.length,
+          newProductsCount: 0,
+          extractedPageIds: recoveredPageIds,
+          outcomeDetails: `Recovered and ingested ${recoveredList.length} partial ad creatives after interruption: ${err?.message || failureReason}`,
+        };
+      } catch (recoveryErr: any) {
+        console.error(
+          `[Spy Scanner] ❌ Partial checkpoint recovery dispatch failed (keeping checkpoint on disk):`,
+          recoveryErr?.message || recoveryErr
+        );
+      }
+    }
+
     return {
       status: "failed",
-      extractedCount: collectedAds.size,
+      extractedCount: recoveredList.length,
       newProductsCount: 0,
       failureReason,
       outcomeDetails: err.message || "Creative scan failed",
     };
   } finally {
     page.off("response", handleResponse);
+    if (routeAttached && !page.isClosed()) {
+      await page.unroute("**/*", mediaAbortHandler).catch(() => {});
+    }
   }
 }

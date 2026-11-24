@@ -123,3 +123,52 @@ test("parseResultCountFromText 3-tier precedence rules", () => {
   assert.equal(res5.status, "success");
   assert.equal(res5.results, 190);
 });
+
+test("checkpoint-service persists ads, survives corrupt tail lines, re-hydrates Dates, and cleans up", async () => {
+  const fs = await import("node:fs");
+  const {
+    initScanCheckpoint,
+    appendScanCheckpoint,
+    readScanCheckpoint,
+    cleanupScanCheckpoint,
+    getCheckpointPath,
+  } = await import("./scanners/checkpoint-service");
+
+  const testScanId = `unit-checkpoint-${Date.now()}`;
+  const checkpointFile = initScanCheckpoint(testScanId);
+
+  try {
+    const sampleDate = new Date("2026-10-15T12:00:00.000Z");
+    appendScanCheckpoint(testScanId, [
+      {
+        adArchiveId: "ad_001",
+        pageId: "123456",
+        pageName: "Brand One",
+        startedRunningOn: sampleDate,
+        caption: "Ad 1 caption",
+        title: "Ad 1 title",
+        ctaText: "Shop Now",
+        linkUrl: "https://example.com/p1",
+        mediaType: "image",
+        mediaUrls: ["https://cdn.example.com/1.jpg"],
+        thumbnailUrl: "https://cdn.example.com/1.jpg",
+        duplicationCount: 2,
+        collationId: null,
+        isActive: true,
+      },
+    ]);
+
+    // Simulate OOM SIGKILL leaving a truncated/corrupt JSON fragment on the last line
+    fs.appendFileSync(checkpointFile, '{"adArchiveId":"ad_002","caption":"truncat', "utf8");
+
+    const { ads, skippedCorruptLines } = readScanCheckpoint(testScanId);
+    assert.equal(ads.length, 1);
+    assert.equal(skippedCorruptLines, 1);
+    assert.equal(ads[0].adArchiveId, "ad_001");
+    assert.ok(ads[0].startedRunningOn instanceof Date, "startedRunningOn must be re-hydrated as Date");
+    assert.equal(ads[0].startedRunningOn?.toISOString(), sampleDate.toISOString());
+  } finally {
+    cleanupScanCheckpoint(testScanId);
+    assert.equal(fs.existsSync(getCheckpointPath(testScanId)), false, "Checkpoint file must be deleted after cleanup");
+  }
+});

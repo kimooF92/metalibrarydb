@@ -39,6 +39,9 @@ export const BatchIngestPayloadSchema = z.object({
   metaReportedCount: z.number().int().min(0).nullable().optional(),
   observedAt: z.string().default(() => new Date().toISOString()),
   scanQuality: z.enum(["complete", "partial", "unclear"]).default("partial"),
+  batchIndex: z.number().int().min(0).optional(),
+  totalBatches: z.number().int().min(1).optional(),
+  isFinalBatch: z.boolean().optional(),
 });
 
 export type BatchIngestPayload = z.infer<typeof BatchIngestPayloadSchema>;

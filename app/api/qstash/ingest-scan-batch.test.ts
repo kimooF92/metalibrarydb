@@ -189,17 +189,23 @@ describe("Batch Scan Ingestion API & Schema Suite (/api/qstash/ingest-scan-batch
     assert.strictEqual(data.error, "Tracked page not found");
   });
 
-  it("BatchIngestPayloadSchema defaults scanQuality to 'partial' when omitted", () => {
+  it("BatchIngestPayloadSchema defaults scanQuality to 'partial' when omitted and accepts optional chunk metadata", () => {
     const payload = {
       creativeScanId: validCreativeScanId,
       trackedPageId: validTrackedPageId,
       pageId: "12345678",
       ads: [],
+      batchIndex: 0,
+      totalBatches: 3,
+      isFinalBatch: false,
     };
     const parsed = BatchIngestPayloadSchema.safeParse(payload);
     assert.strictEqual(parsed.success, true);
     if (parsed.success) {
       assert.strictEqual(parsed.data.scanQuality, "partial");
+      assert.strictEqual(parsed.data.batchIndex, 0);
+      assert.strictEqual(parsed.data.totalBatches, 3);
+      assert.strictEqual(parsed.data.isFinalBatch, false);
     }
   });
 });

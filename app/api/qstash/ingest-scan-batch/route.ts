@@ -37,6 +37,9 @@ export async function handleBatchIngest(req: Request | NextRequest) {
       ads: batchAds,
       observedAt,
       metaReportedCount,
+      totalExtractedCount,
+      totalBatches,
+      isFinalBatch,
     } = parseResult.data;
 
     // 1. Authorize Scan & Page Relation (Derive workspaceId from DB to guarantee tenant isolation)
@@ -266,26 +269,62 @@ export async function handleBatchIngest(req: Request | NextRequest) {
     }
 
     const isAuthoritativeComplete = scanQuality === "complete";
+    const resolvedExtractedCount =
+      totalExtractedCount > 0 ? totalExtractedCount : uniqueAds.length;
+    const effectiveIsFinalBatch = isFinalBatch ?? true;
 
-    // 6. Update Scan Status (Strictly mark partial when crawl did not reach verified completion)
+    // 6. Update Scan Status (Keep 'running' on intermediate chunks; finalize only on final batch)
+    if (!effectiveIsFinalBatch) {
+      await db
+        .update(creativeScans)
+        .set({
+          extractedCount: resolvedExtractedCount,
+          outcomeDetails: `Ingesting batch chunk (${uniqueAds.length} ads in chunk, ${resolvedExtractedCount} total)`,
+        })
+        .where(eq(creativeScans.id, creativeScanId));
+
+      return NextResponse.json({
+        success: true,
+        creativeScanId,
+        ingestedCount: uniqueAds.length,
+        isFinalBatch: false,
+      });
+    }
+
     await db
       .update(creativeScans)
       .set({
         status: isAuthoritativeComplete ? "completed" : "partial",
-        extractedCount: uniqueAds.length,
+        extractedCount: resolvedExtractedCount,
         failureReason: null,
         outcomeDetails: isAuthoritativeComplete
-          ? `Scan completed with ${uniqueAds.length} ads ingested`
-          : `Partial scan batch ingested with ${uniqueAds.length} ads`,
+          ? `Scan completed with ${resolvedExtractedCount} ads ingested`
+          : `Partial scan batch ingested with ${resolvedExtractedCount} ads`,
         finishedAt: new Date(),
       })
       .where(eq(creativeScans.id, creativeScanId));
 
-    // 7. Delayed Archive Reconciliation (Safely runs ONLY on authoritative complete scans)
+    // 7. Delayed Archive Reconciliation (Safely runs ONLY on final authoritative complete scans)
     if (isAuthoritativeComplete) {
       const activeArchiveIds = new Set(
         uniqueAds.filter((a) => a.isActive).map((a) => a.adArchiveId)
       );
+      if ((totalBatches ?? 1) > 1) {
+        const allObservedRows = await db
+          .select({ adArchiveId: ads.adArchiveId })
+          .from(adObservations)
+          .innerJoin(ads, eq(adObservations.adId, ads.id))
+          .where(
+            and(
+              eq(adObservations.creativeScanId, creativeScanId),
+              eq(adObservations.isActive, true)
+            )
+          );
+        for (const row of allObservedRows) {
+          if (row.adArchiveId) activeArchiveIds.add(row.adArchiveId);
+        }
+      }
+
       await reconcileArchivedAds(
         trackedPageId,
         creativeScanId,
