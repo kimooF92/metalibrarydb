@@ -7,17 +7,22 @@ import { forceReleaseLock, deleteCached, deleteByPrefix } from "@/lib/cache-serv
  * Cleans up orphaned or stuck scans across trackedPages, creativeScans, queue, and discoveryRuns tables.
  * @param timeoutMinutes Age threshold in minutes for considering a scan orphaned (default: 3 mins, 0 for immediate reset of all)
  */
-export async function cleanOrphanedScans(timeoutMinutes: number = 3): Promise<{
+export async function cleanOrphanedScans(
+  timeoutMinutes: number = 3,
+  options?: { forceImmediate?: boolean }
+): Promise<{
   fixedPages: number;
   fixedScans: number;
   fixedQueue: number;
   fixedDiscoveryRuns: number;
 }> {
-  // Enforce consistent minimum 5-minute age floor across all cleanup branches
-  const cutoff = timeoutMinutes === 0
-    ? new Date(Date.now() - 5 * 60 * 1000)
-    : new Date(Date.now() - timeoutMinutes * 60 * 1000);
   const now = new Date();
+  // Enforce minimum 5-minute age floor unless forceImmediate is explicitly requested (e.g. single-worker stop/reset)
+  const cutoff = options?.forceImmediate
+    ? now
+    : timeoutMinutes === 0
+    ? new Date(now.getTime() - 5 * 60 * 1000)
+    : new Date(now.getTime() - timeoutMinutes * 60 * 1000);
 
   let fixedPages = 0;
   let fixedScans = 0;
@@ -129,8 +134,9 @@ export async function cleanOrphanedScans(timeoutMinutes: number = 3): Promise<{
   }
 
   // 4. Reset orphaned tracked_pages in "scanning" status
-  const pageCutoffMinutes = timeoutMinutes === 0 ? 5 : Math.max(timeoutMinutes, 3.5);
-  const pageCutoff = new Date(Date.now() - pageCutoffMinutes * 60 * 1000);
+  const pageCutoff = options?.forceImmediate
+    ? now
+    : new Date(now.getTime() - (timeoutMinutes === 0 ? 5 : Math.max(timeoutMinutes, 3.5)) * 60 * 1000);
 
   const scanningPages = await db.query.trackedPages.findMany({
     where: and(

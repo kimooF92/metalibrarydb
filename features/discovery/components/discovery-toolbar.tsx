@@ -21,6 +21,7 @@ import {
 export { VALID_DISCOVERY_STATUSES, type DiscoveryStatusFilter };
 
 export interface ActiveRunInfo {
+  id?: string;
   status: "pending" | "running" | "completed" | "partial" | "failed";
   totalAdsScanned: number;
   targetMaxAds?: number | null;
@@ -63,6 +64,7 @@ export interface DiscoveryToolbarActions {
   onCancelMergeConfirm: () => void;
   onDismissRemaining: () => void;
   onExtractProducts?: () => void;
+  onCancelRun?: (runId: string) => void;
 }
 
 export interface DiscoveryToolbarProps {
@@ -111,6 +113,19 @@ export function DiscoveryToolbar({
                   <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
                 )}
                 {activeRun.status}
+                {activeRun.id &&
+                  actions.onCancelRun &&
+                  (activeRun.status === "running" || activeRun.status === "pending") && (
+                    <button
+                      type="button"
+                      onClick={() => actions.onCancelRun!(activeRun.id!)}
+                      className="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-[10px] font-bold normal-case tracking-normal cursor-pointer transition"
+                      title="Cancel stuck or running discovery scan"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                      Stop
+                    </button>
+                  )}
               </span>
             </div>
             <div className="h-6 w-[1px] bg-slate-200 dark:bg-slate-800" />

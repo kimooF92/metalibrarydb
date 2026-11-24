@@ -14,7 +14,8 @@ function isUuid(id?: string | null): boolean {
 
 export async function resetStuckJobs() {
   const { cleanOrphanedScans } = await import("../../lib/clean-scans");
-  await cleanOrphanedScans(0);
+  const isSingleShard = (process.env.TOTAL_SHARDS || "1") === "1";
+  await cleanOrphanedScans(0, { forceImmediate: isSingleShard });
 
   await db
     .update(discoveredPages)

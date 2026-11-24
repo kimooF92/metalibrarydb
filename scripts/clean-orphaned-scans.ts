@@ -11,7 +11,7 @@ async function main() {
   const timeoutMinutes = process.argv.includes("--all") ? 0 : 5;
   console.log(`Checking for scans stuck longer than ${timeoutMinutes === 0 ? "0m (force all)" : `${timeoutMinutes}m`}...`);
 
-  const result = await cleanOrphanedScans(timeoutMinutes);
+  const result = await cleanOrphanedScans(timeoutMinutes, { forceImmediate: timeoutMinutes === 0 });
 
   console.log(`✅ Cleaned up:`);
   console.log(`   • ${result.fixedPages} tracked page(s) reset from 'scanning'`);

@@ -540,6 +540,28 @@ export function useDiscoveryRuns({
     ]
   );
 
+  const handleCancelRun = useCallback(
+    async (runId: string) => {
+      try {
+        const res = await fetch("/api/discovery/runs", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ runId }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          onNotify?.("Discovery scan cancelled.");
+          await fetchRuns();
+        } else {
+          onNotify?.(`Failed to cancel scan: ${data.error || "Unknown error"}`);
+        }
+      } catch (err: any) {
+        onNotify?.(`Failed to cancel scan: ${err?.message || "Unknown error"}`);
+      }
+    },
+    [fetchRuns, onNotify]
+  );
+
   return {
     runs,
     activeRun,
@@ -574,6 +596,7 @@ export function useDiscoveryRuns({
     effectiveTargetMaxAds,
     effectiveMaxScrolls,
     fetchRuns,
+    handleCancelRun,
     handleLaunchUrlScan,
     handlePopulateControlsFromUrl,
     handleLaunchScan,

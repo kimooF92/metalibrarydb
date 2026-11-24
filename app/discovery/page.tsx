@@ -111,6 +111,7 @@ export default function DiscoveryPage() {
             onCancelMergeConfirm: () => pages.setMergeConfirmPending(false),
             onDismissRemaining: pages.handleDismissRemainingRun,
             onExtractProducts: () => pages.handleEnrichRun(),
+            onCancelRun: runs.handleCancelRun,
           }}
         />
 

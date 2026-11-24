@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { discoveryRuns } from "@/db/schema";
-import { desc, gte, or, eq, and, sql } from "drizzle-orm";
+import { desc, gte, or, eq, and, sql, inArray } from "drizzle-orm";
 import { triggerGitHubWorkflow } from "@/lib/github";
 import { parseMetaAdLibraryDiscoveryUrl } from "@/lib/url-parser";
 import { getActiveWorkspace } from "@/lib/workspace-server";
@@ -291,6 +291,44 @@ export async function POST(req: Request) {
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || "Failed to create discovery run" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    const activeWorkspace = await getActiveWorkspace(req);
+    const body = await req.json().catch(() => ({}));
+    const runId = typeof body.runId === "string" ? body.runId.trim() : "";
+
+    if (!runId) {
+      return NextResponse.json(
+        { success: false, error: "runId is required" },
+        { status: 400 }
+      );
+    }
+
+    await db
+      .update(discoveryRuns)
+      .set({
+        status: "failed",
+        failureReason: "cancelled_manually",
+        outcomeDetails: "Discovery scan cancelled manually",
+        finishedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(discoveryRuns.id, runId),
+          eq(discoveryRuns.workspaceId, activeWorkspace.id),
+          inArray(discoveryRuns.status, ["pending", "running"])
+        )
+      );
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, error: error.message || "Failed to cancel discovery run" },
       { status: 500 }
     );
   }
