@@ -209,7 +209,7 @@ test("attachMediaAbortRoute aborts binary media, continues API/DOM requests, and
     return { route, getCounts: () => ({ aborted, continued }) };
   };
 
-  for (const type of ["image", "media", "font", "imageset"]) {
+  for (const type of ["image", "media", "font", "imageset", "manifest"]) {
     const mock = makeMockRoute(type);
     await captured.handler(mock.route);
     assert.deepEqual(mock.getCounts(), { aborted: 1, continued: 0 }, `${type} must be aborted`);
@@ -220,6 +220,38 @@ test("attachMediaAbortRoute aborts binary media, continues API/DOM requests, and
     await captured.handler(mock.route);
     assert.deepEqual(mock.getCounts(), { aborted: 0, continued: 1 }, `${type} must continue`);
   }
+
+  // Telemetry / logging endpoints must be aborted even on xhr/fetch, while GraphQL API continues
+  for (const telemetryUrl of [
+    "https://www.facebook.com/ajax/bz?__a=1",
+    "https://www.facebook.com/logging_client_events",
+  ]) {
+    let aborted = 0;
+    let continued = 0;
+    await captured.handler({
+      request: () => ({ resourceType: () => "xhr", url: () => telemetryUrl }),
+      abort: async () => {
+        aborted++;
+      },
+      continue: async () => {
+        continued++;
+      },
+    });
+    assert.deepEqual({ aborted, continued }, { aborted: 1, continued: 0 }, `Telemetry URL ${telemetryUrl} must be aborted`);
+  }
+
+  let gqlAborted = 0;
+  let gqlContinued = 0;
+  await captured.handler({
+    request: () => ({ resourceType: () => "xhr", url: () => "https://www.facebook.com/api/graphql/" }),
+    abort: async () => {
+      gqlAborted++;
+    },
+    continue: async () => {
+      gqlContinued++;
+    },
+  });
+  assert.deepEqual({ aborted: gqlAborted, continued: gqlContinued }, { aborted: 0, continued: 1 }, "GraphQL XHR must continue");
 
   // Open page: first detach unroutes once, second detach is idempotent
   await detach();

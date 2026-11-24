@@ -1,18 +1,24 @@
 import type { Page, Route } from "playwright";
 
-export const ABORTED_RESOURCE_TYPES = new Set(["image", "media", "font", "imageset"]);
+export const ABORTED_RESOURCE_TYPES = new Set(["image", "media", "font", "imageset", "manifest"]);
 
 /**
  * Attaches a non-fatal Playwright route interceptor that aborts heavy binary
- * media payloads (images, videos/audio, fonts, imagesets) while allowing API
- * and document traffic (`document`, `script`, `xhr`, `fetch`, `stylesheet`) through.
+ * media payloads (images, videos/audio, fonts, imagesets) and Meta background
+ * telemetry beacons while allowing API and document traffic through.
  *
  * Returns an idempotent `detach()` cleanup helper that safely skips `unroute`
  * if already detached, registration failed, or the page is already closed.
  */
 export async function attachMediaAbortRoute(page: Page): Promise<() => Promise<void>> {
   const handler = (route: Route) => {
-    if (ABORTED_RESOURCE_TYPES.has(route.request().resourceType())) {
+    const req = route.request();
+    const url = typeof req.url === "function" ? req.url() : "";
+    if (
+      ABORTED_RESOURCE_TYPES.has(req.resourceType()) ||
+      url.includes("/ajax/bz") ||
+      url.includes("logging_client_events")
+    ) {
       return Promise.resolve(route.abort()).catch(() => {});
     }
     return Promise.resolve(route.continue()).catch(() => {});

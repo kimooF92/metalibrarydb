@@ -324,6 +324,7 @@ export async function runWorker() {
         }
 
         console.log(`[Queue Empty] All pending jobs completed. Worker idling (${ranJobs} processed).`);
+        await closeBrowserSession().catch((e) => console.warn("[Worker] Error closing idle browser session:", e?.message));
         await emitSessionSummary();
 
         // Product rescue fallback
@@ -398,6 +399,10 @@ export async function runWorker() {
           isCountOnly,
         });
         ranJobs++;
+        if (ranJobs % 10 === 0) {
+          console.log(`[Worker Memory] 🧹 Recycling Chromium browser after ${ranJobs} jobs...`);
+          await closeBrowserSession().catch((e) => console.warn("[Worker] Error recycling browser session:", e?.message));
+        }
         continue;
       }
 
@@ -451,6 +456,18 @@ export async function runWorker() {
       }
 
       ranJobs++;
+
+      if (jobType === "creative" || ranJobs % 10 === 0) {
+        console.log(
+          `[Worker Memory] 🧹 Closing Chromium browser (${jobType === "creative" ? "post-creative scan" : `periodic recycle @ ${ranJobs} jobs`}) to reclaim RAM...`
+        );
+        await closeBrowserSession().catch((e) => console.warn("[Worker] Error recycling browser session:", e?.message));
+        if (typeof (global as any).gc === "function") {
+          try {
+            (global as any).gc();
+          } catch {}
+        }
+      }
 
       console.log(`[Cooldown] Waiting before next request...`);
       await randomDelay(

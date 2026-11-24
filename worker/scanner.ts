@@ -1,5 +1,6 @@
 import { Page } from "playwright";
 import { randomDelay, DELAY_CONFIG } from "./throttle";
+import { attachMediaAbortRoute } from "./scanners/media-route-guard";
 
 export interface ScanOutcome {
   status: "success" | "failed" | "unclear";
@@ -123,16 +124,11 @@ export async function scanMetaAdPage(
   options?: ScanPageOptions
 ): Promise<ScanOutcome> {
   const timeoutMs = parseInt(process.env.PAGE_TIMEOUT || "30000", 10);
+  let detachRoute: (() => Promise<void>) | null = null;
 
   try {
-    // Media blocking guard: abort images, audio, video, web fonts to radically minimize memory footprint
-    await page.route("**/*", (route) => {
-      const type = route.request().resourceType();
-      if (["image", "media", "font", "imageset"].includes(type)) {
-        return route.abort();
-      }
-      return route.continue();
-    }).catch(() => {});
+    // Media blocking guard: abort images, audio, video, web fonts to minimize memory footprint
+    detachRoute = await attachMediaAbortRoute(page);
 
     if (onProgress) await onProgress("navigating", "1. Navigating to Meta Ad Library...", 20);
     await randomDelay(DELAY_CONFIG.beforeNavMin, DELAY_CONFIG.beforeNavMax);
@@ -286,5 +282,9 @@ export async function scanMetaAdPage(
   } catch (err: any) {
     console.error("Scan exception:", err);
     return { status: "failed", results: null, failureReason: "navigation_error" };
+  } finally {
+    if (detachRoute) {
+      await detachRoute();
+    }
   }
 }

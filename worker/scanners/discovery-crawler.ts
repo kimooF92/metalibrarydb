@@ -468,7 +468,7 @@ export async function runDiscoveryScan(
     detachRoute = await attachMediaAbortRoute(page);
 
     await page.goto(cleanTargetUrl, {
-      waitUntil: "networkidle",
+      waitUntil: "domcontentloaded",
       timeout: RESPONSE_TIMEOUT_MS,
     });
 
@@ -476,14 +476,29 @@ export async function runDiscoveryScan(
     console.log(`[Discovery Scanner] Waiting for Meta's search query engine to stream GraphQL ad feed & inline HTML payloads...`);
     const initialWaitStart = Date.now();
 
-    // Helper to scan inline script tags embedded in the HTML document
+    // Helper to scan inline script tags embedded in the HTML document (initial/reload hydration only)
     const scanInlineScripts = async () => {
       try {
         const rawScriptContents = await page.evaluate(() => {
-          const scripts = Array.from(document.querySelectorAll('script[type="application/json"], script'));
-          return scripts
-            .map((s) => s.textContent || "")
-            .filter((t) => (t.includes("adArchiveID") || t.includes("ad_archive_id") || t.includes("dynamic_filter_options")) && t.length < 500000);
+          const w = window as any;
+          if (!w.__discoveryScannedScripts) {
+            w.__discoveryScannedScripts = new WeakSet<Element>();
+          }
+          const seen: WeakSet<Element> = w.__discoveryScannedScripts;
+          const scripts = Array.from(document.querySelectorAll('script[type="application/json"], script:not([src])'));
+          const fresh: string[] = [];
+          for (const s of scripts) {
+            if (seen.has(s)) continue;
+            seen.add(s);
+            const t = s.textContent || "";
+            if (
+              (t.includes("adArchiveID") || t.includes("ad_archive_id") || t.includes("dynamic_filter_options")) &&
+              t.length < 500000
+            ) {
+              fresh.push(t);
+            }
+          }
+          return fresh;
         });
 
         for (const content of rawScriptContents) {
@@ -524,7 +539,7 @@ export async function runDiscoveryScan(
 
       if (hasEmptyState || scannedAdIds.size === 0) {
         console.log(`[Discovery Scanner] 0 ads / Empty state detected on initial load. Reloading page once to force Meta query engine re-evaluation...`);
-        await page.reload({ waitUntil: "networkidle", timeout: RESPONSE_TIMEOUT_MS }).catch(() => {});
+        await page.reload({ waitUntil: "domcontentloaded", timeout: RESPONSE_TIMEOUT_MS }).catch(() => {});
         await page.waitForTimeout(5000);
         await scanInlineScripts();
         console.log(`[Discovery Scanner] Post-reload stream wait complete. Captured ${scannedAdIds.size} ads so far.`);
@@ -589,56 +604,72 @@ export async function runDiscoveryScan(
 
       graphqlResponseReceived = false;
 
-      // 1. Resolve Inner Scroll Container Metrics & Bounding Box
+      // 1. Resolve (and cache) Scroll Container Metrics & Bounding Box
       const containerInfo = await page
         .evaluate(() => {
-          // Strategy A: Ad Card Parent Chain
-          const adElement = document.querySelector(
-            'a[href*="id="], a[href*="view_all_page_id="], div[class*="x1yztbdb"]'
-          );
+          const w = window as any;
+          const cached = w.__discoveryScrollCache as
+            | { target: Element | null; containerType: string }
+            | undefined;
+
           let resolvedContainer: Element | null = null;
           let containerType = "WindowRoot";
 
-          if (adElement) {
-            let parent = adElement.parentElement;
-            while (parent && parent !== document.body) {
-              const style = window.getComputedStyle(parent);
-              if (
-                (style.overflowY === "auto" ||
-                  style.overflowY === "scroll" ||
-                  style.overflow === "auto" ||
-                  style.overflow === "scroll") &&
-                parent.scrollHeight > parent.clientHeight
-              ) {
-                resolvedContainer = parent;
-                containerType = "AdCardParentContainer";
-                break;
+          if (cached && (!cached.target || cached.target.isConnected)) {
+            resolvedContainer = cached.target;
+            containerType = cached.containerType;
+          } else {
+            // Strategy A: Ad Card Parent Chain
+            const adElement = document.querySelector(
+              'a[href*="id="], a[href*="view_all_page_id="], div[class*="x1yztbdb"]'
+            );
+            if (adElement) {
+              let parent = adElement.parentElement;
+              while (parent && parent !== document.body) {
+                const style = window.getComputedStyle(parent);
+                if (
+                  (style.overflowY === "auto" ||
+                    style.overflowY === "scroll" ||
+                    style.overflow === "auto" ||
+                    style.overflow === "scroll") &&
+                  parent.scrollHeight > parent.clientHeight
+                ) {
+                  resolvedContainer = parent;
+                  containerType = "AdCardParentContainer";
+                  break;
+                }
+                parent = parent.parentElement;
               }
-              parent = parent.parentElement;
             }
-          }
 
-          // Strategy B: role="feed"
-          if (!resolvedContainer) {
-            const roleFeed = document.querySelector('div[role="feed"]');
-            if (roleFeed) {
-              resolvedContainer = roleFeed;
-              containerType = "RoleFeedContainer";
+            // Strategy B: role="feed"
+            if (!resolvedContainer) {
+              const roleFeed = document.querySelector('div[role="feed"]');
+              if (roleFeed) {
+                resolvedContainer = roleFeed;
+                containerType = "RoleFeedContainer";
+              }
             }
-          }
 
-          // Strategy C: Any scrollable div with overflowY
-          if (!resolvedContainer) {
-            const scrollableDivs = Array.from(document.querySelectorAll("div")).filter((div) => {
-              const style = window.getComputedStyle(div);
-              return (
-                (style.overflowY === "auto" || style.overflowY === "scroll") &&
-                div.scrollHeight > div.clientHeight + 100
-              );
-            });
-            if (scrollableDivs.length > 0) {
-              resolvedContainer = scrollableDivs[0];
-              containerType = "OverflowDivContainer";
+            // Strategy C: Fallback scrollable div scan (run at most once per page load)
+            if (!resolvedContainer && !w.__discoveryDivFallbackChecked) {
+              w.__discoveryDivFallbackChecked = true;
+              const divs = document.querySelectorAll("div");
+              for (let idx = 0; idx < divs.length; idx++) {
+                const div = divs[idx];
+                if (div.scrollHeight <= div.clientHeight + 100) continue;
+                const style = window.getComputedStyle(div);
+                if (style.overflowY === "auto" || style.overflowY === "scroll") {
+                  resolvedContainer = div;
+                  containerType = "OverflowDivContainer";
+                  break;
+                }
+              }
+            }
+
+            // Only lock in WindowRoot cache once ad nodes are present so initial empty DOM retries Strategy A/B once ads render
+            if (resolvedContainer || adElement) {
+              w.__discoveryScrollCache = { target: resolvedContainer, containerType };
             }
           }
 
@@ -680,44 +711,13 @@ export async function runDiscoveryScan(
         } catch {}
       }
 
-      // 3. Fallback evaluate scroll & dispatch scroll events directly on inner container & window
+      // 3. Fallback evaluate scroll using cached scroll container (no repeated full-DOM style scans)
       await page
         .evaluate(() => {
-          const adElement = document.querySelector(
-            'a[href*="id="], a[href*="view_all_page_id="], div[class*="x1yztbdb"]'
-          );
-          let target: Element | null = null;
-
-          if (adElement) {
-            let parent = adElement.parentElement;
-            while (parent && parent !== document.body) {
-              const style = window.getComputedStyle(parent);
-              if (
-                (style.overflowY === "auto" ||
-                  style.overflowY === "scroll" ||
-                  style.overflow === "auto" ||
-                  style.overflow === "scroll") &&
-                parent.scrollHeight > parent.clientHeight
-              ) {
-                target = parent;
-                break;
-              }
-              parent = parent.parentElement;
-            }
-          }
-
-          if (!target) {
-            target =
-              document.querySelector('div[role="feed"]') ||
-              Array.from(document.querySelectorAll("div")).find((div) => {
-                const style = window.getComputedStyle(div);
-                return (
-                  (style.overflowY === "auto" || style.overflowY === "scroll") &&
-                  div.scrollHeight > div.clientHeight + 100
-                );
-              }) ||
-              null;
-          }
+          const cached = (window as any).__discoveryScrollCache as
+            | { target: Element | null }
+            | undefined;
+          const target = cached?.target?.isConnected ? cached.target : null;
 
           if (target) {
             target.scrollTop += 2500;
@@ -738,42 +738,13 @@ export async function runDiscoveryScan(
         await page.waitForTimeout(300);
       }
 
-      // 5. Inline DOM script tag payload scan on EVERY scroll iteration
-      await scanInlineScripts();
-
-      // 6. Measure post-scroll metrics & log detailed container scroll diagnostics
+      // 5. Measure post-scroll metrics directly from cached container (skipping redundant inline <script> re-scans)
       const postContainerInfo = await page
         .evaluate(() => {
-          const adElement = document.querySelector(
-            'a[href*="id="], a[href*="view_all_page_id="], div[class*="x1yztbdb"]'
-          );
-          let target: Element | null = null;
-          if (adElement) {
-            let parent = adElement.parentElement;
-            while (parent && parent !== document.body) {
-              const style = window.getComputedStyle(parent);
-              if (
-                (style.overflowY === "auto" || style.overflowY === "scroll") &&
-                parent.scrollHeight > parent.clientHeight
-              ) {
-                target = parent;
-                break;
-              }
-              parent = parent.parentElement;
-            }
-          }
-          if (!target) {
-            target =
-              document.querySelector('div[role="feed"]') ||
-              Array.from(document.querySelectorAll("div")).find((div) => {
-                const style = window.getComputedStyle(div);
-                return (
-                  (style.overflowY === "auto" || style.overflowY === "scroll") &&
-                  div.scrollHeight > div.clientHeight + 100
-                );
-              }) ||
-              null;
-          }
+          const cached = (window as any).__discoveryScrollCache as
+            | { target: Element | null }
+            | undefined;
+          const target = cached?.target?.isConnected ? cached.target : null;
           const el = target || document.scrollingElement || document.documentElement || document.body;
           return {
             scrollTop: el.scrollTop || window.scrollY || 0,
