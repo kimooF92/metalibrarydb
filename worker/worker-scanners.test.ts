@@ -172,3 +172,83 @@ test("checkpoint-service persists ads, survives corrupt tail lines, re-hydrates 
     assert.equal(fs.existsSync(getCheckpointPath(testScanId)), false, "Checkpoint file must be deleted after cleanup");
   }
 });
+
+test("attachMediaAbortRoute aborts binary media, continues API/DOM requests, and detaches safely", async () => {
+  const { attachMediaAbortRoute } = await import("./scanners/media-route-guard");
+
+  const captured: { handler: ((route: any) => Promise<void>) | null } = { handler: null };
+  let unrouteCalls = 0;
+
+  const mockPage = {
+    route: async (url: string, handler: (route: any) => Promise<void>) => {
+      assert.equal(url, "**/*");
+      captured.handler = handler;
+    },
+    unroute: async (_url: string, handler: (route: any) => Promise<void>) => {
+      assert.equal(handler, captured.handler);
+      unrouteCalls++;
+    },
+    isClosed: () => false,
+  } as any;
+
+  const detach = await attachMediaAbortRoute(mockPage);
+  assert.ok(captured.handler, "Route handler must be registered");
+
+  const makeMockRoute = (resourceType: string) => {
+    let aborted = 0;
+    let continued = 0;
+    const route = {
+      request: () => ({ resourceType: () => resourceType }),
+      abort: async () => {
+        aborted++;
+      },
+      continue: async () => {
+        continued++;
+      },
+    };
+    return { route, getCounts: () => ({ aborted, continued }) };
+  };
+
+  for (const type of ["image", "media", "font", "imageset"]) {
+    const mock = makeMockRoute(type);
+    await captured.handler(mock.route);
+    assert.deepEqual(mock.getCounts(), { aborted: 1, continued: 0 }, `${type} must be aborted`);
+  }
+
+  for (const type of ["xhr", "fetch", "document", "script", "stylesheet"]) {
+    const mock = makeMockRoute(type);
+    await captured.handler(mock.route);
+    assert.deepEqual(mock.getCounts(), { aborted: 0, continued: 1 }, `${type} must continue`);
+  }
+
+  // Open page: first detach unroutes once, second detach is idempotent
+  await detach();
+  await detach();
+  assert.equal(unrouteCalls, 1, "unroute should be called exactly once when page is open");
+
+  // Closed page: detach must not invoke unroute or throw
+  let closedUnrouteCalls = 0;
+  const mockClosedPage = {
+    route: async () => {},
+    unroute: async () => {
+      closedUnrouteCalls++;
+    },
+    isClosed: () => true,
+  } as any;
+  const detachClosed = await attachMediaAbortRoute(mockClosedPage);
+  await detachClosed();
+  assert.equal(closedUnrouteCalls, 0, "unroute must be skipped when page.isClosed() is true");
+
+  // Registration failure: non-fatal and safe to detach
+  const failingPage = {
+    route: async () => {
+      throw new Error("Target page crashed");
+    },
+    unroute: async () => {
+      assert.fail("unroute must not be called when registration failed");
+    },
+    isClosed: () => false,
+  } as any;
+  const detachFailed = await attachMediaAbortRoute(failingPage);
+  await detachFailed();
+});

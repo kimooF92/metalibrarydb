@@ -1,4 +1,4 @@
-import { Page, Response, Route } from "playwright";
+import { Page, Response } from "playwright";
 import { db } from "../../db";
 import { ads, adObservations, trackedPages, scanHistory, brandDomains, scrapedProducts } from "../../db/schema";
 import { eq, sql, and, desc, ne, isNull, or } from "drizzle-orm";
@@ -11,6 +11,7 @@ import { linkAndAutoScrapeProduct } from "../../lib/product-ingest";
 import { selectBestProductCandidateUrl } from "../../lib/discovery-product-selector";
 import { processAdMedia } from "./media-pipeline";
 import { ExtractedAdData, SpyScanOutcome } from "./scanner-types";
+import { attachMediaAbortRoute } from "./media-route-guard";
 import {
   initScanCheckpoint,
   appendScanCheckpoint,
@@ -30,7 +31,6 @@ const INGEST_CHUNK_SIZE = 100;
 const NO_PROGRESS_CAP = parseInt(process.env.SPY_NO_PROGRESS_CAP || "6", 10);
 const SCROLL_WAIT_MS = parseInt(process.env.SPY_SCROLL_WAIT_MS || "3000", 10);
 const RESPONSE_TIMEOUT_MS = parseInt(process.env.PAGE_TIMEOUT || "30000", 10);
-const ABORTED_RESOURCE_TYPES = new Set(["image", "media", "font", "imageset"]);
 
 /**
  * Extract normalized ad attributes from Meta GraphQL payload node
@@ -396,7 +396,7 @@ export async function scanAdCreatives(
   let hasCaptchaOrBlock = false;
   let isRateLimited = false;
   let graphqlResponseReceived = false;
-  let routeAttached = false;
+  let detachRoute: (() => Promise<void>) | null = null;
 
   initScanCheckpoint(creativeScanId);
 
@@ -413,13 +413,6 @@ export async function scanAdCreatives(
     if (pendingCheckpointBatch.length >= CHECKPOINT_FLUSH_INTERVAL) {
       flushPendingCheckpoint();
     }
-  };
-
-  const mediaAbortHandler = (route: Route) => {
-    if (ABORTED_RESOURCE_TYPES.has(route.request().resourceType())) {
-      return route.abort();
-    }
-    return route.continue();
   };
 
   // Derive normalized domain segments from the search query
@@ -541,12 +534,7 @@ export async function scanAdCreatives(
   page.on("response", handleResponse);
 
   try {
-    try {
-      await page.route("**/*", mediaAbortHandler);
-      routeAttached = true;
-    } catch {
-      // Non-fatal if page route registration fails
-    }
+    detachRoute = await attachMediaAbortRoute(page);
 
     console.log(`[Spy Scanner] Navigating to: ${targetUrl}`);
     const navStartTime = Date.now();
@@ -1200,8 +1188,8 @@ export async function scanAdCreatives(
     };
   } finally {
     page.off("response", handleResponse);
-    if (routeAttached && !page.isClosed()) {
-      await page.unroute("**/*", mediaAbortHandler).catch(() => {});
+    if (detachRoute) {
+      await detachRoute();
     }
   }
 }

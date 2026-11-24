@@ -5,6 +5,7 @@ import { eq, inArray } from "drizzle-orm";
 import { resolveDestinationUrl } from "../../lib/utils";
 import { selectBestProductCandidateUrl } from "../../lib/discovery-product-selector";
 import { DiscoveredPageData, DiscoveryScanOutcome } from "./scanner-types";
+import { attachMediaAbortRoute } from "./media-route-guard";
 
 export type { DiscoveredPageData, DiscoveryScanOutcome };
 
@@ -271,6 +272,95 @@ function extractDiscoveryFromJSON(
 }
 
 /**
+ * Persists discovered pages with cross-scan tracked/ignored memory.
+ */
+async function persistDiscoveredPages(
+  runId: string,
+  country: string,
+  collectedPages: Map<string, DiscoveredPageData>,
+  finishedAt: Date
+): Promise<number> {
+  if (collectedPages.size === 0) return 0;
+
+  const existingTracked = await db.query.trackedPages.findMany({
+    columns: { id: true, pageId: true, url: true },
+  });
+  const trackedPageMap = new Map<string, string>(); // pageId or url -> trackedPages.id
+  for (const tp of existingTracked) {
+    if (tp.pageId) trackedPageMap.set(tp.pageId, tp.id);
+    if (tp.url) {
+      const match = tp.url.match(/view_all_page_id=(\d+)/);
+      if (match) trackedPageMap.set(match[1], tp.id);
+    }
+  }
+
+  const previouslyIgnored = await db.query.discoveredPages.findMany({
+    where: eq(discoveredPages.status, "ignored"),
+    columns: { pageId: true },
+  });
+  const ignoredPageSet = new Set(previouslyIgnored.map((p) => p.pageId));
+
+  let savedPagesCount = 0;
+  for (const pageData of collectedPages.values()) {
+    const existingTrackedId = trackedPageMap.get(pageData.pageId) || null;
+    const isIgnored = ignoredPageSet.has(pageData.pageId);
+    const initialStatus = existingTrackedId ? "imported" : isIgnored ? "ignored" : "discovered";
+    const initialPreviewStatus =
+      initialStatus === "imported"
+        ? "promoted"
+        : isIgnored
+        ? "ignored"
+        : "pending";
+
+    await db
+      .insert(discoveredPages)
+      .values({
+        runId,
+        pageId: pageData.pageId,
+        displayName: pageData.displayName,
+        country,
+        matchingAdCount: pageData.matchingAdCount,
+        sampleAdArchiveIds: Array.from(pageData.sampleAdArchiveIds),
+        sampleCtas: Array.from(pageData.sampleCtas),
+        sampleUrls: Array.from(pageData.sampleUrls),
+        status: initialStatus,
+        trackedPageId: existingTrackedId,
+        previewScrapeStatus: initialPreviewStatus,
+        createdAt: finishedAt,
+        updatedAt: finishedAt,
+      })
+      .onConflictDoUpdate({
+        target: [discoveredPages.runId, discoveredPages.pageId],
+        set: {
+          displayName: pageData.displayName || discoveredPages.displayName,
+          matchingAdCount: pageData.matchingAdCount,
+          sampleAdArchiveIds: Array.from(pageData.sampleAdArchiveIds),
+          sampleCtas: Array.from(pageData.sampleCtas),
+          sampleUrls: Array.from(pageData.sampleUrls),
+          status: initialStatus,
+          trackedPageId: existingTrackedId,
+          updatedAt: finishedAt,
+        },
+      });
+    savedPagesCount++;
+  }
+
+  return savedPagesCount;
+}
+
+/**
+ * Triggers decoupled ephemeral product enrichment outside active browser navigation.
+ */
+async function runNonFatalEnrichment(runId: string): Promise<void> {
+  try {
+    const { enrichDiscoveredPagesForRun } = await import("../discovery-enricher");
+    await enrichDiscoveredPagesForRun(runId);
+  } catch (enrichErr) {
+    console.warn("[Discovery Scanner] Non-fatal product enrichment error:", enrichErr);
+  }
+}
+
+/**
  * Main Discovery Scanner: Multi-stage deep scroll & page extraction
  */
 export async function runDiscoveryScan(
@@ -354,6 +444,7 @@ export async function runDiscoveryScan(
   };
 
   page.on("response", handleResponse);
+  let detachRoute: (() => Promise<void>) | null = null;
 
   try {
     if (!targetUrl || typeof targetUrl !== "string" || !targetUrl.trim().startsWith("http")) {
@@ -374,6 +465,7 @@ export async function runDiscoveryScan(
     } catch {}
 
     console.log(`[Discovery Scanner] Navigating to broad search URL: ${cleanTargetUrl}`);
+    detachRoute = await attachMediaAbortRoute(page);
 
     await page.goto(cleanTargetUrl, {
       waitUntil: "networkidle",
@@ -836,72 +928,12 @@ export async function runDiscoveryScan(
       }
     }
 
+    // Detach media abort route before DB persistence & enrichment
+    if (detachRoute) await detachRoute();
+
     // 4. Save Discovered Pages to Database (Cross-Scan Memory: check tracked & previously ignored pages)
     const finishedAt = new Date();
-    const existingTracked = await db.query.trackedPages.findMany({
-      columns: { id: true, pageId: true, url: true },
-    });
-    const trackedPageMap = new Map<string, string>(); // pageId or url -> trackedPages.id
-    for (const tp of existingTracked) {
-      if (tp.pageId) trackedPageMap.set(tp.pageId, tp.id);
-      if (tp.url) {
-        const match = tp.url.match(/view_all_page_id=(\d+)/);
-        if (match) trackedPageMap.set(match[1], tp.id);
-      }
-    }
-
-    const previouslyIgnored = await db.query.discoveredPages.findMany({
-      where: eq(discoveredPages.status, "ignored"),
-      columns: { pageId: true },
-    });
-    const ignoredPageSet = new Set(previouslyIgnored.map((p) => p.pageId));
-
-    let savedPagesCount = 0;
-    const pageEntries = Array.from(collectedPages.values());
-
-    for (const pageData of pageEntries) {
-      const existingTrackedId = trackedPageMap.get(pageData.pageId) || null;
-      const isIgnored = ignoredPageSet.has(pageData.pageId);
-      const initialStatus = existingTrackedId ? "imported" : isIgnored ? "ignored" : "discovered";
-      const initialPreviewStatus =
-        initialStatus === "imported"
-          ? "promoted"
-          : isIgnored
-          ? "ignored"
-          : "pending";
-
-      await db
-        .insert(discoveredPages)
-        .values({
-          runId,
-          pageId: pageData.pageId,
-          displayName: pageData.displayName,
-          country,
-          matchingAdCount: pageData.matchingAdCount,
-          sampleAdArchiveIds: Array.from(pageData.sampleAdArchiveIds),
-          sampleCtas: Array.from(pageData.sampleCtas),
-          sampleUrls: Array.from(pageData.sampleUrls),
-          status: initialStatus,
-          trackedPageId: existingTrackedId,
-          previewScrapeStatus: initialPreviewStatus,
-          createdAt: finishedAt,
-          updatedAt: finishedAt,
-        })
-        .onConflictDoUpdate({
-          target: [discoveredPages.runId, discoveredPages.pageId],
-          set: {
-            displayName: pageData.displayName || discoveredPages.displayName,
-            matchingAdCount: pageData.matchingAdCount,
-            sampleAdArchiveIds: Array.from(pageData.sampleAdArchiveIds),
-            sampleCtas: Array.from(pageData.sampleCtas),
-            sampleUrls: Array.from(pageData.sampleUrls),
-            status: initialStatus,
-            trackedPageId: existingTrackedId,
-            updatedAt: finishedAt,
-          },
-        });
-      savedPagesCount++;
-    }
+    const savedPagesCount = await persistDiscoveredPages(runId, country, collectedPages, finishedAt);
 
     const finalStatus =
       savedPagesCount === 0 && scannedAdIds.size === 0
@@ -927,12 +959,7 @@ export async function runDiscoveryScan(
 
     // Decoupled Ephemeral Enrichment (Runs outside active browser session)
     if (savedPagesCount > 0) {
-      try {
-        const { enrichDiscoveredPagesForRun } = await import("../discovery-enricher");
-        await enrichDiscoveredPagesForRun(runId);
-      } catch (enrichErr) {
-        console.warn("[Discovery Scanner] Non-fatal product enrichment error:", enrichErr);
-      }
+      await runNonFatalEnrichment(runId);
     }
 
     return {
@@ -942,12 +969,64 @@ export async function runDiscoveryScan(
       outcomeDetails: `${seqPrefix}Extracted ${savedPagesCount} unique pages from ${scannedAdIds.size} active ads.`,
     };
   } catch (err: any) {
+    const isTimeout =
+      err?.name === "TimeoutError" ||
+      /timeout|timed\s*out/i.test(err?.message || "");
+    // DiscoveryScanOutcome.failureReason union permits "captcha" | "rate_limited" | "payload_not_found" | "timeout"
+    const failureReason: DiscoveryScanOutcome["failureReason"] = "timeout";
+
+    page.off("response", handleResponse);
+    if (detachRoute) await detachRoute();
+
+    if (collectedPages.size > 0) {
+      try {
+        const finishedAt = new Date();
+        const savedPagesCount = await persistDiscoveredPages(
+          runId,
+          country,
+          collectedPages,
+          finishedAt
+        );
+
+        if (savedPagesCount > 0) {
+          const recoveryDetails = `${seqPrefix}Recovered ${savedPagesCount} unique pages from ${scannedAdIds.size} active ads after ${isTimeout ? "timeout" : "interruption"}: ${err?.message || failureReason}`;
+          await db
+            .update(discoveryRuns)
+            .set({
+              status: "partial",
+              totalAdsScanned: scannedAdIds.size,
+              totalPagesDiscovered: savedPagesCount,
+              outcomeDetails: recoveryDetails,
+              finishedAt,
+            })
+            .where(eq(discoveryRuns.id, runId));
+
+          console.warn(`[Discovery Scanner] 🛡️ ${recoveryDetails}`);
+          await runNonFatalEnrichment(runId);
+
+          return {
+            status: "partial",
+            totalAdsScanned: scannedAdIds.size,
+            totalPagesDiscovered: savedPagesCount,
+            outcomeDetails: recoveryDetails,
+          };
+        }
+      } catch (recoveryErr: any) {
+        console.error(
+          "[Discovery Scanner] ❌ Partial recovery persistence failed:",
+          recoveryErr?.message || recoveryErr
+        );
+      }
+    }
+
     await db
       .update(discoveryRuns)
       .set({
         status: "failed",
-        failureReason: "timeout",
-        outcomeDetails: `${seqPrefix}${err.message || "Discovery scan failed unexpectedly"}`,
+        failureReason,
+        totalAdsScanned: scannedAdIds.size,
+        totalPagesDiscovered: 0,
+        outcomeDetails: `${seqPrefix}${err?.message || "Discovery scan failed unexpectedly"}`,
         finishedAt: new Date(),
       })
       .where(eq(discoveryRuns.id, runId));
@@ -955,11 +1034,12 @@ export async function runDiscoveryScan(
     return {
       status: "failed",
       totalAdsScanned: scannedAdIds.size,
-      totalPagesDiscovered: collectedPages.size,
-      failureReason: "timeout",
-      outcomeDetails: `${seqPrefix}${err.message || "Discovery scan failed"}`,
+      totalPagesDiscovered: 0,
+      failureReason,
+      outcomeDetails: `${seqPrefix}${err?.message || "Discovery scan failed"}`,
     };
   } finally {
     page.off("response", handleResponse);
+    if (detachRoute) await detachRoute();
   }
 }
