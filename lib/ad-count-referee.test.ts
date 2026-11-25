@@ -186,3 +186,53 @@ test("detectAdCountDoubt triggers multiple_candidates when DOM contains conflict
   assert.ok(doubt.doubtTypes.includes("spike_20_plus"));
 });
 
+test("harvestAdCountCandidates ignores per-card 'X ads use this creative' duplication badges", () => {
+  const bodyText = `
+    Happy House Shop
+    ~31 results
+    Active
+    Platforms
+    2 ads use this creative and text
+  `;
+
+  const candidates = harvestAdCountCandidates(bodyText);
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].count, 31);
+  assert.equal(candidates[0].hasTilde, true);
+});
+
+test("resolveAdCountWithSpanJev resolves relaunch from 0 to ~31 without overriding back to 0", async () => {
+  const bodyText = `
+    Happy House Shop
+    ~31 results
+    Active
+    2 ads use this creative and text
+  `;
+
+  const result = await resolveAdCountWithSpanJev({
+    scannedCount: 31,
+    previousCount: 0,
+    bodyText,
+    brandName: "Happy House Shop",
+    url: "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&view_all_page_id=117248567975478&search_type=page&media_type=all",
+    hasTilde: true,
+  });
+
+  assert.equal(result.resolvedCount, 31);
+  assert.equal(result.modelUsed, "single_tilde_relaunch_heuristic");
+});
+
+test("resolveAdCountWithSpanJev resolves large direct-page jump with single ~ candidate", async () => {
+  const result = await resolveAdCountWithSpanJev({
+    scannedCount: 45,
+    previousCount: 10,
+    bodyText: "Brand X\n~45 results\nActive",
+    brandName: "Brand X",
+    url: "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&view_all_page_id=999999&search_type=page&media_type=all",
+    hasTilde: true,
+  });
+
+  assert.equal(result.resolvedCount, 45);
+  assert.equal(result.modelUsed, "single_tilde_page_heuristic");
+});
+

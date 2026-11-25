@@ -85,6 +85,20 @@ export function harvestAdCountCandidates(bodyText?: string | null): AdCountCandi
     // Filter out obvious noise: 0 (unless explicit), extreme IDs (>= 1,000,000), or NaN
     if (isNaN(count) || count < 0 || count >= 1_000_000) continue;
 
+    // Ignore per-card ad duplication badges like "2 ads use this creative and text"
+    const trailingText = bodyText.slice(
+      match.index + match[0].length,
+      match.index + match[0].length + 40
+    );
+    if (
+      !isTilde &&
+      /^\s+(?:use\s+this\s+creative|utilisent\s+ce\s+contenu|usan\s+este|verwenden\s+dieses)/i.test(
+        trailingText
+      )
+    ) {
+      continue;
+    }
+
     // Grab 35 chars of context before and after
     const startIdx = Math.max(0, match.index - 35);
     const endIdx = Math.min(bodyText.length, match.index + match[0].length + 35);
@@ -260,7 +274,8 @@ export async function resolveAdCountWithSpanJev(
   const brandName = params.brandName || "Tracked Brand";
 
   // Heuristic 1: If there is an authentic '~' candidate and all other candidates lack '~',
-  // and the authentic tilde candidate is within normal variation (< 20 change), trust it directly ($0 tokens)!
+  // trust it directly ($0 tokens) when within normal variation (< 20 change),
+  // OR when it's a safe direct-page (`view_all_page_id=`) / relaunch-from-0 scan without suggested-search redirect.
   const tildeCandidates = candidates.filter((c) => c.hasTilde);
   if (tildeCandidates.length === 1) {
     const tildeCount = tildeCandidates[0].count;
@@ -268,16 +283,46 @@ export async function resolveAdCountWithSpanJev(
       params.previousCount !== null && params.previousCount !== undefined
         ? Math.abs(tildeCount - params.previousCount)
         : 0;
+    const isDirectPageUrl = Boolean(params.url && /view_all_page_id=/i.test(params.url));
+    const isRelaunchFromZero = params.previousCount === 0 && tildeCount > 0;
+    const isSafeSingleTilde =
+      tildeCount < 5_000 &&
+      !doubt.doubtTypes.includes("suggested_search") &&
+      !doubt.doubtTypes.includes("out_of_bounds");
 
-    if (diffFromPrev < 20) {
+    if (diffFromPrev < 20 || (isSafeSingleTilde && (isDirectPageUrl || isRelaunchFromZero))) {
       return {
         resolvedCount: tildeCount,
-        modelUsed: "single_tilde_heuristic",
+        modelUsed: isRelaunchFromZero
+          ? "single_tilde_relaunch_heuristic"
+          : isDirectPageUrl && diffFromPrev >= 20
+            ? "single_tilde_page_heuristic"
+            : "single_tilde_heuristic",
         confidence: 0.95,
         wasRefereed: true,
         doubtReasons: doubt.reasons,
       };
     }
+  }
+
+  // Heuristic 1a: Relaunch from 0 when caller passed hasTilde=true without full bodyText candidates
+  if (
+    candidates.length === 0 &&
+    params.hasTilde &&
+    params.scannedCount !== null &&
+    params.scannedCount > 0 &&
+    params.scannedCount < 5_000 &&
+    params.previousCount === 0 &&
+    !doubt.doubtTypes.includes("suggested_search") &&
+    !doubt.doubtTypes.includes("out_of_bounds")
+  ) {
+    return {
+      resolvedCount: params.scannedCount,
+      modelUsed: "single_tilde_relaunch_heuristic",
+      confidence: 0.95,
+      wasRefereed: true,
+      doubtReasons: doubt.reasons,
+    };
   }
 
   // Heuristic 1b: If drop to zero was flagged but NO positive candidate ad counts (> 0)
@@ -304,8 +349,13 @@ export async function resolveAdCountWithSpanJev(
     criteriaMap[key] = `${tag}: "${c.context.slice(0, 50)}"`;
   }
 
-  // Add previous count as a baseline option if available
-  if (params.previousCount !== null && params.previousCount !== undefined) {
+  // Add previous count as a baseline option if available (unless relaunching from 0 with an authentic ~ positive count)
+  const hasAuthenticPositiveTilde = candidates.some((c) => c.hasTilde && c.count > 0);
+  if (
+    params.previousCount !== null &&
+    params.previousCount !== undefined &&
+    !(params.previousCount === 0 && hasAuthenticPositiveTilde)
+  ) {
     const prevKey = `keep_${params.previousCount}`;
     criteriaMap[prevKey] = `Preserve previous baseline (${params.previousCount} ads) — scan is corrupted/unclear`;
   }
