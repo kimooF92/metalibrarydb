@@ -10,6 +10,137 @@ export interface ZeroAdAnomalyResult {
   reason?: string;
   distinctPagesCount?: number;
   isRegionalCluster?: boolean;
+  isShardBlocked?: boolean;
+}
+
+// Per-process / per-shard consecutive zero-drop tracker.
+// Prevents a single soft-blocked shard in a multi-shard matrix from poisoning dozens of brands
+// when sibling shards continue writing positive scans to scan_history.
+const sessionZeroDropPageIds = new Set<string>();
+let sessionConsecutiveZeroDrops = 0;
+
+/**
+ * Records a successful positive ad-count scan in this worker process,
+ * clearing the per-shard consecutive zero-drop streak.
+ */
+export function recordSessionPositiveScan() {
+  sessionConsecutiveZeroDrops = 0;
+  sessionZeroDropPageIds.clear();
+}
+
+/**
+ * Evaluates whether the current worker session's consecutive zero-drop streak
+ * warrants bypassing global fleet-health proof to run a local canary check.
+ */
+export function evaluateSessionZeroStreak(
+  consecutiveDrops: number,
+  streakThreshold: number = parseInt(process.env.SHARD_ZERO_STREAK_THRESHOLD || "3", 10)
+): boolean {
+  return consecutiveDrops >= Math.max(2, streakThreshold);
+}
+
+/**
+ * Resets in-memory session streak state (used in unit tests).
+ */
+export function resetSessionZeroStreakForTests() {
+  sessionConsecutiveZeroDrops = 0;
+  sessionZeroDropPageIds.clear();
+}
+
+/**
+ * Reverts false `on_hold` transitions back to `active`, neutralizes bogus 0-result
+ * history rows, and de-escalates urgent recheck queue priority for victim pages.
+ */
+async function rescueAndQuarantineVictimPages(
+  victimIds: string[],
+  windowStart: Date,
+  historyFailureReason: string,
+  contextLabel: string
+) {
+  if (victimIds.length === 0) return;
+
+  for (const victimId of victimIds) {
+    try {
+      const victim = await db.query.trackedPages.findFirst({
+        where: eq(trackedPages.id, victimId),
+        columns: {
+          id: true,
+          holdStatus: true,
+          holdStartedAt: true,
+          displayName: true,
+          lastKnownValidResults: true,
+          currentResults: true,
+        },
+      });
+
+      if (victim && victim.holdStatus === "on_hold") {
+        const enteredDuringOutage = victim.holdStartedAt
+          ? new Date(victim.holdStartedAt) >= windowStart
+          : true;
+
+        if (enteredDuringOutage) {
+          console.log(
+            `[Circuit Breaker] 🛡️ Rescuing ${contextLabel} victim page "${victim.displayName || victimId}" — reverting false on_hold status to active.`
+          );
+          await db
+            .update(trackedPages)
+            .set({
+              holdStatus: "active",
+              currentResults: victim.lastKnownValidResults ?? victim.currentResults ?? 0,
+              consecutiveZeroScans: 0,
+              lastKnownValidResults: null,
+              holdStartedAt: null,
+              status: "pending",
+              updatedAt: new Date(),
+            })
+            .where(eq(trackedPages.id, victimId));
+        } else {
+          console.log(
+            `[Circuit Breaker] ❄️ Freezing victim page "${victim.displayName || victimId}" — keeping pre-existing hold state (entered before outage window).`
+          );
+        }
+      }
+    } catch (rescueErr) {
+      console.error(`[Circuit Breaker] Failed to rescue ${contextLabel} victim ${victimId}:`, rescueErr);
+    }
+  }
+
+  // Neutralize their recent zero scans so they do not poison sparklines or scaling classifiers
+  try {
+    await db
+      .update(scanHistory)
+      .set({
+        results: null,
+        difference: null,
+        status: "unclear",
+        failureReason: historyFailureReason,
+      })
+      .where(
+        and(
+          inArray(scanHistory.trackedPageId, victimIds),
+          gte(scanHistory.checkedAt, windowStart),
+          eq(scanHistory.results, 0)
+        )
+      );
+  } catch (histErr) {
+    console.error(`[Circuit Breaker] Failed to sanitize historical zero rows (${contextLabel}):`, histErr);
+  }
+
+  // De-escalate priority on any rechecks enqueued for victim pages back to standard priority 1
+  try {
+    await db
+      .update(queue)
+      .set({ priority: 1 })
+      .where(
+        and(
+          inArray(queue.trackedPageId, victimIds),
+          eq(queue.status, "pending"),
+          sql`${queue.priority} > 1`
+        )
+      );
+  } catch (queueErr) {
+    console.error(`[Circuit Breaker] Failed to de-escalate victim priority jobs (${contextLabel}):`, queueErr);
+  }
 }
 
 // Configurable constants via environment variables
@@ -84,6 +215,7 @@ export async function checkZeroAdAnomaly(
 
   // If the result is a real positive count, the scraper is clearly functional for this page.
   if (currentResults !== null && currentResults > 0) {
+    recordSessionPositiveScan();
     const state = await getWorkerState();
     if (state.circuitBreakerTripped || (state.consecutiveZeroPages || 0) > 0) {
       console.log(
@@ -105,7 +237,45 @@ export async function checkZeroAdAnomaly(
     return { isAnomalous: false };
   }
 
+  // Track consecutive zero-drops within THIS worker process/shard
+  if ((currentPage?.currentResults ?? 0) > 0 || (currentPage?.lastKnownValidResults ?? 0) > 0) {
+    sessionZeroDropPageIds.add(currentPageId);
+    sessionConsecutiveZeroDrops++;
+  }
+
   const windowStart = new Date(Date.now() - config.windowMinutes * 60 * 1000);
+
+  // Per-shard soft-block check: if THIS worker process hit >= 3 consecutive zero-drops in a row,
+  // verify this browser/IP directly via canary regardless of sibling shards' positive scans.
+  if (evaluateSessionZeroStreak(sessionConsecutiveZeroDrops) && browserPage) {
+    console.warn(
+      `[Circuit Breaker] ⚠️ Single-shard streak alert: ${sessionConsecutiveZeroDrops} consecutive active brands dropped to 0 in this worker session. Running local canary check...`
+    );
+    try {
+      const shardCanary = await runCanarySanityCheck(browserPage);
+      if (!shardCanary.isHealthy) {
+        const victimIds = Array.from(sessionZeroDropPageIds).filter((id) => id !== currentPageId);
+        await rescueAndQuarantineVictimPages(
+          victimIds,
+          windowStart,
+          "shard_soft_blocked",
+          "single-shard soft-block"
+        );
+        const streakCount = sessionConsecutiveZeroDrops;
+        resetSessionZeroStreakForTests();
+        return {
+          isAnomalous: true,
+          isShardBlocked: true,
+          reason: `Single-shard soft-block: ${streakCount} consecutive zero-drops in this worker session and canary failed (${shardCanary.reason || "unhealthy"}).`,
+          distinctPagesCount: streakCount,
+        };
+      }
+      // Canary passed on this shard; reset in-memory streak so we don't spam canary
+      resetSessionZeroStreakForTests();
+    } catch (shardCanaryErr: any) {
+      console.warn("[Circuit Breaker] Shard canary check error:", shardCanaryErr?.message || shardCanaryErr);
+    }
+  }
 
   // Find distinct pages that DROPPED to 0 ads in the rolling window (excluding already quarantined scans, already-0 pages, inactive pages, and test pages)
   const recentZeroScans = await db
@@ -195,42 +365,12 @@ export async function checkZeroAdAnomaly(
 
           // Rescue victim pages affected during this regional cluster anomaly
           const otherPageIds = Array.from(distinctZeroPageIds).filter((id) => id !== currentPageId);
-          if (otherPageIds.length > 0) {
-            for (const victimId of otherPageIds) {
-              try {
-                const victim = await db.query.trackedPages.findFirst({
-                  where: eq(trackedPages.id, victimId),
-                  columns: { id: true, holdStatus: true, holdStartedAt: true, displayName: true, lastKnownValidResults: true, currentResults: true },
-                });
-
-                if (victim && victim.holdStatus === "on_hold") {
-                  const enteredDuringOutage = victim.holdStartedAt
-                    ? new Date(victim.holdStartedAt) >= windowStart
-                    : true;
-
-                  if (enteredDuringOutage) {
-                    console.log(
-                      `[Circuit Breaker] 🛡️ Rescuing regional cluster victim page "${victim.displayName || victimId}" — reverting false on_hold status to active.`
-                    );
-                    await db
-                      .update(trackedPages)
-                      .set({
-                        holdStatus: "active",
-                        currentResults: victim.lastKnownValidResults ?? victim.currentResults ?? 0,
-                        consecutiveZeroScans: 0,
-                        lastKnownValidResults: null,
-                        holdStartedAt: null,
-                        status: "pending",
-                        updatedAt: new Date(),
-                      })
-                      .where(eq(trackedPages.id, victimId));
-                  }
-                }
-              } catch (rescueErr) {
-                console.error(`[Circuit Breaker] Failed to rescue regional victim ${victimId}:`, rescueErr);
-              }
-            }
-          }
+          await rescueAndQuarantineVictimPages(
+            otherPageIds,
+            windowStart,
+            "regional_cluster_anomaly",
+            "regional cluster"
+          );
 
           return {
             isAnomalous: true,
@@ -268,82 +408,12 @@ export async function checkZeroAdAnomaly(
 
     // 2. Rescue and quarantine the other victim pages affected during this outage window
     const otherPageIds = Array.from(distinctZeroPageIds).filter((id) => id !== currentPageId);
-    if (otherPageIds.length > 0) {
-      for (const victimId of otherPageIds) {
-        try {
-          const victim = await db.query.trackedPages.findFirst({
-            where: eq(trackedPages.id, victimId),
-          });
-
-          if (victim && victim.holdStatus === "on_hold") {
-            const enteredDuringOutage = victim.holdStartedAt
-              ? new Date(victim.holdStartedAt) >= windowStart
-              : true;
-
-            if (enteredDuringOutage) {
-              console.log(
-                `[Circuit Breaker] 🛡️ Rescuing victim page "${victim.displayName || victimId}" — reverting false on_hold status to active.`
-              );
-              await db
-                .update(trackedPages)
-                .set({
-                  holdStatus: "active",
-                  currentResults: victim.lastKnownValidResults ?? victim.currentResults,
-                  consecutiveZeroScans: 0,
-                  lastKnownValidResults: null,
-                  holdStartedAt: null,
-                  status: "pending",
-                  updatedAt: new Date(),
-                })
-                .where(eq(trackedPages.id, victimId));
-            } else {
-              console.log(
-                `[Circuit Breaker] ❄️ Freezing victim page "${victim.displayName || victimId}" — keeping pre-existing hold state (entered before outage window).`
-              );
-            }
-          }
-        } catch (rescueErr) {
-          console.error(`[Circuit Breaker] Failed to rescue victim page ${victimId}:`, rescueErr);
-        }
-      }
-
-      // Neutralize their recent zero scans so they do not poison sparklines or scaling classifiers
-      try {
-        await db
-          .update(scanHistory)
-          .set({
-            results: null,
-            difference: null,
-            status: "unclear",
-            failureReason: "circuit_breaker_meta_outage",
-          })
-          .where(
-            and(
-              inArray(scanHistory.trackedPageId, otherPageIds),
-              gte(scanHistory.checkedAt, windowStart),
-              eq(scanHistory.results, 0)
-            )
-          );
-      } catch (histErr) {
-        console.error("[Circuit Breaker] Failed to sanitize historical zero rows:", histErr);
-      }
-
-      // De-escalate priority on any rechecks enqueued for victim pages back to standard priority 1
-      try {
-        await db
-          .update(queue)
-          .set({ priority: 1 })
-          .where(
-            and(
-              inArray(queue.trackedPageId, otherPageIds),
-              eq(queue.status, "pending"),
-              sql`${queue.priority} > 1`
-            )
-          );
-      } catch (queueErr) {
-        console.error("[Circuit Breaker] Failed to de-escalate victim priority jobs:", queueErr);
-      }
-    }
+    await rescueAndQuarantineVictimPages(
+      otherPageIds,
+      windowStart,
+      "circuit_breaker_meta_outage",
+      "outage"
+    );
 
     // 3. Emit high-severity notification to operator
     try {

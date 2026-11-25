@@ -382,10 +382,17 @@ export async function dispatchQueueJob(ctx: JobDispatchContext): Promise<JobDisp
         timestamp: Date.now(),
       }).catch(() => { });
 
-      if (res?.circuitBreakerTripped) {
-        console.warn(
-          "[Worker] 🛑 Circuit Breaker tripped during count scan. Halting scanning batch to protect data integrity."
-        );
+      if (res?.circuitBreakerTripped || res?.shardSoftBlocked) {
+        if (res?.shardSoftBlocked) {
+          console.warn(
+            "[Worker] 🛡️ Single-shard soft-block detected via canary failure. Triggering backoff and halting this shard batch to protect brand data."
+          );
+          await handleFailure().catch(() => {});
+        } else {
+          console.warn(
+            "[Worker] 🛑 Circuit Breaker tripped during count scan. Halting scanning batch to protect data integrity."
+          );
+        }
         return { success: true, circuitBreakerTripped: true };
       }
 

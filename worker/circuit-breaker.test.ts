@@ -576,5 +576,38 @@ test("positive scan auto-heals tripped circuit breaker", () => {
   assert.equal(normal.circuitBreakerTripped, false);
 });
 
+test("per-shard zero-drop streak detector triggers at threshold", async () => {
+  const { evaluateSessionZeroStreak } = await import("./circuit-breaker");
+  assert.equal(evaluateSessionZeroStreak(0, 3), false);
+  assert.equal(evaluateSessionZeroStreak(2, 3), false);
+  assert.equal(evaluateSessionZeroStreak(3, 3), true);
+  assert.equal(evaluateSessionZeroStreak(5, 3), true);
+  // Clamps minimum streak threshold to >= 2
+  assert.equal(evaluateSessionZeroStreak(1, 1), false);
+  assert.equal(evaluateSessionZeroStreak(2, 1), true);
+});
+
+test("shouldIncrementZeroConfirmation enforces minimum cooldown gap between zero scans", async () => {
+  const { shouldIncrementZeroConfirmation, ZERO_CONFIRMATION_MIN_GAP_MS } = await import(
+    "./services/scan-completion-service"
+  );
+  const now = new Date("2026-11-25T13:05:38.000Z");
+
+  // 45 seconds after previous check -> must NOT increment toward permanent archival
+  const fortyFiveSecondsAgo = new Date(now.getTime() - 45 * 1000);
+  assert.equal(shouldIncrementZeroConfirmation(fortyFiveSecondsAgo, now), false);
+
+  // 10 minutes after previous check -> still inside 15m guard
+  const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000);
+  assert.equal(shouldIncrementZeroConfirmation(tenMinutesAgo, now), false);
+
+  // Exactly 15 minutes or older -> allowed to increment
+  const fifteenMinutesAgo = new Date(now.getTime() - ZERO_CONFIRMATION_MIN_GAP_MS);
+  assert.equal(shouldIncrementZeroConfirmation(fifteenMinutesAgo, now), true);
+
+  // Missing lastChecked -> allowed
+  assert.equal(shouldIncrementZeroConfirmation(null, now), true);
+});
+
 
 

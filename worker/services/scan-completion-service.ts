@@ -16,6 +16,23 @@ function isUuid(id?: string | null): boolean {
   return typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 }
 
+export const ZERO_CONFIRMATION_MIN_GAP_MS = 15 * 60 * 1000; // 15 minutes between zero confirmations
+
+/**
+ * Prevents rapid back-to-back zero retries (e.g. manual clicks or 45s rechecks during a transient Meta glitch)
+ * from burning through the 3-scan grace period and permanently archiving active ads.
+ */
+export function shouldIncrementZeroConfirmation(
+  lastChecked: Date | string | null | undefined,
+  now: Date,
+  minGapMs: number = ZERO_CONFIRMATION_MIN_GAP_MS
+): boolean {
+  if (!lastChecked) return true;
+  const lastMs = new Date(lastChecked).getTime();
+  if (Number.isNaN(lastMs)) return true;
+  return now.getTime() - lastMs >= minGapMs;
+}
+
 export async function markJobCompleted(
   queueId: string,
   pageId: string,
@@ -134,7 +151,11 @@ export async function markJobCompleted(
         checkedAt: now,
         creativeScannedAt: null,
         status: "unclear",
-        failureReason: anomaly.isRegionalCluster ? "regional_cluster_anomaly" : "circuit_breaker_meta_outage",
+        failureReason: anomaly.isShardBlocked
+          ? "shard_soft_blocked"
+          : anomaly.isRegionalCluster
+            ? "regional_cluster_anomaly"
+            : "circuit_breaker_meta_outage",
       });
 
       // Nuanced Outage Rescue: If the trigger page entered on_hold during this outage window, rescue it back to active.
@@ -189,9 +210,15 @@ export async function markJobCompleted(
         brandName,
         results: prevCount,
         difference: 0,
-        circuitBreakerTripped: !anomaly.isRegionalCluster,
+        circuitBreakerTripped: !anomaly.isRegionalCluster && !anomaly.isShardBlocked,
+        shardSoftBlocked: Boolean(anomaly.isShardBlocked),
       };
     }
+  }
+
+  if (status === "success" && results !== null && results > 0) {
+    const { recordSessionPositiveScan } = await import("../circuit-breaker");
+    recordSessionPositiveScan();
   }
 
   // 2b. Insert scan_history record (truthful audit log for verified scans)
@@ -262,59 +289,72 @@ export async function markJobCompleted(
       console.error("[Count Scan] Failed to log hold detected notification:", e);
     }
   } else if (isZeroWhileOnHold) {
-    const nextZeroCount = (trackedPage?.consecutiveZeroScans ?? 0) + 1;
-    const isConfirmedShutdown = nextZeroCount >= CONFIRM_SCANS;
-
-    if (isConfirmedShutdown) {
-      // 3 consecutive zero scans confirmed — transition to inactive & allow archival
+    const canIncrementConfirmation = shouldIncrementZeroConfirmation(trackedPage?.lastChecked, now);
+    if (!canIncrementConfirmation) {
+      console.log(
+        `[Count Scan] ⏳ Zero scan for on_hold page "${brandName}" (${pageId}) arrived within 15m cooldown. Preserving consecutiveZeroScans=${trackedPage?.consecutiveZeroScans ?? 1}/${CONFIRM_SCANS} to prevent rapid false archival.`
+      );
       await db.update(trackedPages).set({
-        holdStatus: "inactive",
-        consecutiveZeroScans: nextZeroCount,
-        currentResults: results,
-        lastKnownValidResults: null,
         lastChecked: now,
         lastSuccessAt: now,
         status: "success",
         updatedAt: now,
       }).where(eq(trackedPages.id, pageId));
+    } else {
+      const nextZeroCount = (trackedPage?.consecutiveZeroScans ?? 0) + 1;
+      const isConfirmedShutdown = nextZeroCount >= CONFIRM_SCANS;
 
-      // Archive ads now that shutdown is confirmed
-      try {
-        const { reconcileZeroResultCount } = await import("../../lib/ad-reconciliation");
-        const archivedCount = await reconcileZeroResultCount(
-          pageId,
-          status,
-          results,
-          now,
-          undefined,
-          "inactive",
-          nextZeroCount
-        );
-        if (archivedCount > 0) {
-          console.log(
-            `[Count Scan] Archived ${archivedCount} linked ad(s) after confirmed 3x zero-result scans for ${pageId}.`
+      if (isConfirmedShutdown) {
+        // 3 consecutive zero scans confirmed — transition to inactive & allow archival
+        await db.update(trackedPages).set({
+          holdStatus: "inactive",
+          consecutiveZeroScans: nextZeroCount,
+          currentResults: results,
+          lastKnownValidResults: null,
+          lastChecked: now,
+          lastSuccessAt: now,
+          status: "success",
+          updatedAt: now,
+        }).where(eq(trackedPages.id, pageId));
+
+        // Archive ads now that shutdown is confirmed
+        try {
+          const { reconcileZeroResultCount } = await import("../../lib/ad-reconciliation");
+          const archivedCount = await reconcileZeroResultCount(
+            pageId,
+            status,
+            results,
+            now,
+            undefined,
+            "inactive",
+            nextZeroCount
+          );
+          if (archivedCount > 0) {
+            console.log(
+              `[Count Scan] Archived ${archivedCount} linked ad(s) after confirmed 3x zero-result scans for ${pageId}.`
+            );
+          }
+        } catch (archiveErr) {
+          console.error(
+            `[Count Scan] Failed to archive linked ads after confirmed zero shutdown for ${pageId}:`,
+            archiveErr
           );
         }
-      } catch (archiveErr) {
-        console.error(
-          `[Count Scan] Failed to archive linked ads after confirmed zero shutdown for ${pageId}:`,
-          archiveErr
-        );
-      }
-    } else {
-      // Still in grace period (e.g. scan 2 of 3) — increment counter, NO archival
-      await db.update(trackedPages).set({
-        consecutiveZeroScans: nextZeroCount,
-        currentResults: results,
-        lastChecked: now,
-        lastSuccessAt: now,
-        status: "success",
-        updatedAt: now,
-      }).where(eq(trackedPages.id, pageId));
+      } else {
+        // Still in grace period (e.g. scan 2 of 3) — increment counter, NO archival
+        await db.update(trackedPages).set({
+          consecutiveZeroScans: nextZeroCount,
+          currentResults: results,
+          lastChecked: now,
+          lastSuccessAt: now,
+          status: "success",
+          updatedAt: now,
+        }).where(eq(trackedPages.id, pageId));
 
-      try {
-        await enqueueOrEscalateJob(pageId, "count", 2);
-      } catch { }
+        try {
+          await enqueueOrEscalateJob(pageId, "count", 2);
+        } catch { }
+      }
     }
   } else if (isRecovering || isRelaunching) {
     // Account hold lifted OR inactive brand relaunched ads — compute display difference vs baseline BEFORE clearing

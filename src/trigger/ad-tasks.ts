@@ -293,16 +293,7 @@ export const scanPageCountTask = task({
 
       page = await context.newPage();
 
-      // Intercept and abort memory-heavy binary resources (video streams, images, fonts)
-      await page.route("**/*", (route) => {
-        const type = route.request().resourceType();
-        if (["image", "media", "font", "imageset"].includes(type)) {
-          return route.abort();
-        }
-        return route.continue();
-      });
-
-      // 3. Perform the scrape with live progress updates
+      // 3. Perform the scrape with live progress updates (scanMetaAdPage attaches attachMediaAbortRoute)
       const outcome = await scanMetaAdPage(
         page,
         targetUrl,

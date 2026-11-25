@@ -284,3 +284,17 @@ test("attachMediaAbortRoute aborts binary media, continues API/DOM requests, and
   const detachFailed = await attachMediaAbortRoute(failingPage);
   await detachFailed();
 });
+
+test("parseResultCountFromText prioritizes positive tilde count over ad copy mentioning 0 results", () => {
+  const bodyWithZeroSnippetInAd = `
+    Topdecor Distribution
+    ~91 results
+    Filters
+    Library ID: 1408661057892248
+    Sponsored
+    We guarantee 0 results wasted and 100% satisfaction!
+  `;
+  const res = parseResultCountFromText(bodyWithZeroSnippetInAd);
+  assert.equal(res.status, "success");
+  assert.equal(res.results, 91);
+});
